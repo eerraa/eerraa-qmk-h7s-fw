@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V250627R1"
+#define _DEF_FIRMWATRE_VERSION      "V250922R1"   // ['V250922R1'] 펌웨어 버전 갱신
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
