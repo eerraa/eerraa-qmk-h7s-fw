@@ -9,6 +9,10 @@
 #include "usb.h"
 #include "cdc.h"
 #include "cli.h"
+#include "reset.h"
+#include "eeprom.h"
+#include "qmk/port/port.h"
+#include "qmk/port/platforms/eeprom.h"
 
 
 #ifdef _USE_HW_USB
@@ -16,8 +20,19 @@
 #include "usbd_hid.h"
 
 
-static bool is_init = false;
-static UsbMode_t is_usb_mode = USB_NON_MODE;
+static bool          is_init = false;
+static UsbMode_t     is_usb_mode = USB_NON_MODE;
+static UsbBootMode_t usb_boot_mode = USB_BOOT_MODE_HS_8K;                    // V250923R1 Current USB boot mode target
+
+static const char *const usb_boot_mode_name[USB_BOOT_MODE_MAX] = {          // V250923R1 Mode labels for logging/CLI
+  "HS 8K",
+  "HS 4K",
+  "HS 2K",
+  "FS 1K",
+};
+
+static const char *usbBootModeLabel(UsbBootMode_t mode);                     // V250923R1 helpers
+static bool        usbBootModeStore(UsbBootMode_t mode);
 
 USBD_HandleTypeDef USBD_Device;
 extern PCD_HandleTypeDef hpcd_USB_OTG_HS;
@@ -38,13 +53,99 @@ static uint8_t hid_ep_tbl[] = {
   };
 
 static uint8_t cdc_ep_tbl[] = {
-  CDC_IN_EP, 
-  CDC_OUT_EP, 
+  CDC_IN_EP,
+  CDC_OUT_EP,
   CDC_CMD_EP};
 #endif
 
+static const char *usbBootModeLabel(UsbBootMode_t mode)
+{
+  if (mode < USB_BOOT_MODE_MAX)
+  {
+    return usb_boot_mode_name[mode];
+  }
+  return "UNKNOWN";
+}
+
+bool usbBootModeLoad(void)
+{
+  uint32_t raw_mode = eeprom_read_dword((const uint32_t *)EECONFIG_USER_BOOTMODE);
+
+  if (raw_mode >= USB_BOOT_MODE_MAX)
+  {
+    raw_mode = USB_BOOT_MODE_HS_8K;
+  }
+
+  usb_boot_mode = (UsbBootMode_t)raw_mode;
+  logPrintf("[  ] USB BootMode : %s\n", usbBootModeLabel(usb_boot_mode));  // V250923R1 Log persisted boot mode
+
+  return true;
+}
+
+UsbBootMode_t usbBootModeGet(void)
+{
+  return usb_boot_mode;
+}
+
+bool usbBootModeIsFullSpeed(void)
+{
+  return usb_boot_mode == USB_BOOT_MODE_FS_1K;
+}
+
+uint8_t usbBootModeGetHsInterval(void)
+{
+  switch (usb_boot_mode)
+  {
+    case USB_BOOT_MODE_HS_4K:
+      return 0x02;
+    case USB_BOOT_MODE_HS_2K:
+      return 0x03;
+    case USB_BOOT_MODE_FS_1K:
+      return 0x01;
+    case USB_BOOT_MODE_HS_8K:
+    default:
+      return 0x01;
+  }
+}
+
+static bool usbBootModeStore(UsbBootMode_t mode)
+{
+  uint32_t raw_mode = (uint32_t)mode;
+  uint32_t addr     = (uint32_t)EECONFIG_USER_BOOTMODE;
+
+  if (mode >= USB_BOOT_MODE_MAX)
+  {
+    return false;
+  }
+
+  if (usb_boot_mode == mode)
+  {
+    return true;
+  }
+
+  if (eepromWrite(addr, (uint8_t *)&raw_mode, sizeof(raw_mode)) == true)
+  {
+    usb_boot_mode = mode;
+    return true;
+  }
+
+  return false;
+}
+
+bool usbBootModeSaveAndReset(UsbBootMode_t mode)
+{
+  if (usbBootModeStore(mode) != true)
+  {
+    return false;
+  }
+
+  resetToReset();
+  return true;
+}
+
 #ifdef _USE_HW_CLI
 static void cliCmd(cli_args_t *args);
+static void cliBoot(cli_args_t *args);                                       // V250923R1 Boot mode CLI handler
 #endif
 
 
@@ -54,6 +155,7 @@ bool usbInit(void)
 {
 #ifdef _USE_HW_CLI
   cliAdd("usb", cliCmd);
+  cliAdd("boot", cliBoot);                                    // V250923R1 Expose boot mode control
 #endif
   return true;
 }
@@ -80,10 +182,11 @@ bool usbBegin(UsbMode_t usb_mode)
     // HAL_PWREx_EnableUSBVoltageDetector();
 
     is_usb_mode = USB_CDC_MODE;
-    
+
     p_desc = &VCP_Desc;
     logPrintf("[OK] usbBegin()\n");
     logPrintf("     USB_CDC\r\n");
+    logPrintf("     BootMode  : %s\r\n", usbBootModeLabel(usbBootModeGet())); // V250923R1 Report selected polling mode
     #endif
   }
   else if (usb_mode == USB_MSC_MODE)
@@ -108,6 +211,7 @@ bool usbBegin(UsbMode_t usb_mode)
     p_desc = &MSC_Desc;
     logPrintf("[OK] usbBegin()\n");
     logPrintf("     USB_MSC\r\n");
+    logPrintf("     BootMode  : %s\r\n", usbBootModeLabel(usbBootModeGet())); // V250923R1 Report selected polling mode
     #endif
   }
   else if (usb_mode == USB_HID_MODE)
@@ -123,14 +227,15 @@ bool usbBegin(UsbMode_t usb_mode)
     USBD_Start(&USBD_Device);
 
     is_usb_mode = USB_HID_MODE;
-    
+
     p_desc = &HID_Desc;
     logPrintf("[OK] usbBegin()\n");
     logPrintf("     USB_HID\r\n");
+    logPrintf("     BootMode  : %s\r\n", usbBootModeLabel(usbBootModeGet())); // V250923R1 Report selected polling mode
     #endif
-  }  
+  }
   else if (usb_mode == USB_CMP_MODE)
-  { 
+  {
     #if HW_USB_CMP == 1
     USBD_Init(&USBD_Device, &CMP_Desc, DEVICE_HS);
 
@@ -145,12 +250,13 @@ bool usbBegin(UsbMode_t usb_mode)
     USBD_Start(&USBD_Device);
 
     is_usb_mode = USB_CDC_MODE;
-    
+
     p_desc = &CMP_Desc;
     logPrintf("[OK] usbBegin()\n");
     logPrintf("     USB_CMP\r\n");
+    logPrintf("     BootMode  : %s\r\n", usbBootModeLabel(usbBootModeGet())); // V250923R1 Report selected polling mode
     #endif
-  }  
+  }
   else
   {
     is_init = false;
@@ -325,6 +431,58 @@ void cliCmd(cli_args_t *args)
     cliPrintf("usb tx\n");
     cliPrintf("usb rx\n");
     #endif
+  }
+}
+
+void cliBoot(cli_args_t *args)
+{
+  bool ret = false;
+
+  if (args->argc == 1 && args->isStr(0, "info") == true)
+  {
+    cliPrintf("Boot Mode   : %s\n", usbBootModeLabel(usbBootModeGet()));       // V250923R1 Display stored mode
+    ret = true;
+  }
+
+  if (args->argc == 2 && args->isStr(0, "set") == true)
+  {
+    UsbBootMode_t req_mode = USB_BOOT_MODE_MAX;
+
+    if (args->isStr(1, "8k") == true)
+    {
+      req_mode = USB_BOOT_MODE_HS_8K;
+    }
+    else if (args->isStr(1, "4k") == true)
+    {
+      req_mode = USB_BOOT_MODE_HS_4K;
+    }
+    else if (args->isStr(1, "2k") == true)
+    {
+      req_mode = USB_BOOT_MODE_HS_2K;
+    }
+    else if (args->isStr(1, "1k") == true)
+    {
+      req_mode = USB_BOOT_MODE_FS_1K;
+    }
+
+    if (req_mode < USB_BOOT_MODE_MAX)
+    {
+      cliPrintf("Boot Mode   : %s -> %s\n", usbBootModeLabel(usbBootModeGet()), usbBootModeLabel(req_mode));
+      if (usbBootModeSaveAndReset(req_mode) != true)
+      {
+        cliPrintf("Boot mode save failed\n");
+      }
+      ret = true;
+    }
+  }
+
+  if (ret == false)
+  {
+    cliPrintf("boot info\n");
+    cliPrintf("boot set 8k\n");
+    cliPrintf("boot set 4k\n");
+    cliPrintf("boot set 2k\n");
+    cliPrintf("boot set 1k\n");
   }
 }
 #endif

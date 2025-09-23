@@ -1,4 +1,5 @@
 #include "hw.h"
+#include "qmk/port/platforms/eeprom.h"  // V250923R1 Preload QMK EEPROM services
 
 
 
@@ -50,6 +51,11 @@ bool hwInit(void)
   resetInit();    
   i2cInit();
   eepromInit();
+  eeprom_init();                                              // V250923R1 Sync QMK EEPROM image before USB init
+  if (usbBootModeLoad() != true)                              // V250923R1 Apply stored USB boot mode preference
+  {
+    logPrintf("[!] usbBootModeLoad Fail\n");
+  }
   #ifdef _USE_HW_QSPI
   qspiInit();
   #endif
