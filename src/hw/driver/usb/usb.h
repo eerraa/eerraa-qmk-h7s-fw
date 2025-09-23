@@ -58,6 +58,21 @@ typedef enum UsbType
   USB_CON_HID = 4,
 } UsbType_t;
 
+typedef enum UsbBootMode                               // V250923R1 Persisted USB polling profile
+{
+  USB_BOOT_MODE_HS_8K = 0,
+  USB_BOOT_MODE_HS_4K,
+  USB_BOOT_MODE_HS_2K,
+  USB_BOOT_MODE_FS_1K,
+  USB_BOOT_MODE_MAX,
+} UsbBootMode_t;
+
+bool         usbBootModeLoad(void);                    // V250923R1 Load stored boot mode selection
+UsbBootMode_t usbBootModeGet(void);                    // V250923R1 Query active boot mode
+bool         usbBootModeIsFullSpeed(void);             // V250923R1 Check if FS (1 kHz) mode is requested
+uint8_t      usbBootModeGetHsInterval(void);           // V250923R1 Retrieve HS polling interval encoding
+bool         usbBootModeSaveAndReset(UsbBootMode_t mode);
+
 bool usbInit(void);
 bool usbBegin(UsbMode_t usb_mode);
 void usbDeInit(void);

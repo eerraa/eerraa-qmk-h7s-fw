@@ -203,6 +203,10 @@ void HAL_PCD_ResetCallback(PCD_HandleTypeDef *hpcd)
   {
     speed = USBD_SPEED_HIGH;
   }
+  else if ( hpcd->Init.speed == PCD_SPEED_HIGH_IN_FULL)
+  {
+    speed = USBD_SPEED_FULL;                                      // V250923R1 HS core running in FS mode
+  }
   else if ( hpcd->Init.speed == PCD_SPEED_FULL)
   {
     speed = USBD_SPEED_FULL;
@@ -344,7 +348,14 @@ USBD_StatusTypeDef USBD_LL_Init(USBD_HandleTypeDef *pdev)
 
   hpcd_USB_OTG_HS.Instance = USB_OTG_HS;
   hpcd_USB_OTG_HS.Init.dev_endpoints = 9;
-  hpcd_USB_OTG_HS.Init.speed = PCD_SPEED_HIGH;
+  if (usbBootModeIsFullSpeed() == true)
+  {
+    hpcd_USB_OTG_HS.Init.speed = PCD_SPEED_HIGH_IN_FULL;          // V250923R1 HS PHY operating at FS 1 kHz
+  }
+  else
+  {
+    hpcd_USB_OTG_HS.Init.speed = PCD_SPEED_HIGH;
+  }
   hpcd_USB_OTG_HS.Init.dma_enable = DISABLE;
   hpcd_USB_OTG_HS.Init.phy_itface = USB_OTG_HS_EMBEDDED_PHY;
   hpcd_USB_OTG_HS.Init.Sof_enable = ENABLE;

@@ -42,6 +42,7 @@
 #include "usbd_hid.h"
 #include "usbd_ctlreq.h"
 #include "usbd_desc.h"
+#include "usb.h"                                                // V250923R1 Boot mode aware intervals
 
 #include "cli.h"
 #include "log.h"
@@ -498,12 +499,14 @@ static uint8_t USBD_HID_Init(USBD_HandleTypeDef *pdev, uint8_t cfgidx)
   pdev->pClassDataCmsit[pdev->classId] = (void *)hhid;
   pdev->pClassData = pdev->pClassDataCmsit[pdev->classId];
 
+  uint8_t hs_interval = usbBootModeGetHsInterval();                      // V250923R1 Dynamic HS polling interval
+
 
 #ifdef USE_USBD_COMPOSITE
   /* Get the Endpoints addresses allocated for this class instance */
   HIDInEpAdd  = USBD_CoreGetEPAdd(pdev, USBD_EP_IN, USBD_EP_TYPE_INTR, (uint8_t)pdev->classId);
 #endif /* USE_USBD_COMPOSITE */
-  pdev->ep_in[HIDInEpAdd & 0xFU].bInterval = pdev->dev_speed == USBD_SPEED_HIGH ? HID_HS_BINTERVAL:HID_FS_BINTERVAL;
+  pdev->ep_in[HIDInEpAdd & 0xFU].bInterval = pdev->dev_speed == USBD_SPEED_HIGH ? hs_interval:HID_FS_BINTERVAL;
 
   /* Open EP IN */
   (void)USBD_LL_OpenEP(pdev, HIDInEpAdd, USBD_EP_TYPE_INTR, HID_EPIN_SIZE);
@@ -512,17 +515,17 @@ static uint8_t USBD_HID_Init(USBD_HandleTypeDef *pdev, uint8_t cfgidx)
 
   // VIA EP
   //
-  pdev->ep_in[HID_VIA_EP_IN & 0xFU].bInterval = pdev->dev_speed == USBD_SPEED_HIGH ? HID_HS_BINTERVAL:HID_FS_BINTERVAL;
+  pdev->ep_in[HID_VIA_EP_IN & 0xFU].bInterval = pdev->dev_speed == USBD_SPEED_HIGH ? hs_interval:HID_FS_BINTERVAL;
   (void)USBD_LL_OpenEP(pdev, HID_VIA_EP_IN, USBD_EP_TYPE_INTR, HID_VIA_EP_SIZE);
   pdev->ep_in[HID_VIA_EP_IN & 0xFU].is_used = 1U;
 
-  pdev->ep_in[HID_VIA_EP_OUT & 0xFU].bInterval = pdev->dev_speed == USBD_SPEED_HIGH ? HID_HS_BINTERVAL:HID_FS_BINTERVAL;
+  pdev->ep_in[HID_VIA_EP_OUT & 0xFU].bInterval = pdev->dev_speed == USBD_SPEED_HIGH ? hs_interval:HID_FS_BINTERVAL;
   (void)USBD_LL_OpenEP(pdev, HID_VIA_EP_OUT, USBD_EP_TYPE_INTR, HID_VIA_EP_SIZE);
   pdev->ep_in[HID_VIA_EP_OUT & 0xFU].is_used = 1U;
 
   // EXK EP
   //
-  pdev->ep_in[HID_EXK_EP_IN & 0xFU].bInterval = pdev->dev_speed == USBD_SPEED_HIGH ? HID_HS_BINTERVAL:HID_FS_BINTERVAL;
+  pdev->ep_in[HID_EXK_EP_IN & 0xFU].bInterval = pdev->dev_speed == USBD_SPEED_HIGH ? hs_interval:HID_FS_BINTERVAL;
   (void)USBD_LL_OpenEP(pdev, HID_EXK_EP_IN, USBD_EP_TYPE_INTR, HID_EXK_EP_SIZE);
   pdev->ep_in[HID_EXK_EP_IN & 0xFU].is_used = 1U;
 
@@ -844,8 +847,9 @@ uint32_t USBD_HID_GetPollingInterval(USBD_HandleTypeDef *pdev)
   {
     /* Sets the data transfer polling interval for high speed transfers.
      Values between 1..16 are allowed. Values correspond to interval
-     of 2 ^ (bInterval-1). This option (8 ms, corresponds to HID_HS_BINTERVAL */
-    polling_interval = (((1U << (HID_HS_BINTERVAL - 1U))) / 8U);
+     of 2 ^ (bInterval-1). */
+    uint8_t hs_interval = usbBootModeGetHsInterval();
+    polling_interval    = (((1U << (hs_interval - 1U))) / 8U);           // V250923R1 Reflect dynamic HS interval
   }
   else   /* LOW and FULL-speed endpoints */
   {
@@ -895,11 +899,30 @@ static uint8_t *USBD_HID_GetFSCfgDesc(uint16_t *length)
   */
 static uint8_t *USBD_HID_GetHSCfgDesc(uint16_t *length)
 {
-  USBD_EpDescTypeDef *pEpDesc = USBD_GetEpDesc(USBD_HID_CfgDesc, HID_EPIN_ADDR);
+  uint8_t             hs_interval = usbBootModeGetHsInterval();
+  USBD_EpDescTypeDef *pEpDesc    = USBD_GetEpDesc(USBD_HID_CfgDesc, HID_EPIN_ADDR);
 
   if (pEpDesc != NULL)
   {
-    pEpDesc->bInterval = HID_HS_BINTERVAL;
+    pEpDesc->bInterval = hs_interval;                                 // V250923R1 Keyboard HS polling interval
+  }
+
+  pEpDesc = USBD_GetEpDesc(USBD_HID_CfgDesc, HID_VIA_EP_IN);
+  if (pEpDesc != NULL)
+  {
+    pEpDesc->bInterval = hs_interval;                                 // V250923R1 VIA IN polling interval
+  }
+
+  pEpDesc = USBD_GetEpDesc(USBD_HID_CfgDesc, HID_VIA_EP_OUT);
+  if (pEpDesc != NULL)
+  {
+    pEpDesc->bInterval = hs_interval;                                 // V250923R1 VIA OUT polling interval
+  }
+
+  pEpDesc = USBD_GetEpDesc(USBD_HID_CfgDesc, HID_EXK_EP_IN);
+  if (pEpDesc != NULL)
+  {
+    pEpDesc->bInterval = hs_interval;                                 // V250923R1 EXK polling interval
   }
 
   *length = (uint16_t)sizeof(USBD_HID_CfgDesc);
