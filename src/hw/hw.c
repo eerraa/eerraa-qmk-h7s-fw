@@ -1,4 +1,5 @@
 #include "hw.h"
+#include "usb_mode.h"
 
 
 
@@ -50,6 +51,7 @@ bool hwInit(void)
   resetInit();    
   i2cInit();
   eepromInit();
+  usbModeInit();  // [V250628R1] Load persisted USB polling configuration.
   #ifdef _USE_HW_QSPI
   qspiInit();
   #endif

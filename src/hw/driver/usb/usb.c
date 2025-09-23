@@ -9,6 +9,7 @@
 #include "usb.h"
 #include "cdc.h"
 #include "cli.h"
+#include "usb_mode.h"
 
 
 #ifdef _USE_HW_USB
@@ -127,6 +128,7 @@ bool usbBegin(UsbMode_t usb_mode)
     p_desc = &HID_Desc;
     logPrintf("[OK] usbBegin()\n");
     logPrintf("     USB_HID\r\n");
+    logPrintf("     USB_RATE \t: %s\r\n", usbModeGetName(usbModeGet()));  // [V250628R1] Report active polling mode.
     #endif
   }  
   else if (usb_mode == USB_CMP_MODE)
@@ -149,6 +151,7 @@ bool usbBegin(UsbMode_t usb_mode)
     p_desc = &CMP_Desc;
     logPrintf("[OK] usbBegin()\n");
     logPrintf("     USB_CMP\r\n");
+    logPrintf("     USB_RATE \t: %s\r\n", usbModeGetName(usbModeGet()));  // [V250628R1]
     #endif
   }  
   else

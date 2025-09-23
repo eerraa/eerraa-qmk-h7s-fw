@@ -48,6 +48,7 @@
 #include "usbd_def.h"
 #include "usbd_core.h"
 #include "usbd_cdc.h"
+#include "usb_mode.h"
 
 
 PCD_HandleTypeDef hpcd_USB_OTG_HS;
@@ -199,13 +200,13 @@ void HAL_PCD_ResetCallback(PCD_HandleTypeDef *hpcd)
 {
   USBD_SpeedTypeDef speed = USBD_SPEED_FULL;
 
-  if ( hpcd->Init.speed == PCD_SPEED_HIGH)
+  if (hpcd->Init.speed == PCD_SPEED_HIGH)
   {
     speed = USBD_SPEED_HIGH;
   }
-  else if ( hpcd->Init.speed == PCD_SPEED_FULL)
+  else if (hpcd->Init.speed == PCD_SPEED_FULL || hpcd->Init.speed == PCD_SPEED_HIGH_IN_FULL)
   {
-    speed = USBD_SPEED_FULL;
+    speed = USBD_SPEED_FULL;  // [V250628R1] Treat HS-in-FS as full-speed for the device stack.
   }
   else
   {
@@ -344,7 +345,7 @@ USBD_StatusTypeDef USBD_LL_Init(USBD_HandleTypeDef *pdev)
 
   hpcd_USB_OTG_HS.Instance = USB_OTG_HS;
   hpcd_USB_OTG_HS.Init.dev_endpoints = 9;
-  hpcd_USB_OTG_HS.Init.speed = PCD_SPEED_HIGH;
+  hpcd_USB_OTG_HS.Init.speed = usbModeIsFs() ? PCD_SPEED_HIGH_IN_FULL : PCD_SPEED_HIGH;  // [V250628R1] Dynamically switch between HS and HS-in-FS.
   hpcd_USB_OTG_HS.Init.dma_enable = DISABLE;
   hpcd_USB_OTG_HS.Init.phy_itface = USB_OTG_HS_EMBEDDED_PHY;
   hpcd_USB_OTG_HS.Init.Sof_enable = ENABLE;
