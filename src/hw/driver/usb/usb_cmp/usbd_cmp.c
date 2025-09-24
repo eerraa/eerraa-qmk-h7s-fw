@@ -858,9 +858,14 @@ static void  USBD_CMPSIT_HIDKeyboardDesc(USBD_HandleTypeDef *pdev, uint32_t pCon
   *Sze                                 += (uint32_t)sizeof(USBD_HIDDescTypeDef);
 
   /* Append Endpoint descriptor to Configuration descriptor */
+  uint16_t hid_keyboard_mps = HID_EPIN_SIZE;                              // V250923R2 FS 모드에서 64바이트 패킷 유지
+  if (speed == (uint8_t)USBD_SPEED_HIGH)
+  {
+    hid_keyboard_mps |= (2U << 11);                                       // V250923R2 HS 모드에서는 3트랜잭션 유지
+  }
   __USBD_CMPSIT_SET_EP(pdev->tclasslist[pdev->classId].Eps[0].add,
                        USBD_EP_TYPE_INTR,
-                       HID_EPIN_SIZE | (2<<11),
+                       hid_keyboard_mps,
                        usbBootModeGetHsInterval(),
                        HID_FS_BINTERVAL);
 
