@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V250923R1"
+#define _DEF_FIRMWATRE_VERSION      "V250923R2"  // V250923R2 FS descriptor wMaxPacket 정합 수정
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
