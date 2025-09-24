@@ -33,6 +33,7 @@ void apMain(void)
     }
 
     cliUpdate();
+    usbProcess();                                               // V250924R2 USB 안정성 이벤트 처리
     qmkUpdate();
   }
 }

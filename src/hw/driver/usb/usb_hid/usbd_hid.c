@@ -92,6 +92,8 @@ static void usbHidMeasurePollRate(void);
 static void usbHidMeasureRateTime(void);
 static bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev);
 static void usbHidInitTimer(void);
+static void usbHidMonitorSof(uint32_t now_us);                     // V250924R2 SOF 안정성 추적
+static UsbBootMode_t usbHidResolveDowngradeTarget(void);           // V250924R2 다운그레이드 대상 계산
 
 
 
@@ -471,6 +473,16 @@ extern USBD_HandleTypeDef USBD_Device;
 static TIM_HandleTypeDef htim2;
 
 static uint32_t sof_cnt = 0;
+
+typedef struct
+{
+  uint32_t prev_tick_us;                                          // V250924R2 직전 SOF 타임스탬프(us)
+  uint32_t last_decay_ms;                                         // V250924R2 점수 감소 시각(ms)
+  uint32_t holdoff_end_ms;                                        // V250924R2 다운그레이드 홀드오프 종료 시각(ms)
+  uint8_t  score;                                                 // V250924R2 누적 불안정 점수
+} usb_sof_monitor_t;
+
+static usb_sof_monitor_t sof_monitor = {0};                       // V250924R2 SOF 안정성 상태
 
 
 /**
@@ -1152,8 +1164,10 @@ void usbHidMeasurePollRate(void)
   static uint32_t cnt = 0;
   uint32_t        sample_window = usbBootModeIsFullSpeed() ? 1000U : 8000U; // V250924R1 Align poll window with active USB speed
 
+  uint32_t now_us = micros();
 
-  rate_time_sof_pre = micros();
+  usbHidMonitorSof(now_us);                                       // V250924R2 SOF 간격 모니터링
+  rate_time_sof_pre = now_us;
   if (cnt >= sample_window)
   {
     cnt = 0;
@@ -1168,6 +1182,138 @@ void usbHidMeasurePollRate(void)
     rate_time_sum = 0;
   }
   cnt++;
+}
+
+static UsbBootMode_t usbHidResolveDowngradeTarget(void)            // V250924R2 현재 모드 대비 하위 폴링 모드 계산
+{
+  UsbBootMode_t cur_mode = usbBootModeGet();
+
+  switch (cur_mode)
+  {
+    case USB_BOOT_MODE_HS_8K:
+      return USB_BOOT_MODE_HS_4K;
+    case USB_BOOT_MODE_HS_4K:
+      return USB_BOOT_MODE_HS_2K;
+    case USB_BOOT_MODE_HS_2K:
+      return USB_BOOT_MODE_FS_1K;
+    default:
+      return USB_BOOT_MODE_MAX;
+  }
+}
+
+static void usbHidMonitorSof(uint32_t now_us)                     // V250924R2 SOF(uSOF) 간격 감시
+{
+  USBD_HandleTypeDef *pdev   = &USBD_Device;
+  uint32_t             now_ms = millis();
+
+  if (pdev->dev_state != USBD_STATE_CONFIGURED)
+  {
+    sof_monitor.prev_tick_us = now_us;
+    sof_monitor.score        = 0U;
+    sof_monitor.last_decay_ms = now_ms;
+    return;
+  }
+
+  if (USBD_is_suspended())
+  {
+    sof_monitor.prev_tick_us  = now_us;
+    sof_monitor.score         = 0U;
+    sof_monitor.holdoff_end_ms = now_ms + 200U;
+    sof_monitor.last_decay_ms  = now_ms;
+    return;
+  }
+
+  if (pdev->dev_speed != USBD_SPEED_HIGH && pdev->dev_speed != USBD_SPEED_FULL)
+  {
+    sof_monitor.prev_tick_us = now_us;
+    sof_monitor.score        = 0U;
+    sof_monitor.last_decay_ms = now_ms;
+    return;
+  }
+
+  if (sof_monitor.prev_tick_us == 0U)
+  {
+    sof_monitor.prev_tick_us = now_us;
+    sof_monitor.last_decay_ms = now_ms;
+    return;
+  }
+
+  uint32_t delta_us = now_us - sof_monitor.prev_tick_us;
+  sof_monitor.prev_tick_us = now_us;
+
+  uint32_t expected_us       = (pdev->dev_speed == USBD_SPEED_HIGH) ? 125U : 1000U;
+  uint32_t decay_interval_ms = (pdev->dev_speed == USBD_SPEED_HIGH) ? 4U : 20U;
+  uint8_t  degrade_threshold = (pdev->dev_speed == USBD_SPEED_HIGH) ? 6U : 4U;
+
+  if (now_ms < sof_monitor.holdoff_end_ms)
+  {
+    sof_monitor.last_decay_ms = now_ms;
+    return;
+  }
+
+  if (delta_us < (expected_us * 2U))
+  {
+    if (sof_monitor.score > 0U)
+    {
+      if ((now_ms - sof_monitor.last_decay_ms) >= decay_interval_ms)
+      {
+        sof_monitor.score--;
+        sof_monitor.last_decay_ms = now_ms;
+      }
+    }
+    return;
+  }
+
+  uint32_t missed_frames = (delta_us + expected_us - 1U) / expected_us;
+  uint8_t  delta_score   = 1U;
+
+  if (missed_frames > 4U)
+  {
+    delta_score = 4U;
+  }
+  else if (missed_frames > 1U)
+  {
+    delta_score = (uint8_t)(missed_frames - 1U);
+  }
+
+  if (delta_score < 1U)
+  {
+    delta_score = 1U;
+  }
+
+  if (sof_monitor.score <= (uint8_t)(0xFFU - delta_score))
+  {
+    sof_monitor.score += delta_score;
+  }
+  else
+  {
+    sof_monitor.score = 0xFFU;
+  }
+
+  sof_monitor.last_decay_ms = now_ms;
+
+  if (sof_monitor.score >= degrade_threshold)
+  {
+    UsbBootMode_t next_mode = usbHidResolveDowngradeTarget();
+
+    if (next_mode < USB_BOOT_MODE_MAX)
+    {
+      if (usbRequestBootModeDowngrade(next_mode, delta_us, expected_us) == true)
+      {
+        sof_monitor.holdoff_end_ms = now_ms + 2000U;
+      }
+      else
+      {
+        sof_monitor.holdoff_end_ms = now_ms + 50U;
+      }
+    }
+    else
+    {
+      sof_monitor.holdoff_end_ms = now_ms + 50U;
+    }
+
+    sof_monitor.score = 0U;
+  }
 }
 
 void usbHidMeasureRateTime(void)

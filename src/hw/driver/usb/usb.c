@@ -44,6 +44,16 @@ extern USBD_DescriptorsTypeDef CMP_Desc;
 
 static USBD_DescriptorsTypeDef *p_desc = NULL;
 
+typedef struct
+{
+  volatile bool pending;                                         // V250924R2 다운그레이드 요청 보류 플래그
+  UsbBootMode_t next_mode;                                       // V250924R2 요청된 다음 부트 모드
+  uint32_t      delta_us;                                        // V250924R2 측정된 SOF 간격(us)
+  uint32_t      expected_us;                                     // V250924R2 기대 SOF 간격(us)
+} usb_boot_mode_request_t;
+
+static usb_boot_mode_request_t boot_mode_request = {0};          // V250924R2 USB 안정성 이벤트 큐
+
 #if HW_USB_CMP == 1
 static uint8_t hid_ep_tbl[] = {
   HID_EPIN_ADDR, 
@@ -141,6 +151,45 @@ bool usbBootModeSaveAndReset(UsbBootMode_t mode)
 
   resetToReset();
   return true;
+}
+
+bool usbRequestBootModeDowngrade(UsbBootMode_t mode, uint32_t measured_delta_us, uint32_t expected_us)  // V250924R2 비동기 USB 폴링 모드 다운그레이드 요청
+{
+  if (mode >= USB_BOOT_MODE_MAX)
+  {
+    return false;
+  }
+
+  if (boot_mode_request.pending == true)
+  {
+    return false;
+  }
+
+  boot_mode_request.next_mode   = mode;
+  boot_mode_request.delta_us    = measured_delta_us;
+  boot_mode_request.expected_us = expected_us;
+  boot_mode_request.pending     = true;
+  return true;
+}
+
+void usbProcess(void)                                                                  // V250924R2 USB 안정성 이벤트 처리 루프
+{
+  if (boot_mode_request.pending == true)
+  {
+    UsbBootMode_t next_mode   = boot_mode_request.next_mode;
+    uint32_t      delta_us    = boot_mode_request.delta_us;
+    uint32_t      expected_us = boot_mode_request.expected_us;
+
+    boot_mode_request.pending = false;
+
+    logPrintf("[!] USB Poll 불안정 감지 : 기대 %lu us, 측정 %lu us\n", expected_us, delta_us);   // V250924R2 다운그레이드 로그
+    logPrintf("[!] USB Poll 모드 다운그레이드 -> %s\n", usbBootModeLabel(next_mode));             // V250924R2 대상 모드
+
+    if (usbBootModeSaveAndReset(next_mode) != true)
+    {
+      logPrintf("[!] USB Poll 모드 저장 실패\n");                                            // V250924R2 저장 실패 로그
+    }
+  }
 }
 
 #ifdef _USE_HW_CLI
