@@ -1149,24 +1149,25 @@ bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length)
 
 void usbHidMeasurePollRate(void)
 {
-  static uint32_t cnt = 0; 
+  static uint32_t cnt = 0;
+  uint32_t        sample_window = usbBootModeIsFullSpeed() ? 1000U : 8000U; // V250924R1 Align poll window with active USB speed
 
 
   rate_time_sof_pre = micros();
-  if (cnt >= 8000)
+  if (cnt >= sample_window)
   {
     cnt = 0;
     data_in_rate = data_in_cnt;
-    rate_time_min = rate_time_min_check; 
-    rate_time_max = rate_time_max_check;     
+    rate_time_min = rate_time_min_check;
+    rate_time_max = rate_time_max_check;
     rate_time_avg = rate_time_sum / (data_in_cnt + 1);
     data_in_cnt = 0;
 
-    rate_time_min_check = 0xFFFF; 
-    rate_time_max_check = 0;     
+    rate_time_min_check = 0xFFFF;
+    rate_time_max_check = 0;
     rate_time_sum = 0;
-  }  
-  cnt++;  
+  }
+  cnt++;
 }
 
 void usbHidMeasureRateTime(void)
