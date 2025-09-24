@@ -4,8 +4,10 @@ PROJECT_CONTEXT
 - TARGET_MCU: STM32H7S series
 - USB_PHY_MODE: internal High-speed PHY only
 - BASE_REPORT_RATE_OBJECTIVE: 8000Hz interrupt-driven input at High-speed
+- STATUS_EXTENDED_REPORT_RATES: High-speed 4000Hz + High-speed 2000Hz + Full-speed 1000Hz implemented
 - ACTIVE_WORK_ITEMS:
-  - EXTENDED_REPORT_RATES: add High-speed 4000Hz, High-speed 2000Hz, Full-speed 1000Hz support
+  - USB_INSTABILITY_DETECTOR: implement microframe loss/delay detection logic
+  - POLLING_RATE_DOWNGRADE: downgrade report rate when instability is detected
 - QMK_PORT_SUMMARY: QMK logic ported and tuned for high-bandwidth USB keyboard firmware
 
 CODEX_RULES
