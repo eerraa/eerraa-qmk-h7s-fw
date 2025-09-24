@@ -72,6 +72,8 @@ UsbBootMode_t usbBootModeGet(void);                    // V250923R1 Query active
 bool         usbBootModeIsFullSpeed(void);             // V250923R1 Check if FS (1 kHz) mode is requested
 uint8_t      usbBootModeGetHsInterval(void);           // V250923R1 Retrieve HS polling interval encoding
 bool         usbBootModeSaveAndReset(UsbBootMode_t mode);
+bool         usbRequestBootModeDowngrade(UsbBootMode_t mode, uint32_t measured_delta_us, uint32_t expected_us); // V250924R2 USB 다운그레이드 요청 인터페이스
+void         usbProcess(void);                         // V250924R2 USB 안정성 모니터 서비스 루프
 
 bool usbInit(void);
 bool usbBegin(UsbMode_t usb_mode);

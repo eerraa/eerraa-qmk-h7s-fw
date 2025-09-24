@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V250924R1"  // V250924R1 FS matrix info poll latency 수정
+#define _DEF_FIRMWATRE_VERSION      "V250924R2"  // V250924R2 USB 안정성 모니터링 및 자동 다운그레이드
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
