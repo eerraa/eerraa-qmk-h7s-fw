@@ -5,9 +5,12 @@ PROJECT_CONTEXT
 - USB_PHY_MODE: internal High-speed PHY only
 - BASE_REPORT_RATE_OBJECTIVE: 8000Hz interrupt-driven input at High-speed
 - STATUS_EXTENDED_REPORT_RATES: High-speed 4000Hz + High-speed 2000Hz + Full-speed 1000Hz implemented
-- ACTIVE_WORK_ITEMS:
-  - USB_INSTABILITY_DETECTOR: implement microframe loss/delay detection logic
-  - POLLING_RATE_DOWNGRADE: downgrade report rate when instability is detected
+- IMPLEMENTED_FEATURES:
+  - USB_INSTABILITY_MONITOR: microframe gap scoring with warm-up holdoff + timeout guarding enumeration jitter (V250924R3)
+  - POLLING_RATE_DOWNGRADE: staged downgrade queue with confirmation delay + EEPROM persistence to avoid repeated resets
+- OPEN_FOLLOW-UPS:
+  - HOST_COMPAT_MATRIX: collect enumeration logs across Windows/macOS/Linux for the V250924R3 monitor heuristics
+  - AUTO_RECOVERY_POLICY: evaluate restoring higher rates after sustained stability windows
 - QMK_PORT_SUMMARY: QMK logic ported and tuned for high-bandwidth USB keyboard firmware
 
 CODEX_RULES
@@ -96,6 +99,10 @@ DIRECTORY_MAP
   - PATH=tools/uf2/uf2families.json :: ROLE=UF2 board identifiers
 
 ADDITIONAL_NOTES
+- USB_MONITOR_BEHAVIOUR:
+  - `USB_SOF_MONITOR_CONFIG_HOLDOFF_MS` = 750ms setup grace; scoring starts only after configuration+resume completes and warm-up succeeds
+  - Warm-up requires 2048 HS microframes (128 FS frames) or a 2.75s timeout before instability affects downgrade scoring
+  - Score threshold: HS=12, FS=6 with per-event cap; downgrade requests arm only after confirmation delay to filter transient spikes
 - USB_PHY_POLICY: High-speed only; Full-speed or external PHY code remains disabled unless tied to the new 1000Hz support work
 - TIMING_SENSITIVITY: preserve 8000Hz scheduling; review `src/ap/modules/qmk/port/sys_port.*` and `src/hw/driver/` when touching timers or DMA
 - QMK_UPSTREAM_SYNC: compare `quantum/` first, adjust platform differences inside `port/`
