@@ -474,15 +474,29 @@ static TIM_HandleTypeDef htim2;
 
 static uint32_t sof_cnt = 0;
 
+enum
+{
+  USB_SOF_MONITOR_CONFIG_HOLDOFF_MS = 750U,                                              // V250924R3 구성 직후 워밍업 지연(ms)
+  USB_SOF_MONITOR_WARMUP_TIMEOUT_MS = USB_SOF_MONITOR_CONFIG_HOLDOFF_MS + USB_BOOT_MONITOR_CONFIRM_DELAY_MS, // V250924R3 워밍업 최대 시간(ms)
+  USB_SOF_MONITOR_WARMUP_FRAMES_HS  = 2048U,                                             // V250924R3 HS 안정성 확인 프레임 수
+  USB_SOF_MONITOR_WARMUP_FRAMES_FS  = 128U,                                              // V250924R3 FS 안정성 확인 프레임 수
+  USB_SOF_MONITOR_SCORE_CAP         = 3U,                                                // V250924R2 단일 이벤트 점수 상한
+};
+
 typedef struct
 {
   uint32_t prev_tick_us;                                          // V250924R2 직전 SOF 타임스탬프(us)
   uint32_t last_decay_ms;                                         // V250924R2 점수 감소 시각(ms)
   uint32_t holdoff_end_ms;                                        // V250924R2 다운그레이드 홀드오프 종료 시각(ms)
+  uint32_t warmup_deadline_ms;                                    // V250924R3 워밍업 타임아웃 시각(ms)
+  uint16_t warmup_good_frames;                                    // V250924R3 누적 정상 프레임 수
+  uint16_t warmup_target_frames;                                  // V250924R3 요구되는 정상 프레임 한계
   uint8_t  score;                                                 // V250924R2 누적 불안정 점수
+  bool     warmup_complete;                                       // V250924R3 워밍업 완료 여부
 } usb_sof_monitor_t;
 
 static usb_sof_monitor_t sof_monitor = {0};                       // V250924R2 SOF 안정성 상태
+static uint8_t           sof_prev_dev_state = USBD_STATE_DEFAULT; // V250924R2 마지막 USB 장치 상태
 
 
 /**
@@ -1201,33 +1215,59 @@ static UsbBootMode_t usbHidResolveDowngradeTarget(void)            // V250924R2 
   }
 }
 
-static void usbHidMonitorSof(uint32_t now_us)                     // V250924R2 SOF(uSOF) 간격 감시
+static void usbHidMonitorSof(uint32_t now_us)                     // V250924R3 SOF(uSOF) 간격 감시/워밍업 제어
 {
   USBD_HandleTypeDef *pdev   = &USBD_Device;
   uint32_t             now_ms = millis();
 
+  if (pdev->dev_state != sof_prev_dev_state)
+  {
+    sof_monitor.prev_tick_us      = now_us;
+    sof_monitor.score             = 0U;
+    sof_monitor.last_decay_ms     = now_ms;
+    sof_monitor.holdoff_end_ms    = (pdev->dev_state == USBD_STATE_CONFIGURED) ? (now_ms + USB_SOF_MONITOR_CONFIG_HOLDOFF_MS) : now_ms; // V250924R3 구성 전후 홀드오프 재설정
+    sof_monitor.warmup_deadline_ms = (pdev->dev_state == USBD_STATE_CONFIGURED) ? (now_ms + USB_SOF_MONITOR_WARMUP_TIMEOUT_MS) : now_ms; // V250924R3 워밍업 타임아웃 초기화
+    sof_monitor.warmup_good_frames = 0U;                             // V250924R3 정상 프레임 카운터 리셋
+    sof_monitor.warmup_target_frames = 0U;                           // V250924R3 프레임 목표 초기화
+    sof_monitor.warmup_complete   = false;                           // V250924R3 워밍업 상태 초기화
+    sof_prev_dev_state            = pdev->dev_state;
+  }
+
   if (pdev->dev_state != USBD_STATE_CONFIGURED)
   {
-    sof_monitor.prev_tick_us = now_us;
-    sof_monitor.score        = 0U;
-    sof_monitor.last_decay_ms = now_ms;
+    sof_monitor.prev_tick_us       = now_us;
+    sof_monitor.score              = 0U;
+    sof_monitor.last_decay_ms      = now_ms;
+    sof_monitor.holdoff_end_ms     = now_ms;
+    sof_monitor.warmup_deadline_ms = now_ms;                          // V250924R3 상태 해제 시 워밍업 재요구
+    sof_monitor.warmup_good_frames = 0U;                              // V250924R3 정상 프레임 카운터 리셋
+    sof_monitor.warmup_target_frames = 0U;                            // V250924R3 프레임 목표 초기화
+    sof_monitor.warmup_complete    = false;                           // V250924R3 워밍업 상태 초기화
     return;
   }
 
   if (USBD_is_suspended())
   {
-    sof_monitor.prev_tick_us  = now_us;
-    sof_monitor.score         = 0U;
-    sof_monitor.holdoff_end_ms = now_ms + 200U;
-    sof_monitor.last_decay_ms  = now_ms;
+    sof_monitor.prev_tick_us        = now_us;
+    sof_monitor.score               = 0U;
+    sof_monitor.holdoff_end_ms      = now_ms + 200U;
+    sof_monitor.warmup_deadline_ms  = now_ms + USB_SOF_MONITOR_WARMUP_TIMEOUT_MS; // V250924R3 재개 직후 워밍업 보장
+    sof_monitor.warmup_good_frames  = 0U;                          // V250924R3 재개 후 정상 프레임 누적 재시작
+    sof_monitor.warmup_target_frames = 0U;                         // V250924R3 속도별 목표 재설정
+    sof_monitor.warmup_complete     = false;                       // V250924R3 재개 시 워밍업 상태 해제
+    sof_monitor.last_decay_ms       = now_ms;
     return;
   }
 
   if (pdev->dev_speed != USBD_SPEED_HIGH && pdev->dev_speed != USBD_SPEED_FULL)
   {
-    sof_monitor.prev_tick_us = now_us;
-    sof_monitor.score        = 0U;
-    sof_monitor.last_decay_ms = now_ms;
+    sof_monitor.prev_tick_us       = now_us;
+    sof_monitor.score              = 0U;
+    sof_monitor.last_decay_ms      = now_ms;
+    sof_monitor.warmup_deadline_ms = now_ms;                          // V250924R3 지원되지 않는 속도 시 워밍업 초기화
+    sof_monitor.warmup_good_frames = 0U;                              // V250924R3 정상 프레임 카운터 리셋
+    sof_monitor.warmup_target_frames = 0U;                            // V250924R3 프레임 목표 초기화
+    sof_monitor.warmup_complete    = false;                           // V250924R3 워밍업 상태 초기화
     return;
   }
 
@@ -1243,12 +1283,43 @@ static void usbHidMonitorSof(uint32_t now_us)                     // V250924R2 S
 
   uint32_t expected_us       = (pdev->dev_speed == USBD_SPEED_HIGH) ? 125U : 1000U;
   uint32_t decay_interval_ms = (pdev->dev_speed == USBD_SPEED_HIGH) ? 4U : 20U;
-  uint8_t  degrade_threshold = (pdev->dev_speed == USBD_SPEED_HIGH) ? 6U : 4U;
+  uint8_t  degrade_threshold = (pdev->dev_speed == USBD_SPEED_HIGH) ? 12U : 6U;
 
   if (now_ms < sof_monitor.holdoff_end_ms)
   {
     sof_monitor.last_decay_ms = now_ms;
     return;
+  }
+
+  if (sof_monitor.warmup_complete == false)                             // V250924R3 구성 직후 충분한 안정 구간 확보
+  {
+    if (sof_monitor.warmup_target_frames == 0U)
+    {
+      sof_monitor.warmup_target_frames = (pdev->dev_speed == USBD_SPEED_HIGH) ? USB_SOF_MONITOR_WARMUP_FRAMES_HS
+                                                                              : USB_SOF_MONITOR_WARMUP_FRAMES_FS;
+    }
+
+    if (delta_us < (expected_us * 2U))
+    {
+      if (sof_monitor.warmup_good_frames < sof_monitor.warmup_target_frames)
+      {
+        sof_monitor.warmup_good_frames++;
+      }
+    }
+    else if (sof_monitor.warmup_good_frames > 0U)
+    {
+      sof_monitor.warmup_good_frames = 0U;
+    }
+
+    if (sof_monitor.warmup_good_frames >= sof_monitor.warmup_target_frames || now_ms >= sof_monitor.warmup_deadline_ms)
+    {
+      sof_monitor.warmup_complete = true;
+      sof_monitor.last_decay_ms   = now_ms;
+    }
+    else
+    {
+      return;
+    }
   }
 
   if (delta_us < (expected_us * 2U))
@@ -1276,6 +1347,11 @@ static void usbHidMonitorSof(uint32_t now_us)                     // V250924R2 S
     delta_score = (uint8_t)(missed_frames - 1U);
   }
 
+  if (delta_score > USB_SOF_MONITOR_SCORE_CAP)
+  {
+    delta_score = USB_SOF_MONITOR_SCORE_CAP;
+  }
+
   if (delta_score < 1U)
   {
     delta_score = 1U;
@@ -1298,9 +1374,14 @@ static void usbHidMonitorSof(uint32_t now_us)                     // V250924R2 S
 
     if (next_mode < USB_BOOT_MODE_MAX)
     {
-      if (usbRequestBootModeDowngrade(next_mode, delta_us, expected_us) == true)
+      usb_boot_downgrade_result_t request_result = usbRequestBootModeDowngrade(next_mode,
+                                                                               delta_us,
+                                                                               expected_us,
+                                                                               now_ms);
+
+      if (request_result == USB_BOOT_DOWNGRADE_ARMED || request_result == USB_BOOT_DOWNGRADE_CONFIRMED)
       {
-        sof_monitor.holdoff_end_ms = now_ms + 2000U;
+        sof_monitor.holdoff_end_ms = now_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS;
       }
       else
       {
