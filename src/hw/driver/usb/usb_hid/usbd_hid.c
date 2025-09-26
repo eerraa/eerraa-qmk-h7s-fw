@@ -489,14 +489,49 @@ typedef struct
   uint32_t last_decay_ms;                                         // V250924R2 점수 감소 시각(ms)
   uint32_t holdoff_end_ms;                                        // V250924R2 다운그레이드 홀드오프 종료 시각(ms)
   uint32_t warmup_deadline_ms;                                    // V250924R3 워밍업 타임아웃 시각(ms)
+  uint32_t expected_us;                                           // V250924R4 속도별 기대 SOF 주기(us)
+  uint32_t stable_threshold_us;                                   // V250924R4 정상 범위 상한(us)
+  uint32_t decay_interval_ms;                                     // V250924R4 점수 감쇠 주기(ms)
   uint16_t warmup_good_frames;                                    // V250924R3 누적 정상 프레임 수
   uint16_t warmup_target_frames;                                  // V250924R3 요구되는 정상 프레임 한계
+  uint8_t  degrade_threshold;                                     // V250924R4 다운그레이드 임계 점수
+  uint8_t  active_speed;                                          // V250924R4 캐시된 USB 속도 코드
   uint8_t  score;                                                 // V250924R2 누적 불안정 점수
   bool     warmup_complete;                                       // V250924R3 워밍업 완료 여부
 } usb_sof_monitor_t;
 
 static usb_sof_monitor_t sof_monitor = {0};                       // V250924R2 SOF 안정성 상태
 static uint8_t           sof_prev_dev_state = USBD_STATE_DEFAULT; // V250924R2 마지막 USB 장치 상태
+
+static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 속도별 모니터링 파라미터 캐시
+{
+  sof_monitor.active_speed = speed_code;
+
+  switch (speed_code)
+  {
+    case USBD_SPEED_HIGH:
+      sof_monitor.expected_us        = 125U;
+      sof_monitor.stable_threshold_us = 250U;
+      sof_monitor.decay_interval_ms  = 4U;
+      sof_monitor.degrade_threshold  = 12U;
+      sof_monitor.warmup_target_frames = USB_SOF_MONITOR_WARMUP_FRAMES_HS;
+      break;
+    case USBD_SPEED_FULL:
+      sof_monitor.expected_us        = 1000U;
+      sof_monitor.stable_threshold_us = 2000U;
+      sof_monitor.decay_interval_ms  = 20U;
+      sof_monitor.degrade_threshold  = 6U;
+      sof_monitor.warmup_target_frames = USB_SOF_MONITOR_WARMUP_FRAMES_FS;
+      break;
+    default:
+      sof_monitor.expected_us        = 0U;
+      sof_monitor.stable_threshold_us = 0U;
+      sof_monitor.decay_interval_ms  = 0U;
+      sof_monitor.degrade_threshold  = 0U;
+      sof_monitor.warmup_target_frames = 0U;
+      break;
+  }
+}
 
 
 /**
@@ -1228,8 +1263,8 @@ static void usbHidMonitorSof(uint32_t now_us)                     // V250924R3 S
     sof_monitor.holdoff_end_ms    = (pdev->dev_state == USBD_STATE_CONFIGURED) ? (now_ms + USB_SOF_MONITOR_CONFIG_HOLDOFF_MS) : now_ms; // V250924R3 구성 전후 홀드오프 재설정
     sof_monitor.warmup_deadline_ms = (pdev->dev_state == USBD_STATE_CONFIGURED) ? (now_ms + USB_SOF_MONITOR_WARMUP_TIMEOUT_MS) : now_ms; // V250924R3 워밍업 타임아웃 초기화
     sof_monitor.warmup_good_frames = 0U;                             // V250924R3 정상 프레임 카운터 리셋
-    sof_monitor.warmup_target_frames = 0U;                           // V250924R3 프레임 목표 초기화
     sof_monitor.warmup_complete   = false;                           // V250924R3 워밍업 상태 초기화
+    usbHidSofMonitorApplySpeedParams((pdev->dev_state == USBD_STATE_CONFIGURED) ? pdev->dev_speed : 0xFFU); // V250924R4 속도 파라미터 초기화
     sof_prev_dev_state            = pdev->dev_state;
   }
 
@@ -1241,8 +1276,8 @@ static void usbHidMonitorSof(uint32_t now_us)                     // V250924R3 S
     sof_monitor.holdoff_end_ms     = now_ms;
     sof_monitor.warmup_deadline_ms = now_ms;                          // V250924R3 상태 해제 시 워밍업 재요구
     sof_monitor.warmup_good_frames = 0U;                              // V250924R3 정상 프레임 카운터 리셋
-    sof_monitor.warmup_target_frames = 0U;                            // V250924R3 프레임 목표 초기화
     sof_monitor.warmup_complete    = false;                           // V250924R3 워밍업 상태 초기화
+    usbHidSofMonitorApplySpeedParams(0xFFU);                          // V250924R4 비구성 상태 속도 파라미터 해제
     return;
   }
 
@@ -1253,9 +1288,9 @@ static void usbHidMonitorSof(uint32_t now_us)                     // V250924R3 S
     sof_monitor.holdoff_end_ms      = now_ms + 200U;
     sof_monitor.warmup_deadline_ms  = now_ms + USB_SOF_MONITOR_WARMUP_TIMEOUT_MS; // V250924R3 재개 직후 워밍업 보장
     sof_monitor.warmup_good_frames  = 0U;                          // V250924R3 재개 후 정상 프레임 누적 재시작
-    sof_monitor.warmup_target_frames = 0U;                         // V250924R3 속도별 목표 재설정
     sof_monitor.warmup_complete     = false;                       // V250924R3 재개 시 워밍업 상태 해제
     sof_monitor.last_decay_ms       = now_ms;
+    usbHidSofMonitorApplySpeedParams(pdev->dev_speed);             // V250924R4 일시중지 후 속도 파라미터 유지
     return;
   }
 
@@ -1266,9 +1301,20 @@ static void usbHidMonitorSof(uint32_t now_us)                     // V250924R3 S
     sof_monitor.last_decay_ms      = now_ms;
     sof_monitor.warmup_deadline_ms = now_ms;                          // V250924R3 지원되지 않는 속도 시 워밍업 초기화
     sof_monitor.warmup_good_frames = 0U;                              // V250924R3 정상 프레임 카운터 리셋
-    sof_monitor.warmup_target_frames = 0U;                            // V250924R3 프레임 목표 초기화
     sof_monitor.warmup_complete    = false;                           // V250924R3 워밍업 상태 초기화
+    usbHidSofMonitorApplySpeedParams(0xFFU);                          // V250924R4 미지원 속도 파라미터 정리
     return;
+  }
+
+  if (pdev->dev_speed != sof_monitor.active_speed)
+  {
+    usbHidSofMonitorApplySpeedParams(pdev->dev_speed);               // V250924R4 속도 전환 시 파라미터 갱신
+    sof_monitor.score              = 0U;
+    sof_monitor.last_decay_ms      = now_ms;
+    sof_monitor.holdoff_end_ms     = now_ms + USB_SOF_MONITOR_CONFIG_HOLDOFF_MS;
+    sof_monitor.warmup_deadline_ms = now_ms + USB_SOF_MONITOR_WARMUP_TIMEOUT_MS;
+    sof_monitor.warmup_good_frames = 0U;
+    sof_monitor.warmup_complete    = false;
   }
 
   if (sof_monitor.prev_tick_us == 0U)
@@ -1278,12 +1324,18 @@ static void usbHidMonitorSof(uint32_t now_us)                     // V250924R3 S
     return;
   }
 
+  uint32_t expected_us       = sof_monitor.expected_us;               // V250924R4 캐시된 기대 주기 참조
+  uint32_t stable_threshold  = sof_monitor.stable_threshold_us;       // V250924R4 캐시된 정상 범위 참조
+  uint32_t decay_interval_ms = sof_monitor.decay_interval_ms;         // V250924R4 캐시된 감쇠 주기 참조
+  uint8_t  degrade_threshold = sof_monitor.degrade_threshold;         // V250924R4 캐시된 임계 점수 참조
+
+  if (expected_us == 0U)
+  {
+    return;
+  }
+
   uint32_t delta_us = now_us - sof_monitor.prev_tick_us;
   sof_monitor.prev_tick_us = now_us;
-
-  uint32_t expected_us       = (pdev->dev_speed == USBD_SPEED_HIGH) ? 125U : 1000U;
-  uint32_t decay_interval_ms = (pdev->dev_speed == USBD_SPEED_HIGH) ? 4U : 20U;
-  uint8_t  degrade_threshold = (pdev->dev_speed == USBD_SPEED_HIGH) ? 12U : 6U;
 
   if (now_ms < sof_monitor.holdoff_end_ms)
   {
@@ -1293,13 +1345,7 @@ static void usbHidMonitorSof(uint32_t now_us)                     // V250924R3 S
 
   if (sof_monitor.warmup_complete == false)                             // V250924R3 구성 직후 충분한 안정 구간 확보
   {
-    if (sof_monitor.warmup_target_frames == 0U)
-    {
-      sof_monitor.warmup_target_frames = (pdev->dev_speed == USBD_SPEED_HIGH) ? USB_SOF_MONITOR_WARMUP_FRAMES_HS
-                                                                              : USB_SOF_MONITOR_WARMUP_FRAMES_FS;
-    }
-
-    if (delta_us < (expected_us * 2U))
+    if (delta_us < stable_threshold)
     {
       if (sof_monitor.warmup_good_frames < sof_monitor.warmup_target_frames)
       {
@@ -1322,7 +1368,7 @@ static void usbHidMonitorSof(uint32_t now_us)                     // V250924R3 S
     }
   }
 
-  if (delta_us < (expected_us * 2U))
+  if (delta_us < stable_threshold)
   {
     if (sof_monitor.score > 0U)
     {

@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V250924R3"  // V250924R3 USB 안정성 모니터링 워밍업 가드 최적화
+#define _DEF_FIRMWATRE_VERSION      "V250924R4"  // V250924R4 USB SOF 모니터 파라미터 캐싱으로 스캔 부하 완화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
