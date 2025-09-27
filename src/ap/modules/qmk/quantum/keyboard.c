@@ -218,12 +218,19 @@ uint32_t get_matrix_scan_rate(void) {
 
 #ifdef MATRIX_HAS_GHOST
 static matrix_row_t get_real_keys(uint8_t row, matrix_row_t rowdata) {
-    matrix_row_t out = 0;
-    for (uint8_t col = 0; col < MATRIX_COLS; col++) {
+    matrix_row_t out              = 0;
+    matrix_row_t pending_columns  = rowdata;
+
+    while (pending_columns) {
+        const uint8_t      col      = __builtin_ctz((unsigned long)pending_columns);  // V250928R1: 눌린 열만 순회해 키맵 조회 비용 최소화
+        const matrix_row_t col_mask = ((matrix_row_t)1) << col;
+
+        pending_columns &= pending_columns - 1;
+
         // read each key in the row data and check if the keymap defines it as a real key
-        if (keycode_at_keymap_location(0, row, col) && (rowdata & (((matrix_row_t)1) << col))) {
+        if (keycode_at_keymap_location(0, row, col)) {
             // this creates new row data, if a key is defined in the keymap, it will be set here
-            out |= ((matrix_row_t)1) << col;
+            out |= col_mask;
         }
     }
     return out;

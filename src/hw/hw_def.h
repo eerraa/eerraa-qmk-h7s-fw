@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V250924R8"  // V250924R8 고스트 검출의 단일 키 조기 종료로 키 스캔 분기 비용 축소
+#define _DEF_FIRMWATRE_VERSION      "V250928R1"  // V250928R1 키맵 필터 열 스캔을 눌린 스위치만 순회하도록 변경
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
