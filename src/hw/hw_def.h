@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V250928R1"  // V250928R1 키맵 필터 열 스캔을 눌린 스위치만 순회하도록 변경
+#define _DEF_FIRMWATRE_VERSION      "V250928R2"  // V250928R2 고스트 판정 시 물리 중복 열이 부족하면 키맵 필터 생략
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
