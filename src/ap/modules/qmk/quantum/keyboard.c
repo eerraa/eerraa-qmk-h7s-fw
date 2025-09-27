@@ -235,6 +235,9 @@ static inline bool popcount_more_than_one(matrix_row_t rowdata) {
 }
 
 static inline bool has_ghost_in_row(uint8_t row, matrix_row_t rowdata) {
+    if ((rowdata & (rowdata - 1)) == 0) {
+        return false;  // V250924R8: 물리적으로 0/1키만 눌린 경우 바로 종료해 키맵 필터 비용 절감
+    }
     /* No ghost exists when less than 2 keys are down on the row.
     If there are "active" blanks in the matrix, the key can't be pressed by the user,
     there is no doubt as to which keys are really being pressed.
