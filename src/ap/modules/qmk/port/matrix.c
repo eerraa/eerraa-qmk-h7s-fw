@@ -49,24 +49,32 @@ matrix_row_t matrix_get_row(uint8_t row)
 
 uint8_t matrix_scan(void)
 {
-  matrix_row_t curr_matrix[MATRIX_ROWS] = {0};
-  uint32_t pre_time;  
-  bool changed;
+  matrix_row_t curr_matrix[MATRIX_ROWS];
+  uint32_t     pre_time;
+  bool         changed = false;
 
 
   pre_time = micros();
 
   #if 1
-  uint16_t curr_rows[MATRIX_ROWS];
+  _Static_assert(sizeof(matrix_row_t) == sizeof(uint16_t),
+                 "matrix_row_t must match keysReadColsBuf element size");
 
-
-  keysReadColsBuf(curr_rows, MATRIX_ROWS);
+  keysReadColsBuf((uint16_t *)curr_matrix, MATRIX_ROWS);
 
   for (uint32_t rows=0; rows<MATRIX_ROWS; rows++)
   {
-    curr_matrix[rows] = curr_rows[rows]; 
+    matrix_row_t new_state = curr_matrix[rows];
+
+    if (raw_matrix[rows] != new_state)
+    {
+      raw_matrix[rows] = new_state;
+      changed          = true;
+    }
   }
   #else
+  memset(curr_matrix, 0, sizeof(curr_matrix));
+
   keysUpdate();
   for (uint32_t rows=0; rows<MATRIX_ROWS; rows++)
   {
@@ -75,16 +83,14 @@ uint8_t matrix_scan(void)
       curr_matrix[rows] |= (keysGetPressed(rows, cols)<<cols);
     }
   }
-  #endif
-
-  key_scan_time = micros() - pre_time;
-
-
   changed = memcmp(raw_matrix, curr_matrix, sizeof(curr_matrix)) != 0;
   if (changed)
   {
     memcpy(raw_matrix, curr_matrix, sizeof(curr_matrix));
   }
+  #endif
+
+  key_scan_time = micros() - pre_time;
 
   changed = debounce(raw_matrix, matrix, MATRIX_ROWS, changed);
   if (changed)
