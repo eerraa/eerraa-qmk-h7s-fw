@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V250924R4"  // V250924R4 USB SOF 모니터 파라미터 캐싱으로 스캔 부하 완화
+#define _DEF_FIRMWATRE_VERSION      "V250924R5"  // V250924R5 키 스캔 경로 DMA 버퍼 직접 참조로 복사 오버헤드 제거
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

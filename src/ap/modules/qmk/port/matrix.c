@@ -49,7 +49,6 @@ matrix_row_t matrix_get_row(uint8_t row)
 
 uint8_t matrix_scan(void)
 {
-  matrix_row_t curr_matrix[MATRIX_ROWS];
   uint32_t     pre_time;
   bool         changed = false;
 
@@ -60,11 +59,11 @@ uint8_t matrix_scan(void)
   _Static_assert(sizeof(matrix_row_t) == sizeof(uint16_t),
                  "matrix_row_t must match keysReadColsBuf element size");
 
-  keysReadColsBuf((uint16_t *)curr_matrix, MATRIX_ROWS);
+  const matrix_row_t *hw_matrix = (const matrix_row_t *)keysPeekColsBuf();  // V250924R5: DMA 버퍼를 직접 참조하여 스캔 복사 비용 제거
 
   for (uint32_t rows=0; rows<MATRIX_ROWS; rows++)
   {
-    matrix_row_t new_state = curr_matrix[rows];
+    matrix_row_t new_state = hw_matrix[rows];
 
     if (raw_matrix[rows] != new_state)
     {
@@ -72,7 +71,9 @@ uint8_t matrix_scan(void)
       changed          = true;
     }
   }
-  #else
+#else
+  matrix_row_t curr_matrix[MATRIX_ROWS];
+
   memset(curr_matrix, 0, sizeof(curr_matrix));
 
   keysUpdate();
