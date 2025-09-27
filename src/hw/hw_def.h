@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V250924R5"  // V250924R5 키 스캔 경로 DMA 버퍼 직접 참조로 복사 오버헤드 제거
+#define _DEF_FIRMWATRE_VERSION      "V250924R6"  // V250924R6 matrix_task() 고스트 미발생 시 행 순회 생략으로 스캔 루프 경량화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
