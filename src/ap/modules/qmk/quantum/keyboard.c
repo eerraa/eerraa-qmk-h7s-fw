@@ -261,7 +261,18 @@ static inline bool has_ghost_in_row(uint8_t row, matrix_row_t rowdata) {
     we are checking one row at a time, not all of them at once.
     */
     for (uint8_t i = 0; i < MATRIX_ROWS; i++) {
-        if (i != row && popcount_more_than_one(get_real_keys(i, matrix_get_row(i)) & rowdata)) {
+        if (i == row) {
+            continue;
+        }
+
+        const matrix_row_t other_row_state = matrix_get_row(i);
+        const matrix_row_t overlap         = other_row_state & rowdata;
+
+        if ((overlap & (overlap - 1)) == 0) {
+            continue;  // V250928R2: 물리 중복 열이 0/1개면 고스트가 생길 수 없어 키맵 필터링을 생략
+        }
+
+        if (popcount_more_than_one(get_real_keys(i, other_row_state) & rowdata)) {
             return true;
         }
     }
