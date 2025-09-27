@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V250924R7"  // V250924R7 matrix_task() 열 루프를 변경 비트 기반으로 축소해 이벤트 처리 비용 감소
+#define _DEF_FIRMWATRE_VERSION      "V250924R8"  // V250924R8 고스트 검출의 단일 키 조기 종료로 키 스캔 분기 비용 축소
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
