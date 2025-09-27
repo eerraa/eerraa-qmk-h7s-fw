@@ -311,6 +311,11 @@ bool keysReadColsBuf(uint16_t *p_data, uint32_t rows_cnt)
   return true;
 }
 
+const uint16_t *keysPeekColsBuf(void)
+{
+  return col_rd_buf;  // V250924R5: DMA 수집 버퍼를 직접 노출하여 추가 복사 없이 스캔 상태를 참조
+}
+
 bool keysGetPressed(uint16_t row, uint16_t col)
 {
   bool     ret = false;
