@@ -534,19 +534,17 @@ static bool matrix_task(void) {
     }
 
     static matrix_row_t matrix_previous[MATRIX_ROWS];
+    static bool         ghost_pending = false;  // V250924R6: 고스트 감지 시 후속 스캔에서도 행 비교 유지
 
-    matrix_scan();
-    bool matrix_changed = false;
-    for (uint8_t row = 0; row < MATRIX_ROWS && !matrix_changed; row++) {
-        matrix_changed |= matrix_previous[row] ^ matrix_get_row(row);
-    }
+    const bool scan_changed   = matrix_scan();
+    bool       matrix_changed = scan_changed || ghost_pending;
 
     matrix_scan_perf_task();
 
-    // Short-circuit the complete matrix processing if it is not necessary
+    // 고스트가 없고 스캔 결과가 동일하면 행 순회를 생략해 낭비를 줄인다. (V250924R6)
     if (!matrix_changed) {
         generate_tick_event();
-        return matrix_changed;
+        return false;
     }
 
     if (debug_config.matrix) {
@@ -554,12 +552,18 @@ static bool matrix_task(void) {
     }
 
     const bool process_keypress = should_process_keypress();
+    bool       new_ghost_pending = false;
 
     for (uint8_t row = 0; row < MATRIX_ROWS; row++) {
         const matrix_row_t current_row = matrix_get_row(row);
         const matrix_row_t row_changes = current_row ^ matrix_previous[row];
 
-        if (!row_changes || has_ghost_in_row(row, current_row)) {
+        if (!row_changes) {
+            continue;
+        }
+
+        if (has_ghost_in_row(row, current_row)) {
+            new_ghost_pending = true;
             continue;
         }
 
@@ -579,7 +583,9 @@ static bool matrix_task(void) {
         matrix_previous[row] = current_row;
     }
 
-    return matrix_changed;
+    ghost_pending = new_ghost_pending;
+
+    return true;
 }
 
 /** \brief Tasks previously located in matrix_scan_quantum
