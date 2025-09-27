@@ -1,101 +1,129 @@
-# eerraa-qmk-h7s-fw
+# CODEX_MAP::eerraa-qmk-h7s-fw
 
-PROJECT_CONTEXT
-- TARGET: STM32H7S with internal High-speed PHY; firmware tuned for 8000Hz input.
-- EXTENDED_RATES: High-speed 4k/2kHz plus Full-speed 1kHz.
-- KEY_FEATURES:
-  - USB_INSTABILITY_MONITOR: microframe gap scoring with holdoff, warm-up, and decay timers tracked in microseconds to keep the SOF ISR lightweight while preserving downgrade accuracy (V250924R4).
-  - POLLING_RATE_DOWNGRADE: staged downgrade queue with confirmation delay and EEPROM persistence to avoid repeated resets.
-- FOLLOW-UPS: host compatibility matrix for V250924R3 heuristics; evaluate auto recovery after long stability windows.
-- QMK_PORT_SUMMARY: QMK logic refit for high-bandwidth USB keyboard firmware.
+## PROJECT_SNAPSHOT
+- target_mcu: STM32H7S (internal HS PHY)
+- usb_polling_rates: [hs_8000hz, hs_4000hz, hs_2000hz, fs_1000hz_fallback]
+- qmk_port_goal: "Align standard QMK logic with STM32H7S bandwidth/timing constraints"
+- backlog:
+  - V250924R3_host_matrix: "Catalog host compatibility heuristics"
+  - V250924R3_auto_recovery: "Evaluate long-duration downgrade recovery"
 
-CODEX_RULES
-- RESPONSE_LANGUAGE: Korean (all answers must be in Korean)
-- ANALYSIS_SEQUENCE:
-  1. VERIFY_VERSION_AND_BUILD_PARAMS: inspect `_DEF_FIRMWARE_VERSION` and board macros in `src/hw/hw_def.h`
-  2. TRACE_ENTRYPOINT: follow init path `src/main.c` -> `src/ap/ap.c`
-  3. MAP_QMK_LAYERS: review `src/ap/modules/qmk/{port,keyboards,quantum}`
-- CHANGELOG_NOTATION: annotate edits with `'VYYMMDDRn'` comments; increment `Rn` for multiple revisions per day
-- FIRMWARE_VERSION_POLICY: sync `_DEF_FIRMWARE_VERSION` in `src/hw/hw_def.h` to `VYYMMDDRn`
-- HIGH_PRIORITY_REVIEW_FILES: `src/ap/modules/qmk/port/sys_port.*`, `src/hw/driver/`
+## FIRMWARE_FEATURES
+- usb_instability_monitor:
+    version: V250924R4
+    metrics: [microframe_gap_tracking, holdoff_timer, warmup_timer, decay_timer]
+    scheduling: "SOF ISR lightweight, downgrade logic accurate"
+    downgrade_pipeline: staged_queue_with_confirmation_delay_and_eeprom_persistence
+- polling_rate_downgrade_queue: staged_pipeline_preventing_reset_loops
 
-BUILD_PIPELINE
-- NOTE: UF2 conversion handled inside CMake targets
-- COMMANDS:
-  - `cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/sirind/brick60'`
-  - `cmake --build build -j10`
+## FIRMWARE_POLICIES
+- usb_phy_mode: high_speed_only_until_fs_1khz_validation
+- timing_constraints: preserve_8000hz_scheduling → inspect src/ap/modules/qmk/port/sys_port.* , src/hw/driver/
+- upstream_sync_rule: diff_against_quantum_then_reapply_port_overrides
 
-DIRECTORY_MAP
-- ROOT
-  - PATH=CMakeLists.txt :: ROLE=global CMake configuration
-  - PATH=LICENSE :: ROLE=project license record
-  - PATH=README.md :: ROLE=Codex quick reference and workflow rules
-  - PATH=prj/ :: ROLE=IDE environment configurations
-  - PATH=src/ :: ROLE=all firmware sources and libraries
-  - PATH=tools/ :: ROLE=toolchain helpers and UF2 utilities
-- PRJ
-  - PATH=prj/vscode/baram-45k.code-workspace :: ROLE=VS Code workspace for Baram 45K board
-  - PATH=prj/vscode/baram-60mx-6.25u.code-workspace :: ROLE=VS Code workspace for Baram 60MX-6.25U board
-- SRC
-  - PATH=src/main.c :: ROLE=system entry (`main`), handles init + app launch
-  - PATH=src/main.h :: ROLE=shared declarations for main module
-  - PATH=src/ap/ :: ROLE=application layer + QMK port integration
-  - PATH=src/bsp/ :: ROLE=board support package and startup code
-  - PATH=src/common/ :: ROLE=shared definitions, errors, hardware helpers
-  - PATH=src/hw/ :: ROLE=hardware abstraction layer + firmware version definitions
-  - PATH=src/lib/ :: ROLE=external libraries (ST HAL, utilities)
-- SRC/AP
-  - PATH=src/ap/ap.c :: ROLE=main loop + QMK task scheduling
-  - PATH=src/ap/ap.h :: ROLE=application interface declarations
-  - PATH=src/ap/ap_def.h :: ROLE=application-level constants/structs
-  - PATH=src/ap/modules/ :: ROLE=functional modules including QMK port
-- SRC/AP/MODULES/QMK
-  - PATH=src/ap/modules/qmk/CMakeLists.txt :: ROLE=QMK module build target config
-  - PATH=src/ap/modules/qmk/keyboards/ :: ROLE=keyboard-specific layouts, ports, metadata
-  - PATH=src/ap/modules/qmk/port/ :: ROLE=STM32H7S hardware abstraction for QMK
-  - PATH=src/ap/modules/qmk/quantum/ :: ROLE=QMK core logic and shared modules
-  - PATH=src/ap/modules/qmk/qmk.c :: ROLE=firmware↔QMK init bridge
-  - PATH=src/ap/modules/qmk/qmk.h :: ROLE=QMK module external interface
-- KEYBOARDS_SUBSTRUCTURE
-  - CONTENTS=config.cmake (CMake options), config.h (USB IDs, matrix), info.json (metadata), json/*.json (VIA/Vial), keymap.c (keymap logic), port/* (per-board features)
-  - MAJOR_BOARDS=baram/45k, baram/60MX-6.25U, era/sirind/brick60, era/sirind/brick60h
-- PORT_SUBSTRUCTURE
-  - ELEMENTS=kill_switch.*, kkuk.*, matrix.{c,h}, override.{c,h}, platforms/*, protocol/*, sys_port.*, ver_port.*, via_hid.*, version.h
-  - FUNCTION=override base QMK behavior for STM32H7S timers/GPIO/USB, implement safety + communication
-- QUANTUM_CORE
-  - INPUT_PROCESSING=action*, keycode*, keymap_*, process_keycode*
-  - DEVICE_FEATURES=mousekey*, joystick*, painter, pointing_device*, digitizer*
-  - FEEDBACK_MODULES=rgb_matrix, rgblight, led*, haptic*, audio, backlight
-  - STATE_MANAGEMENT=eeconfig*, dynamic_keymap*, wear_leveling, sync_timer*
-  - COMMUNICATION=via*, virtser, raw_hid, usb*
-  - UTILITIES=util.h, wait.*, timer.*, bootmagic, command*
-- SRC/BSP
-  - PATH=src/bsp/bsp.c :: ROLE=board init + hardware handler registration
-  - PATH=src/bsp/bsp.h :: ROLE=BSP interface declarations
-  - PATH=src/bsp/device/ :: ROLE=clock + pinmap low-level configs
-  - PATH=src/bsp/ldscript/ :: ROLE=linker scripts and memory layout
-  - PATH=src/bsp/startup/ :: ROLE=startup assembly and init
-- SRC/COMMON
-  - PATH=src/common/core/ :: ROLE=core utilities
-  - PATH=src/common/def.h :: ROLE=global macros
-  - PATH=src/common/err_code.h :: ROLE=error code tables
-  - PATH=src/common/hw/ :: ROLE=shared hardware utilities
-- SRC/HW
-  - PATH=src/hw/hw.c :: ROLE=hardware layer init + module registration
-  - PATH=src/hw/hw.h :: ROLE=hardware interfaces
-  - PATH=src/hw/hw_def.h :: ROLE=board definitions + `_DEF_FIRMWARE_VERSION`
-  - PATH=src/hw/driver/ :: ROLE=USB/GPIO/I2C driver implementations
-- SRC/LIB
-  - PATH=src/lib/ST/ :: ROLE=ST HAL + CMSIS
-  - PATH=src/lib/lib8tion/ :: ROLE=lib8tion utilities used by QMK
-- TOOLS
-  - PATH=tools/W25Q16JV_BARAM-QMK-H7S.stldr :: ROLE=ST-LINK loader config
-  - PATH=tools/arm-none-eabi-gcc.cmake :: ROLE=toolchain path/options definition
-  - PATH=tools/uf2/uf2conv.py :: ROLE=UF2 converter script
-  - PATH=tools/uf2/uf2families.json :: ROLE=UF2 board identifiers
+## COLLAB_RULES_FOR_CODEX
+- response_language: korean_only
+- analysis_checklist:
+  1. inspect `_DEF_FIRMWARE_VERSION` + board macros @ src/hw/hw_def.h
+  2. follow init_chain src/main.c → src/ap/ap.c
+  3. review layout modules @ src/ap/modules/qmk/{port,keyboards,quantum}
+- changelog_notation: VYYMMDDRn (increment Rn per same-day revision)
+- firmware_version_policy: keep `_DEF_FIRMWARE_VERSION` synced with newest VYYMMDDRn
+- critical_review_targets: [src/ap/modules/qmk/port/sys_port.* , src/hw/driver/]
 
-ADDITIONAL_NOTES
-- USB_MONITOR: 750ms setup holdoff; warm-up succeeds after 2048 HS microframes (128 FS frames) or a 2.75s timeout; downgrade scoring caps events at HS=12/FS=6 and only arms after a confirmation delay. Microsecond bookkeeping keeps SOF execution bounded while still recording wall-clock `millis()` when persisting downgrade state (V250924R4).
-- USB_PHY_POLICY: High-speed only; Full-speed/external PHY paths stay disabled until tied to 1000Hz work.
-- TIMING_SENSITIVITY: maintain 8000Hz scheduling; review `src/ap/modules/qmk/port/sys_port.*` and `src/hw/driver/` before changing timers/DMA.
-- QMK_UPSTREAM_SYNC: diff `quantum/` first, reapply platform-specific adjustments within `port/`.
+## BUILD_PIPELINE
+- uf2_conversion: handled_in_cmake_targets
+- standard_build:
+  - step1: cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/sirind/brick60'
+  - step2: cmake --build build -j10
+
+## DIRECTORY_INDEX
+```text
+ROOT
+├─ CMakeLists.txt              :: global_cmake
+├─ LICENSE                     :: project_license
+├─ README.md                   :: codex_reference
+├─ prj/                        :: ide_configs
+├─ src/                        :: firmware_sources
+└─ tools/                      :: toolchain_and_uf2
+
+prj/
+└─ vscode/
+   ├─ baram-45k.code-workspace           :: vscode_workspace_baram_45k
+   └─ baram-60mx-6.25u.code-workspace    :: vscode_workspace_baram_60mx_6.25u
+
+src/
+├─ main.c , main.h             :: system_entrypoint + shared_decls
+├─ ap/                         :: application_layer + qmk_integration
+├─ bsp/                        :: board_support_package
+├─ common/                     :: shared_defs + errors + hw_helpers
+├─ hw/                         :: hardware_abstraction + firmware_version
+└─ lib/                        :: external_libraries
+
+src/ap/
+├─ ap.c , ap.h                 :: main_loop + app_interface
+├─ ap_def.h                    :: app_constants
+└─ modules/                    :: functional_modules (includes qmk)
+
+src/ap/modules/qmk/
+├─ CMakeLists.txt              :: module_build_config
+├─ keyboards/                  :: board_layouts + metadata
+├─ port/                       :: stm32h7s_abstraction_for_qmk
+├─ quantum/                    :: qmk_core_logic
+├─ qmk.c                       :: firmware_qmk_bridge
+└─ qmk.h                       :: module_interface
+
+src/ap/modules/qmk/port/
+├─ kill_switch.* , kkuk.*
+├─ matrix.{c,h} , override.{c,h}
+├─ platforms/* , protocol/*
+├─ sys_port.* , ver_port.*
+└─ via_hid.* , version.h
+purpose: override_qmk_for_stm32h7s_timers_gpio_usb + safety_comm_features
+
+src/ap/modules/qmk/quantum/
+- input_processing: action* , keycode* , keymap_* , process_keycode*
+- device_features: mousekey* , joystick* , painter , pointing_device* , digitizer*
+- feedback_modules: rgb_matrix , rgblight , led* , haptic* , audio , backlight
+- state_management: eeconfig* , dynamic_keymap* , wear_leveling , sync_timer*
+- communication: via* , virtser , raw_hid , usb*
+- utilities: util.h , wait.* , timer.* , bootmagic , command*
+
+src/bsp/
+├─ bsp.c , bsp.h               :: board_init + handler_registration
+├─ device/                     :: clock + pinmap_configs
+├─ ldscript/                   :: linker_scripts + memory_layout
+└─ startup/                    :: startup_asm + init
+
+src/common/
+├─ core/                       :: core_utilities
+├─ def.h                       :: global_macros
+├─ err_code.h                  :: error_tables
+└─ hw/                         :: shared_hw_utilities
+
+src/hw/
+├─ hw.c , hw.h                 :: hardware_layer_init + module_registry
+├─ hw_def.h                    :: board_defs + `_DEF_FIRMWARE_VERSION`
+└─ driver/                     :: usb_gpio_i2c_drivers
+
+src/lib/
+├─ ST/                         :: st_hal + cmsis
+└─ lib8tion/                   :: lib8tion_utils
+
+tools/
+├─ W25Q16JV_BARAM-QMK-H7S.stldr      :: stlink_loader_config
+├─ arm-none-eabi-gcc.cmake           :: toolchain_options
+└─ uf2/
+   ├─ uf2conv.py                      :: uf2_converter
+   └─ uf2families.json                :: uf2_board_ids
+```
+
+## ADDITIONAL_NOTES
+- usb_monitor_profile:
+    version: V250924R4
+    holdoff: 750ms
+    warmup: 2048_hs_microframes_or_2.75s_timeout
+    downgrade_caps: {hs_events:12 , fs_events:6}
+    activation: confirmation_delay_required
+    bookkeeping: microsecond_metrics + millis() persistence
+- follow_up_research: [host_compatibility_validation , long_window_recovery]
