@@ -567,17 +567,20 @@ static bool matrix_task(void) {
             continue;
         }
 
-        matrix_row_t col_mask = 1;
-        for (uint8_t col = 0; col < MATRIX_COLS; col++, col_mask <<= 1) {
-            if (row_changes & col_mask) {
-                const bool key_pressed = current_row & col_mask;
+        matrix_row_t pending_changes = row_changes;
+        while (pending_changes) {
+            const uint8_t      col      = __builtin_ctz((unsigned long)pending_changes);  // V250924R7: 변경 비트만 스캔해 열 루프 비용 최소화
+            const matrix_row_t col_mask = ((matrix_row_t)1) << col;
 
-                if (process_keypress) {
-                    action_exec(MAKE_KEYEVENT(row, col, key_pressed));
-                }
+            pending_changes &= pending_changes - 1;  // V250924R7: 처리한 비트를 제거해 반복 횟수를 줄임
 
-                switch_events(row, col, key_pressed);
+            const bool key_pressed = current_row & col_mask;
+
+            if (process_keypress) {
+                action_exec(MAKE_KEYEVENT(row, col, key_pressed));
             }
+
+            switch_events(row, col, key_pressed);
         }
 
         matrix_previous[row] = current_row;
