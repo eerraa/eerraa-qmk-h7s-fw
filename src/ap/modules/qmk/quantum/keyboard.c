@@ -618,6 +618,16 @@ static bool matrix_task(void) {
         }
 
         matrix_row_t pending_changes = row_changes;
+        keyevent_t event;
+        if (process_keypress) {
+            event = (keyevent_t){
+                .key   = {.row = row, .col = 0},
+                .time  = timer_read(),   // V250928R4: 동일 스캔 내 이벤트는 하나의 타임스탬프를 공유해 timer_read() 호출 최소화
+                .type  = KEY_EVENT,
+                .pressed = false,
+            };
+        }
+
         while (pending_changes) {
             const uint8_t      col      = __builtin_ctz((unsigned long)pending_changes);  // V250924R7: 변경 비트만 스캔해 열 루프 비용 최소화
             const matrix_row_t col_mask = ((matrix_row_t)1) << col;
@@ -627,7 +637,9 @@ static bool matrix_task(void) {
             const bool key_pressed = current_row & col_mask;
 
             if (process_keypress) {
-                action_exec(MAKE_KEYEVENT(row, col, key_pressed));
+                event.key.col = col;
+                event.pressed = key_pressed;
+                action_exec(event);
             }
 
             switch_events(row, col, key_pressed);
