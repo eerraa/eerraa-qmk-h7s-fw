@@ -160,6 +160,8 @@ typedef struct
   uint32_t freq_hz;
   uint32_t time_max;
   uint32_t time_min;
+  uint32_t time_excess_max;  // V250928R3 예상 간격 초과분 최대값(us)
+  uint32_t queue_depth_max;  // V250928R3 폴링 지연 당시 대기 중이던 큐 길이 최대값
 } usb_hid_rate_info_t;
 
 bool usbHidSetViaReceiveFunc(void (*func)(uint8_t *, uint8_t));

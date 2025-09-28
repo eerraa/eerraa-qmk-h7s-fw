@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V250928R2"  // V250928R2 고스트 판정 시 물리 중복 열이 부족하면 키맵 필터 생략
+#define _DEF_FIRMWATRE_VERSION      "V250928R3"  // V250928R3 HID 폴링 진단 카운터 추가
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
