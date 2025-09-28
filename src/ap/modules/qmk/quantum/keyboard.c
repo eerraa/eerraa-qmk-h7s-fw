@@ -217,23 +217,52 @@ uint32_t get_matrix_scan_rate(void) {
 #endif
 
 #ifdef MATRIX_HAS_GHOST
-static matrix_row_t get_real_keys(uint8_t row, matrix_row_t rowdata) {
-    matrix_row_t out              = 0;
-    matrix_row_t pending_columns  = rowdata;
+static matrix_row_t real_key_mask[MATRIX_ROWS];
+static bool         real_key_mask_dirty[MATRIX_ROWS];
+static bool         real_key_mask_ready;
 
-    while (pending_columns) {
-        const uint8_t      col      = __builtin_ctz((unsigned long)pending_columns);  // V250928R1: 눌린 열만 순회해 키맵 조회 비용 최소화
-        const matrix_row_t col_mask = ((matrix_row_t)1) << col;
+static void mark_all_real_key_masks_dirty(void) {
+    for (uint8_t row = 0; row < MATRIX_ROWS; row++) {
+        real_key_mask_dirty[row] = true;  // V250928R3: 초기화 및 전체 무효화 시 지연 계산 대비
+    }
+    real_key_mask_ready = true;  // V250928R3: 최초 접근 시점에 한 번만 초기화하도록 표시
+}
 
-        pending_columns &= pending_columns - 1;
+static void refresh_real_key_mask(uint8_t row) {
+    matrix_row_t mask = 0;
 
-        // read each key in the row data and check if the keymap defines it as a real key
+    for (uint8_t col = 0; col < MATRIX_COLS; col++) {
         if (keycode_at_keymap_location(0, row, col)) {
-            // this creates new row data, if a key is defined in the keymap, it will be set here
-            out |= col_mask;
+            mask |= ((matrix_row_t)1) << col;
         }
     }
-    return out;
+
+    real_key_mask[row]       = mask;      // V250928R3: 열 비트를 캐싱해 반복 키맵 조회 제거
+    real_key_mask_dirty[row] = false;
+}
+
+void keyboard_keymap_real_keys_invalidate(uint8_t row) {
+    if (row < MATRIX_ROWS) {
+        if (!real_key_mask_ready) {
+            mark_all_real_key_masks_dirty();  // V250928R3: 초기 접근 전에 무효화 요청이 들어오면 전체 초기화
+        }
+        real_key_mask_dirty[row] = true;      // V250928R3: 동적 키맵 변경 시 해당 행만 다시 계산
+    }
+}
+
+void keyboard_keymap_real_keys_invalidate_all(void) {
+    mark_all_real_key_masks_dirty();  // V250928R3: 대량 업데이트 시 전체 행을 다시 계산하도록 플래그 설정
+}
+
+static matrix_row_t get_real_keys(uint8_t row, matrix_row_t rowdata) {
+    if (!real_key_mask_ready) {
+        mark_all_real_key_masks_dirty();  // V250928R3: 최초 호출 시 모든 행을 지연 초기화로 준비
+    }
+    if (real_key_mask_dirty[row]) {
+        refresh_real_key_mask(row);  // V250928R3: 필요한 행만 즉시 재계산
+    }
+
+    return rowdata & real_key_mask[row];
 }
 
 static inline bool popcount_more_than_one(matrix_row_t rowdata) {

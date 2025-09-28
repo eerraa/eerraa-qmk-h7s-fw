@@ -139,6 +139,11 @@ void set_activity_timestamps(uint32_t matrix_timestamp, uint32_t encoder_timesta
 
 uint32_t get_matrix_scan_rate(void);
 
+#ifdef MATRIX_HAS_GHOST
+void keyboard_keymap_real_keys_invalidate(uint8_t row);      // V250928R3: 동적 키맵 변경 시 고스트 마스크 갱신 요청
+void keyboard_keymap_real_keys_invalidate_all(void);         // V250928R3: 일괄 변경 시 전체 행 무효화
+#endif
+
 #ifdef __cplusplus
 }
 #endif
