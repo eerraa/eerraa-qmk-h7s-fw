@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V250928R3"  // V250928R3 HID 폴링 진단 카운터 + 고스트 키맵 캐시
+#define _DEF_FIRMWATRE_VERSION      "V250928R4"  // V250928R4 키 이벤트 타임스탬프 재사용으로 timer_read() 감소
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
