@@ -118,10 +118,12 @@ void matrix_info(void)
       usbHidGetRateInfo(&hid_info);
       
       logPrintf("Scan Rate : %d.%d KHz\n", get_matrix_scan_rate()/1000, get_matrix_scan_rate()%1000);
-      logPrintf("Poll Rate : %d Hz, %d us(max), %d us(min)\n",
+      logPrintf("Poll Rate : %d Hz, %d us(max), %d us(min), %d us(excess), %d queued(max)\n", // V250928R3 HID 진단 지표 노출
                 hid_info.freq_hz,
                 hid_info.time_max,
-                hid_info.time_min);
+                hid_info.time_min,
+                hid_info.time_excess_max,
+                hid_info.queue_depth_max);
       logPrintf("Scan Time : %d us\n", key_scan_time);
     }
   }
@@ -141,10 +143,12 @@ void cliCmd(cli_args_t *args)
     usbHidGetRateInfo(&hid_info);
     
     logPrintf("Scan Rate : %d.%d KHz\n", get_matrix_scan_rate()/1000, get_matrix_scan_rate()%1000);
-    logPrintf("Poll Rate : %d Hz, %d us(max), %d us(min)\n",
+    logPrintf("Poll Rate : %d Hz, %d us(max), %d us(min), %d us(excess), %d queued(max)\n", // V250928R3 HID 진단 지표 노출
               hid_info.freq_hz,
               hid_info.time_max,
-              hid_info.time_min);
+              hid_info.time_min,
+              hid_info.time_excess_max,
+              hid_info.queue_depth_max);
     logPrintf("Scan Time : %d us\n", key_scan_time);
 
     ret = true;

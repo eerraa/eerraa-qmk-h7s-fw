@@ -74,6 +74,7 @@ static uint8_t USBD_HID_DataIn(USBD_HandleTypeDef *pdev, uint8_t epnum);
 static uint8_t USBD_HID_DataOut(USBD_HandleTypeDef *pdev, uint8_t epnum);
 static uint8_t USBD_HID_EP0_RxReady(USBD_HandleTypeDef *pdev);
 static uint8_t USBD_HID_SOF(USBD_HandleTypeDef *pdev);
+static uint32_t usbHidExpectedPollIntervalUs(void);                  // V250928R3 HID 폴링 간격 계산
 
 #ifndef USE_USBD_COMPOSITE
 static uint8_t *USBD_HID_GetFSCfgDesc(uint16_t *length);
@@ -1022,12 +1023,17 @@ static uint32_t data_in_rate = 0;
 static bool     rate_time_req = false;
 static uint32_t rate_time_pre = 0;
 static uint32_t rate_time_us  = 0;
-static uint32_t rate_time_min = 0; 
-static uint32_t rate_time_avg = 0; 
-static uint32_t rate_time_sum = 0; 
-static uint32_t rate_time_max = 0; 
-static uint32_t rate_time_min_check = 0xFFFF; 
-static uint32_t rate_time_max_check = 0; 
+static uint32_t rate_time_min = 0;
+static uint32_t rate_time_avg = 0;
+static uint32_t rate_time_sum = 0;
+static uint32_t rate_time_max = 0;
+static uint32_t rate_time_min_check = 0xFFFF;
+static uint32_t rate_time_max_check = 0;
+static uint32_t rate_time_excess_max = 0;                    // V250928R3 폴링 지연 초과분 누적 최대값
+static uint32_t rate_time_excess_max_check = 0;              // V250928R3 윈도우 내 초과분 최대값 추적
+static uint32_t rate_queue_depth_snapshot = 0;               // V250928R3 폴링 시작 시점의 큐 길이 스냅샷
+static uint32_t rate_queue_depth_max = 0;                    // V250928R3 큐 잔량 최대값
+static uint32_t rate_queue_depth_max_check = 0;              // V250928R3 윈도우 내 큐 잔량 최대값 추적
 
 static uint32_t rate_time_sof_pre = 0; 
 static uint32_t rate_time_sof = 0; 
@@ -1130,6 +1136,24 @@ static uint8_t *USBD_HID_GetDeviceQualifierDesc(uint16_t *length)
 }
 #endif /* USE_USBD_COMPOSITE  */
 
+static uint32_t usbHidExpectedPollIntervalUs(void)
+{
+  if (usbBootModeIsFullSpeed())
+  {
+    return 1000U;                                                   // V250928R3 FS 1kHz = 1000us 간격
+  }
+
+  uint8_t hs_interval = usbBootModeGetHsInterval();                  // V250928R3 HS 모드 bInterval 읽기
+
+  if (hs_interval < 1U)
+  {
+    hs_interval = 1U;
+  }
+
+  uint32_t microframes = 1UL << (hs_interval - 1U);                  // V250928R3 2^(bInterval-1) 마이크로프레임 수
+
+  return microframes * 125U;                                         // V250928R3 1 마이크로프레임 = 125us
+}
 
 bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev)
 {
@@ -1172,12 +1196,13 @@ bool usbHidSendReport(uint8_t *p_data, uint16_t length)
     {
       key_time_req = true;
       rate_time_req = true;
-      rate_time_pre = micros();    
-    }  
+      rate_time_pre = micros();
+      rate_queue_depth_snapshot = qbufferAvailable(&report_q);       // V250928R3 즉시 전송 시 큐 잔량 캡처
+    }
     else
     {
       memcpy(report_info.buf, p_data, length);
-      qbufferWrite(&report_q, (uint8_t *)&report_info, 1);        
+      qbufferWrite(&report_q, (uint8_t *)&report_info, 1);
     }    
   }
   else
@@ -1229,11 +1254,15 @@ void usbHidMeasurePollRate(void)
     rate_time_min = rate_time_min_check;
     rate_time_max = rate_time_max_check;
     rate_time_avg = rate_time_sum / (data_in_cnt + 1);
+    rate_time_excess_max = rate_time_excess_max_check;               // V250928R3 초과 지연 최대값 라치
+    rate_queue_depth_max = rate_queue_depth_max_check;               // V250928R3 큐 잔량 최대값 라치
     data_in_cnt = 0;
 
     rate_time_min_check = 0xFFFF;
     rate_time_max_check = 0;
     rate_time_sum = 0;
+    rate_time_excess_max_check = 0;
+    rate_queue_depth_max_check = 0;
   }
   cnt++;
 }
@@ -1457,10 +1486,10 @@ void usbHidMeasureRateTime(void)
   if (rate_time_req)
   {
     uint32_t rate_time_cur;
-    
+
     rate_time_cur = micros();
     rate_time_us  = rate_time_cur - rate_time_pre;
-    rate_time_sum += rate_time_us; 
+    rate_time_sum += rate_time_us;
     if (rate_time_min_check > rate_time_us)
     {
       rate_time_min_check = rate_time_us;
@@ -1468,6 +1497,23 @@ void usbHidMeasureRateTime(void)
     if (rate_time_max_check < rate_time_us)
     {
       rate_time_max_check = rate_time_us;
+    }
+
+    uint32_t expected_interval_us = usbHidExpectedPollIntervalUs();   // V250928R3 현재 모드 기준 기대 폴링 간격
+
+    if (rate_time_us > expected_interval_us)
+    {
+      uint32_t excess_us = rate_time_us - expected_interval_us;       // V250928R3 초과 지연 계산
+
+      if (rate_time_excess_max_check < excess_us)
+      {
+        rate_time_excess_max_check = excess_us;
+      }
+
+      if (rate_queue_depth_max_check < rate_queue_depth_snapshot)
+      {
+        rate_queue_depth_max_check = rate_queue_depth_snapshot;
+      }
     }
 
 
@@ -1513,6 +1559,8 @@ bool usbHidGetRateInfo(usb_hid_rate_info_t *p_info)
   p_info->freq_hz = data_in_rate;
   p_info->time_max = rate_time_max;
   p_info->time_min = rate_time_min;
+  p_info->time_excess_max = rate_time_excess_max;                   // V250928R3 폴링 초과 지연 최대값 보고
+  p_info->queue_depth_max = rate_queue_depth_max;                   // V250928R3 큐 잔량 최대값 보고
   return true;
 }
 
@@ -1623,12 +1671,15 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
   {
     if (p_hhid->state == USBD_HID_IDLE)
     {
+      uint32_t queued_reports = qbufferAvailable(&report_q);          // V250928R3 큐에 남은 리포트 수 기록
+
       qbufferRead(&report_q, (uint8_t *)hid_buf, 1);
       key_time_req = true;
 
       USBD_HID_SendReport((uint8_t *)hid_buf, HID_KEYBOARD_REPORT_SIZE);
       rate_time_req = true;
       rate_time_pre = micros();
+      rate_queue_depth_snapshot = (queued_reports > 0U) ? (queued_reports - 1U) : 0U; // V250928R3 송신 후 잔여 큐 길이 추적
     }
   }
 
@@ -1685,14 +1736,16 @@ void cliCmd(cli_args_t *args)
       if (millis()-pre_time >= 1000)
       {
         pre_time = millis();
-        cliPrintf("hid rate %d Hz, avg %4d us, max %4d us, min %d us, %d, %d\n", 
+        cliPrintf("hid rate %d Hz, avg %4d us, max %4d us, min %d us, excess %4d us, queued %d, %d, %d\n", // V250928R3 진단 카운터 표시
           data_in_rate,
           rate_time_avg,
           rate_time_max,
           rate_time_min,
+          rate_time_excess_max,
+          rate_queue_depth_max,
           rate_time_sof,
           timer_end
-          ); 
+          );
         
         for (int i=0; i<10; i++)
         {
