@@ -603,6 +603,16 @@ static bool matrix_task(void) {
 
     const bool process_keypress = should_process_keypress();
     bool       new_ghost_pending = false;
+    keyevent_t event;
+
+    if (process_keypress) {
+        event = (keyevent_t){
+            .key = {.row = 0, .col = 0},
+            .time = timer_read(),   // V250928R5: 스캔 단위로 타임스탬프를 공유해 timer_read() 호출을 1회로 축소 (V250928R4 확장)
+            .type = KEY_EVENT,
+            .pressed = false,
+        };
+    }
 
     for (uint8_t row = 0; row < MATRIX_ROWS; row++) {
         const matrix_row_t current_row = matrix_get_row(row);
@@ -618,14 +628,9 @@ static bool matrix_task(void) {
         }
 
         matrix_row_t pending_changes = row_changes;
-        keyevent_t event;
         if (process_keypress) {
-            event = (keyevent_t){
-                .key   = {.row = row, .col = 0},
-                .time  = timer_read(),   // V250928R4: 동일 스캔 내 이벤트는 하나의 타임스탬프를 공유해 timer_read() 호출 최소화
-                .type  = KEY_EVENT,
-                .pressed = false,
-            };
+            event.key.row = row;
+            event.key.col = 0;
         }
 
         while (pending_changes) {
