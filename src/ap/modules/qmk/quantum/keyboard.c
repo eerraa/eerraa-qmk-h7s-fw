@@ -150,14 +150,24 @@ uint32_t last_input_activity_elapsed(void) {
 }
 
 static uint32_t last_matrix_modification_time = 0;
+static uint32_t pending_matrix_activity_time  = 0;  // V251001R3: matrix_task에서 공유한 타임스탬프로 sync_timer_read32() 중복 호출 제거
 uint32_t        last_matrix_activity_time(void) {
     return last_matrix_modification_time;
 }
 uint32_t last_matrix_activity_elapsed(void) {
     return sync_timer_elapsed32(last_matrix_modification_time);
 }
-void last_matrix_activity_trigger(void) {
-    last_matrix_modification_time = last_input_modification_time = sync_timer_read32();
+void last_matrix_activity_trigger(void)
+{
+  uint32_t activity_time = pending_matrix_activity_time;  // V251001R3: matrix_task에서 기록한 32비트 타임스탬프를 우선 사용
+  pending_matrix_activity_time = 0;
+
+  if (!activity_time)
+  {
+    activity_time = sync_timer_read32();  // V251001R3: 타임스탬프가 공유되지 않은 예외 상황에서는 기존 경로를 사용
+  }
+
+  last_matrix_modification_time = last_input_modification_time = activity_time;
 }
 
 static uint32_t last_encoder_modification_time = 0;
@@ -611,9 +621,11 @@ static bool matrix_task(void) {
         matrix_print();
     }
 
-    bool       process_keypress  = false;
-    bool       event_initialized = false;
-    bool       new_ghost_pending = false;
+    bool       process_keypress    = false;
+    bool       event_initialized   = false;
+    bool       new_ghost_pending   = false;
+    uint32_t   event_time_32       = 0;    // V251001R3: 키 이벤트와 활동 타임스탬프를 공유해 타이머 접근을 1회로 축소
+    uint16_t   event_time_16       = 0;
     keyevent_t event;
 
     for (uint8_t row = 0; row < MATRIX_ROWS; row++) {
@@ -622,6 +634,12 @@ static bool matrix_task(void) {
 
         if (!row_changes) {
             continue;
+        }
+
+        if (!event_time_32)
+        {
+          event_time_32 = sync_timer_read32();        // V251001R3: 첫 변화 시점의 32비트 타임스탬프를 확보해 이후 재사용
+          event_time_16 = (uint16_t)event_time_32;
         }
 
         if (has_ghost_in_row(row, current_row)) {
@@ -637,7 +655,7 @@ static bool matrix_task(void) {
             if (process_keypress) {
                 event = (keyevent_t){
                     .key = {.row = 0, .col = 0},
-                    .time = timer_read(),   // V250928R5: 스캔 단위로 타임스탬프를 공유해 timer_read() 호출을 1회로 축소 (V250928R4 확장)
+                    .time = event_time_16,   // V250928R5: 스캔 단위로 타임스탬프를 공유해 timer_read() 호출을 1회로 축소 (V250928R4 확장) / V251001R3: 32비트 활동 타임스탬프와 동기화
                     .type = KEY_EVENT,
                     .pressed = false,
                 };
@@ -668,6 +686,11 @@ static bool matrix_task(void) {
         }
 
         matrix_previous[row] = current_row;
+    }
+
+    if (event_time_32)
+    {
+      pending_matrix_activity_time = event_time_32;  // V251001R3: matrix_task와 last_matrix_activity_trigger() 간 타임스탬프 공유
     }
 
     ghost_pending = new_ghost_pending;
