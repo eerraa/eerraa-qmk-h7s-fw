@@ -611,18 +611,10 @@ static bool matrix_task(void) {
         matrix_print();
     }
 
-    const bool process_keypress = should_process_keypress();
+    bool       process_keypress  = false;
+    bool       event_initialized = false;
     bool       new_ghost_pending = false;
     keyevent_t event;
-
-    if (process_keypress) {
-        event = (keyevent_t){
-            .key = {.row = 0, .col = 0},
-            .time = timer_read(),   // V250928R5: 스캔 단위로 타임스탬프를 공유해 timer_read() 호출을 1회로 축소 (V250928R4 확장)
-            .type = KEY_EVENT,
-            .pressed = false,
-        };
-    }
 
     for (uint8_t row = 0; row < MATRIX_ROWS; row++) {
         const matrix_row_t current_row = matrix_get_row(row);
@@ -635,6 +627,21 @@ static bool matrix_task(void) {
         if (has_ghost_in_row(row, current_row)) {
             new_ghost_pending = true;
             continue;
+        }
+
+        if (!event_initialized) {
+            // V251001R2: 실제 키 이벤트가 확정된 이후에만 should_process_keypress()와 timer_read()를 호출해 고스트 반복 검사 시 낭비 제거
+            process_keypress  = should_process_keypress();
+            event_initialized = true;
+
+            if (process_keypress) {
+                event = (keyevent_t){
+                    .key = {.row = 0, .col = 0},
+                    .time = timer_read(),   // V250928R5: 스캔 단위로 타임스탬프를 공유해 timer_read() 호출을 1회로 축소 (V250928R4 확장)
+                    .type = KEY_EVENT,
+                    .pressed = false,
+                };
+            }
         }
 
         matrix_row_t pending_changes = row_changes;
