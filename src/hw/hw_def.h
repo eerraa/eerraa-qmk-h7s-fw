@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251001R1"  // V251001R1: tick 이벤트 타임스탬프 공유로 `timer_read()` 중복 제거
+#define _DEF_FIRMWATRE_VERSION      "V251002R1"  // V251001R2: 고스트 재검사 시 `timer_read()` 낭비 제거
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
