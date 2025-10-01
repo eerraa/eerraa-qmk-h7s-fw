@@ -19,7 +19,7 @@ static bool keysInitGpio(void);
 const static uint8_t row_wr_buf[] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20};
 
 __attribute__((section(".non_cache")))
-static uint16_t col_rd_buf[MATRIX_ROWS] = {0x00,};
+static volatile uint16_t col_rd_buf[MATRIX_ROWS] = {0x00,};  // V250924R5: DMA 직접 참조 재검토로 volatile 지정해 최신 값 보장
 
 
 
@@ -307,13 +307,13 @@ bool keysReadBuf(uint8_t *p_data, uint32_t length)
 
 bool keysReadColsBuf(uint16_t *p_data, uint32_t rows_cnt)
 {
-  memcpy(p_data, col_rd_buf, rows_cnt * sizeof(uint16_t));
+  memcpy(p_data, (const void *)col_rd_buf, rows_cnt * sizeof(uint16_t));
   return true;
 }
 
-const uint16_t *keysPeekColsBuf(void)
+const volatile uint16_t *keysPeekColsBuf(void)
 {
-  return col_rd_buf;  // V250924R5: DMA 수집 버퍼를 직접 노출하여 추가 복사 없이 스캔 상태를 참조
+  return col_rd_buf;  // V250924R5: DMA 수집 버퍼를 직접 노출하여 추가 복사 없이 스캔 상태를 참조 (재검토: volatile 접근으로 안정성 확보)
 }
 
 bool keysGetPressed(uint16_t row, uint16_t col)
