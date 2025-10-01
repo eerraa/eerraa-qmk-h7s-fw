@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V250928R5"  // V250928R5 matrix_task() 스캔 단위 타임스탬프 공유로 timer_read() 1회화
+#define _DEF_FIRMWATRE_VERSION      "V251001R1"  // V251001R1: tick 이벤트 타임스탬프 공유로 `timer_read()` 중복 제거
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
