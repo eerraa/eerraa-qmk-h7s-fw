@@ -94,7 +94,6 @@ static void usbHidMeasureRateTime(void);
 static bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev);
 static void usbHidInitTimer(void);
 static void usbHidMonitorSof(uint32_t now_us);                     // V250924R2 SOF 안정성 추적
-static UsbBootMode_t usbHidResolveDowngradeTarget(void);           // V250924R2 다운그레이드 대상 계산
 
 
 
@@ -1267,23 +1266,6 @@ void usbHidMeasurePollRate(void)
   cnt++;
 }
 
-static UsbBootMode_t usbHidResolveDowngradeTarget(void)            // V250924R2 현재 모드 대비 하위 폴링 모드 계산
-{
-  UsbBootMode_t cur_mode = usbBootModeGet();
-
-  switch (cur_mode)
-  {
-    case USB_BOOT_MODE_HS_8K:
-      return USB_BOOT_MODE_HS_4K;
-    case USB_BOOT_MODE_HS_4K:
-      return USB_BOOT_MODE_HS_2K;
-    case USB_BOOT_MODE_HS_2K:
-      return USB_BOOT_MODE_FS_1K;
-    default:
-      return USB_BOOT_MODE_MAX;
-  }
-}
-
 static void usbHidMonitorSof(uint32_t now_us)
 {
   USBD_HandleTypeDef *pdev = &USBD_Device;
@@ -1451,7 +1433,7 @@ static void usbHidMonitorSof(uint32_t now_us)
 
   if (sof_monitor.score >= degrade_threshold)
   {
-    UsbBootMode_t next_mode = usbHidResolveDowngradeTarget();
+    UsbBootMode_t next_mode = usbBootModeGetNextLower(usbBootModeGet());      // V251001R5 공용 하향 계산 사용
 
     if (next_mode < USB_BOOT_MODE_MAX)
     {
@@ -1459,7 +1441,8 @@ static void usbHidMonitorSof(uint32_t now_us)
       usb_boot_downgrade_result_t request_result = usbRequestBootModeDowngrade(next_mode,
                                                                                delta_us,
                                                                                expected_us,
-                                                                               now_ms);
+                                                                               now_ms,
+                                                                               USB_BOOT_MONITOR_REASON_SOF_JITTER); // V251001R5 감지 사유 지정
 
       if (request_result == USB_BOOT_DOWNGRADE_ARMED || request_result == USB_BOOT_DOWNGRADE_CONFIRMED)
       {
