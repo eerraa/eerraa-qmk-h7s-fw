@@ -35,6 +35,7 @@
 ```bash
 cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/sirind/brick60'
 cmake --build build -j10
+rm -rf build
 ```
 - UF2 변환은 CMake 타깃 내부에서 자동으로 처리됩니다.
 
