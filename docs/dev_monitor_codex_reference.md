@@ -77,6 +77,11 @@
 - 초기 연결 실패(주소 미할당 상태 지속)도 열거 타임아웃으로 감지되어 다운그레이드 큐에 `enumeration timeout` 사유가 기록됩니다.
 - `_DEF_FIRMWATRE_VERSION`을 `V251001R6`로 갱신해 초기 연결 감시 신뢰성 강화를 식별합니다.
 
+### V251001R7 — 초기 열거 타임아웃 COMMIT 보강
+- `usb.c`에서 초기 열거 감시가 ARM 단계에 머무르지 않고 `usbRequestBootModeDowngrade()`를 재호출해 COMMIT까지 도달하도록 재시도 로직을 보강했습니다.
+- 거절 시 재시도 타이머를 갱신하고, 준비 완료 시각(`ready_ms`)을 마감 시각으로 반영해 열거 실패가 다운그레이드로 확정되도록 했습니다.
+- `_DEF_FIRMWATRE_VERSION`을 `V251001R7`로 갱신해 초기 열거 타임아웃 확정 경로 강화를 식별합니다.
+
 ## 6. CODEX 점검 팁
 - SOF 모니터 파라미터를 수정할 때는 `USB_BOOT_MONITOR_CONFIRM_DELAY_MS`와 `USB_SOF_MONITOR_*` 상수의 상호 의존성을 반드시 검토하십시오.
 - 다운그레이드 큐는 리셋을 동반하므로, 신규 모드 추가 시 `usbBootModeGetNextLower()`와 `usb_boot_mode_request_t` 초기화 경로를 함께 업데이트해야 합니다.

@@ -325,24 +325,47 @@ static void usbEnumerationWatchHandle(uint32_t now_ms)                          
     usb_prev_dev_state = cur_state;
   }
 
-  if (usb_enum_watch_active == true && boot_mode_request.stage == USB_BOOT_MODE_REQ_STAGE_IDLE)
+  if (usb_enum_watch_active == true)
   {
-    if ((int32_t)(now_ms - (int32_t)usb_enum_watch_deadline_ms) >= 0)
+    bool     should_request   = false;                                      // V251001R7 초기 열거 감시 2단계 요청 흐름 추가
+    uint32_t request_deadline = usb_enum_watch_deadline_ms;                 // V251001R7 준비 시각 추적
+
+    if (boot_mode_request.stage == USB_BOOT_MODE_REQ_STAGE_IDLE)
+    {
+      should_request = ((int32_t)(now_ms - (int32_t)usb_enum_watch_deadline_ms) >= 0);
+    }
+    else if (boot_mode_request.stage == USB_BOOT_MODE_REQ_STAGE_ARMED &&
+             boot_mode_request.reason == USB_BOOT_MONITOR_REASON_ENUM_TIMEOUT)
+    {
+      request_deadline = boot_mode_request.ready_ms;                        // V251001R7 재확인 시각으로 마감 갱신
+      should_request   = ((int32_t)(now_ms - (int32_t)request_deadline) >= 0);
+    }
+    else
+    {
+      usb_enum_watch_active = false;
+    }
+
+    if (should_request == true)
     {
       UsbBootMode_t next_mode = usbBootModeGetNextLower(usbBootModeGet());
 
       if (next_mode < USB_BOOT_MODE_MAX)
       {
+        // V251001R7 초기 열거 감시가 2단계 호출을 통해 COMMIT까지 진행되도록 재요청을 수행
         usb_boot_downgrade_result_t request_result =
             usbRequestBootModeDowngrade(next_mode, 0U, 0U, now_ms, USB_BOOT_MONITOR_REASON_ENUM_TIMEOUT);
 
-        if (request_result != USB_BOOT_DOWNGRADE_REJECTED)
+        if (request_result == USB_BOOT_DOWNGRADE_REJECTED)
         {
-          usb_enum_watch_active = false;
+          usb_enum_watch_deadline_ms = now_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS; // V251001R7 거절 시 재시도 대기
+        }
+        else if (request_result == USB_BOOT_DOWNGRADE_ARMED)
+        {
+          usb_enum_watch_deadline_ms = boot_mode_request.ready_ms;          // V251001R7 준비 완료 시각으로 마감 업데이트
         }
         else
         {
-          usb_enum_watch_deadline_ms = now_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS;
+          usb_enum_watch_active = false;
         }
       }
       else

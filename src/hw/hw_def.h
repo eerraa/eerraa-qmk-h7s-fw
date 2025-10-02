@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251001R6"  // V251001R6: 초기 연결 감시 신뢰성 개선(물리 연결 이벤트 추적 보강)
+#define _DEF_FIRMWATRE_VERSION      "V251001R7"  // V251001R7: 초기 열거 감시 2단계 재요청으로 COMMIT 경로 보강
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
