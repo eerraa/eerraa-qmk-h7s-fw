@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251001R5"  // V251001R5: USB 불안정 탐지에 초기 연결 타임아웃 보강 및 로그 영문화
+#define _DEF_FIRMWATRE_VERSION      "V251001R6"  // V251001R6: 초기 연결 감시 신뢰성 개선(물리 연결 이벤트 추적 보강)
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
