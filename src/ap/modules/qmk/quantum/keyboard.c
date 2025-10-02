@@ -275,6 +275,21 @@ static matrix_row_t get_real_keys(uint8_t row, matrix_row_t rowdata) {
     return rowdata & real_key_mask[row];
 }
 
+static matrix_row_t real_rowdata_cache[MATRIX_ROWS];          // V251001R4: 고스트 판정 시 필터링된 행 상태를 캐시해 중복 계산 제거
+static uint32_t     real_rowdata_cache_epoch[MATRIX_ROWS];    // V251001R4: 행별 캐시가 유효한 스캔 번호를 추적
+static uint32_t     real_rowdata_epoch = 1;                   // V251001R4: matrix_task() 호출 간 캐시 세대를 구분
+
+static inline matrix_row_t get_cached_real_keys(uint8_t row, matrix_row_t rowdata)
+{
+  if (real_rowdata_cache_epoch[row] != real_rowdata_epoch)
+  {
+    real_rowdata_cache[row]       = get_real_keys(row, rowdata);  // V251001R4: 동일 스캔에서 반복 호출을 방지
+    real_rowdata_cache_epoch[row] = real_rowdata_epoch;
+  }
+
+  return real_rowdata_cache[row];
+}
+
 static inline bool popcount_more_than_one(matrix_row_t rowdata) {
     rowdata &= rowdata - 1; // if there are less than two bits (keys) set, rowdata will become zero
     return rowdata;
@@ -288,7 +303,7 @@ static inline bool has_ghost_in_row(uint8_t row, matrix_row_t rowdata) {
     If there are "active" blanks in the matrix, the key can't be pressed by the user,
     there is no doubt as to which keys are really being pressed.
     The ghosts will be ignored, they are KC_NO.   */
-    rowdata = get_real_keys(row, rowdata);
+    rowdata = get_cached_real_keys(row, rowdata);  // V251001R4: 필터링된 행 상태를 재사용해 키맵 마스크 연산 절감
     if ((popcount_more_than_one(rowdata)) == 0) {
         return false;
     }
@@ -311,7 +326,7 @@ static inline bool has_ghost_in_row(uint8_t row, matrix_row_t rowdata) {
             continue;  // V250928R2: 물리 중복 열이 0/1개면 고스트가 생길 수 없어 키맵 필터링을 생략
         }
 
-        if (popcount_more_than_one(get_real_keys(i, other_row_state) & rowdata)) {
+        if (popcount_more_than_one(get_cached_real_keys(i, other_row_state) & rowdata)) {
             return true;
         }
     }
@@ -616,6 +631,18 @@ static bool matrix_task(void) {
         generate_tick_event();
         return false;
     }
+
+#ifdef MATRIX_HAS_GHOST
+    real_rowdata_epoch++;  // V251001R4: 스캔마다 캐시 세대를 갱신해 행별 필터링 결과를 분리
+    if (real_rowdata_epoch == 0)
+    {
+      real_rowdata_epoch = 1;  // V251001R4: 32비트 오버플로우 시 세대 값을 재설정
+      for (uint8_t i = 0; i < MATRIX_ROWS; i++)
+      {
+        real_rowdata_cache_epoch[i] = 0;  // V251001R4: 오버플로우 후 이전 캐시가 재사용되지 않도록 무효화
+      }
+    }
+#endif
 
     if (debug_config.matrix) {
         matrix_print();

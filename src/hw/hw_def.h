@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251001R3"  // V251001R3: 키 이벤트와 활동 타임스탬프를 공유해 sync_timer_read32() 호출 축소
+#define _DEF_FIRMWATRE_VERSION      "V251001R4"  // V251001R4: 고스트 판정용 행 캐시로 키맵 필터 재계산 최소화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
