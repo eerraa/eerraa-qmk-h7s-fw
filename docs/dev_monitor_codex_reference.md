@@ -14,7 +14,7 @@
 | `src/hw/driver/usb/usb_hid/usbd_hid.c` | `usbHidMonitorSof()`, `usbHidSofMonitorApplySpeedParams()` | 마이크로프레임 간격 기반 점수 계산, 워밍업/홀드오프/감쇠 정책, 속도별 파라미터 캐싱을 담당합니다.
 | `src/hw/driver/usb/usb_cmp/usbd_cmp.c` | HS/FS `bInterval` 유지 | 다운그레이드 시에도 안정적인 패킷 크기를 보장합니다.
 | `src/hw/driver/usb/usbd_conf.c` | `usbBootModeIsFullSpeed()` 분기 | HS PHY에서 FS 1kHz 강제 모드를 선택할 수 있습니다.
-| `src/hw/hw_def.h` | `_DEF_FIRMWATRE_VERSION` | 모니터 기능 릴리스를 `V251001R5`까지 태깅합니다.
+| `src/hw/hw_def.h` | `_DEF_FIRMWATRE_VERSION` | 모니터 기능 릴리스를 `V251001R6`까지 태깅합니다.
 | `src/ap/ap.c` | `usbProcess()` 호출 | 메인 루프에서 큐 상태 머신을 주기적으로 서비스합니다.
 
 ## 3. 상태 머신 & 데이터 구조 스냅샷
@@ -71,6 +71,11 @@
 - `usbProcess()`가 USB 초기 열거 타임아웃을 감지해 다운그레이드 큐에 `enumeration timeout` 사유를 기록합니다.
 - `usb_boot_mode_request_t`에 `reason` 필드를 추가해 SOF 지터/열거 타임아웃을 구분하고, 관련 로그를 영문화(`[NG] USB poll instability detected`, `[NG] USB enumeration timeout detected`)했습니다.
 - `_DEF_FIRMWATRE_VERSION`을 `V251001R5`로 올려 초기 연결 감시 강화를 식별합니다.
+
+### V251001R6 — 초기 연결 감시 신뢰성 보강
+- `usbd_conf.c`에서 USB 물리 연결/해제 콜백이 `USBD_is_connected()` 상태를 즉시 반영하도록 조정해 케이블 삽입 직후 열거 감시가 시작됩니다.
+- 초기 연결 실패(주소 미할당 상태 지속)도 열거 타임아웃으로 감지되어 다운그레이드 큐에 `enumeration timeout` 사유가 기록됩니다.
+- `_DEF_FIRMWATRE_VERSION`을 `V251001R6`로 갱신해 초기 연결 감시 신뢰성 강화를 식별합니다.
 
 ## 6. CODEX 점검 팁
 - SOF 모니터 파라미터를 수정할 때는 `USB_BOOT_MONITOR_CONFIRM_DELAY_MS`와 `USB_SOF_MONITOR_*` 상수의 상호 의존성을 반드시 검토하십시오.
