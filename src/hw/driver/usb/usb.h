@@ -71,6 +71,12 @@ typedef enum UsbBootMode                               // V250923R1 Persisted US
 
 typedef enum
 {
+  USB_BOOT_MONITOR_REASON_SOF_JITTER = 0,      // V251001R5: SOF 지터 기반 불안정 감지
+  USB_BOOT_MONITOR_REASON_ENUM_TIMEOUT,        // V251001R5: USB 초기화/열거 타임아웃 감지
+} usb_boot_monitor_reason_t;
+
+typedef enum
+{
   USB_BOOT_DOWNGRADE_REJECTED = 0,
   USB_BOOT_DOWNGRADE_ARMED,
   USB_BOOT_DOWNGRADE_CONFIRMED,
@@ -80,11 +86,13 @@ bool         usbBootModeLoad(void);                    // V250923R1 Load stored 
 UsbBootMode_t usbBootModeGet(void);                    // V250923R1 Query active boot mode
 bool         usbBootModeIsFullSpeed(void);             // V250923R1 Check if FS (1 kHz) mode is requested
 uint8_t      usbBootModeGetHsInterval(void);           // V250923R1 Retrieve HS polling interval encoding
+UsbBootMode_t usbBootModeGetNextLower(UsbBootMode_t mode); // V251001R5: 단계적 폴링 모드 하향 계산
 bool         usbBootModeSaveAndReset(UsbBootMode_t mode);
 usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
                                                         uint32_t      measured_delta_us,
                                                         uint32_t      expected_us,
-                                                        uint32_t      now_ms); // V250924R2 USB 다운그레이드 요청 인터페이스
+                                                        uint32_t      now_ms,
+                                                        usb_boot_monitor_reason_t reason); // V251001R5: 감지 사유 전달
 void         usbProcess(void);                         // V250924R2 USB 안정성 모니터 서비스 루프
 
 bool usbInit(void);

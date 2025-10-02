@@ -32,7 +32,10 @@ static const char *const usb_boot_mode_name[USB_BOOT_MODE_MAX] = {          // V
 };
 
 static const char *usbBootModeLabel(UsbBootMode_t mode);                     // V250923R1 helpers
+static const char *usbBootMonitorReasonLabel(usb_boot_monitor_reason_t reason); // V251001R5 감지 사유 라벨링
 static bool        usbBootModeStore(UsbBootMode_t mode);
+static void        usbEnumerationWatchReset(void);                           // V251001R5 초기 열거 타임아웃 초기화
+static void        usbEnumerationWatchHandle(uint32_t now_ms);               // V251001R5 초기 열거 타임아웃 감시
 
 typedef enum
 {
@@ -50,6 +53,10 @@ extern USBD_DescriptorsTypeDef HID_Desc;
 extern USBD_DescriptorsTypeDef CMP_Desc;
 
 static USBD_DescriptorsTypeDef *p_desc = NULL;
+static uint8_t                 usb_prev_dev_state = USBD_STATE_DEFAULT;      // V251001R5 이전 USB 장치 상태
+static bool                    usb_prev_connected = false;                   // V251001R5 이전 USB 연결 상태
+static bool                    usb_enum_watch_active = false;                // V251001R5 초기 열거 타임아웃 감시 플래그
+static uint32_t                usb_enum_watch_deadline_ms = 0U;              // V251001R5 초기 열거 타임아웃 시각(ms)
 
 typedef struct
 {
@@ -60,6 +67,7 @@ typedef struct
   uint32_t                      expected_us;                    // V250924R2 기대 SOF 간격(us)
   uint32_t                      ready_ms;                       // V250924R2 2차 확인 가능 시각(ms)
   uint32_t                      timeout_ms;                     // V250924R2 요청 만료 시각(ms)
+  usb_boot_monitor_reason_t     reason;                         // V251001R5 감지 사유
 } usb_boot_mode_request_t;
 
 static usb_boot_mode_request_t boot_mode_request = {0};          // V250924R2 USB 안정성 이벤트 큐
@@ -73,6 +81,15 @@ static void usbBootModeRequestReset(void)
   boot_mode_request.expected_us = 0U;
   boot_mode_request.ready_ms   = 0U;
   boot_mode_request.timeout_ms = 0U;
+  boot_mode_request.reason     = USB_BOOT_MONITOR_REASON_SOF_JITTER;          // V251001R5 기본값
+}
+
+static void usbEnumerationWatchReset(void)                                     // V251001R5 초기 열거 감시 리셋
+{
+  usb_enum_watch_active   = false;
+  usb_enum_watch_deadline_ms = 0U;
+  usb_prev_dev_state      = USBD_STATE_DEFAULT;
+  usb_prev_connected      = false;
 }
 
 #if HW_USB_CMP == 1
@@ -96,6 +113,18 @@ static const char *usbBootModeLabel(UsbBootMode_t mode)
     return usb_boot_mode_name[mode];
   }
   return "UNKNOWN";
+}
+
+static const char *usbBootMonitorReasonLabel(usb_boot_monitor_reason_t reason) // V251001R5 감지 사유 문자열화
+{
+  switch (reason)
+  {
+    case USB_BOOT_MONITOR_REASON_ENUM_TIMEOUT:
+      return "enumeration timeout";
+    case USB_BOOT_MONITOR_REASON_SOF_JITTER:
+    default:
+      return "SOF jitter";
+  }
 }
 
 bool usbBootModeLoad(void)
@@ -139,6 +168,21 @@ uint8_t usbBootModeGetHsInterval(void)
   }
 }
 
+UsbBootMode_t usbBootModeGetNextLower(UsbBootMode_t mode)                     // V251001R5 단계적 폴링 모드 하향 계산
+{
+  switch (mode)
+  {
+    case USB_BOOT_MODE_HS_8K:
+      return USB_BOOT_MODE_HS_4K;
+    case USB_BOOT_MODE_HS_4K:
+      return USB_BOOT_MODE_HS_2K;
+    case USB_BOOT_MODE_HS_2K:
+      return USB_BOOT_MODE_FS_1K;
+    default:
+      return USB_BOOT_MODE_MAX;
+  }
+}
+
 static bool usbBootModeStore(UsbBootMode_t mode)
 {
   uint32_t raw_mode = (uint32_t)mode;
@@ -174,10 +218,11 @@ bool usbBootModeSaveAndReset(UsbBootMode_t mode)
   return true;
 }
 
-usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
-                                                        uint32_t      measured_delta_us,
-                                                        uint32_t      expected_us,
-                                                        uint32_t      now_ms)  // V250924R2 비동기 USB 폴링 모드 다운그레이드 요청
+usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t       mode,
+                                                        uint32_t            measured_delta_us,
+                                                        uint32_t            expected_us,
+                                                        uint32_t            now_ms,
+                                                        usb_boot_monitor_reason_t reason)  // V251001R5 감지 사유 전달
 {
   if (mode >= USB_BOOT_MODE_MAX)
   {
@@ -193,6 +238,7 @@ usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
     boot_mode_request.expected_us = expected_us;
     boot_mode_request.ready_ms   = now_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS;
     boot_mode_request.timeout_ms = boot_mode_request.ready_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS;
+    boot_mode_request.reason     = reason;
     return USB_BOOT_DOWNGRADE_ARMED;
   }
 
@@ -201,6 +247,7 @@ usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
     boot_mode_request.next_mode   = mode;
     boot_mode_request.delta_us    = measured_delta_us;
     boot_mode_request.expected_us = expected_us;
+    boot_mode_request.reason      = reason;
 
     if ((int32_t)(now_ms - (int32_t)boot_mode_request.ready_ms) >= 0)
     {
@@ -215,24 +262,114 @@ usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
   return USB_BOOT_DOWNGRADE_REJECTED;
 }
 
-void usbProcess(void)                                                                  // V250924R3 USB 안정성 이벤트 처리 루프
+static void usbBootMonitorLogEvent(bool is_commit)                                     // V251001R5 감지 사유별 로그 출력
 {
-  if (boot_mode_request.stage == USB_BOOT_MODE_REQ_STAGE_IDLE)                         // V250924R3 비활성 시 오버헤드 방지
+  const char *reason_label = usbBootMonitorReasonLabel(boot_mode_request.reason);
+
+  if (boot_mode_request.reason == USB_BOOT_MONITOR_REASON_SOF_JITTER)
   {
+    logPrintf("[NG] USB poll instability detected: expected %lu us, measured %lu us%s\n",
+              boot_mode_request.expected_us,
+              boot_mode_request.delta_us,
+              is_commit ? "" : " (validation pending)");
+  }
+  else if (boot_mode_request.reason == USB_BOOT_MONITOR_REASON_ENUM_TIMEOUT)
+  {
+    logPrintf("[NG] USB enumeration timeout detected%s\n", is_commit ? "" : " (validation pending)");
+  }
+
+  logPrintf("[NG] USB poll mode %s -> %s (%s)\n",
+            is_commit ? "downgrade" : "downgrade pending",
+            usbBootModeLabel(boot_mode_request.next_mode),
+            reason_label);
+}
+
+static void usbEnumerationWatchHandle(uint32_t now_ms)                                 // V251001R5 초기 열거 타임아웃 감시
+{
+  bool is_connected = USBD_is_connected();
+
+  if (is_connected == false)
+  {
+    usb_enum_watch_active = false;
+    usb_prev_connected    = false;
+    usb_prev_dev_state    = USBD_STATE_DEFAULT;
     return;
   }
 
+  if (usb_prev_connected == false)
+  {
+    usb_enum_watch_active    = true;
+    usb_enum_watch_deadline_ms = now_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS;
+  }
+
+  usb_prev_connected = true;
+
+  uint8_t cur_state = USBD_Device.dev_state;
+
+  if (cur_state != usb_prev_dev_state)
+  {
+    if (cur_state == USBD_STATE_CONFIGURED)
+    {
+      usb_enum_watch_active = false;
+    }
+    else if (cur_state == USBD_STATE_DEFAULT || cur_state == USBD_STATE_ADDRESSED)
+    {
+      usb_enum_watch_active    = true;
+      usb_enum_watch_deadline_ms = now_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS;
+    }
+    else
+    {
+      usb_enum_watch_active = false;
+    }
+
+    usb_prev_dev_state = cur_state;
+  }
+
+  if (usb_enum_watch_active == true && boot_mode_request.stage == USB_BOOT_MODE_REQ_STAGE_IDLE)
+  {
+    if ((int32_t)(now_ms - (int32_t)usb_enum_watch_deadline_ms) >= 0)
+    {
+      UsbBootMode_t next_mode = usbBootModeGetNextLower(usbBootModeGet());
+
+      if (next_mode < USB_BOOT_MODE_MAX)
+      {
+        usb_boot_downgrade_result_t request_result =
+            usbRequestBootModeDowngrade(next_mode, 0U, 0U, now_ms, USB_BOOT_MONITOR_REASON_ENUM_TIMEOUT);
+
+        if (request_result != USB_BOOT_DOWNGRADE_REJECTED)
+        {
+          usb_enum_watch_active = false;
+        }
+        else
+        {
+          usb_enum_watch_deadline_ms = now_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS;
+        }
+      }
+      else
+      {
+        usb_enum_watch_active = false;
+      }
+    }
+  }
+}
+
+void usbProcess(void)                                                                  // V251001R5 USB 안정성 이벤트 처리 루프 보강
+{
   uint32_t now_ms = millis();
+
+  usbEnumerationWatchHandle(now_ms);
+
+  if (boot_mode_request.stage == USB_BOOT_MODE_REQ_STAGE_IDLE)
+  {
+    return;
+  }
 
   switch (boot_mode_request.stage)
   {
     case USB_BOOT_MODE_REQ_STAGE_ARMED:
       if (boot_mode_request.log_pending == true)
       {
-        logPrintf("[!] USB Poll 불안정 감지 : 기대 %lu us, 측정 %lu us (검증 대기)\n",
-                  boot_mode_request.expected_us,
-                  boot_mode_request.delta_us);
-        logPrintf("[!] USB Poll 모드 다운그레이드 대기 -> %s\n", usbBootModeLabel(boot_mode_request.next_mode));
+        usbBootMonitorLogEvent(false);
         boot_mode_request.log_pending = false;
       }
 
@@ -245,16 +382,13 @@ void usbProcess(void)                                                           
     case USB_BOOT_MODE_REQ_STAGE_COMMIT:
       if (boot_mode_request.log_pending == true)
       {
-        logPrintf("[!] USB Poll 불안정 감지 : 기대 %lu us, 측정 %lu us\n",
-                  boot_mode_request.expected_us,
-                  boot_mode_request.delta_us);
-        logPrintf("[!] USB Poll 모드 다운그레이드 -> %s\n", usbBootModeLabel(boot_mode_request.next_mode));
+        usbBootMonitorLogEvent(true);
         boot_mode_request.log_pending = false;
       }
 
       if (usbBootModeSaveAndReset(boot_mode_request.next_mode) != true)
       {
-        logPrintf("[!] USB Poll 모드 저장 실패\n");                                            // V250924R2 저장 실패 로그
+        logPrintf("[NG] USB poll mode store failed\n");                               // V251001R5 저장 실패 로그 영문화
       }
 
       usbBootModeRequestReset();
@@ -277,6 +411,7 @@ bool usbInit(void)
 {
 #ifdef _USE_HW_USB
   usbBootModeRequestReset();
+  usbEnumerationWatchReset();                                                   // V251001R5 초기 열거 감시 리셋
 #endif
 #ifdef _USE_HW_CLI
   cliAdd("usb", cliCmd);
