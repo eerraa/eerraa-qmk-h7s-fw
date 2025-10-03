@@ -75,6 +75,9 @@ static uint8_t USBD_HID_DataOut(USBD_HandleTypeDef *pdev, uint8_t epnum);
 static uint8_t USBD_HID_EP0_RxReady(USBD_HandleTypeDef *pdev);
 static uint8_t USBD_HID_SOF(USBD_HandleTypeDef *pdev);
 static uint32_t usbHidExpectedPollIntervalUs(void);                  // V250928R3 HID 폴링 간격 계산
+static bool usbHidTimeIsBefore(uint32_t now_us, uint32_t target_us); // V251001R7 마이크로초 래핑 비교 유틸리티
+static bool usbHidTimeIsAfterOrEqual(uint32_t now_us,
+                                     uint32_t target_us);           // V251001R7 마이크로초 래핑 비교 유틸리티
 
 #ifndef USE_USBD_COMPOSITE
 static uint8_t *USBD_HID_GetFSCfgDesc(uint16_t *length);
@@ -516,6 +519,17 @@ typedef struct
 
 static usb_sof_monitor_t sof_monitor = {0};                       // V250924R2 SOF 안정성 상태
 static uint8_t           sof_prev_dev_state = USBD_STATE_DEFAULT; // V250924R2 마지막 USB 장치 상태
+
+static bool usbHidTimeIsBefore(uint32_t now_us, uint32_t target_us)  // V251001R7 마이크로초 타임스탬프 비교 보조
+{
+  return (int32_t)(now_us - target_us) < 0;
+}
+
+static bool usbHidTimeIsAfterOrEqual(uint32_t now_us,
+                                     uint32_t target_us)            // V251001R7 마이크로초 타임스탬프 비교 보조
+{
+  return (int32_t)(now_us - target_us) >= 0;
+}
 
 static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 속도별 모니터링 파라미터 캐시
 {
@@ -1387,7 +1401,7 @@ static void usbHidMonitorSof(uint32_t now_us)
   uint32_t delta_us = now_us - sof_monitor.prev_tick_us;
   sof_monitor.prev_tick_us = now_us;
 
-  if (now_us < sof_monitor.holdoff_end_us)
+  if (usbHidTimeIsBefore(now_us, sof_monitor.holdoff_end_us))       // V251001R7 래핑 대응 홀드오프 비교
   {
     sof_monitor.last_decay_us = now_us;
     return;
@@ -1407,7 +1421,8 @@ static void usbHidMonitorSof(uint32_t now_us)
       sof_monitor.warmup_good_frames = 0U;
     }
 
-    if (sof_monitor.warmup_good_frames >= sof_monitor.warmup_target_frames || now_us >= sof_monitor.warmup_deadline_us)
+    if (sof_monitor.warmup_good_frames >= sof_monitor.warmup_target_frames
+        || usbHidTimeIsAfterOrEqual(now_us, sof_monitor.warmup_deadline_us)) // V251001R7 래핑 대응 워밍업 마감 비교
     {
       sof_monitor.warmup_complete = true;
       sof_monitor.last_decay_us   = now_us;
@@ -1434,23 +1449,16 @@ static void usbHidMonitorSof(uint32_t now_us)
   uint32_t missed_frames = (delta_us + expected_us - 1U) / expected_us;
   uint8_t  delta_score   = 1U;
 
-  if (missed_frames > 4U)
+  if (missed_frames > 2U)
   {
-    delta_score = 4U;
-  }
-  else if (missed_frames > 1U)
-  {
-    delta_score = (uint8_t)(missed_frames - 1U);
-  }
+    uint32_t penalty = missed_frames - 1U;
 
-  if (delta_score > USB_SOF_MONITOR_SCORE_CAP)
-  {
-    delta_score = USB_SOF_MONITOR_SCORE_CAP;
-  }
+    if (penalty > USB_SOF_MONITOR_SCORE_CAP)
+    {
+      penalty = USB_SOF_MONITOR_SCORE_CAP;
+    }
 
-  if (delta_score < 1U)
-  {
-    delta_score = 1U;
+    delta_score = (uint8_t)penalty;                                  // V251001R7 점수 증가 계산 단순화
   }
 
   if (sof_monitor.score <= (uint8_t)(0xFFU - delta_score))
