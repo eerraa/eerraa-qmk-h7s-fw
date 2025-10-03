@@ -1430,7 +1430,9 @@ static void usbHidMonitorSof(uint32_t now_us)
     return;
   }
 
-  if (usbHidTimeIsBefore(now_us, mon->holdoff_end_us))             // V251002R1 홀드오프 조기 반환으로 연산 절약
+  uint32_t holdoff_end_us = mon->holdoff_end_us;                   // V251003R9 구조체 필드 접근 캐시로 ISR 경량화
+
+  if (usbHidTimeIsBefore(now_us, holdoff_end_us))                  // V251002R1 홀드오프 조기 반환으로 연산 절약
   {
     usbHidSofMonitorSyncTick(now_us);                              // V251003R1 홀드오프 구간 타임스탬프 처리 공통화
     return;
@@ -1448,6 +1450,11 @@ static void usbHidMonitorSof(uint32_t now_us)
   uint32_t delta_us         = now_us - prev_tick_us;
 
   mon->prev_tick_us = now_us;
+
+  uint8_t  score          = mon->score;                            // V251003R9 점수 로컬 캐시로 구조체 접근 최소화
+  uint8_t  score_orig     = score;                                 // V251003R9 구조체 반영 여부 판단용 원본
+  uint32_t last_decay_us  = mon->last_decay_us;                    // V251003R9 감쇠 타임스탬프 로컬 캐시
+  uint32_t last_decay_orig = last_decay_us;                        // V251003R9 구조체 반영 여부 판단용 원본
 
   if (mon->warmup_complete == false)
   {
@@ -1472,7 +1479,7 @@ static void usbHidMonitorSof(uint32_t now_us)
         || usbHidTimeIsAfterOrEqual(now_us, mon->warmup_deadline_us))    // V251001R7 래핑 대응 워밍업 마감 비교
     {
       mon->warmup_complete = true;
-      mon->last_decay_us   = now_us;
+      last_decay_us        = now_us;                               // V251003R9 감쇠 시작점 로컬 캐시 갱신
     }
     else
     {
@@ -1482,20 +1489,28 @@ static void usbHidMonitorSof(uint32_t now_us)
 
   if (delta_us < stable_threshold)
   {
-    if (mon->score > 0U)                                               // V251003R8 감쇠 파라미터 조회를 점수 존재 시로 지연
+    if (score > 0U)                                                    // V251003R8 감쇠 파라미터 조회를 점수 존재 시로 지연
     {
       uint32_t decay_interval_us = mon->decay_interval_us;             // V251003R7 워밍업 이후에만 감쇠 파라미터 로드
 
       if (decay_interval_us > 0U)
       {
-        uint32_t next_decay_us = mon->last_decay_us + decay_interval_us; // V251003R3 감쇠 비교 헬퍼 재사용 검토
+        uint32_t next_decay_us = last_decay_us + decay_interval_us;    // V251003R9 로컬 타임스탬프 활용으로 계산 경량화
 
         if (usbHidTimeIsAfterOrEqual(now_us, next_decay_us))
         {
-          mon->score--;
-          mon->last_decay_us = now_us;
+          score--;
+          last_decay_us = now_us;                                     // V251003R9 구조체 쓰기 지연을 위한 로컬 갱신
         }
       }
+    }
+    if (score != score_orig)
+    {
+      mon->score = score;                                            // V251003R9 변경 발생 시에만 구조체 쓰기
+    }
+    if (last_decay_us != last_decay_orig)
+    {
+      mon->last_decay_us = last_decay_us;                            // V251003R9 감쇠 타임스탬프 변경 시에만 구조체 쓰기
     }
     return;
   }
@@ -1508,9 +1523,9 @@ static void usbHidMonitorSof(uint32_t now_us)
     penalty = USB_SOF_MONITOR_SCORE_CAP;
   }
 
-  uint32_t accumulated = (uint32_t)mon->score + penalty;          // V251003R6 임계 비교 선행으로 분기 축소
+  uint32_t accumulated = (uint32_t)score + penalty;               // V251003R6 임계 비교 선행으로 분기 축소
 
-  mon->last_decay_us = now_us;                                    // V251003R6 감쇠 기준 타임스탬프 즉시 갱신
+  last_decay_us = now_us;                                         // V251003R6 감쇠 기준 타임스탬프 즉시 갱신
 
   uint8_t degrade_threshold = mon->degrade_threshold;              // V251003R7 임계 파라미터 접근 지연으로 ISR 경량화
 
@@ -1534,11 +1549,20 @@ static void usbHidMonitorSof(uint32_t now_us)
     }
 
     mon->holdoff_end_us = now_us + holdoff;
-    mon->score          = 0U;
+    score               = 0U;                                      // V251003R9 로컬 점수 초기화 후 구조체 반영
   }
   else
   {
-    mon->score = (uint8_t)accumulated;                             // V251003R6 임계 미도달 시 점수만 갱신
+    score = (uint8_t)accumulated;                                  // V251003R6 임계 미도달 시 점수만 갱신
+  }
+
+  if (score != score_orig)
+  {
+    mon->score = score;                                            // V251003R9 변경 발생 시에만 구조체 쓰기
+  }
+  if (last_decay_us != last_decay_orig)
+  {
+    mon->last_decay_us = last_decay_us;                            // V251003R9 감쇠 타임스탬프 변경 시에만 구조체 쓰기
   }
 }
 
