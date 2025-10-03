@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251001R6"  // V251001R6: SOF 모니터 초기화 경로 공용화 및 유지보수성 향상
+#define _DEF_FIRMWATRE_VERSION      "V251001R7"  // V251001R7: SOF 모니터 타임스탬프 래핑 대응 및 점수 계산 정리
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
