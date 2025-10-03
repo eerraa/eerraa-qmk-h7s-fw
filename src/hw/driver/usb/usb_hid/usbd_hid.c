@@ -95,6 +95,14 @@ static bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev);
 static void usbHidInitTimer(void);
 static void usbHidMonitorSof(uint32_t now_us);                     // V250924R2 SOF 안정성 추적
 static UsbBootMode_t usbHidResolveDowngradeTarget(void);           // V250924R2 다운그레이드 대상 계산
+static void usbHidSofMonitorPrime(uint32_t now_us,
+                                  uint32_t holdoff_delta_us,
+                                  uint32_t warmup_delta_us,
+                                  uint8_t speed_code);            // V251001R6 SOF 초기화 루틴 공용화
+static void usbHidSofMonitorHoldoff(uint32_t now_us,
+                                    uint32_t holdoff_delta_us,
+                                    uint32_t warmup_delta_us,
+                                    uint8_t speed_code);          // V251001R6 속도 전환 홀드오프 공통 처리
 
 
 
@@ -537,6 +545,36 @@ static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 �
       sof_monitor.warmup_target_frames = 0U;
       break;
   }
+}
+
+
+static void usbHidSofMonitorPrime(uint32_t now_us,
+                                  uint32_t holdoff_delta_us,
+                                  uint32_t warmup_delta_us,
+                                  uint8_t speed_code)
+{
+  sof_monitor.prev_tick_us       = now_us;                        // V251001R6 SOF 타임스탬프 초기화 일원화
+  sof_monitor.score              = 0U;
+  sof_monitor.last_decay_us      = now_us;
+  sof_monitor.holdoff_end_us     = now_us + holdoff_delta_us;
+  sof_monitor.warmup_deadline_us = now_us + warmup_delta_us;
+  sof_monitor.warmup_good_frames = 0U;
+  sof_monitor.warmup_complete    = false;
+  usbHidSofMonitorApplySpeedParams(speed_code);
+}
+
+static void usbHidSofMonitorHoldoff(uint32_t now_us,
+                                    uint32_t holdoff_delta_us,
+                                    uint32_t warmup_delta_us,
+                                    uint8_t speed_code)
+{
+  sof_monitor.score              = 0U;                            // V251001R6 속도 전환 시 공통 감쇠 재시작
+  sof_monitor.last_decay_us      = now_us;
+  sof_monitor.holdoff_end_us     = now_us + holdoff_delta_us;
+  sof_monitor.warmup_deadline_us = now_us + warmup_delta_us;
+  sof_monitor.warmup_good_frames = 0U;
+  sof_monitor.warmup_complete    = false;
+  usbHidSofMonitorApplySpeedParams(speed_code);
 }
 
 
@@ -1290,66 +1328,43 @@ static void usbHidMonitorSof(uint32_t now_us)
 
   if (pdev->dev_state != sof_prev_dev_state)
   {
-    sof_monitor.prev_tick_us       = now_us;
-    sof_monitor.score              = 0U;
-    sof_monitor.last_decay_us      = now_us;
-    sof_monitor.holdoff_end_us =
-        (pdev->dev_state == USBD_STATE_CONFIGURED) ? (now_us + USB_SOF_MONITOR_CONFIG_HOLDOFF_US) : now_us;
-    sof_monitor.warmup_deadline_us =
-        (pdev->dev_state == USBD_STATE_CONFIGURED) ? (now_us + USB_SOF_MONITOR_WARMUP_TIMEOUT_US) : now_us;
-    sof_monitor.warmup_good_frames = 0U;
-    sof_monitor.warmup_complete    = false;
-    usbHidSofMonitorApplySpeedParams((pdev->dev_state == USBD_STATE_CONFIGURED) ? pdev->dev_speed : 0xFFU);
-    sof_prev_dev_state             = pdev->dev_state;
+    uint8_t  new_speed = (pdev->dev_state == USBD_STATE_CONFIGURED) ? pdev->dev_speed : 0xFFU;
+    uint32_t holdoff   = (pdev->dev_state == USBD_STATE_CONFIGURED) ? USB_SOF_MONITOR_CONFIG_HOLDOFF_US : 0U;
+    uint32_t warmup    = (pdev->dev_state == USBD_STATE_CONFIGURED) ? USB_SOF_MONITOR_WARMUP_TIMEOUT_US : 0U;
+
+    usbHidSofMonitorPrime(now_us, holdoff, warmup, new_speed);    // V251001R6 상태 전환 초기화 경로 일원화
+    sof_prev_dev_state = pdev->dev_state;
   }
 
   if (pdev->dev_state != USBD_STATE_CONFIGURED)
   {
-    sof_monitor.prev_tick_us       = now_us;
-    sof_monitor.score              = 0U;
-    sof_monitor.last_decay_us      = now_us;
-    sof_monitor.holdoff_end_us     = now_us;
-    sof_monitor.warmup_deadline_us = now_us;
-    sof_monitor.warmup_good_frames = 0U;
-    sof_monitor.warmup_complete    = false;
-    usbHidSofMonitorApplySpeedParams(0xFFU);
+    sof_monitor.prev_tick_us  = now_us;                            // V251001R6 비구성 상태에서는 타임스탬프만 최신화
+    sof_monitor.last_decay_us = now_us;
+    sof_monitor.score         = 0U;
     return;
   }
 
   if (USBD_is_suspended())
   {
-    sof_monitor.prev_tick_us        = now_us;
-    sof_monitor.score               = 0U;
-    sof_monitor.holdoff_end_us      = now_us + USB_SOF_MONITOR_RESUME_HOLDOFF_US;
-    sof_monitor.warmup_deadline_us  = now_us + USB_SOF_MONITOR_WARMUP_TIMEOUT_US;
-    sof_monitor.warmup_good_frames  = 0U;
-    sof_monitor.warmup_complete     = false;
-    sof_monitor.last_decay_us       = now_us;
-    usbHidSofMonitorApplySpeedParams(pdev->dev_speed);
+    usbHidSofMonitorPrime(now_us,
+                          USB_SOF_MONITOR_RESUME_HOLDOFF_US,
+                          USB_SOF_MONITOR_WARMUP_TIMEOUT_US,
+                          pdev->dev_speed);                       // V251001R6 서스펜드 복귀 홀드오프 공용 처리
     return;
   }
 
   if (pdev->dev_speed != USBD_SPEED_HIGH && pdev->dev_speed != USBD_SPEED_FULL)
   {
-    sof_monitor.prev_tick_us       = now_us;
-    sof_monitor.score              = 0U;
-    sof_monitor.last_decay_us      = now_us;
-    sof_monitor.warmup_deadline_us = now_us;
-    sof_monitor.warmup_good_frames = 0U;
-    sof_monitor.warmup_complete    = false;
-    usbHidSofMonitorApplySpeedParams(0xFFU);
+    usbHidSofMonitorPrime(now_us, 0U, 0U, 0xFFU);                 // V251001R6 지원 속도 외 상황 초기화
     return;
   }
 
   if (pdev->dev_speed != sof_monitor.active_speed)
   {
-    usbHidSofMonitorApplySpeedParams(pdev->dev_speed);
-    sof_monitor.score              = 0U;
-    sof_monitor.last_decay_us      = now_us;
-    sof_monitor.holdoff_end_us     = now_us + USB_SOF_MONITOR_CONFIG_HOLDOFF_US;
-    sof_monitor.warmup_deadline_us = now_us + USB_SOF_MONITOR_WARMUP_TIMEOUT_US;
-    sof_monitor.warmup_good_frames = 0U;
-    sof_monitor.warmup_complete    = false;
+    usbHidSofMonitorHoldoff(now_us,
+                            USB_SOF_MONITOR_CONFIG_HOLDOFF_US,
+                            USB_SOF_MONITOR_WARMUP_TIMEOUT_US,
+                            pdev->dev_speed);                     // V251001R6 속도 변경 시 공통 홀드오프 적용
   }
 
   if (sof_monitor.prev_tick_us == 0U)
