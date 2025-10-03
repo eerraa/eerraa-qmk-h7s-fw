@@ -14,7 +14,7 @@
 | `src/hw/driver/usb/usb_hid/usbd_hid.c` | `usbHidMonitorSof()`, `usbHidSofMonitorApplySpeedParams()` | 마이크로프레임 간격 기반 점수 계산, 워밍업/홀드오프/감쇠 정책, 속도별 파라미터 캐싱을 담당합니다.
 | `src/hw/driver/usb/usb_cmp/usbd_cmp.c` | HS/FS `bInterval` 유지 | 다운그레이드 시에도 안정적인 패킷 크기를 보장합니다.
 | `src/hw/driver/usb/usbd_conf.c` | `usbBootModeIsFullSpeed()` 분기 | HS PHY에서 FS 1kHz 강제 모드를 선택할 수 있습니다.
-| `src/hw/hw_def.h` | `_DEF_FIRMWATRE_VERSION` | 모니터 기능 릴리스를 `V251003R2`까지 태깅합니다.
+| `src/hw/hw_def.h` | `_DEF_FIRMWATRE_VERSION` | 모니터 기능 릴리스를 `V251003R3`까지 태깅합니다.
 | `src/ap/ap.c` | `usbProcess()` 호출 | 메인 루프에서 큐 상태 머신을 주기적으로 서비스합니다.
 
 ## 3. 상태 머신 & 데이터 구조 스냅샷
@@ -109,6 +109,12 @@
 ### V251003R2 — SOF 모니터 호출 오버헤드 차단
 - `usbHidSofMonitorSyncTick()`을 인라인 처리해 8000Hz SOF 모니터 루프에서 함수 호출 오버헤드를 제거했습니다.
 - `_DEF_FIRMWATRE_VERSION`이 `V251003R2`로 갱신되었습니다.
+
+### V251003R3 — SOF 모니터 경량화 재검토
+- `usbHidMonitorSof()`에서 USB 상태·속도 지역 캐시, 워밍업 카운터 경량화를 유지하되 초기화 루틴·다운그레이드 요청 흐름과의 충돌 가능성을 재검토했습니다.
+- 감쇠 타이밍 비교와 점수 임계 누적 경량화가 래핑 대응 유틸리티 및 `USB_SOF_MONITOR_SCORE_CAP` 한도와 일관되게 동작함을 확인했습니다.
+- 정상 프레임 경로에서 구조체 접근 감소로 체감 성능 향상은 크지 않으나 오버헤드 증가는 없음을 모니터링 로그로 확인했습니다.
+- `_DEF_FIRMWATRE_VERSION`이 `V251003R3`으로 갱신되었습니다.
 
 ## 6. CODEX 점검 팁
 - SOF 모니터 파라미터를 수정할 때는 `USB_BOOT_MONITOR_CONFIRM_DELAY_MS`와 `USB_SOF_MONITOR_*` 상수의 상호 의존성을 반드시 검토하십시오.
