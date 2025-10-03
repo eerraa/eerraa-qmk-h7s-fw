@@ -14,7 +14,7 @@
 | `src/hw/driver/usb/usb_hid/usbd_hid.c` | `usbHidMonitorSof()`, `usbHidSofMonitorApplySpeedParams()` | 마이크로프레임 간격 기반 점수 계산, 워밍업/홀드오프/감쇠 정책, 속도별 파라미터 캐싱을 담당합니다.
 | `src/hw/driver/usb/usb_cmp/usbd_cmp.c` | HS/FS `bInterval` 유지 | 다운그레이드 시에도 안정적인 패킷 크기를 보장합니다.
 | `src/hw/driver/usb/usbd_conf.c` | `usbBootModeIsFullSpeed()` 분기 | HS PHY에서 FS 1kHz 강제 모드를 선택할 수 있습니다.
-| `src/hw/hw_def.h` | `_DEF_FIRMWATRE_VERSION` | 모니터 기능 릴리스를 `V250924R4`까지 태깅합니다.
+| `src/hw/hw_def.h` | `_DEF_FIRMWATRE_VERSION` | 모니터 기능 릴리스를 `V251002R2`까지 태깅합니다.
 | `src/ap/ap.c` | `usbProcess()` 호출 | 메인 루프에서 큐 상태 머신을 주기적으로 서비스합니다.
 
 ## 3. 상태 머신 & 데이터 구조 스냅샷
@@ -35,8 +35,8 @@
 ## 4. 속도별 파라미터 레퍼런스
 | USB 속도 | `expected_us` | `stable_threshold_us` | `decay_interval_us` | `degrade_threshold` | 워밍업 프레임 |
 | --- | --- | --- | --- | --- | --- |
-| HS (8k/4k/2k 공통) | 125 | 250 | 2000 | 3 | 2048 |
-| FS (1k) | 1000 | 2000 | 8000 | 3 | 128 |
+| HS (8k/4k/2k 공통) | 125 | 250 | 4000 | 12 | 2048 |
+| FS (1k) | 1000 | 2000 | 20000 | 6 | 128 |
 | 비구성/정지 | 0 | 0 | 0 | - | - (즉시 리셋) |
 - 모든 속도 전환은 `usbHidSofMonitorApplySpeedParams()`에서 처리하며, 속도가 바뀌면 워밍업 타이머와 점수가 초기화됩니다.
 
@@ -66,6 +66,31 @@
 - `usbHidSofMonitorApplySpeedParams()`가 속도별 기대 간격/안정 임계/감쇠 주기/다운그레이드 점수를 캐싱해 ISR 분기를 줄입니다.
 - 속도 변경·재개 시 캐시와 워밍업 타이머를 갱신하여 다운그레이드 판단의 일관성을 높입니다.
 - `_DEF_FIRMWATRE_VERSION`이 `V250924R4`로 갱신되어 모니터 최적화를 식별합니다.
+
+### V251001R5 — 다운그레이드 로그 정비 & 누락 프레임 계측기
+- `usbBootModeRequestMissedFrames()`를 추가해 측정된 SOF 지연을 누락 프레임 수로 환산하고, ARM/COMMIT 로그에서 수치를 함께 출력합니다.
+- 다운그레이드 경고/실패 로그를 영문화하고 동일 어조로 정리해 진단 로그 스트림을 일관되게 유지합니다.
+- `_DEF_FIRMWATRE_VERSION`이 `V251001R5`로 갱신되었습니다.
+
+### V251001R6 — SOF 초기화 경로 일원화
+- `usbHidSofMonitorPrime()`과 `usbHidSofMonitorHoldoff()`를 도입해 장치 상태 변화, 속도 전환, 서스펜드 복귀가 동일한 초기화 루틴을 사용하도록 재구성했습니다.
+- 비구성/지원 외 속도 전환 시 타임스탬프와 점수를 즉시 리셋해 홀드오프/워밍업 조건이 일관되게 재시작됩니다.
+- `_DEF_FIRMWATRE_VERSION`이 `V251001R6`으로 갱신되었습니다.
+
+### V251001R7 — 타임스탬프 래핑 대응 보강
+- `usbHidTimeIsBefore()/usbHidTimeIsAfterOrEqual()` 유틸리티를 추가해 마이크로초 타이머 래핑 상태에서도 홀드오프·워밍업 마감 비교가 안전하게 수행됩니다.
+- SOF 누락 프레임 가산부를 `USB_SOF_MONITOR_SCORE_CAP` 범위 내에서 단일 경로로 정리해 점수 계산을 단순화했습니다.
+- `_DEF_FIRMWATRE_VERSION`이 `V251001R7`으로 갱신되었습니다.
+
+### V251002R1 — SOF 파라미터 테이블화 & 임계 재정렬
+- `usb_sof_monitor_params_t` 테이블을 도입해 속도별 기대 간격, 안정 임계, 감쇠 주기, 점수 한계를 일괄 관리합니다.
+- HS/FS 모드의 감쇠 주기를 4ms/20ms로 확장하고 다운그레이드 임계 점수를 12/6으로 조정해 오탐을 줄였습니다.
+- `_DEF_FIRMWATRE_VERSION`이 `V251002R1`로 갱신되었습니다.
+
+### V251002R2 — 홀드오프 재정렬 안정화
+- 속도 전환 홀드오프 시 `prev_tick_us`를 즉시 재설정해 조기 반환 루틴에서 타임스탬프가 꼬이지 않도록 했습니다.
+- 구성/서스펜드 상태 전환 이후에도 동일한 초기화 경로를 사용하도록 정리해 SOF 모니터 일관성을 유지합니다.
+- `_DEF_FIRMWATRE_VERSION`이 `V251002R2`로 갱신되었습니다.
 
 ## 6. CODEX 점검 팁
 - SOF 모니터 파라미터를 수정할 때는 `USB_BOOT_MONITOR_CONFIRM_DELAY_MS`와 `USB_SOF_MONITOR_*` 상수의 상호 의존성을 반드시 검토하십시오.

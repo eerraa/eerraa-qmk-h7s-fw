@@ -517,6 +517,22 @@ typedef struct
   bool     warmup_complete;                                       // V250924R3 워밍업 완료 여부
 } usb_sof_monitor_t;
 
+typedef struct
+{
+  uint8_t  speed_code;                                            // V251002R1 속도별 SOF 파라미터 키
+  uint32_t expected_us;                                           // V251002R1 기대 SOF 간격(us)
+  uint32_t stable_threshold_us;                                   // V251002R1 정상 범위 상한(us)
+  uint32_t decay_interval_us;                                     // V251002R1 점수 감쇠 주기(us)
+  uint8_t  degrade_threshold;                                     // V251002R1 다운그레이드 임계 점수
+  uint16_t warmup_target_frames;                                  // V251002R1 워밍업에 필요한 정상 프레임 수
+} usb_sof_monitor_params_t;
+
+static const usb_sof_monitor_params_t sof_monitor_params[] =      // V251002R1 속도별 SOF 파라미터 테이블
+{
+  {USBD_SPEED_HIGH, 125U, 250U, 4000U, 12U, USB_SOF_MONITOR_WARMUP_FRAMES_HS},
+  {USBD_SPEED_FULL, 1000U, 2000U, 20000U, 6U, USB_SOF_MONITOR_WARMUP_FRAMES_FS},
+};
+
 static usb_sof_monitor_t sof_monitor = {0};                       // V250924R2 SOF 안정성 상태
 static uint8_t           sof_prev_dev_state = USBD_STATE_DEFAULT; // V250924R2 마지막 USB 장치 상태
 
@@ -531,33 +547,40 @@ static bool usbHidTimeIsAfterOrEqual(uint32_t now_us,
   return (int32_t)(now_us - target_us) >= 0;
 }
 
+static const usb_sof_monitor_params_t *usbHidSofMonitorFindParams(uint8_t speed_code)  // V251002R1 파라미터 조회기
+{
+  for (uint32_t i = 0; i < (sizeof(sof_monitor_params) / sizeof(sof_monitor_params[0])); i++)
+  {
+    if (sof_monitor_params[i].speed_code == speed_code)
+    {
+      return &sof_monitor_params[i];
+    }
+  }
+
+  return NULL;
+}
+
 static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 속도별 모니터링 파라미터 캐시
 {
   sof_monitor.active_speed = speed_code;
 
-  switch (speed_code)
+  const usb_sof_monitor_params_t *params = usbHidSofMonitorFindParams(speed_code); // V251002R1 속도별 설정 조회
+
+  if (params != NULL)
   {
-    case USBD_SPEED_HIGH:
-      sof_monitor.expected_us        = 125U;
-      sof_monitor.stable_threshold_us = 250U;
-      sof_monitor.decay_interval_us  = 4000U;
-      sof_monitor.degrade_threshold  = 12U;
-      sof_monitor.warmup_target_frames = USB_SOF_MONITOR_WARMUP_FRAMES_HS;
-      break;
-    case USBD_SPEED_FULL:
-      sof_monitor.expected_us        = 1000U;
-      sof_monitor.stable_threshold_us = 2000U;
-      sof_monitor.decay_interval_us  = 20000U;
-      sof_monitor.degrade_threshold  = 6U;
-      sof_monitor.warmup_target_frames = USB_SOF_MONITOR_WARMUP_FRAMES_FS;
-      break;
-    default:
-      sof_monitor.expected_us        = 0U;
-      sof_monitor.stable_threshold_us = 0U;
-      sof_monitor.decay_interval_us  = 0U;
-      sof_monitor.degrade_threshold  = 0U;
-      sof_monitor.warmup_target_frames = 0U;
-      break;
+    sof_monitor.expected_us         = params->expected_us;
+    sof_monitor.stable_threshold_us = params->stable_threshold_us;
+    sof_monitor.decay_interval_us   = params->decay_interval_us;
+    sof_monitor.degrade_threshold   = params->degrade_threshold;
+    sof_monitor.warmup_target_frames = params->warmup_target_frames;
+  }
+  else
+  {
+    sof_monitor.expected_us         = 0U;
+    sof_monitor.stable_threshold_us = 0U;
+    sof_monitor.decay_interval_us   = 0U;
+    sof_monitor.degrade_threshold   = 0U;
+    sof_monitor.warmup_target_frames = 0U;
   }
 }
 
@@ -582,6 +605,7 @@ static void usbHidSofMonitorHoldoff(uint32_t now_us,
                                     uint32_t warmup_delta_us,
                                     uint8_t speed_code)
 {
+  sof_monitor.prev_tick_us       = now_us;                        // V251002R2 홀드오프 재정렬 대응 타임스탬프 리셋
   sof_monitor.score              = 0U;                            // V251001R6 속도 전환 시 공통 감쇠 재시작
   sof_monitor.last_decay_us      = now_us;
   sof_monitor.holdoff_end_us     = now_us + holdoff_delta_us;
@@ -1381,7 +1405,16 @@ static void usbHidMonitorSof(uint32_t now_us)
                             pdev->dev_speed);                     // V251001R6 속도 변경 시 공통 홀드오프 적용
   }
 
-  if (sof_monitor.prev_tick_us == 0U)
+  uint32_t prev_tick_us = sof_monitor.prev_tick_us;
+
+  if (prev_tick_us == 0U)
+  {
+    sof_monitor.prev_tick_us = now_us;
+    sof_monitor.last_decay_us = now_us;
+    return;
+  }
+
+  if (usbHidTimeIsBefore(now_us, sof_monitor.holdoff_end_us))       // V251002R1 홀드오프 조기 반환으로 연산 절약
   {
     sof_monitor.prev_tick_us = now_us;
     sof_monitor.last_decay_us = now_us;
@@ -1398,14 +1431,8 @@ static void usbHidMonitorSof(uint32_t now_us)
     return;
   }
 
-  uint32_t delta_us = now_us - sof_monitor.prev_tick_us;
+  uint32_t delta_us = now_us - prev_tick_us;
   sof_monitor.prev_tick_us = now_us;
-
-  if (usbHidTimeIsBefore(now_us, sof_monitor.holdoff_end_us))       // V251001R7 래핑 대응 홀드오프 비교
-  {
-    sof_monitor.last_decay_us = now_us;
-    return;
-  }
 
   if (sof_monitor.warmup_complete == false)
   {
