@@ -29,7 +29,7 @@
 ### 3.2 다운그레이드 큐(`usb_boot_mode_request_t`)
 - 필드 핵심: `stage`(IDLE→ARMED→COMMIT), `next_mode`, `delta_us`, `expected_us`, `ready_ms`, `timeout_ms`, `log_pending`.
 - `ARMED` 단계에서 첫 로그를 출력하고 2초 확인 지연(`USB_BOOT_MONITOR_CONFIRM_DELAY_MS`)을 기다립니다.
-- 확인 지연이 경과하면 `COMMIT`으로 승격되어 저장/리셋을 수행하고, 실패 시 `[!] USB Poll 모드 저장 실패` 로그 후 큐를 초기화합니다.
+- 확인 지연이 경과하면 `COMMIT`으로 승격되어 저장/리셋을 수행하고, 실패 시 `[NG] USB poll downgrade persist failed` 로그 후 큐를 초기화합니다.
 - `usbProcess()`는 IDLE 상태에서 반환하여 메인 루프 오버헤드를 최소화합니다.
 
 ## 4. 속도별 파라미터 레퍼런스
