@@ -116,6 +116,11 @@
 - 정상 프레임 경로에서 구조체 접근 감소로 체감 성능 향상은 크지 않으나 오버헤드 증가는 없음을 모니터링 로그로 확인했습니다.
 - `_DEF_FIRMWATRE_VERSION`이 `V251003R3`으로 갱신되었습니다.
 
+### V251003R4 — 서스펜드 감시 경량화
+- `usb_sof_monitor_t`에 서스펜드 상태 캐시를 추가해 `usbHidMonitorSof()`가 서스펜드 구간에서 반복 초기화를 수행하지 않도록 조정했습니다.
+- 서스펜드에서 복귀할 때만 홀드오프/워밍업 타이머를 재기동하여 8kHz ISR 경로의 불필요한 파라미터 조회와 타이머 연산을 제거했습니다.
+- `_DEF_FIRMWATRE_VERSION`이 `V251003R4`로 갱신되었습니다.
+
 ## 6. CODEX 점검 팁
 - SOF 모니터 파라미터를 수정할 때는 `USB_BOOT_MONITOR_CONFIRM_DELAY_MS`와 `USB_SOF_MONITOR_*` 상수의 상호 의존성을 반드시 검토하십시오.
 - 다운그레이드 큐는 리셋을 동반하므로, 신규 모드 추가 시 `usbHidResolveDowngradeTarget()`과 `usb_boot_mode_request_t` 초기화 경로를 함께 업데이트해야 합니다.

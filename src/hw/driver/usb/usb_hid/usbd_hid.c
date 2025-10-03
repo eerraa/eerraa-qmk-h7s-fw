@@ -510,6 +510,7 @@ typedef struct
   uint8_t                              active_speed;               // V250924R4 캐시된 USB 속도 코드
   uint8_t                              score;                      // V250924R2 누적 불안정 점수
   bool                                 warmup_complete;            // V250924R3 워밍업 완료 여부
+  bool                                 suspended_active;           // V251003R4 서스펜드 상태 캐시로 재초기화 최소화
 } usb_sof_monitor_t;
 
 struct usb_sof_monitor_params_s
@@ -576,6 +577,7 @@ static void usbHidSofMonitorPrime(uint32_t now_us,
   sof_monitor.warmup_good_frames = 0U;
   sof_monitor.warmup_complete    = false;
   sof_monitor.params             = NULL;                          // V251002R4 속도 파라미터는 속도 적용 후 설정
+  sof_monitor.suspended_active   = false;                         // V251003R4 서스펜드 상태는 호출자 분기로 관리
   usbHidSofMonitorApplySpeedParams(speed_code);
 }
 
@@ -1358,12 +1360,27 @@ static void usbHidMonitorSof(uint32_t now_us)
 
   dev_speed = pdev->dev_speed;
 
-  if (USBD_is_suspended())
+  bool suspended = USBD_is_suspended();
+
+  if (suspended)
+  {
+    if (mon->suspended_active == false)
+    {
+      usbHidSofMonitorPrime(now_us,
+                            0U,
+                            0U,
+                            dev_speed);                           // V251003R4 서스펜드 진입 시 최소 초기화
+      mon->suspended_active = true;                               // V251003R4 반복 초기화를 회피해 오버헤드 절감
+    }
+    return;
+  }
+
+  if (mon->suspended_active)
   {
     usbHidSofMonitorPrime(now_us,
                           USB_SOF_MONITOR_RESUME_HOLDOFF_US,
                           USB_SOF_MONITOR_WARMUP_TIMEOUT_US,
-                          dev_speed);                             // V251001R6 서스펜드 복귀 홀드오프 공용 처리
+                          dev_speed);                             // V251003R4 서스펜드 복귀 시점에만 홀드오프 적용
     return;
   }
 
