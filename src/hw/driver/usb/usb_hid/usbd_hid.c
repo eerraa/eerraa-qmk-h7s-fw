@@ -547,22 +547,21 @@ static bool usbHidTimeIsAfterOrEqual(uint32_t now_us,
   return (int32_t)(now_us - target_us) >= 0;
 }
 
-static const usb_sof_monitor_params_t *usbHidSofMonitorFindParams(uint8_t speed_code)  // V251002R1 파라미터 조회기
-{
-  for (uint32_t i = 0; i < (sizeof(sof_monitor_params) / sizeof(sof_monitor_params[0])); i++)
-  {
-    if (sof_monitor_params[i].speed_code == speed_code)
-    {
-      return &sof_monitor_params[i];
-    }
-  }
-
-  return NULL;
-}
-
 static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 속도별 모니터링 파라미터 캐시
 {
-  const usb_sof_monitor_params_t *params = usbHidSofMonitorFindParams(speed_code);
+  const usb_sof_monitor_params_t *params = NULL;
+
+  switch (speed_code)
+  {
+    case USBD_SPEED_HIGH:
+      params = &sof_monitor_params[0];                                // V251004R1 속도 파라미터 분기 직접 선택으로 반복 검색 제거
+      break;
+    case USBD_SPEED_FULL:
+      params = &sof_monitor_params[1];                                // V251004R1 속도 파라미터 분기 직접 선택으로 반복 검색 제거
+      break;
+    default:
+      break;
+  }
 
   sof_monitor.active_speed = speed_code;
 
@@ -1360,10 +1359,9 @@ static UsbBootMode_t usbHidResolveDowngradeTarget(void)            // V250924R2 
 
 static void usbHidMonitorSof(uint32_t now_us)
 {
-  USBD_HandleTypeDef   *pdev = &USBD_Device;
-  usb_sof_monitor_t    *mon  = &sof_monitor;                      // V251003R3 SOF 모니터 지역 캐시로 분기 경량화 유지
-  uint8_t               dev_state;
-  uint8_t               dev_speed;
+  USBD_HandleTypeDef *pdev = &USBD_Device;
+  usb_sof_monitor_t  *mon  = &sof_monitor;                         // V251003R3 SOF 모니터 지역 캐시로 분기 경량화 유지
+  uint8_t             dev_state;
 
   dev_state = pdev->dev_state;
 
@@ -1384,14 +1382,11 @@ static void usbHidMonitorSof(uint32_t now_us)
     return;
   }
 
-  dev_speed = pdev->dev_speed;
-
-  bool suspended = USBD_is_suspended();
-
-  if (suspended)
+  if (USBD_is_suspended())
   {
     if (mon->suspended_active == false)
     {
+      uint8_t dev_speed = pdev->dev_speed;
       usbHidSofMonitorPrime(now_us,
                             0U,
                             0U,
@@ -1400,6 +1395,8 @@ static void usbHidMonitorSof(uint32_t now_us)
     }
     return;
   }
+
+  uint8_t dev_speed = pdev->dev_speed;                            // V251004R1 서스펜드/복귀 분기 이후에 속도 접근으로 불필요한 읽기 제거
 
   if (mon->suspended_active)
   {
