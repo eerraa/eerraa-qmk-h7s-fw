@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251003R9"  // V251003R9: SOF 모니터 점수/감쇠 캐시 로컬화로 ISR 경량화
+#define _DEF_FIRMWATRE_VERSION      "V251004R1"  // V251004R1: SOF 파라미터 조회 분기 및 서스펜드 경로 경량화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
