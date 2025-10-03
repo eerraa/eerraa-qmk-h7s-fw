@@ -1451,22 +1451,25 @@ static void usbHidMonitorSof(uint32_t now_us)
 
   if (mon->warmup_complete == false)
   {
-    uint16_t warmup_target = mon->warmup_target_frames;            // V251003R5 구조체 직접 캐시 활용
+    uint16_t warmup_target       = mon->warmup_target_frames;            // V251003R5 구조체 직접 캐시 활용
+    uint16_t warmup_good_frames  = mon->warmup_good_frames;              // V251003R8 워밍업 프레임 로컬 캐시로 접근 감소
 
     if (delta_us < stable_threshold)
     {
-      if (mon->warmup_good_frames < warmup_target)
+      if (warmup_good_frames < warmup_target)
       {
-        mon->warmup_good_frames++;
+        warmup_good_frames++;
       }
     }
     else
     {
-      mon->warmup_good_frames = 0U;
+      warmup_good_frames = 0U;
     }
 
-    if (mon->warmup_good_frames >= warmup_target
-        || usbHidTimeIsAfterOrEqual(now_us, mon->warmup_deadline_us)) // V251001R7 래핑 대응 워밍업 마감 비교
+    mon->warmup_good_frames = warmup_good_frames;                        // V251003R8 로컬 누적 결과 구조체에 재반영
+
+    if (warmup_good_frames >= warmup_target
+        || usbHidTimeIsAfterOrEqual(now_us, mon->warmup_deadline_us))    // V251001R7 래핑 대응 워밍업 마감 비교
     {
       mon->warmup_complete = true;
       mon->last_decay_us   = now_us;
@@ -1479,16 +1482,19 @@ static void usbHidMonitorSof(uint32_t now_us)
 
   if (delta_us < stable_threshold)
   {
-    uint32_t decay_interval_us = mon->decay_interval_us;           // V251003R7 워밍업 이후에만 감쇠 파라미터 로드
-
-    if (mon->score > 0U && decay_interval_us > 0U)
+    if (mon->score > 0U)                                               // V251003R8 감쇠 파라미터 조회를 점수 존재 시로 지연
     {
-      uint32_t next_decay_us = mon->last_decay_us + decay_interval_us; // V251003R3 감쇠 비교 헬퍼 재사용 검토
+      uint32_t decay_interval_us = mon->decay_interval_us;             // V251003R7 워밍업 이후에만 감쇠 파라미터 로드
 
-      if (usbHidTimeIsAfterOrEqual(now_us, next_decay_us))
+      if (decay_interval_us > 0U)
       {
-        mon->score--;
-        mon->last_decay_us = now_us;
+        uint32_t next_decay_us = mon->last_decay_us + decay_interval_us; // V251003R3 감쇠 비교 헬퍼 재사용 검토
+
+        if (usbHidTimeIsAfterOrEqual(now_us, next_decay_us))
+        {
+          mon->score--;
+          mon->last_decay_us = now_us;
+        }
       }
     }
     return;
