@@ -501,16 +501,20 @@ typedef struct usb_sof_monitor_params_s usb_sof_monitor_params_t;   // V251003R1
 
 typedef struct
 {
-  uint32_t                             prev_tick_us;               // V250924R2 직전 SOF 타임스탬프(us)
-  uint32_t                             last_decay_us;              // 점수 감소 시각(us)
-  uint32_t                             holdoff_end_us;             // 다운그레이드 홀드오프 종료 시각(us)
-  uint32_t                             warmup_deadline_us;         // 워밍업 타임아웃 시각(us)
-  const usb_sof_monitor_params_t      *params;                     // V251002R4 속도별 파라미터 참조 캐시
-  uint16_t                             warmup_good_frames;         // V250924R3 누적 정상 프레임 수
-  uint8_t                              active_speed;               // V250924R4 캐시된 USB 속도 코드
-  uint8_t                              score;                      // V250924R2 누적 불안정 점수
-  bool                                 warmup_complete;            // V250924R3 워밍업 완료 여부
-  bool                                 suspended_active;           // V251003R4 서스펜드 상태 캐시로 재초기화 최소화
+  uint32_t                        prev_tick_us;               // V250924R2 직전 SOF 타임스탬프(us)
+  uint32_t                        last_decay_us;              // 점수 감소 시각(us)
+  uint32_t                        holdoff_end_us;             // 다운그레이드 홀드오프 종료 시각(us)
+  uint32_t                        warmup_deadline_us;         // 워밍업 타임아웃 시각(us)
+  uint32_t                        expected_us;                // V251003R5 속도별 기대 간격 직접 캐시
+  uint32_t                        stable_threshold_us;        // V251003R5 안정 범위 상한 직접 캐시
+  uint32_t                        decay_interval_us;          // V251003R5 점수 감쇠 주기 직접 캐시
+  uint16_t                        warmup_target_frames;       // V251003R5 워밍업 목표 프레임 직접 캐시
+  uint16_t                        warmup_good_frames;         // V250924R3 누적 정상 프레임 수
+  uint8_t                         active_speed;               // V250924R4 캐시된 USB 속도 코드
+  uint8_t                         degrade_threshold;          // V251003R5 다운그레이드 임계값 직접 캐시
+  uint8_t                         score;                      // V250924R2 누적 불안정 점수
+  bool                            warmup_complete;            // V250924R3 워밍업 완료 여부
+  bool                            suspended_active;           // V251003R4 서스펜드 상태 캐시로 재초기화 최소화
 } usb_sof_monitor_t;
 
 struct usb_sof_monitor_params_s
@@ -558,8 +562,26 @@ static const usb_sof_monitor_params_t *usbHidSofMonitorFindParams(uint8_t speed_
 
 static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 속도별 모니터링 파라미터 캐시
 {
+  const usb_sof_monitor_params_t *params = usbHidSofMonitorFindParams(speed_code);
+
   sof_monitor.active_speed = speed_code;
-  sof_monitor.params       = usbHidSofMonitorFindParams(speed_code); // V251002R4 파라미터 참조 캐시 단순화
+
+  if (params != NULL)
+  {
+    sof_monitor.expected_us          = params->expected_us;         // V251003R5 속도 파라미터 직접 복사로 런타임 접근 최소화
+    sof_monitor.stable_threshold_us  = params->stable_threshold_us; // V251003R5 속도 파라미터 직접 복사로 런타임 접근 최소화
+    sof_monitor.decay_interval_us    = params->decay_interval_us;   // V251003R5 속도 파라미터 직접 복사로 런타임 접근 최소화
+    sof_monitor.degrade_threshold    = params->degrade_threshold;   // V251003R5 속도 파라미터 직접 복사로 런타임 접근 최소화
+    sof_monitor.warmup_target_frames = params->warmup_target_frames;// V251003R5 속도 파라미터 직접 복사로 런타임 접근 최소화
+  }
+  else
+  {
+    sof_monitor.expected_us          = 0U;                          // V251003R5 비구성/알 수 없는 속도 초기화
+    sof_monitor.stable_threshold_us  = 0U;
+    sof_monitor.decay_interval_us    = 0U;
+    sof_monitor.degrade_threshold    = 0U;
+    sof_monitor.warmup_target_frames = 0U;
+  }
 }
 
 
@@ -576,7 +598,11 @@ static void usbHidSofMonitorPrime(uint32_t now_us,
   sof_monitor.warmup_deadline_us = now_us + warmup_delta_us;
   sof_monitor.warmup_good_frames = 0U;
   sof_monitor.warmup_complete    = false;
-  sof_monitor.params             = NULL;                          // V251002R4 속도 파라미터는 속도 적용 후 설정
+  sof_monitor.expected_us        = 0U;                            // V251003R5 속도 파라미터는 적용 함수에서 직접 채움
+  sof_monitor.stable_threshold_us = 0U;                           // V251003R5 속도 파라미터는 적용 함수에서 직접 채움
+  sof_monitor.decay_interval_us  = 0U;                            // V251003R5 속도 파라미터는 적용 함수에서 직접 채움
+  sof_monitor.degrade_threshold  = 0U;                            // V251003R5 속도 파라미터는 적용 함수에서 직접 채움
+  sof_monitor.warmup_target_frames = 0U;                          // V251003R5 속도 파라미터는 적용 함수에서 직접 채움
   sof_monitor.suspended_active   = false;                         // V251003R4 서스펜드 상태는 호출자 분기로 관리
   usbHidSofMonitorApplySpeedParams(speed_code);
 }
@@ -1410,18 +1436,16 @@ static void usbHidMonitorSof(uint32_t now_us)
     return;
   }
 
-  const usb_sof_monitor_params_t *params = mon->params;           // V251002R4 속도별 파라미터 즉시 참조
-
-  if (params == NULL)                                             // V251002R4 파라미터 미적용 시 조기 반환
+  if (mon->expected_us == 0U)                                     // V251003R5 유효 파라미터 미적용 시 조기 반환
   {
     return;
   }
 
-  uint32_t expected_us       = params->expected_us;
-  uint32_t stable_threshold  = params->stable_threshold_us;
-  uint32_t decay_interval_us = params->decay_interval_us;
-  uint8_t  degrade_threshold = params->degrade_threshold;
-  uint16_t warmup_target     = params->warmup_target_frames;       // V251003R3 워밍업 카운터 접근 재검토
+  uint32_t expected_us       = mon->expected_us;
+  uint32_t stable_threshold  = mon->stable_threshold_us;
+  uint32_t decay_interval_us = mon->decay_interval_us;
+  uint8_t  degrade_threshold = mon->degrade_threshold;
+  uint16_t warmup_target     = mon->warmup_target_frames;          // V251003R5 구조체 직접 캐시 활용
 
   uint32_t prev_tick_us = mon->prev_tick_us;
   uint32_t delta_us     = now_us - prev_tick_us;
