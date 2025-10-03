@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251003R3"  // V251003R3: SOF 모니터 경량화 검토 및 안정성 재확인
+#define _DEF_FIRMWATRE_VERSION      "V251003R4"  // V251003R4: 서스펜드 진입/복귀 감시 경량화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
