@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251001R4"  // V251001R4: 고스트 판정용 행 캐시로 키맵 필터 재계산 최소화
+#define _DEF_FIRMWATRE_VERSION      "V251001R5"  // V251001R5: USB 불안정 로그 영문화 및 누락 프레임 정보 추가
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
