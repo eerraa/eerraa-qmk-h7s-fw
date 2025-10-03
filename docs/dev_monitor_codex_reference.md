@@ -126,6 +126,11 @@
 - `usbHidSofMonitorApplySpeedParams()`가 속도 파라미터를 즉시 복사하며, 구성 외 속도 진입 시 캐시를 0으로 초기화해 조기 반환 흐름을 간소화했습니다.
 - `_DEF_FIRMWATRE_VERSION`이 `V251003R5`로 갱신되었습니다.
 
+### V251003R6 — SOF 모니터 점수 누적 경량화 재검토
+- `usbHidMonitorSof()`에서 누락 프레임 패널티 계산 분기를 제거하고 다운그레이드 임계 비교를 선행해 ISR 분기 수를 줄였습니다.
+- 임계 도달 시 점수 갱신과 감쇠 타임스탬프 처리 순서를 재정비해 홀드오프 재진입 경로가 간단해졌습니다.
+- `_DEF_FIRMWATRE_VERSION`이 `V251003R6`으로 갱신되었습니다.
+
 ## 6. CODEX 점검 팁
 - SOF 모니터 파라미터를 수정할 때는 `USB_BOOT_MONITOR_CONFIRM_DELAY_MS`와 `USB_SOF_MONITOR_*` 상수의 상호 의존성을 반드시 검토하십시오.
 - 다운그레이드 큐는 리셋을 동반하므로, 신규 모드 추가 시 `usbHidResolveDowngradeTarget()`과 `usb_boot_mode_request_t` 초기화 경로를 함께 업데이트해야 합니다.
