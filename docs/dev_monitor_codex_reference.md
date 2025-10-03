@@ -131,6 +131,11 @@
 - 임계 도달 시 점수 갱신과 감쇠 타임스탬프 처리 순서를 재정비해 홀드오프 재진입 경로가 간단해졌습니다.
 - `_DEF_FIRMWATRE_VERSION`이 `V251003R6`으로 갱신되었습니다.
 
+### V251003R7 — SOF 모니터 파라미터 지연 로드 경량화
+- `usbHidMonitorSof()`가 워밍업 완료 전에는 감쇠·임계 파라미터를 읽지 않도록 조정해 8kHz ISR의 메모리 접근 수를 줄였습니다.
+- 다운그레이드 임계 비교에서도 필요 시점에만 파라미터를 참조하도록 재구성해 정상 프레임 경로 분기 부담을 완화했습니다.
+- `_DEF_FIRMWATRE_VERSION`이 `V251003R7`으로 갱신되었습니다.
+
 ## 6. CODEX 점검 팁
 - SOF 모니터 파라미터를 수정할 때는 `USB_BOOT_MONITOR_CONFIRM_DELAY_MS`와 `USB_SOF_MONITOR_*` 상수의 상호 의존성을 반드시 검토하십시오.
 - 다운그레이드 큐는 리셋을 동반하므로, 신규 모드 추가 시 `usbHidResolveDowngradeTarget()`과 `usb_boot_mode_request_t` 초기화 경로를 함께 업데이트해야 합니다.

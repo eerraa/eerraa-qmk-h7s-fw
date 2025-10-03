@@ -1436,24 +1436,23 @@ static void usbHidMonitorSof(uint32_t now_us)
     return;
   }
 
-  if (mon->expected_us == 0U)                                     // V251003R5 유효 파라미터 미적용 시 조기 반환
+  uint32_t expected_us = mon->expected_us;                         // V251003R7 워밍업/감쇠 파라미터 지연 로드로 ISR 경량화
+
+  if (expected_us == 0U)                                            // V251003R5 유효 파라미터 미적용 시 조기 반환
   {
     return;
   }
 
-  uint32_t expected_us       = mon->expected_us;
-  uint32_t stable_threshold  = mon->stable_threshold_us;
-  uint32_t decay_interval_us = mon->decay_interval_us;
-  uint8_t  degrade_threshold = mon->degrade_threshold;
-  uint16_t warmup_target     = mon->warmup_target_frames;          // V251003R5 구조체 직접 캐시 활용
-
-  uint32_t prev_tick_us = mon->prev_tick_us;
-  uint32_t delta_us     = now_us - prev_tick_us;
+  uint32_t prev_tick_us    = mon->prev_tick_us;
+  uint32_t stable_threshold = mon->stable_threshold_us;
+  uint32_t delta_us         = now_us - prev_tick_us;
 
   mon->prev_tick_us = now_us;
 
   if (mon->warmup_complete == false)
   {
+    uint16_t warmup_target = mon->warmup_target_frames;            // V251003R5 구조체 직접 캐시 활용
+
     if (delta_us < stable_threshold)
     {
       if (mon->warmup_good_frames < warmup_target)
@@ -1480,6 +1479,8 @@ static void usbHidMonitorSof(uint32_t now_us)
 
   if (delta_us < stable_threshold)
   {
+    uint32_t decay_interval_us = mon->decay_interval_us;           // V251003R7 워밍업 이후에만 감쇠 파라미터 로드
+
     if (mon->score > 0U && decay_interval_us > 0U)
     {
       uint32_t next_decay_us = mon->last_decay_us + decay_interval_us; // V251003R3 감쇠 비교 헬퍼 재사용 검토
@@ -1504,6 +1505,8 @@ static void usbHidMonitorSof(uint32_t now_us)
   uint32_t accumulated = (uint32_t)mon->score + penalty;          // V251003R6 임계 비교 선행으로 분기 축소
 
   mon->last_decay_us = now_us;                                    // V251003R6 감쇠 기준 타임스탬프 즉시 갱신
+
+  uint8_t degrade_threshold = mon->degrade_threshold;              // V251003R7 임계 파라미터 접근 지연으로 ISR 경량화
 
   if (accumulated >= degrade_threshold)                           // V251003R6 다운그레이드 임계 도달 시 즉시 처리
   {
