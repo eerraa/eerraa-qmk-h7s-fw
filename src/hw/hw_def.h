@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251001R5"  // V251001R5: USB 불안정 로그 영문화 및 누락 프레임 정보 추가
+#define _DEF_FIRMWATRE_VERSION      "V251001R6"  // V251001R6: SOF 모니터 초기화 경로 공용화 및 유지보수성 향상
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
