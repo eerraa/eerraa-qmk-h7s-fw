@@ -96,6 +96,11 @@
 - `usbHidSofMonitorHoldoff()`를 `usbHidSofMonitorPrime()`에 통합해 속도 변경 홀드오프 경로에서도 동일한 초기화 루틴을 재사용합니다.
 - `_DEF_FIRMWATRE_VERSION`이 `V251002R3`로 갱신되었습니다.
 
+### V251002R4 — 파라미터 참조 캐시 경량화
+- `usb_sof_monitor_t`에서 속도별 기대값과 임계 정보를 `usb_sof_monitor_params_t` 포인터로 참조해 구조체를 간소화했습니다.
+- 속도 전환 초기화 시 파라미터 캐시를 명시적으로 리셋하고, 모니터 루틴이 포인터 유효성을 확인하도록 정리했습니다.
+- `_DEF_FIRMWATRE_VERSION`이 `V251002R4`로 갱신되었습니다.
+
 ## 6. CODEX 점검 팁
 - SOF 모니터 파라미터를 수정할 때는 `USB_BOOT_MONITOR_CONFIRM_DELAY_MS`와 `USB_SOF_MONITOR_*` 상수의 상호 의존성을 반드시 검토하십시오.
 - 다운그레이드 큐는 리셋을 동반하므로, 신규 모드 추가 시 `usbHidResolveDowngradeTarget()`과 `usb_boot_mode_request_t` 초기화 경로를 함께 업데이트해야 합니다.
