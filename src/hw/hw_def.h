@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251003R5"  // V251003R5: SOF 파라미터 직접 캐시로 모니터 경량화
+#define _DEF_FIRMWATRE_VERSION      "V251003R6"  // V251003R6: SOF 모니터 점수 누적 경량화 재검토
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

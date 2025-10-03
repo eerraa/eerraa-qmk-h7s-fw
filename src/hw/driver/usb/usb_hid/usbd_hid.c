@@ -1494,24 +1494,18 @@ static void usbHidMonitorSof(uint32_t now_us)
   }
 
   uint32_t missed_frames = (delta_us + expected_us - 1U) / expected_us;
-  uint32_t penalty       = (missed_frames > 1U) ? (missed_frames - 1U) : 1U; // V251003R1 지연 점수 계산 간소화
+  uint32_t penalty       = missed_frames - 1U;                     // V251003R6 안정 임계(≥2프레임) 가정으로 분기 제거
 
   if (penalty > USB_SOF_MONITOR_SCORE_CAP)
   {
     penalty = USB_SOF_MONITOR_SCORE_CAP;
   }
 
-  uint32_t accumulated = (uint32_t)mon->score + penalty;          // V251003R3 임계값 기반 점수 누적 경량화 유지
+  uint32_t accumulated = (uint32_t)mon->score + penalty;          // V251003R6 임계 비교 선행으로 분기 축소
 
-  if (accumulated > degrade_threshold)
-  {
-    accumulated = degrade_threshold;
-  }
+  mon->last_decay_us = now_us;                                    // V251003R6 감쇠 기준 타임스탬프 즉시 갱신
 
-  mon->score        = (uint8_t)accumulated;
-  mon->last_decay_us = now_us;
-
-  if (mon->score >= degrade_threshold)
+  if (accumulated >= degrade_threshold)                           // V251003R6 다운그레이드 임계 도달 시 즉시 처리
   {
     UsbBootMode_t next_mode = usbHidResolveDowngradeTarget();
     uint32_t      holdoff   = USB_SOF_MONITOR_RECOVERY_DELAY_US;   // V251003R1 홀드오프 연장 경로 통합
@@ -1532,6 +1526,10 @@ static void usbHidMonitorSof(uint32_t now_us)
 
     mon->holdoff_end_us = now_us + holdoff;
     mon->score          = 0U;
+  }
+  else
+  {
+    mon->score = (uint8_t)accumulated;                             // V251003R6 임계 미도달 시 점수만 갱신
   }
 }
 
