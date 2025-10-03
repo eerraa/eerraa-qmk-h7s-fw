@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251002R4"  // V251002R4: SOF 파라미터 참조 캐시 경량화
+#define _DEF_FIRMWATRE_VERSION      "V251003R2"  // V251003R2: SOF 타임스탬프 인라인화로 오버헤드 차단
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
