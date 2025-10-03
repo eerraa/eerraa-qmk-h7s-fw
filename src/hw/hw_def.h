@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251002R3"  // V251002R3: SOF 초기화 함수 단순화
+#define _DEF_FIRMWATRE_VERSION      "V251002R4"  // V251002R4: SOF 파라미터 참조 캐시 경량화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

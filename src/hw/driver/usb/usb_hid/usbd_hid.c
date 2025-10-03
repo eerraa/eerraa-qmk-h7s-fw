@@ -498,19 +498,15 @@ enum
 
 typedef struct
 {
-  uint32_t prev_tick_us;                                          // V250924R2 직전 SOF 타임스탬프(us)
-  uint32_t last_decay_us;                                         // 점수 감소 시각(us)
-  uint32_t holdoff_end_us;                                        // 다운그레이드 홀드오프 종료 시각(us)
-  uint32_t warmup_deadline_us;                                    // 워밍업 타임아웃 시각(us)
-  uint32_t expected_us;                                           // V250924R4 속도별 기대 SOF 주기(us)
-  uint32_t stable_threshold_us;                                   // V250924R4 정상 범위 상한(us)
-  uint32_t decay_interval_us;                                     // 점수 감쇠 주기(us)
-  uint16_t warmup_good_frames;                                    // V250924R3 누적 정상 프레임 수
-  uint16_t warmup_target_frames;                                  // V250924R3 요구되는 정상 프레임 한계
-  uint8_t  degrade_threshold;                                     // V250924R4 다운그레이드 임계 점수
-  uint8_t  active_speed;                                          // V250924R4 캐시된 USB 속도 코드
-  uint8_t  score;                                                 // V250924R2 누적 불안정 점수
-  bool     warmup_complete;                                       // V250924R3 워밍업 완료 여부
+  uint32_t                             prev_tick_us;               // V250924R2 직전 SOF 타임스탬프(us)
+  uint32_t                             last_decay_us;              // 점수 감소 시각(us)
+  uint32_t                             holdoff_end_us;             // 다운그레이드 홀드오프 종료 시각(us)
+  uint32_t                             warmup_deadline_us;         // 워밍업 타임아웃 시각(us)
+  const usb_sof_monitor_params_t      *params;                     // V251002R4 속도별 파라미터 참조 캐시
+  uint16_t                             warmup_good_frames;         // V250924R3 누적 정상 프레임 수
+  uint8_t                              active_speed;               // V250924R4 캐시된 USB 속도 코드
+  uint8_t                              score;                      // V250924R2 누적 불안정 점수
+  bool                                 warmup_complete;            // V250924R3 워밍업 완료 여부
 } usb_sof_monitor_t;
 
 typedef struct
@@ -559,25 +555,7 @@ static const usb_sof_monitor_params_t *usbHidSofMonitorFindParams(uint8_t speed_
 static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 속도별 모니터링 파라미터 캐시
 {
   sof_monitor.active_speed = speed_code;
-
-  const usb_sof_monitor_params_t *params = usbHidSofMonitorFindParams(speed_code); // V251002R1 속도별 설정 조회
-
-  if (params != NULL)
-  {
-    sof_monitor.expected_us         = params->expected_us;
-    sof_monitor.stable_threshold_us = params->stable_threshold_us;
-    sof_monitor.decay_interval_us   = params->decay_interval_us;
-    sof_monitor.degrade_threshold   = params->degrade_threshold;
-    sof_monitor.warmup_target_frames = params->warmup_target_frames;
-  }
-  else
-  {
-    sof_monitor.expected_us         = 0U;
-    sof_monitor.stable_threshold_us = 0U;
-    sof_monitor.decay_interval_us   = 0U;
-    sof_monitor.degrade_threshold   = 0U;
-    sof_monitor.warmup_target_frames = 0U;
-  }
+  sof_monitor.params       = usbHidSofMonitorFindParams(speed_code); // V251002R4 파라미터 참조 캐시 단순화
 }
 
 
@@ -594,6 +572,7 @@ static void usbHidSofMonitorPrime(uint32_t now_us,
   sof_monitor.warmup_deadline_us = now_us + warmup_delta_us;
   sof_monitor.warmup_good_frames = 0U;
   sof_monitor.warmup_complete    = false;
+  sof_monitor.params             = NULL;                          // V251002R4 속도 파라미터는 속도 적용 후 설정
   usbHidSofMonitorApplySpeedParams(speed_code);
 }
 
@@ -1403,15 +1382,17 @@ static void usbHidMonitorSof(uint32_t now_us)
     return;
   }
 
-  uint32_t expected_us       = sof_monitor.expected_us;
-  uint32_t stable_threshold  = sof_monitor.stable_threshold_us;
-  uint32_t decay_interval_us = sof_monitor.decay_interval_us;
-  uint8_t  degrade_threshold = sof_monitor.degrade_threshold;
+  const usb_sof_monitor_params_t *params = sof_monitor.params;     // V251002R4 속도별 파라미터 즉시 참조
 
-  if (expected_us == 0U)
+  if (params == NULL)                                             // V251002R4 파라미터 미적용 시 조기 반환
   {
     return;
   }
+
+  uint32_t expected_us       = params->expected_us;
+  uint32_t stable_threshold  = params->stable_threshold_us;
+  uint32_t decay_interval_us = params->decay_interval_us;
+  uint8_t  degrade_threshold = params->degrade_threshold;
 
   uint32_t delta_us = now_us - prev_tick_us;
   sof_monitor.prev_tick_us = now_us;
@@ -1420,7 +1401,7 @@ static void usbHidMonitorSof(uint32_t now_us)
   {
     if (delta_us < stable_threshold)
     {
-      if (sof_monitor.warmup_good_frames < sof_monitor.warmup_target_frames)
+      if (sof_monitor.warmup_good_frames < params->warmup_target_frames)
       {
         sof_monitor.warmup_good_frames++;
       }
@@ -1430,7 +1411,7 @@ static void usbHidMonitorSof(uint32_t now_us)
       sof_monitor.warmup_good_frames = 0U;
     }
 
-    if (sof_monitor.warmup_good_frames >= sof_monitor.warmup_target_frames
+    if (sof_monitor.warmup_good_frames >= params->warmup_target_frames
         || usbHidTimeIsAfterOrEqual(now_us, sof_monitor.warmup_deadline_us)) // V251001R7 래핑 대응 워밍업 마감 비교
     {
       sof_monitor.warmup_complete = true;
