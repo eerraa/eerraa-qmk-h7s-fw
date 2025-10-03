@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251003R2"  // V251003R2: SOF 타임스탬프 인라인화로 오버헤드 차단
+#define _DEF_FIRMWATRE_VERSION      "V251003R3"  // V251003R3: SOF 모니터 경량화 검토 및 안정성 재확인
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
