@@ -14,7 +14,7 @@
 | `src/hw/driver/usb/usb_hid/usbd_hid.c` | `usbHidMonitorSof()`, `usbHidSofMonitorApplySpeedParams()` | 마이크로프레임 간격 기반 점수 계산, 워밍업/홀드오프/감쇠 정책, 속도별 파라미터 캐싱을 담당합니다.
 | `src/hw/driver/usb/usb_cmp/usbd_cmp.c` | HS/FS `bInterval` 유지 | 다운그레이드 시에도 안정적인 패킷 크기를 보장합니다.
 | `src/hw/driver/usb/usbd_conf.c` | `usbBootModeIsFullSpeed()` 분기 | HS PHY에서 FS 1kHz 강제 모드를 선택할 수 있습니다.
-| `src/hw/hw_def.h` | `_DEF_FIRMWATRE_VERSION` | 모니터 기능 릴리스를 `V251003R3`까지 태깅합니다.
+| `src/hw/hw_def.h` | `_DEF_FIRMWATRE_VERSION` | 모니터 기능 릴리스를 `V251003R5`까지 태깅합니다.
 | `src/ap/ap.c` | `usbProcess()` 호출 | 메인 루프에서 큐 상태 머신을 주기적으로 서비스합니다.
 
 ## 3. 상태 머신 & 데이터 구조 스냅샷
@@ -120,6 +120,11 @@
 - `usb_sof_monitor_t`에 서스펜드 상태 캐시를 추가해 `usbHidMonitorSof()`가 서스펜드 구간에서 반복 초기화를 수행하지 않도록 조정했습니다.
 - 서스펜드에서 복귀할 때만 홀드오프/워밍업 타이머를 재기동하여 8kHz ISR 경로의 불필요한 파라미터 조회와 타이머 연산을 제거했습니다.
 - `_DEF_FIRMWATRE_VERSION`이 `V251003R4`로 갱신되었습니다.
+
+### V251003R5 — SOF 파라미터 직접 캐시 경량화
+- `usb_sof_monitor_t`가 기대 간격·안정 임계·감쇠 주기·워밍업 목표·임계 점수를 개별 필드로 보관해 ISR 루프에서의 구조체 포인터 역참조를 제거했습니다.
+- `usbHidSofMonitorApplySpeedParams()`가 속도 파라미터를 즉시 복사하며, 구성 외 속도 진입 시 캐시를 0으로 초기화해 조기 반환 흐름을 간소화했습니다.
+- `_DEF_FIRMWATRE_VERSION`이 `V251003R5`로 갱신되었습니다.
 
 ## 6. CODEX 점검 팁
 - SOF 모니터 파라미터를 수정할 때는 `USB_BOOT_MONITOR_CONFIRM_DELAY_MS`와 `USB_SOF_MONITOR_*` 상수의 상호 의존성을 반드시 검토하십시오.
