@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251002R2"  // V251002R2: 홀드오프 타임스탬프 리셋 보강
+#define _DEF_FIRMWATRE_VERSION      "V251002R3"  // V251002R3: SOF 초기화 함수 단순화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
