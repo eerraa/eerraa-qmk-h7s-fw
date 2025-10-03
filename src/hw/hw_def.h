@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251001R7"  // V251001R7: SOF 모니터 타임스탬프 래핑 대응 및 점수 계산 정리
+#define _DEF_FIRMWATRE_VERSION      "V251002R2"  // V251002R2: 홀드오프 타임스탬프 리셋 보강
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
