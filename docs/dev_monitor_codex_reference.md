@@ -141,6 +141,11 @@
 - 점수가 0일 때는 감쇠 파라미터를 읽지 않아 정상 SOF 경로에서의 메모리 접근을 최소화했습니다.
 - `_DEF_FIRMWATRE_VERSION`이 `V251003R8`로 갱신되었습니다.
 
+### V251003R9 — SOF 점수/감쇠 로컬 캐시 경량화
+- `usbHidMonitorSof()`가 점수와 감쇠 타임스탬프를 로컬 변수로 캐시해 구조체 접근을 줄이고 안정 프레임 경로의 분기 오버헤드를 완화했습니다.
+- 다운그레이드 임계 도달 시 로컬 점수 초기화를 재사용해 구조체 쓰기를 일원화했습니다.
+- `_DEF_FIRMWATRE_VERSION`이 `V251003R9`로 갱신되었습니다.
+
 ## 6. CODEX 점검 팁
 - SOF 모니터 파라미터를 수정할 때는 `USB_BOOT_MONITOR_CONFIRM_DELAY_MS`와 `USB_SOF_MONITOR_*` 상수의 상호 의존성을 반드시 검토하십시오.
 - 다운그레이드 큐는 리셋을 동반하므로, 신규 모드 추가 시 `usbHidResolveDowngradeTarget()`과 `usb_boot_mode_request_t` 초기화 경로를 함께 업데이트해야 합니다.
