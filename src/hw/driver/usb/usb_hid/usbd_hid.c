@@ -102,10 +102,6 @@ static void usbHidSofMonitorPrime(uint32_t now_us,
                                   uint32_t holdoff_delta_us,
                                   uint32_t warmup_delta_us,
                                   uint8_t speed_code);            // V251001R6 SOF 초기화 루틴 공용화
-static void usbHidSofMonitorHoldoff(uint32_t now_us,
-                                    uint32_t holdoff_delta_us,
-                                    uint32_t warmup_delta_us,
-                                    uint8_t speed_code);          // V251001R6 속도 전환 홀드오프 공통 처리
 
 
 
@@ -590,23 +586,9 @@ static void usbHidSofMonitorPrime(uint32_t now_us,
                                   uint32_t warmup_delta_us,
                                   uint8_t speed_code)
 {
+  // V251002R3 속도 변경 홀드오프 경로까지 단일 초기화 루틴으로 통합
   sof_monitor.prev_tick_us       = now_us;                        // V251001R6 SOF 타임스탬프 초기화 일원화
   sof_monitor.score              = 0U;
-  sof_monitor.last_decay_us      = now_us;
-  sof_monitor.holdoff_end_us     = now_us + holdoff_delta_us;
-  sof_monitor.warmup_deadline_us = now_us + warmup_delta_us;
-  sof_monitor.warmup_good_frames = 0U;
-  sof_monitor.warmup_complete    = false;
-  usbHidSofMonitorApplySpeedParams(speed_code);
-}
-
-static void usbHidSofMonitorHoldoff(uint32_t now_us,
-                                    uint32_t holdoff_delta_us,
-                                    uint32_t warmup_delta_us,
-                                    uint8_t speed_code)
-{
-  sof_monitor.prev_tick_us       = now_us;                        // V251002R2 홀드오프 재정렬 대응 타임스탬프 리셋
-  sof_monitor.score              = 0U;                            // V251001R6 속도 전환 시 공통 감쇠 재시작
   sof_monitor.last_decay_us      = now_us;
   sof_monitor.holdoff_end_us     = now_us + holdoff_delta_us;
   sof_monitor.warmup_deadline_us = now_us + warmup_delta_us;
@@ -1399,10 +1381,10 @@ static void usbHidMonitorSof(uint32_t now_us)
 
   if (pdev->dev_speed != sof_monitor.active_speed)
   {
-    usbHidSofMonitorHoldoff(now_us,
-                            USB_SOF_MONITOR_CONFIG_HOLDOFF_US,
-                            USB_SOF_MONITOR_WARMUP_TIMEOUT_US,
-                            pdev->dev_speed);                     // V251001R6 속도 변경 시 공통 홀드오프 적용
+    usbHidSofMonitorPrime(now_us,
+                          USB_SOF_MONITOR_CONFIG_HOLDOFF_US,
+                          USB_SOF_MONITOR_WARMUP_TIMEOUT_US,
+                          pdev->dev_speed);                       // V251002R3 속도 변경 홀드오프도 공용 초기화 사용
   }
 
   uint32_t prev_tick_us = sof_monitor.prev_tick_us;

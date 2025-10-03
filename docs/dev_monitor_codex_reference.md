@@ -73,7 +73,7 @@
 - `_DEF_FIRMWATRE_VERSION`이 `V251001R5`로 갱신되었습니다.
 
 ### V251001R6 — SOF 초기화 경로 일원화
-- `usbHidSofMonitorPrime()`과 `usbHidSofMonitorHoldoff()`를 도입해 장치 상태 변화, 속도 전환, 서스펜드 복귀가 동일한 초기화 루틴을 사용하도록 재구성했습니다.
+- `usbHidSofMonitorPrime()`을 도입해 장치 상태 변화, 속도 전환, 서스펜드 복귀가 동일한 초기화 루틴을 사용하도록 재구성했습니다.
 - 비구성/지원 외 속도 전환 시 타임스탬프와 점수를 즉시 리셋해 홀드오프/워밍업 조건이 일관되게 재시작됩니다.
 - `_DEF_FIRMWATRE_VERSION`이 `V251001R6`으로 갱신되었습니다.
 
@@ -91,6 +91,10 @@
 - 속도 전환 홀드오프 시 `prev_tick_us`를 즉시 재설정해 조기 반환 루틴에서 타임스탬프가 꼬이지 않도록 했습니다.
 - 구성/서스펜드 상태 전환 이후에도 동일한 초기화 경로를 사용하도록 정리해 SOF 모니터 일관성을 유지합니다.
 - `_DEF_FIRMWATRE_VERSION`이 `V251002R2`로 갱신되었습니다.
+
+### V251002R3 — SOF 초기화 함수 단순화
+- `usbHidSofMonitorHoldoff()`를 `usbHidSofMonitorPrime()`에 통합해 속도 변경 홀드오프 경로에서도 동일한 초기화 루틴을 재사용합니다.
+- `_DEF_FIRMWATRE_VERSION`이 `V251002R3`로 갱신되었습니다.
 
 ## 6. CODEX 점검 팁
 - SOF 모니터 파라미터를 수정할 때는 `USB_BOOT_MONITOR_CONFIRM_DELAY_MS`와 `USB_SOF_MONITOR_*` 상수의 상호 의존성을 반드시 검토하십시오.
