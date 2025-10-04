@@ -22,6 +22,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
   1. 속도/상태 변화 → `usbHidSofMonitorPrime()` 호출로 캐시 리셋.
   2. 워밍업 조건 달성(HS 2048·FS 128 프레임) → 감시 활성화.
   - 워밍업 마감 비교는 `warmup_deadline` 로컬 캐시를 사용해 ISR 메모리 접근을 줄인다. *(V251005R1)*
+  - 워밍업 카운터는 값이 변할 때만 구조체에 기록해 동일 값 반복 쓰기를 피한다. *(V251005R2)*
   3. 간격 초과 → 점수 가산(`clamp(0~4)`), 감쇠 타이머에 따라 1점 감소.
   4. `score >= degrade_threshold` → 다운그레이드 큐에 요청하며 누락 프레임 수를 함께 캐시.
 
@@ -66,6 +67,7 @@ usb suspend/resume/reset
 - ISR에서는 `usbHidSofMonitorSyncTick()`으로 타임스탬프를 갱신한 뒤, 홀드오프 → 워밍업 → 안정 감시 → 임계 판단 순으로 진행합니다.
 - `usbHidUpdateWakeUp()`이 서스펜드를 감지하면 점수·타임스탬프를 리셋하고 즉시 반환합니다.
 - 다운그레이드 요청은 큐가 처리하며, ARM → COMMIT 단계에서 BootMode 저장과 리셋을 담당합니다.
+- SOF 타임스탬프 비교 보조 함수(`usbHidTimeIsBefore`, `usbHidTimeIsAfterOrEqual`)는 인라인화되어 ISR 호출 비용을 줄였습니다. *(V251005R2)*
 
 ---
 

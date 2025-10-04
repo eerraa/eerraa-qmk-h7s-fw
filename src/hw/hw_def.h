@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251005R1"  // V251005R1: 다운그레이드 Stage 캐시 및 워밍업 마감 캐시 추가
+#define _DEF_FIRMWATRE_VERSION      "V251005R2"  // V251005R2: SOF 비교 인라인화 및 워밍업 카운터 갱신 최적화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
