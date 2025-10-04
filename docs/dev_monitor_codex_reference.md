@@ -38,6 +38,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
   - 속도 파라미터 적용은 기본값을 0으로 초기화한 뒤 HS/FS 열거형 값을 직접 인덱스로 사용해 분기 수를 줄인다. *(V251006R3)*
 - 상태 전환 Prime 직후 ISR을 종료해 같은 프레임에서의 추가 분기 실행을 제거한다. *(V251006R8)*
 - SOF 간격 임계 비교는 불리언 캐시를 재사용해 워밍업·감쇠 경로에서 반복 비교를 제거한다. *(V251006R8)*
+- 임계 이하 간격에서는 누락 프레임 계산과 패널티 산술을 건너뛰어 정상 SOF 구간의 ISR 비용을 줄인다. *(V251006R9)*
 
 ### 2.2 `usb_boot_mode_request_t` (다운그레이드 큐)
 - **필드**: `stage`(IDLE→ARMED→COMMIT), `next_mode`, `delta_us`, `expected_us`, `missed_frames`, `ready_ms`, `timeout_ms`, `log_pending`.
@@ -148,7 +149,7 @@ usbHidMonitorSof(now):
     decay_score_if_needed()
     return
 
-  missed_frames = usbCalcMissedFrames(expected_us, interval)   // V251005R6 상수 분기 기반 누락 프레임 계산 공유 (안정 감시 단계에서만 expected_us 사용, V251006R1)
+  missed_frames = usbCalcMissedFrames(expected_us, interval)   // V251005R6 상수 분기 기반 누락 프레임 계산 공유 (안정 감시 단계에서만 expected_us 사용, V251006R1 — 임계 이하 구간은 V251006R9로 조기 반환)
   penalty = clamp(missed_frames - 1, 0, SCORE_CAP)
   next_score = score + penalty                                // V251005R8 8비트 덧셈으로 누락 패널티 누적
   if (score >= degrade_threshold or next_score >= degrade_threshold)
