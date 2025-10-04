@@ -24,6 +24,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
   - 워밍업 마감 비교는 `warmup_deadline` 로컬 캐시를 사용해 ISR 메모리 접근을 줄인다. *(V251005R1)*
 - 워밍업 카운터는 값이 변할 때만 구조체에 기록해 동일 값 반복 쓰기를 피한다. *(V251005R2)*
 - 워밍업 카운터가 증가한 프레임에서는 목표 달성 여부만 확인하고, 미달이면 즉시 반환해 데드라인 비교를 건너뛴다. *(V251008R1)*
+- 목표에 도달한 프레임에서는 완료 분기에서 한 번만 기록해 최종 저장을 지연한다. *(V251008R2)*
 - Prime 경량화 이후 속도 파라미터는 `usbHidSofMonitorApplySpeedParams()`에서 직접 채워져, 상태 전환 시 불필요한 0 초기화가 사라졌다. *(V251005R6)*
 - 유효 속도에서는 `usbHidSofMonitorApplySpeedParams()`가 곧바로 테이블 값을 복사해, 중복 0 초기화를 제거했다. *(V251007R2)*
 - 기대 간격·안정 임계·감쇠 주기는 16비트로 저장되어 ISR에서의 로드/스토어 폭이 줄었다. *(V251005R7)*
@@ -32,7 +33,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
 - 홀드오프 혹은 워밍업 델타가 0이면 Prime이 바로 0을 기록하고 워밍업 완료로 표시해, 구성 외 구간의 다음 SOF부터 조건 분기를 건너뛴다. *(V251007R9)*
 - 홀드오프·비구성 구간에서 점수가 0이면 `usbHidSofMonitorSyncTick()`이 `last_decay_us`를 건드리지 않아 불필요한 쓰기를 제거한다. *(V251006R1)*
  - 서스펜드 감지는 `pdev->dev_state == USBD_STATE_SUSPENDED` 비교로 처리해 `USBD_is_suspended()` 호출을 제거했다. *(V251006R5)*
-  3. 간격 초과 → 누락 프레임을 8비트 패널티로 환산하고 `score + penalty` 비교로 점수를 누적하거나 즉시 다운그레이드. *(V251005R8)*
+  3. 간격 초과 → 누락 프레임을 8비트 패널티로 환산하고, 임계까지 남은 여유와 비교해 점수를 포화 누적하거나 즉시 다운그레이드. *(V251008R2)*
      - 안정 임계값은 항상 기대 간격의 두 배 이상이라 누락 프레임이 최소 2로 계산되어, 패널티는 Prime 이후에도 1 이상으로 바로 산출된다. *(V251007R9)*
   4. `score >= degrade_threshold` → 다운그레이드 큐에 요청하며 누락 프레임 수를 함께 캐시.
 - `pdev->dev_speed`는 SOF ISR 진입 시 한 번만 로드해 상태 전환 Prime과 서스펜드/복귀 및 속도 검사 분기에서 재사용한다. *(V251006R2, V251006R3)*
@@ -158,15 +159,16 @@ usbHidMonitorSof(now):
   if (!warmup_complete):
     if (below_threshold and warmup_good_frames < warmup_target):
       warmup_good_frames += 1
-      monitor.warmup_good_frames = warmup_good_frames
       if (warmup_good_frames < warmup_target):
-        return                                         // V251008R1 목표 미달 시 즉시 다음 프레임 대기
+        monitor.warmup_good_frames = warmup_good_frames    // V251008R2 목표 이전 구간에서만 기록
+        return                                             // V251008R1 목표 미달 시 즉시 다음 프레임 대기
     elif (!below_threshold and warmup_good_frames != 0):
       warmup_good_frames = 0
       monitor.warmup_good_frames = 0
 
     if (warmup_good_frames >= warmup_target):
       monitor.warmed_up = true
+      monitor.warmup_good_frames = warmup_good_frames       // V251008R2 완료 시 최종 값 1회 기록
       monitor.last_decay_us = now                        // V251007R8 워밍업 완주 시 감쇠 기준 즉시 갱신
     elif (now >= monitor.warmup_deadline_us):
       monitor.warmed_up = true
@@ -182,11 +184,14 @@ usbHidMonitorSof(now):
 
   missed_frames = usbCalcMissedFrames(expected_us, interval)   // V251005R6 상수 분기 기반 누락 프레임 계산 공유 (안정 감시 단계에서만 expected_us 사용, V251006R1 — 임계 이하 구간은 V251006R9로 조기 반환)
   penalty = clamp(missed_frames - 1, 0, SCORE_CAP)
-  next_score = score + penalty                                // V251005R8 8비트 덧셈으로 누락 패널티 누적
-  if (score >= degrade_threshold or next_score >= degrade_threshold)
-    trigger_downgrade = true                                   // V251005R8 단일 비교 기반 다운그레이드 판정
-  else
-    score = next_score
+  trigger_downgrade = (score >= degrade_threshold)
+  if (!trigger_downgrade and penalty != 0):                     // V251008R2 패널티 존재 시에만 연산 수행
+    room = degrade_threshold - score
+    if (penalty >= room):
+      score = degrade_threshold
+      trigger_downgrade = true
+    else:
+      score += penalty
 
   if ((now - last_decay) >= decay_interval)
     score = max(score - 1, 0)

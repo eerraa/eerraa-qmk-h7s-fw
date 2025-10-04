@@ -1472,10 +1472,10 @@ static void usbHidMonitorSof(uint32_t now_us)
       if (warmup_good_frames < warmup_target)
       {
         warmup_good_frames++;                                        // V251008R1 정상 프레임 누적 시 즉시 증가 후 결과 분기
-        mon->warmup_good_frames = warmup_good_frames;                 // V251008R1 값이 변한 경우에만 구조체를 갱신
 
         if (warmup_good_frames < warmup_target)
         {
+          mon->warmup_good_frames = warmup_good_frames;               // V251008R2 목표 도달 전까지 한 번만 구조체 갱신
           return;                                                    // V251008R1 목표 미달 구간은 즉시 반환해 데드라인 비교 생략
         }
       }
@@ -1488,9 +1488,10 @@ static void usbHidMonitorSof(uint32_t now_us)
 
     if (warmup_good_frames >= warmup_target)
     {
-      mon->warmup_complete = true;
-      warmup_complete      = true;                                    // V251006R6 로컬 캐시와 구조체 상태를 동기화
-      mon->last_decay_us   = now_us;                                   // V251007R8 워밍업 완주 시 즉시 감쇠 기준 갱신
+      mon->warmup_complete     = true;
+      warmup_complete          = true;                                // V251006R6 로컬 캐시와 구조체 상태를 동기화
+      mon->warmup_good_frames  = warmup_good_frames;                  // V251008R2 워밍업 완료 시 최종 카운터를 1회만 기록
+      mon->last_decay_us       = now_us;                              // V251007R8 워밍업 완주 시 즉시 감쇠 기준 갱신
     }
     else
     {
@@ -1560,16 +1561,24 @@ static void usbHidMonitorSof(uint32_t now_us)
     uint8_t penalty = (uint8_t)penalty_base;                       // V251005R5 8비트 패널티로 산술 경량화
 
     uint8_t degrade_threshold = mon->degrade_threshold;            // V251003R7 임계 파라미터 접근 지연으로 ISR 경량화
-    uint8_t next_score        = (uint8_t)(score + penalty);        // V251005R8 누락 패널티 누적을 단일 산술로 계산
-    bool    downgrade_trigger = (score >= degrade_threshold) ||
-                                (next_score >= degrade_threshold); // V251005R8 점수/패널티 단일 비교 기반 다운그레이드 판정
+    bool    downgrade_trigger = (score >= degrade_threshold);      // V251008R2 기존 점수만으로 임계 초과 여부 선행 판단
 
-    if (!downgrade_trigger)
+    if (!downgrade_trigger && penalty != 0U)                       // V251008R2 패널티가 있을 때만 누적 연산 실행
     {
-      score = next_score;                                          // V251005R8 다운그레이드 미발생 시 누적 점수 갱신
+      uint8_t room = (uint8_t)(degrade_threshold - score);         // V251008R2 임계까지 남은 점수 여유 계산
+
+      if (penalty >= room)
+      {
+        score             = degrade_threshold;                     // V251008R2 임계 도달 시 점수를 포화해 후속 비교 제거
+        downgrade_trigger = true;
+      }
+      else
+      {
+        score = (uint8_t)(score + penalty);                        // V251008R2 임계 미도달 시 패널티만 누적
+      }
     }
 
-    if (downgrade_trigger)                                         // V251005R5 다운그레이드 경로 분리
+    if (downgrade_trigger)                                         // V251008R2 포화 이후에도 동일 조건으로 다운그레이드 유지
     {
       uint16_t missed_frames_report = (missed_frames > UINT16_MAX) ? UINT16_MAX
                                                                   : (uint16_t)missed_frames; // V251006R2 다운그레이드 시에만 누락 프레임 포화 변환
