@@ -79,8 +79,6 @@ typedef struct
 
 static usb_boot_mode_request_t boot_mode_request = {0};          // V250924R2 USB 안정성 이벤트 큐
 
-static uint32_t usbBootModeRequestMissedFrames(void);            // V251004R2 다운그레이드 트리거 프레임 산출
-
 static void usbBootModeRequestReset(void)
 {
   boot_mode_request.stage      = USB_BOOT_MODE_REQ_STAGE_IDLE;
@@ -91,40 +89,6 @@ static void usbBootModeRequestReset(void)
   boot_mode_request.ready_ms   = 0U;
   boot_mode_request.timeout_ms = 0U;
   boot_mode_request.missed_frames = 0U;                          // V251004R2 누락 프레임 캐시 초기화
-}
-
-static uint32_t usbBootModeRequestMissedFrames(void)             // V251005R3 로그용 누락 프레임 캐시 보강 계산기
-{
-  uint16_t cached = boot_mode_request.missed_frames;              // V251005R7 16비트 캐시 우선 사용
-
-  if (cached > 0U)
-  {
-    return (uint32_t)cached;
-  }
-
-  uint32_t expected_us = (uint32_t)boot_mode_request.expected_us;
-
-  if (expected_us == 0U)
-  {
-    return 0U;
-  }
-
-  uint32_t frames = usbCalcMissedFrames(expected_us,
-                                        boot_mode_request.delta_us); // V251005R6 속도별 상수 나눗셈으로 누락 프레임 복원
-
-  if (frames == 0U)
-  {
-    frames = 1U;                                                  // V251005R3 예외 경로 최소 1프레임 보장
-  }
-
-  if (frames > UINT16_MAX)
-  {
-    frames = UINT16_MAX;                                          // V251005R7 16비트 캐시 범위 보호
-  }
-
-  boot_mode_request.missed_frames = (uint16_t)frames;             // V251005R7 16비트 캐시에 안전하게 저장
-
-  return frames;
 }
 
 #if HW_USB_CMP == 1
@@ -241,6 +205,11 @@ usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
     return USB_BOOT_DOWNGRADE_REJECTED;
   }
 
+  if (missed_frames == 0U)
+  {
+    missed_frames = 1U;                                           // V251007R1 최소 1프레임 보장으로 재계산 경로 제거
+  }
+
   if (boot_mode_request.stage == USB_BOOT_MODE_REQ_STAGE_IDLE)
   {
     boot_mode_request.stage      = USB_BOOT_MODE_REQ_STAGE_ARMED;
@@ -276,59 +245,69 @@ usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
 
 void usbProcess(void)                                                                  // V250924R3 USB 안정성 이벤트 처리 루프
 {
-  usb_boot_mode_request_stage_t stage = boot_mode_request.stage;                       // V251005R1 Stage 로컬 캐시로 분기 비용 축소
+  usb_boot_mode_request_t        *request = &boot_mode_request;                        // V251007R1 전역 큐 접근 로컬 캐시
+  usb_boot_mode_request_stage_t   stage   = request->stage;                            // V251007R1 Stage 로컬 캐시 유지
 
   if (stage == USB_BOOT_MODE_REQ_STAGE_IDLE)                                           // V250924R3 비활성 시 오버헤드 방지
   {
     return;
   }
 
-  switch (stage)
+  if (stage == USB_BOOT_MODE_REQ_STAGE_ARMED)
   {
-    case USB_BOOT_MODE_REQ_STAGE_ARMED:
-      if (boot_mode_request.log_pending == true)
+    if (request->log_pending == true)
+    {
+      uint32_t missed_frames = (uint32_t)request->missed_frames;                       // V251007R1 누락 프레임 캐시 직접 사용
+
+      if (missed_frames == 0U)
       {
-        uint32_t missed_frames = usbBootModeRequestMissedFrames();             // V251001R5 누락 프레임 수 로깅
-        logPrintf("[NG] USB poll instability detected: expected %lu us, measured %lu us (~%lu frames, awaiting confirmation)\n",
-                  boot_mode_request.expected_us,
-                  boot_mode_request.delta_us,
-                  missed_frames);
-        logPrintf("[NG] USB poll downgrade pending -> %s\n", usbBootModeLabel(boot_mode_request.next_mode)); // V251001R5 영문화
-        boot_mode_request.log_pending = false;
+        missed_frames = 1U;                                                            // V251007R1 로그 최소값 보장 안전망
       }
 
-      {
-        uint32_t now_ms = millis();                                           // V251005R1 타임아웃 계산 경로에서만 millis() 호출
+      logPrintf("[NG] USB poll instability detected: expected %lu us, measured %lu us (~%lu frames, awaiting confirmation)\n",
+                request->expected_us,
+                request->delta_us,
+                missed_frames);
+      logPrintf("[NG] USB poll downgrade pending -> %s\n", usbBootModeLabel(request->next_mode)); // V251001R5 영문화
+      request->log_pending = false;
+    }
 
-        if ((int32_t)(now_ms - (int32_t)boot_mode_request.timeout_ms) >= 0)
-        {
-          usbBootModeRequestReset();
-        }
-      }
-      break;
+    uint32_t now_ms = millis();                                                        // V251005R1 타임아웃 계산 경로에서만 millis() 호출
 
-    case USB_BOOT_MODE_REQ_STAGE_COMMIT:
-      if (boot_mode_request.log_pending == true)
-      {
-        uint32_t missed_frames = usbBootModeRequestMissedFrames();             // V251001R5 누락 프레임 수 로깅
-        logPrintf("[NG] USB poll instability confirmed: expected %lu us, measured %lu us (~%lu frames)\n",
-                  boot_mode_request.expected_us,
-                  boot_mode_request.delta_us,
-                  missed_frames);
-        logPrintf("[NG] USB poll downgrade -> %s\n", usbBootModeLabel(boot_mode_request.next_mode)); // V251001R5 영문화
-        boot_mode_request.log_pending = false;
-      }
-
-      if (usbBootModeSaveAndReset(boot_mode_request.next_mode) != true)
-      {
-        logPrintf("[NG] USB poll downgrade persist failed\n");                                 // V251001R5 영문화
-      }
-
+    if ((int32_t)(now_ms - (int32_t)request->timeout_ms) >= 0)
+    {
       usbBootModeRequestReset();
-      break;
+    }
+    return;
+  }
 
-    default:
-      break;
+  if (stage == USB_BOOT_MODE_REQ_STAGE_COMMIT)
+  {
+    if (request->log_pending == true)
+    {
+      uint32_t missed_frames = (uint32_t)request->missed_frames;                       // V251007R1 누락 프레임 캐시 직접 사용
+
+      if (missed_frames == 0U)
+      {
+        missed_frames = 1U;                                                            // V251007R1 로그 최소값 보장 안전망
+      }
+
+      logPrintf("[NG] USB poll instability confirmed: expected %lu us, measured %lu us (~%lu frames)\n",
+                request->expected_us,
+                request->delta_us,
+                missed_frames);
+      logPrintf("[NG] USB poll downgrade -> %s\n", usbBootModeLabel(request->next_mode)); // V251001R5 영문화
+      request->log_pending = false;
+    }
+
+    UsbBootMode_t next_mode = request->next_mode;                                      // V251007R1 모드 로컬 캐시로 구조체 접근 축소
+
+    if (usbBootModeSaveAndReset(next_mode) != true)
+    {
+      logPrintf("[NG] USB poll downgrade persist failed\n");                           // V251001R5 영문화
+    }
+
+    usbBootModeRequestReset();
   }
 }
 

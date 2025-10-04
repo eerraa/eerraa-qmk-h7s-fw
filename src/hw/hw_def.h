@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251006R9"  // V251006R9: 임계 이하 SOF에서 누락 프레임 계산 생략으로 ISR 경량화
+#define _DEF_FIRMWATRE_VERSION      "V251007R1"  // V251007R1: 다운그레이드 큐 누락 프레임 정규화 및 메인 루프 경량화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
