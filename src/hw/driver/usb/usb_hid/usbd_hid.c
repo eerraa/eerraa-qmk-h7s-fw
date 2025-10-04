@@ -1506,9 +1506,9 @@ static void usbHidMonitorSof(uint32_t now_us)
 
       if (decay_interval_us > 0U)
       {
-        uint32_t next_decay_us = last_decay_us + decay_interval_us;    // V251003R9 로컬 타임스탬프 활용으로 계산 경량화
+        uint32_t elapsed = now_us - last_decay_us;                    // V251006R1 unsigned 차분으로 감쇠 조건 비교
 
-        if (usbHidTimeIsAfterOrEqual(now_us, next_decay_us))
+        if (elapsed >= decay_interval_us)                             // V251006R1 추가 산술 없이 경과 시간 판정
         {
           score--;
           last_decay_us = now_us;                                     // V251003R9 구조체 쓰기 지연을 위한 로컬 갱신
@@ -1527,20 +1527,39 @@ static void usbHidMonitorSof(uint32_t now_us)
   }
 
   uint32_t missed_frames = delta_us / expected_us;                 // V251005R3 임계 구간에서 몫 계산만으로 누락 프레임 산출
-  uint32_t penalty       = missed_frames - 1U;                     // V251003R6 안정 임계(≥2프레임) 가정으로 분기 제거
+  uint32_t penalty_base  = (missed_frames > 0U) ? missed_frames - 1U : 0U; // V251006R1 누락 프레임 기반 패널티 초기값 산출
 
-  if (penalty > USB_SOF_MONITOR_SCORE_CAP)
+  if (penalty_base > USB_SOF_MONITOR_SCORE_CAP)
   {
-    penalty = USB_SOF_MONITOR_SCORE_CAP;
+    penalty_base = USB_SOF_MONITOR_SCORE_CAP;
   }
 
-  uint32_t accumulated = (uint32_t)score + penalty;               // V251003R6 임계 비교 선행으로 분기 축소
+  uint8_t penalty = (uint8_t)penalty_base;                         // V251006R1 8비트 패널티로 산술 경량화
 
   last_decay_us = now_us;                                         // V251003R6 감쇠 기준 타임스탬프 즉시 갱신
 
   uint8_t degrade_threshold = mon->degrade_threshold;              // V251003R7 임계 파라미터 접근 지연으로 ISR 경량화
+  bool     downgrade_trigger = false;                              // V251006R1 8비트 예산 비교 기반 다운그레이드 판정
 
-  if (accumulated >= degrade_threshold)                           // V251003R6 다운그레이드 임계 도달 시 즉시 처리
+  if (score >= degrade_threshold)
+  {
+    downgrade_trigger = true;                                      // V251006R1 점수 초과 보호 경로 유지
+  }
+  else
+  {
+    uint8_t budget = (uint8_t)(degrade_threshold - score);         // V251006R1 남은 임계 예산
+
+    if (penalty >= budget)
+    {
+      downgrade_trigger = true;                                    // V251006R1 패널티가 예산을 소진하면 즉시 다운그레이드
+    }
+    else
+    {
+      score = (uint8_t)(score + penalty);                          // V251006R1 8비트 누적로직으로 점수 갱신
+    }
+  }
+
+  if (downgrade_trigger)                                           // V251006R1 다운그레이드 경로 분리
   {
     UsbBootMode_t next_mode = usbHidResolveDowngradeTarget();
     uint32_t      holdoff   = USB_SOF_MONITOR_RECOVERY_DELAY_US;   // V251003R1 홀드오프 연장 경로 통합
@@ -1559,13 +1578,12 @@ static void usbHidMonitorSof(uint32_t now_us)
         holdoff = USB_BOOT_MONITOR_CONFIRM_DELAY_US;
       }
     }
-
     mon->holdoff_end_us = now_us + holdoff;
     score               = 0U;                                      // V251003R9 로컬 점수 초기화 후 구조체 반영
   }
   else
   {
-    score = (uint8_t)accumulated;                                  // V251003R6 임계 미도달 시 점수만 갱신
+    // no-op: score가 8비트 누적으로 이미 갱신됨                 // V251006R1 예산 비교 경로에서는 추가 처리 불필요
   }
 
   if (score != score_orig)

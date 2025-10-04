@@ -23,7 +23,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
   2. 워밍업 조건 달성(HS 2048·FS 128 프레임) → 감시 활성화.
   - 워밍업 마감 비교는 `warmup_deadline` 로컬 캐시를 사용해 ISR 메모리 접근을 줄인다. *(V251005R1)*
   - 워밍업 카운터는 값이 변할 때만 구조체에 기록해 동일 값 반복 쓰기를 피한다. *(V251005R2)*
-  3. 간격 초과 → 점수 가산(`clamp(0~4)`), 감쇠 타이머에 따라 1점 감소.
+  3. 간격 초과 → 누락 프레임을 8비트 패널티로 환산하고 남은 임계 예산과 비교해 점수를 누적하거나 즉시 다운그레이드. *(V251006R1)*
   4. `score >= degrade_threshold` → 다운그레이드 큐에 요청하며 누락 프레임 수를 함께 캐시.
 
 ### 2.2 `usb_boot_mode_request_t` (다운그레이드 큐)
@@ -92,12 +92,15 @@ usbHidMonitorSof(now):
 
   missed_frames = interval / expected_us
   penalty = clamp(missed_frames - 1, 0, SCORE_CAP)
-  score = min(score + penalty, SCORE_CAP)
+  if (score >= degrade_threshold or penalty >= degrade_threshold - score)
+    trigger_downgrade = true
+  else
+    score += penalty
 
-  if (now - last_decay >= decay_interval)
+  if ((now - last_decay) >= decay_interval)
     score = max(score - 1, 0)
 
-  if (score >= degrade_threshold)
+  if (trigger_downgrade)
     usbRequestBootModeDowngrade(next_mode, delta_us, expected_us, missed_frames)
 ```
 
@@ -118,6 +121,7 @@ usbHidMonitorSof(now):
 - 감쇠/임계값 변경 시 `USB_SOF_MONITOR_SCORE_CAP`과 `USB_BOOT_MONITOR_CONFIRM_DELAY_MS`를 함께 검토합니다.
 - 신규 BootMode를 추가하면 `usbHidResolveDowngradeTarget()`과 큐 초기화 루틴에서 모드 전환 테이블을 업데이트합니다.
 - ISR에 추가 로직을 넣을 경우 `usbHidMonitorSof()`의 조기 반환 경로(서스펜드, 홀드오프, 워밍업)를 유지해 125µs 예산을 보호하십시오.
+- 감쇠 타이머 비교는 `elapsed = now - last_decay` 형태의 unsigned 차분으로 동작하므로, `last_decay_us`를 갱신할 때 동일한 연산 형태를 유지해 래핑 안정성을 보장하십시오. *(V251006R1)*
 - CLI 확장은 `log_pending` 플래그 흐름을 활용해 중복 로그를 방지합니다.
 
 ---
