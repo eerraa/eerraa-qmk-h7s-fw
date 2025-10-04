@@ -141,18 +141,36 @@ usbHidMonitorSof(now):
     usbHidSofMonitorSyncTick(now)
     return
 
-  if (now < holdoff_end):
-    usbHidSofMonitorSyncTick(now)
-    return
+  holdoff_end = monitor.holdoff_end_us
+  if (holdoff_end != 0):                                        // V251007R8 홀드오프 만료 시 0으로 초기화해 이후 비교 생략
+    if (now < holdoff_end):
+      usbHidSofMonitorSyncTick(now)
+      return
+    monitor.holdoff_end_us = 0
 
   interval = now - prev_tick
   below_threshold = (interval < stable_threshold)
   warmup_complete = monitor.warmed_up                    // V251006R6 워밍업 상태 로컬 캐시
   if (!warmup_complete):
-    if (below_threshold) warmup_good_frames++
-    if (warmup_good_frames >= warmup_target) monitor.warmed_up = true
-    return
+    if (below_threshold):
+      warmup_good_frames = min(warmup_good_frames + 1, warmup_target)
+    elif (warmup_good_frames != 0):
+      warmup_good_frames = 0
+    monitor.warmup_good_frames = warmup_good_frames (if changed)
 
+    if (warmup_good_frames >= warmup_target):
+      monitor.warmed_up = true
+      monitor.last_decay_us = now                        // V251007R8 워밍업 완주 시 감쇠 기준 즉시 갱신
+    elif (just_incremented):                                      // V251007R8 증가 직후에는 추가 비교 없이 다음 프레임 대기
+      return
+    elif (now >= monitor.warmup_deadline_us):
+      monitor.warmed_up = true
+      monitor.last_decay_us = now                        // V251007R8 워밍업 타임아웃 시점 동기화
+    else:
+      return
+
+  score = monitor.score                                  // V251007R8 워밍업 완료 이후에만 점수/감쇠 캐시 로드
+  last_decay = monitor.last_decay_us
   if (below_threshold):
     decay_score_if_needed()
     return
