@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251007R8"  // V251007R8: SOF 홀드오프 만료 처리 및 워밍업 캐시 로드 지연
+#define _DEF_FIRMWATRE_VERSION      "V251007R9"  // V251007R9: Prime 델타 0 처리 및 SOF 패널티/샘플 윈도우 경량화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
