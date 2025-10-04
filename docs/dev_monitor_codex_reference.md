@@ -17,15 +17,15 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
 
 ## 2. 데이터 구조 스냅샷
 ### 2.1 `usb_sof_monitor_t` (SOF 모니터)
-- **주요 필드**: `score`, `holdoff_end_us`, `warmup_deadline_us`, `warmup_good_frames`, `expected_us`, `stable_threshold_us`, `decay_interval_us`, `degrade_threshold`, `active_speed`, `flags`.
+- **주요 필드**: `score`, `holdoff_end_us`, `warmup_deadline_us`, `warmup_good_frames`, `expected_us`, `stable_threshold_us`, `decay_interval_us`, `degrade_threshold`, `active_speed`, `warmup_complete`, `suspended_active`.
 - **핵심 전이**
   1. 속도/상태 변화 → `usbHidSofMonitorPrime()` 호출로 캐시 리셋.
   2. 워밍업 조건 달성(HS 2048·FS 128 프레임) → 감시 활성화.
   3. 간격 초과 → 점수 가산(`clamp(0~4)`), 감쇠 타이머에 따라 1점 감소.
-  4. `score >= degrade_threshold` → 다운그레이드 큐에 요청.
+  4. `score >= degrade_threshold` → 다운그레이드 큐에 요청하며 누락 프레임 수를 함께 캐시.
 
 ### 2.2 `usb_boot_mode_request_t` (다운그레이드 큐)
-- **필드**: `stage`(IDLE→ARMED→COMMIT), `next_mode`, `delta_us`, `expected_us`, `ready_ms`, `timeout_ms`, `log_pending`.
+- **필드**: `stage`(IDLE→ARMED→COMMIT), `next_mode`, `delta_us`, `expected_us`, `missed_frames`, `ready_ms`, `timeout_ms`, `log_pending`.
 - **동작 요약**
   - `ARMED`: 첫 로그 출력 후 `USB_BOOT_MONITOR_CONFIRM_DELAY_MS` 대기.
   - `COMMIT`: BootMode 저장 성공 시 리부트 → `usbHidSofMonitorPrime()` 재호출.
@@ -51,7 +51,7 @@ USBD_HID_SOF_ISR
   └─ usbHidMonitorSof(now_us)
         ├─ usbHidUpdateWakeUp()
         ├─ usbHidSofMonitorApplySpeedParams(dev_speed?)
-        └─ usbRequestBootModeDowngrade(...?)  // 임계 초과 시
+        └─ usbRequestBootModeDowngrade(..., missed_frames, ...)  // 임계 초과 시 누락 프레임 전달
 
 main loop (ap.c)
   └─ usbProcess()
@@ -87,12 +87,13 @@ usbHidMonitorSof(now):
 
   delta_frames = clamp((interval - expected_us) / expected_us, 0, 4)
   score = min(score + delta_frames, SCORE_CAP)
+  missed_frames = delta_frames + 1
 
   if (now - last_decay >= decay_interval)
     score = max(score - 1, 0)
 
   if (score >= degrade_threshold)
-    usbRequestBootModeDowngrade(next_mode, delta_us)
+    usbRequestBootModeDowngrade(next_mode, delta_us, expected_us, missed_frames)
 ```
 
 ---
@@ -103,7 +104,7 @@ usbHidMonitorSof(now):
 | USB Configure/Reset | `usbHidSofMonitorPrime()` | `active_speed`가 최신 `pdev->dev_speed`로 초기화, 점수 0.
 | 서스펜드 진입 | `usbHidUpdateWakeUp()` | `USB_HID_MONITOR_FLAG_SUSPENDED` 세트, 다음 SOF 즉시 반환.
 | Resume 이후 첫 SOF | `usbHidMonitorSof()` | 워밍업부터 다시 누적.
-| 다운그레이드 ARM | `usbRequestBootModeDowngrade()` | `ready_ms`가 현재 시간 + 확인 지연으로 세팅.
+| 다운그레이드 ARM | `usbRequestBootModeDowngrade()` | `ready_ms`가 현재 시간 + 확인 지연으로 세팅, `missed_frames` 캐시 유지.
 | COMMIT 실패 | `usbProcess()` | 경고 로그 출력, 큐 초기화.
 
 ---

@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251004R1"  // V251004R1: SOF 파라미터 조회 분기 및 서스펜드 경로 경량화
+#define _DEF_FIRMWATRE_VERSION      "V251004R2"  // V251004R2: SOF 누락 프레임 캐시 및 계산식 경량화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
