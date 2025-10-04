@@ -31,6 +31,13 @@ static const char *const usb_boot_mode_name[USB_BOOT_MODE_MAX] = {          // V
   "FS 1K",
 };
 
+static const uint8_t usb_boot_mode_hs_interval_table[USB_BOOT_MODE_MAX] = {  // V251006R4 HS bInterval 테이블로 분기 제거
+  0x01,
+  0x02,
+  0x03,
+  0x01,
+};
+
 static const char *usbBootModeLabel(UsbBootMode_t mode);                     // V250923R1 helpers
 static bool        usbBootModeStore(UsbBootMode_t mode);
 
@@ -163,18 +170,12 @@ bool usbBootModeIsFullSpeed(void)
 
 uint8_t usbBootModeGetHsInterval(void)
 {
-  switch (usb_boot_mode)
+  if (usb_boot_mode < USB_BOOT_MODE_MAX)
   {
-    case USB_BOOT_MODE_HS_4K:
-      return 0x02;
-    case USB_BOOT_MODE_HS_2K:
-      return 0x03;
-    case USB_BOOT_MODE_FS_1K:
-      return 0x01;
-    case USB_BOOT_MODE_HS_8K:
-    default:
-      return 0x01;
+    return usb_boot_mode_hs_interval_table[usb_boot_mode];          // V251006R4 테이블 조회로 분기 예측 비용 축소
   }
+
+  return 0x01;
 }
 
 static bool usbBootModeStore(UsbBootMode_t mode)

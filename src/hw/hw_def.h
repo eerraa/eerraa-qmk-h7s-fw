@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251006R3"  // V251006R3: SOF dev_speed 단일 로드 확대 및 속도 파라미터 분기 축소
+#define _DEF_FIRMWATRE_VERSION      "V251006R4"  // V251006R4: HS 폴링/기대 간격 테이블화로 분기 비용 절감
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
