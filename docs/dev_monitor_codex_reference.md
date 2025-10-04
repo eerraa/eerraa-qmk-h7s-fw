@@ -8,7 +8,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
 | 파일 | 주요 심볼 | 역할 요약 |
 | --- | --- | --- |
 | `src/hw/driver/usb/usb_hid/usbd_hid.c` | `usbHidMonitorSof`, `usbHidSofMonitorPrime`, `usbHidSofMonitorApplySpeedParams` | SOF ISR, 초기화, 속도 캐시 및 점수 계산.
-| `src/hw/driver/usb/usb.c` | `usbRequestBootModeDowngrade`, `usbProcess`, `usbCalcMissedFrames`, `usbBootModeGetExpectedIntervalUs` | 다운그레이드 큐, 누락 프레임 계산, BootMode 저장 및 기대 간격 테이블 제공.
+| `src/hw/driver/usb/usb.c` | `usbRequestBootModeDowngrade`, `usbProcess`, `usbCalcMissedFrames`, `usbBootModeGetExpectedIntervalUs` | 다운그레이드 큐, 누락 프레임 정규화, BootMode 저장 및 기대 간격 테이블 제공.
 | `src/hw/driver/usb/usbd_conf.c` | `usbBootModeIsFullSpeed` | PHY 속도 강제, `pdev->dev_speed` 상태 전달.
 | `src/ap/ap.c` | `usbProcess` 호출 | 메인 루프에서 큐 서비스.
 | `src/hw/hw.c`, `src/hw/hw_def.h` | `usbBootModeLoad`, `_DEF_FIRMWATRE_VERSION` | 부팅 시 BootMode 복원, 펌웨어 버전 태깅.
@@ -46,11 +46,10 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
   - `ARMED`: 첫 로그 출력 후 `USB_BOOT_MONITOR_CONFIRM_DELAY_MS` 대기.
   - `COMMIT`: BootMode 저장 성공 시 리부트 → `usbHidSofMonitorPrime()` 재호출.
   - 실패 경로는 경고 로그 출력 후 큐 리셋.
-  - `usbProcess()`는 Stage 값을 로컬에 캐시하고, `ARMED` 단계에서만 `millis()`를 호출해 메인 루프 오버헤드를 줄인다. *(V251005R1)*
-  - `usbProcess()`는 `stage == IDLE`일 때 즉시 반환.
-  - `missed_frames` 캐시는 ISR에서 전달된 값을 유지하며, 로그 경로도 동일한 값을 재사용한다. *(V251005R3)*
-  - 누락 프레임 재계산 시 `usbCalcMissedFrames()`를 사용해 ISR과 동일한 상수 분기 경로를 공유한다. *(V251005R6)*
-  - 기대 간격·누락 프레임 캐시는 16비트로 저장되며, ISR이 포화한 값을 그대로 받아 추가 연산 없이 유지한다. *(V251005R9)*
+    - `usbProcess()`는 큐 포인터와 Stage를 로컬에 캐시해 분기 내 구조체 접근을 최소화한다. *(V251007R1)*
+    - `usbProcess()`는 `stage == IDLE`일 때 즉시 반환.
+    - `missed_frames` 캐시는 다운그레이드 ARM 등록 시 최소 1로 정규화되어 로그 출력이 재계산 없이 캐시 값을 사용한다. *(V251007R1)*
+    - 기대 간격·누락 프레임 캐시는 16비트로 저장되며, ISR이 포화한 값을 그대로 받아 추가 연산 없이 유지한다. *(V251005R9, V251007R1)*
 
 ---
 
@@ -71,7 +70,7 @@ USBD_HID_SOF_ISR
   └─ usbHidMonitorSof(now_us)
         ├─ usbHidUpdateWakeUp()
         ├─ usbHidSofMonitorApplySpeedParams(dev_speed?)
-        └─ usbRequestBootModeDowngrade(..., missed_frames_report, ...)  // 다운그레이드 시에만 16비트 포화 값을 큐로 전달 *(V251006R2)*
+        └─ usbRequestBootModeDowngrade(..., missed_frames_report, ...)  // 다운그레이드 시 16비트 포화·최소 1 값으로 큐 전달 *(V251006R2, V251007R1)*
 
 main loop (ap.c)
   └─ usbProcess()
@@ -160,9 +159,10 @@ usbHidMonitorSof(now):
   if ((now - last_decay) >= decay_interval)
     score = max(score - 1, 0)
 
-  if (trigger_downgrade)
-    missed_frames_report = clamp16(missed_frames)              // V251006R2 다운그레이드 발생 시에만 16비트 포화 수행
-    usbRequestBootModeDowngrade(next_mode, delta_us, expected_us, missed_frames_report)
+    if (trigger_downgrade)
+      missed_frames_report = clamp16(missed_frames)              // V251006R2 다운그레이드 발생 시에만 16비트 포화 수행
+      if (missed_frames_report == 0) missed_frames_report = 1    // V251007R1 큐 전송 전 최소 1프레임 보장
+      usbRequestBootModeDowngrade(next_mode, delta_us, expected_us, missed_frames_report)
 ```
 
 ---
