@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251006R2"  // V251006R2: 비구성 점수 쓰기 제거, dev_speed 캐시 및 다운그레이드 포화 지연
+#define _DEF_FIRMWATRE_VERSION      "V251006R3"  // V251006R3: SOF dev_speed 단일 로드 확대 및 속도 파라미터 분기 축소
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

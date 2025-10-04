@@ -550,37 +550,22 @@ static inline bool usbHidTimeIsAfterOrEqual(uint32_t now_us,
 
 static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 속도별 모니터링 파라미터 캐시
 {
-  const usb_sof_monitor_params_t *params = NULL;
+  sof_monitor.active_speed         = speed_code;
+  sof_monitor.expected_us          = 0U;                            // V251006R3 기본값 0 초기화로 분기 최소화
+  sof_monitor.stable_threshold_us  = 0U;
+  sof_monitor.decay_interval_us    = 0U;
+  sof_monitor.degrade_threshold    = 0U;
+  sof_monitor.warmup_target_frames = 0U;
 
-  switch (speed_code)
+  if (speed_code <= USBD_SPEED_FULL)                                // V251006R3 열거형 인덱스를 직접 사용해 switch 제거
   {
-    case USBD_SPEED_HIGH:
-      params = &sof_monitor_params[0];                                // V251004R1 속도 파라미터 분기 직접 선택으로 반복 검색 제거
-      break;
-    case USBD_SPEED_FULL:
-      params = &sof_monitor_params[1];                                // V251004R1 속도 파라미터 분기 직접 선택으로 반복 검색 제거
-      break;
-    default:
-      break;
-  }
+    const usb_sof_monitor_params_t *params = &sof_monitor_params[speed_code];
 
-  sof_monitor.active_speed = speed_code;
-
-  if (params != NULL)
-  {
     sof_monitor.expected_us          = params->expected_us;         // V251005R7 16비트 파라미터 직접 복사로 ISR 폭 축소 유지
     sof_monitor.stable_threshold_us  = params->stable_threshold_us; // V251005R7 16비트 파라미터 직접 복사로 메모리 접근 경량화
     sof_monitor.decay_interval_us    = params->decay_interval_us;   // V251005R7 16비트 감쇠 주기 복사로 구조체 축소
     sof_monitor.degrade_threshold    = params->degrade_threshold;   // V251003R5 속도 파라미터 직접 복사로 런타임 접근 최소화
     sof_monitor.warmup_target_frames = params->warmup_target_frames;// V251003R5 속도 파라미터 직접 복사로 런타임 접근 최소화
-  }
-  else
-  {
-    sof_monitor.expected_us          = 0U;                          // V251005R7 비구성 속도에서 16비트 캐시 초기화
-    sof_monitor.stable_threshold_us  = 0U;
-    sof_monitor.decay_interval_us    = 0U;
-    sof_monitor.degrade_threshold    = 0U;
-    sof_monitor.warmup_target_frames = 0U;                          // V251005R6 Prime 경량화 이후에도 안전하게 초기화 유지
   }
 }
 
@@ -1363,12 +1348,14 @@ static void usbHidMonitorSof(uint32_t now_us)
   USBD_HandleTypeDef *pdev = &USBD_Device;
   usb_sof_monitor_t  *mon  = &sof_monitor;                         // V251003R3 SOF 모니터 지역 캐시로 분기 경량화 유지
   uint8_t             dev_state;
+  uint8_t             dev_speed;                                   // V251006R3 SOF ISR 초기에 속도를 단일 로드해 전 구간 공유
 
   dev_state = pdev->dev_state;
+  dev_speed = pdev->dev_speed;                                     // V251006R3 상태 전환과 정상 감시에서 공용 사용
 
   if (dev_state != sof_prev_dev_state)
   {
-    uint8_t  new_speed = (dev_state == USBD_STATE_CONFIGURED) ? pdev->dev_speed : 0xFFU;
+    uint8_t  new_speed = (dev_state == USBD_STATE_CONFIGURED) ? dev_speed : 0xFFU; // V251006R3 Prime 경로에서도 캐시 사용
     uint32_t holdoff   = (dev_state == USBD_STATE_CONFIGURED) ? USB_SOF_MONITOR_CONFIG_HOLDOFF_US : 0U;
     uint32_t warmup    = (dev_state == USBD_STATE_CONFIGURED) ? USB_SOF_MONITOR_WARMUP_TIMEOUT_US : 0U;
 
@@ -1381,8 +1368,6 @@ static void usbHidMonitorSof(uint32_t now_us)
     usbHidSofMonitorSyncTick(now_us);                              // V251003R1 비구성 상태 타임스탬프 처리 공통화
     return;                                                        // V251006R2 Prime 초기화 이후 중복 점수 기록 제거
   }
-
-  uint8_t dev_speed = pdev->dev_speed;                            // V251006R2 서스펜드/복귀 공용 속도 캐시로 중복 읽기 제거
 
   if (USBD_is_suspended())
   {
