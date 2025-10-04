@@ -1352,6 +1352,7 @@ static void usbHidMonitorSof(uint32_t now_us)
 
     usbHidSofMonitorPrime(now_us, holdoff, warmup, new_speed);      // V251001R6 상태 전환 초기화 경로 일원화
     sof_prev_dev_state = dev_state;
+    return;                                                         // V251006R8 상태 전환 시 추가 분기 실행을 건너뛰어 ISR 경량화
   }
 
   if (dev_state == USBD_STATE_SUSPENDED)                           // V251006R7 서스펜드 선행 처리로 불필요한 동기화 제거
@@ -1416,6 +1417,7 @@ static void usbHidMonitorSof(uint32_t now_us)
   uint32_t prev_tick_us    = mon->prev_tick_us;
   uint32_t stable_threshold = mon->stable_threshold_us;
   uint32_t delta_us         = now_us - prev_tick_us;
+  bool     delta_below_threshold = delta_us < stable_threshold;     // V251006R8 임계 비교 결과 캐시로 반복 비교 제거
 
   mon->prev_tick_us = now_us;
 
@@ -1431,7 +1433,7 @@ static void usbHidMonitorSof(uint32_t now_us)
     uint16_t warmup_good_frames   = mon->warmup_good_frames;            // V251003R8 워밍업 프레임 로컬 캐시로 접근 감소
     uint16_t warmup_good_original = warmup_good_frames;                 // V251005R2 구조체 갱신 최소화를 위한 원본 값 캐시
 
-    if (delta_us < stable_threshold)
+    if (delta_below_threshold)
     {
       if (warmup_good_frames < warmup_target)
       {
@@ -1471,7 +1473,7 @@ static void usbHidMonitorSof(uint32_t now_us)
     }
   }
 
-  if (warmup_complete == true && delta_us < stable_threshold)       // V251006R6 워밍업 완료 후에만 감쇠 경로를 실행해 분기 일치 유지
+  if (warmup_complete == true && delta_below_threshold)             // V251006R8 임계 비교 캐시 재사용으로 분기 비용 축소
   {
     if (score > 0U)                                                    // V251003R8 감쇠 파라미터 조회를 점수 존재 시로 지연
     {

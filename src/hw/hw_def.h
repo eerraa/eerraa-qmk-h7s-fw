@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251006R7"  // V251006R7: SOF ISR 서스펜드 선행 처리와 속도 파라미터 경량화
+#define _DEF_FIRMWATRE_VERSION      "V251006R8"  // V251006R8: 상태 전환 즉시 반환 및 SOF 임계 비교 캐시로 ISR 경량화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

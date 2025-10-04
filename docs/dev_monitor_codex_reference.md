@@ -36,6 +36,8 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
 - 워밍업 완료 플래그는 로컬 변수로 캐시되어 감쇠 경로와 점수 갱신 시 구조체 재접근을 줄인다. *(V251006R6)*
 - 서스펜드 분기는 일반 비구성 처리보다 먼저 실행되어 동기화 호출을 생략하며, 최초 진입 시 속도 파라미터만 재적용한다. *(V251006R7)*
   - 속도 파라미터 적용은 기본값을 0으로 초기화한 뒤 HS/FS 열거형 값을 직접 인덱스로 사용해 분기 수를 줄인다. *(V251006R3)*
+- 상태 전환 Prime 직후 ISR을 종료해 같은 프레임에서의 추가 분기 실행을 제거한다. *(V251006R8)*
+- SOF 간격 임계 비교는 불리언 캐시를 재사용해 워밍업·감쇠 경로에서 반복 비교를 제거한다. *(V251006R8)*
 
 ### 2.2 `usb_boot_mode_request_t` (다운그레이드 큐)
 - **필드**: `stage`(IDLE→ARMED→COMMIT), `next_mode`, `delta_us`, `expected_us`, `missed_frames`, `ready_ms`, `timeout_ms`, `log_pending`.
@@ -98,6 +100,12 @@ usbHidMonitorSof(now):
   dev_speed = (dev_state in {CONFIGURED, SUSPENDED}) ?      // V251006R6 구성/서스펜드 상태에서만 속도 값을 읽어 불필요한 MMIO 제거
               pdev->dev_speed : 0
 
+  if (dev_state != prev_state):
+    holdoff, warmup = resolve_transition_params(dev_state)
+    usbHidSofMonitorPrime(now, holdoff, warmup, resolve_speed(dev_state))
+    prev_state = dev_state
+    return
+
   if (dev_state == SUSPENDED):
     if (!monitor.suspended_active):
       if (dev_speed in {HS, FS} and (monitor.active_speed != dev_speed or monitor.expected_us == 0)): // V251006R7 서스펜드 최초 진입 시 파라미터만 재적용
@@ -120,14 +128,24 @@ usbHidMonitorSof(now):
   if (dev_speed != monitor.active_speed):
     usbHidSofMonitorPrime(now, CONFIG_HOLDOFF, WARMUP_TIMEOUT, dev_speed)
 
-  usbHidSofMonitorSyncTick(now)
-  if (now < holdoff_end) return
+  if (prev_tick == 0):
+    usbHidSofMonitorSyncTick(now)
+    return
+
+  if (now < holdoff_end):
+    usbHidSofMonitorSyncTick(now)
+    return
 
   interval = now - prev_tick
+  below_threshold = (interval < stable_threshold)
   warmup_complete = monitor.warmed_up                    // V251006R6 워밍업 상태 로컬 캐시
   if (!warmup_complete):
-    if (interval <= stable_threshold) warmup_good_frames++
+    if (below_threshold) warmup_good_frames++
     if (warmup_good_frames >= warmup_target) monitor.warmed_up = true
+    return
+
+  if (below_threshold):
+    decay_score_if_needed()
     return
 
   missed_frames = usbCalcMissedFrames(expected_us, interval)   // V251005R6 상수 분기 기반 누락 프레임 계산 공유 (안정 감시 단계에서만 expected_us 사용, V251006R1)
