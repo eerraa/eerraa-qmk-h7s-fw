@@ -83,9 +83,9 @@ uint8_t      usbBootModeGetHsInterval(void);           // V250923R1 Retrieve HS 
 bool         usbBootModeSaveAndReset(UsbBootMode_t mode);
 usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
                                                         uint32_t      measured_delta_us,
-                                                        uint32_t      expected_us,
-                                                        uint32_t      missed_frames,
-                                                        uint32_t      now_ms); // V251004R2 USB 다운그레이드 요청 인터페이스
+                                                        uint16_t      expected_us,
+                                                        uint16_t      missed_frames,
+                                                        uint32_t      now_ms); // V251005R9 ISR 포화 값을 직접 전달하는 다운그레이드 요청 인터페이스
 void         usbProcess(void);                         // V250924R2 USB 안정성 모니터 서비스 루프
 
 static inline uint32_t usbCalcMissedFrames(uint32_t expected_us,

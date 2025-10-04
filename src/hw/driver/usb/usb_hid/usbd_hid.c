@@ -1376,7 +1376,10 @@ static void usbHidMonitorSof(uint32_t now_us)
   if (dev_state != USBD_STATE_CONFIGURED)
   {
     usbHidSofMonitorSyncTick(now_us);                              // V251003R1 비구성 상태 타임스탬프 처리 공통화
-    mon->score = 0U;
+    if (mon->score != 0U)                                          // V251005R9 구성 해제 반복 시 불필요한 0 기록 제거
+    {
+      mon->score = 0U;
+    }
     return;
   }
 
@@ -1526,6 +1529,8 @@ static void usbHidMonitorSof(uint32_t now_us)
   uint32_t missed_frames = usbCalcMissedFrames(expected_us,
                                                delta_us);         // V251005R6 속도별 상수 나눗셈으로 누락 프레임 산출
   uint32_t penalty_base  = (missed_frames > 0U) ? missed_frames - 1U : 0U; // V251005R5 누락 프레임 기반 패널티 초기값 산출
+  uint16_t missed_frames_report = (missed_frames > UINT16_MAX) ? UINT16_MAX
+                                                               : (uint16_t)missed_frames; // V251005R9 큐 전달용 누락 프레임 16비트 포화
 
   if (penalty_base > USB_SOF_MONITOR_SCORE_CAP)
   {
@@ -1556,9 +1561,9 @@ static void usbHidMonitorSof(uint32_t now_us)
       uint32_t now_ms = millis();
       usb_boot_downgrade_result_t request_result = usbRequestBootModeDowngrade(next_mode,
                                                                                delta_us,
-                                                                               expected_us,
-                                                                               missed_frames,
-                                                                               now_ms);   // V251004R2 누락 프레임 전달
+                                                                               mon->expected_us,
+                                                                               missed_frames_report,
+                                                                               now_ms);   // V251005R9 ISR에서 16비트 포화 후 전달
 
       if (request_result == USB_BOOT_DOWNGRADE_ARMED || request_result == USB_BOOT_DOWNGRADE_CONFIRMED)
       {

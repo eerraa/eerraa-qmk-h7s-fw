@@ -214,9 +214,9 @@ bool usbBootModeSaveAndReset(UsbBootMode_t mode)
 
 usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
                                                         uint32_t      measured_delta_us,
-                                                        uint32_t      expected_us,
-                                                        uint32_t      missed_frames,
-                                                        uint32_t      now_ms)  // V251004R2 누락 프레임 전달을 포함한 다운그레이드 요청
+                                                        uint16_t      expected_us,
+                                                        uint16_t      missed_frames,
+                                                        uint32_t      now_ms)  // V251005R9 ISR 포화 값을 직접 전달하는 다운그레이드 요청
 {
   if (mode >= USB_BOOT_MODE_MAX)
   {
@@ -229,8 +229,8 @@ usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
     boot_mode_request.log_pending = true;
     boot_mode_request.next_mode  = mode;
     boot_mode_request.delta_us   = measured_delta_us;
-    boot_mode_request.expected_us = (uint16_t)((expected_us > UINT16_MAX) ? UINT16_MAX : expected_us); // V251005R7 16비트 범위로 저장
-    boot_mode_request.missed_frames = (uint16_t)((missed_frames > UINT16_MAX) ? UINT16_MAX : missed_frames); // V251005R7 16비트 누락 프레임 기록
+    boot_mode_request.expected_us = expected_us;                  // V251005R9 ISR에서 포화된 기대 간격을 그대로 유지
+    boot_mode_request.missed_frames = missed_frames;              // V251005R9 ISR 포화 값 저장으로 중복 연산 제거
     boot_mode_request.ready_ms   = now_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS;
     boot_mode_request.timeout_ms = boot_mode_request.ready_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS;
     return USB_BOOT_DOWNGRADE_ARMED;
@@ -240,8 +240,8 @@ usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
   {
     boot_mode_request.next_mode   = mode;
     boot_mode_request.delta_us    = measured_delta_us;
-    boot_mode_request.expected_us = (uint16_t)((expected_us > UINT16_MAX) ? UINT16_MAX : expected_us); // V251005R7 16비트 범위로 저장
-    boot_mode_request.missed_frames = (uint16_t)((missed_frames > UINT16_MAX) ? UINT16_MAX : missed_frames); // V251005R7 16비트 누락 프레임 갱신
+    boot_mode_request.expected_us = expected_us;                // V251005R9 ISR에서 포화된 기대 간격을 그대로 유지
+    boot_mode_request.missed_frames = missed_frames;            // V251005R9 ISR 포화 값 저장으로 중복 연산 제거
 
     if ((int32_t)(now_ms - (int32_t)boot_mode_request.ready_ms) >= 0)
     {
