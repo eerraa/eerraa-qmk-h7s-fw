@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251005R5"  // V251005R5: SOF 감쇠 차분 비교 및 8비트 패널티 누적 경량화
+#define _DEF_FIRMWATRE_VERSION      "V251005R6"  // V251005R6: SOF Prime 중복 초기화 제거 및 누락 프레임 계산 경량화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

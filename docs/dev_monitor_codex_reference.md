@@ -8,7 +8,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
 | 파일 | 주요 심볼 | 역할 요약 |
 | --- | --- | --- |
 | `src/hw/driver/usb/usb_hid/usbd_hid.c` | `usbHidMonitorSof`, `usbHidSofMonitorPrime`, `usbHidSofMonitorApplySpeedParams` | SOF ISR, 초기화, 속도 캐시 및 점수 계산.
-| `src/hw/driver/usb/usb.c` | `usbRequestBootModeDowngrade`, `usbProcess`, `usbBootModeSave` | 다운그레이드 큐, 확인 지연, BootMode 저장.
+| `src/hw/driver/usb/usb.c` | `usbRequestBootModeDowngrade`, `usbProcess`, `usbCalcMissedFrames` | 다운그레이드 큐, 누락 프레임 계산 도우미, BootMode 저장.
 | `src/hw/driver/usb/usbd_conf.c` | `usbBootModeIsFullSpeed` | PHY 속도 강제, `pdev->dev_speed` 상태 전달.
 | `src/ap/ap.c` | `usbProcess` 호출 | 메인 루프에서 큐 서비스.
 | `src/hw/hw.c`, `src/hw/hw_def.h` | `usbBootModeLoad`, `_DEF_FIRMWATRE_VERSION` | 부팅 시 BootMode 복원, 펌웨어 버전 태깅.
@@ -23,6 +23,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
   2. 워밍업 조건 달성(HS 2048·FS 128 프레임) → 감시 활성화.
   - 워밍업 마감 비교는 `warmup_deadline` 로컬 캐시를 사용해 ISR 메모리 접근을 줄인다. *(V251005R1)*
   - 워밍업 카운터는 값이 변할 때만 구조체에 기록해 동일 값 반복 쓰기를 피한다. *(V251005R2)*
+  - Prime 경량화 이후 속도 파라미터는 `usbHidSofMonitorApplySpeedParams()`에서 직접 채워져, 상태 전환 시 불필요한 0 초기화가 사라졌다. *(V251005R6)*
   3. 간격 초과 → 누락 프레임을 8비트 패널티로 환산하고 남은 임계 예산과 비교해 점수를 누적하거나 즉시 다운그레이드. *(V251005R5)*
   4. `score >= degrade_threshold` → 다운그레이드 큐에 요청하며 누락 프레임 수를 함께 캐시.
 
@@ -35,6 +36,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
   - `usbProcess()`는 Stage 값을 로컬에 캐시하고, `ARMED` 단계에서만 `millis()`를 호출해 메인 루프 오버헤드를 줄인다. *(V251005R1)*
   - `usbProcess()`는 `stage == IDLE`일 때 즉시 반환.
   - `missed_frames` 캐시는 ISR에서 전달된 값을 유지하며, 로그 경로도 동일한 값을 재사용한다. *(V251005R3)*
+  - 누락 프레임 재계산 시 `usbCalcMissedFrames()`를 사용해 ISR과 동일한 상수 분기 경로를 공유한다. *(V251005R6)*
 
 ---
 
@@ -90,7 +92,7 @@ usbHidMonitorSof(now):
     if (warmup_good_frames >= warmup_target) monitor.warmed_up = true
     return
 
-  missed_frames = interval / expected_us
+  missed_frames = usbCalcMissedFrames(expected_us, interval)   // V251005R6 상수 분기 기반 누락 프레임 계산 공유
   penalty = clamp(missed_frames - 1, 0, SCORE_CAP)
   if (score >= degrade_threshold or penalty >= degrade_threshold - score)
     trigger_downgrade = true
