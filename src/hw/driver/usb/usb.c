@@ -197,11 +197,12 @@ bool usbBootModeSaveAndReset(UsbBootMode_t mode)
 usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
                                                         uint32_t      measured_delta_us,
                                                         uint16_t      expected_us,
-                                                        uint16_t      missed_frames,
-                                                        uint32_t      now_ms)  // V251005R9 ISR 포화 값을 직접 전달하는 다운그레이드 요청
+                                                        uint16_t      missed_frames)  // V251007R5 Stage별 필요 시에만 타임스탬프를 획득하도록 인터페이스 정리
 {
   usb_boot_mode_request_t *request = &boot_mode_request;                   // V251007R4 다운그레이드 큐 포인터 로컬 캐시로 구조체 접근 경량화
   usb_boot_mode_request_stage_t stage;                                     // V251007R4 Stage 로컬 캐시로 분기 비교 최소화
+  uint32_t                   now_ms = 0U;                                  // V251007R5 타임스탬프는 실제 사용 시에만 획득
+  bool                       now_ms_valid = false;                         // V251007R5 millis() 호출을 단 한 번만 수행하도록 캐시 플래그
 
   if (mode >= USB_BOOT_MODE_MAX)
   {
@@ -219,19 +220,32 @@ usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
 
   if (stage == USB_BOOT_MODE_REQ_STAGE_IDLE)
   {
+    if (now_ms_valid == false)
+    {
+      now_ms        = millis();                                            // V251007R5 ARM 진입 직전에 타임스탬프를 지연 획득
+      now_ms_valid  = true;
+    }
+    uint32_t confirm_delay_ms = USB_BOOT_MONITOR_CONFIRM_DELAY_MS;         // V251007R5 확인 지연 상수를 로컬에 캐시해 덧셈 경로 단축
+    uint32_t ready_ms         = now_ms + confirm_delay_ms;                 // V251007R5 구조체 쓰기 전에 로컬 값으로 확인 시각 계산
+
     request->stage        = USB_BOOT_MODE_REQ_STAGE_ARMED;
     request->log_pending  = true;
     request->next_mode    = mode;
     request->delta_us     = measured_delta_us;
     request->expected_us  = expected_us;                           // V251005R9 ISR에서 포화된 기대 간격을 그대로 유지
     request->missed_frames = missed_frames;                       // V251005R9 ISR 포화 값 저장으로 중복 연산 제거
-    request->ready_ms     = now_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS;
-    request->timeout_ms   = request->ready_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS;
+    request->ready_ms     = ready_ms;                                      // V251007R5 구조체 재로드 없이 확인 지연 시각 기록
+    request->timeout_ms   = ready_ms + confirm_delay_ms;                   // V251007R5 로컬 값을 재사용해 타임아웃 계산 경량화
     return USB_BOOT_DOWNGRADE_ARMED;
   }
 
   if (stage == USB_BOOT_MODE_REQ_STAGE_ARMED)
   {
+    if (now_ms_valid == false)
+    {
+      now_ms        = millis();                                            // V251007R5 ARMED 단계에서도 최초 한 번만 millis() 호출
+      now_ms_valid  = true;
+    }
     request->next_mode     = mode;
     request->delta_us      = measured_delta_us;
     request->expected_us   = expected_us;                       // V251005R9 ISR에서 포화된 기대 간격을 그대로 유지
