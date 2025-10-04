@@ -205,10 +205,7 @@ usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
     return USB_BOOT_DOWNGRADE_REJECTED;
   }
 
-  if (missed_frames == 0U)
-  {
-    missed_frames = 1U;                                           // V251007R1 최소 1프레임 보장으로 재계산 경로 제거
-  }
+  // V251007R3 ISR에서 최소 프레임 정규화를 수행하므로 추가 보정 분기를 제거
 
   if (boot_mode_request.stage == USB_BOOT_MODE_REQ_STAGE_IDLE)
   {
@@ -258,11 +255,7 @@ void usbProcess(void)                                                           
     if (request->log_pending == true)
     {
       uint32_t missed_frames = (uint32_t)request->missed_frames;                       // V251007R1 누락 프레임 캐시 직접 사용
-
-      if (missed_frames == 0U)
-      {
-        missed_frames = 1U;                                                            // V251007R1 로그 최소값 보장 안전망
-      }
+      // V251007R3 최소값은 ISR에서 보장되어 재보정 분기 제거
 
       logPrintf("[NG] USB poll instability detected: expected %lu us, measured %lu us (~%lu frames, awaiting confirmation)\n",
                 request->expected_us,
@@ -286,11 +279,7 @@ void usbProcess(void)                                                           
     if (request->log_pending == true)
     {
       uint32_t missed_frames = (uint32_t)request->missed_frames;                       // V251007R1 누락 프레임 캐시 직접 사용
-
-      if (missed_frames == 0U)
-      {
-        missed_frames = 1U;                                                            // V251007R1 로그 최소값 보장 안전망
-      }
+      // V251007R3 최소값은 ISR에서 보장되어 재보정 분기 제거
 
       logPrintf("[NG] USB poll instability confirmed: expected %lu us, measured %lu us (~%lu frames)\n",
                 request->expected_us,

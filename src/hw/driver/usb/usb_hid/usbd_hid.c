@@ -1536,6 +1536,11 @@ static void usbHidMonitorSof(uint32_t now_us)
     {
       uint16_t missed_frames_report = (missed_frames > UINT16_MAX) ? UINT16_MAX
                                                                   : (uint16_t)missed_frames; // V251006R2 다운그레이드 시에만 누락 프레임 포화 변환
+
+      if (missed_frames_report == 0U)
+      {
+        missed_frames_report = 1U;                                 // V251007R3 다운그레이드 보고 시 최소 1프레임 보장 책임을 ISR에서 수행
+      }
       UsbBootMode_t next_mode = usbHidResolveDowngradeTarget();
       uint32_t      holdoff   = USB_SOF_MONITOR_RECOVERY_DELAY_US; // V251003R1 홀드오프 연장 경로 통합
 
