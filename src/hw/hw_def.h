@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251007R7"  // V251007R7: 다운그레이드 큐 Stage 분기 정리 및 로그 경량화
+#define _DEF_FIRMWATRE_VERSION      "V251007R8"  // V251007R8: SOF 홀드오프 만료 처리 및 워밍업 캐시 로드 지연
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

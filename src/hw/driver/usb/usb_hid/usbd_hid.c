@@ -1422,10 +1422,15 @@ static void usbHidMonitorSof(uint32_t now_us)
 
   uint32_t holdoff_end_us = mon->holdoff_end_us;                   // V251003R9 구조체 필드 접근 캐시로 ISR 경량화
 
-  if (usbHidTimeIsBefore(now_us, holdoff_end_us))                  // V251002R1 홀드오프 조기 반환으로 연산 절약
+  if (holdoff_end_us != 0U)                                        // V251007R8 홀드오프 종료 후 비교 생략을 위한 활성 상태 확인
   {
-    usbHidSofMonitorSyncTick(now_us);                              // V251003R1 홀드오프 구간 타임스탬프 처리 공통화
-    return;
+    if (usbHidTimeIsBefore(now_us, holdoff_end_us))                // V251002R1 홀드오프 조기 반환으로 연산 절약
+    {
+      usbHidSofMonitorSyncTick(now_us);                            // V251003R1 홀드오프 구간 타임스탬프 처리 공통화
+      return;
+    }
+
+    mon->holdoff_end_us = 0U;                                      // V251007R8 홀드오프 만료 후 즉시 0으로 초기화해 반복 비교 제거
   }
 
   uint32_t prev_tick_us    = mon->prev_tick_us;
@@ -1435,11 +1440,7 @@ static void usbHidMonitorSof(uint32_t now_us)
 
   mon->prev_tick_us = now_us;
 
-  uint8_t  score           = mon->score;                           // V251003R9 점수 로컬 캐시로 구조체 접근 최소화
-  uint8_t  score_orig      = score;                                // V251003R9 구조체 반영 여부 판단용 원본
-  uint32_t last_decay_us   = mon->last_decay_us;                   // V251003R9 감쇠 타임스탬프 로컬 캐시
-  uint32_t last_decay_orig = last_decay_us;                        // V251003R9 구조체 반영 여부 판단용 원본
-  bool     warmup_complete = mon->warmup_complete;                 // V251006R6 워밍업 상태를 로컬에 캐시해 구조체 접근 최소화
+  bool warmup_complete = mon->warmup_complete;                     // V251006R6 워밍업 상태를 로컬에 캐시해 구조체 접근 최소화
 
   if (warmup_complete == false)
   {
@@ -1471,7 +1472,7 @@ static void usbHidMonitorSof(uint32_t now_us)
     {
       mon->warmup_complete = true;
       warmup_complete      = true;                                    // V251006R6 로컬 캐시와 구조체 상태를 동기화
-      last_decay_us        = now_us;                                   // V251003R9 감쇠 시작점 로컬 캐시 갱신
+      mon->last_decay_us   = now_us;                                   // V251007R8 워밍업 완주 시 즉시 감쇠 기준 갱신
     }
     else if (warmup_incremented)
     {
@@ -1485,7 +1486,7 @@ static void usbHidMonitorSof(uint32_t now_us)
       {
         mon->warmup_complete = true;
         warmup_complete      = true;                                  // V251006R6 로컬 캐시와 구조체 상태를 동기화
-        last_decay_us        = now_us;                                 // V251003R9 감쇠 시작점 로컬 캐시 갱신
+        mon->last_decay_us   = now_us;                                 // V251007R8 워밍업 타임아웃 완주 시 감쇠 기준 즉시 갱신
       }
       else
       {
@@ -1493,6 +1494,11 @@ static void usbHidMonitorSof(uint32_t now_us)
       }
     }
   }
+
+  uint8_t  score           = mon->score;                           // V251007R8 워밍업 완료 후 점수 로컬 캐시 갱신
+  uint8_t  score_orig      = score;                                // V251007R8 구조체 반영 여부 판단용 원본 유지
+  uint32_t last_decay_us   = mon->last_decay_us;                   // V251007R8 감쇠 기준 시각 로컬 캐시 재로드
+  uint32_t last_decay_orig = last_decay_us;                        // V251007R8 구조체 업데이트 필요 여부 판단용 원본
 
   if (warmup_complete == true && delta_below_threshold)             // V251006R8 임계 비교 캐시 재사용으로 분기 비용 축소
   {
