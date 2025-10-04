@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251005R9"  // V251005R9: 비구성 점수 초기화 최적화 및 다운그레이드 파라미터 포화 전달
+#define _DEF_FIRMWATRE_VERSION      "V251006R1"  // V251006R1: SOF 감쇠 타임스탬프 조건부 동기화 및 expected_us 접근 지연
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
