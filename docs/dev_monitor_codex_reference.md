@@ -23,6 +23,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
   2. 워밍업 조건 달성(HS 2048·FS 128 프레임) → 감시 활성화.
   - 워밍업 마감 비교는 `warmup_deadline` 로컬 캐시를 사용해 ISR 메모리 접근을 줄인다. *(V251005R1)*
 - 워밍업 카운터는 값이 변할 때만 구조체에 기록해 동일 값 반복 쓰기를 피한다. *(V251005R2)*
+- 워밍업 카운터가 증가한 프레임에서는 데드라인 비교를 생략해 정상 누적 구간의 분기를 줄였다. *(V251007R6)*
 - Prime 경량화 이후 속도 파라미터는 `usbHidSofMonitorApplySpeedParams()`에서 직접 채워져, 상태 전환 시 불필요한 0 초기화가 사라졌다. *(V251005R6)*
 - 유효 속도에서는 `usbHidSofMonitorApplySpeedParams()`가 곧바로 테이블 값을 복사해, 중복 0 초기화를 제거했다. *(V251007R2)*
 - 기대 간격·안정 임계·감쇠 주기는 16비트로 저장되어 ISR에서의 로드/스토어 폭이 줄었다. *(V251005R7)*
@@ -91,6 +92,7 @@ usb suspend/resume/reset
 - Prime은 동일 속도 재호출 시 캐시된 파라미터를 그대로 사용해 구조체 쓰기를 최소화합니다. *(V251005R8)*
 - BootMode에 따른 HS `bInterval`과 기대 폴링 간격은 `usb.c`의 공용 테이블에서 조회되며, `usbBootModeGetExpectedIntervalUs()`로 모든 모듈이 동일 값을 사용합니다. *(V251006R5)*
 - 다운그레이드 요청은 큐가 처리하며, ARM → COMMIT 단계에서 BootMode 저장과 리셋을 담당합니다.
+- `usbHidMeasurePollRate()`는 BootMode가 변경될 때만 폴링 샘플 윈도우를 갱신해 반복 분기를 줄입니다. *(V251007R6)*
 - SOF 타임스탬프 비교 보조 함수(`usbHidTimeIsBefore`, `usbHidTimeIsAfterOrEqual`)는 인라인화되어 ISR 호출 비용을 줄였습니다. *(V251005R2)*
 - 다운그레이드 타깃은 Enum 순차 증가 방식으로 계산되어 switch 분기가 제거되었습니다. *(V251005R7)*
 - 안정 감시 단계에서만 `expected_us`를 읽어 워밍업 및 정상 프레임에서는 구조체 접근이 발생하지 않습니다. *(V251006R1)*

@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251007R5"  // V251007R5: 다운그레이드 큐 타임스탬프 지연 획득 및 확인 지연 계산 경량화
+#define _DEF_FIRMWATRE_VERSION      "V251007R6"  // V251007R6: SOF 워밍업 분기 경량화 및 폴링 샘플 윈도우 캐시 적용
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
