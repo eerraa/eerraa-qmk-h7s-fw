@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251007R6"  // V251007R6: SOF 워밍업 분기 경량화 및 폴링 샘플 윈도우 캐시 적용
+#define _DEF_FIRMWATRE_VERSION      "V251007R7"  // V251007R7: 다운그레이드 큐 Stage 분기 정리 및 로그 경량화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

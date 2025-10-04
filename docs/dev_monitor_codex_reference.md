@@ -51,10 +51,11 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
   - 실패 경로는 경고 로그 출력 후 큐 리셋.
     - `usbProcess()`는 큐 포인터와 Stage를 로컬에 캐시해 분기 내 구조체 접근을 최소화한다. *(V251007R1)*
     - `usbRequestBootModeDowngrade()`는 함수 진입 시 큐 포인터와 Stage를 로컬에 캐시해 ARM/COMMIT 전환 시 반복 주소 계산을 줄인다. *(V251007R4)*
-    - Stage를 확인한 뒤 필요할 때만 `millis()`를 호출해 거부 경로에서 HAL tick 접근 비용을 제거한다. *(V251007R5)*
+    - Stage를 `switch`로 분기해 각 단계에서만 `millis()`를 호출하고, `now_ms_valid` 보조 플래그를 제거했다. *(V251007R7)*
     - ARM 진입 시 확인 지연은 로컬 변수로 계산해 `ready_ms`/`timeout_ms`를 구조체 재읽기 없이 기록한다. *(V251007R5)*
     - `usbProcess()`는 `stage == IDLE`일 때 즉시 반환.
     - `missed_frames` 캐시는 다운그레이드 ARM 등록 시 ISR에서 최소 1로 정규화되어 로그 출력이 재계산 없이 캐시 값을 사용한다. *(V251007R3)*
+    - `usbProcess()` 로그는 `missed_frames` 캐시를 직접 캐스팅해 임시 변수를 만들지 않는다. *(V251007R7)*
     - 기대 간격·누락 프레임 캐시는 16비트로 저장되며, ISR이 포화한 값을 그대로 받아 추가 연산 없이 유지한다. *(V251005R9, V251007R1)*
     - 기대 간격 혹은 누락 프레임이 0으로 전달되면 ARM 단계에 진입하기 전에 즉시 거부해 초기화 잔여값으로 인한 불필요한 Stage 소모를 막는다. *(V251007R4)*
 
@@ -77,7 +78,7 @@ USBD_HID_SOF_ISR
   └─ usbHidMonitorSof(now_us)
         ├─ usbHidUpdateWakeUp()
         ├─ usbHidSofMonitorApplySpeedParams(dev_speed?)
-        └─ usbRequestBootModeDowngrade(..., missed_frames_report)  // 다운그레이드 시 16비트 포화·최소 1 값으로 큐 전달, 타임스탬프는 함수 내부에서 지연 획득 *(V251006R2, V251007R3, V251007R5)*
+        └─ usbRequestBootModeDowngrade(..., missed_frames_report)  // 다운그레이드 시 16비트 포화·최소 1 값으로 큐 전달, Stage 분기별로 millis() 호출 *(V251006R2, V251007R3, V251007R7)*
 
 main loop (ap.c)
   └─ usbProcess()
@@ -170,7 +171,7 @@ usbHidMonitorSof(now):
     if (trigger_downgrade)
       missed_frames_report = clamp16(missed_frames)              // V251006R2 다운그레이드 발생 시에만 16비트 포화 수행
       if (missed_frames_report == 0) missed_frames_report = 1    // V251007R3 큐 전송 전 ISR에서 최소 1프레임 보장
-      usbRequestBootModeDowngrade(next_mode, delta_us, expected_us, missed_frames_report) // V251007R5 Stage별로 필요할 때만 millis() 호출
+      usbRequestBootModeDowngrade(next_mode, delta_us, expected_us, missed_frames_report) // V251007R7 Stage 분기에서만 millis() 호출
 ```
 
 ---
