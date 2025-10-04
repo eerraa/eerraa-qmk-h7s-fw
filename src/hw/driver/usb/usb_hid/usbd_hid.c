@@ -1505,7 +1505,7 @@ static void usbHidMonitorSof(uint32_t now_us)
 
   uint16_t expected_us = mon->expected_us;                         // V251006R1 안정 감시 단계에서만 기대 간격 로드
 
-  if (expected_us != 0U)
+  if ((delta_below_threshold == false) && (expected_us != 0U))     // V251006R9 임계 이하 간격에서는 누락 프레임 계산을 생략
   {
     uint32_t missed_frames = usbCalcMissedFrames((uint32_t)expected_us,
                                                  delta_us);         // V251005R6 속도별 상수 나눗셈으로 누락 프레임 산출
