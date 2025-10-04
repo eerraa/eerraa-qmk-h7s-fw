@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251007R3"  // V251007R3: 다운그레이드 큐 최소 프레임 보정 책임 이전으로 루프 분기 경량화
+#define _DEF_FIRMWATRE_VERSION      "V251007R4"  // V251007R4: 다운그레이드 큐 입력 가드 및 포인터 캐시로 Stage 분기 경량화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

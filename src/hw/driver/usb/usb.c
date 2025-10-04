@@ -200,37 +200,47 @@ usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
                                                         uint16_t      missed_frames,
                                                         uint32_t      now_ms)  // V251005R9 ISR 포화 값을 직접 전달하는 다운그레이드 요청
 {
+  usb_boot_mode_request_t *request = &boot_mode_request;                   // V251007R4 다운그레이드 큐 포인터 로컬 캐시로 구조체 접근 경량화
+  usb_boot_mode_request_stage_t stage;                                     // V251007R4 Stage 로컬 캐시로 분기 비교 최소화
+
   if (mode >= USB_BOOT_MODE_MAX)
   {
     return USB_BOOT_DOWNGRADE_REJECTED;
   }
 
+  if ((expected_us == 0U) || (missed_frames == 0U))                        // V251007R4 비정상 입력 거르기로 ARM 경로 불필요한 실행 차단
+  {
+    return USB_BOOT_DOWNGRADE_REJECTED;
+  }
+
+  stage = request->stage;
+
   // V251007R3 ISR에서 최소 프레임 정규화를 수행하므로 추가 보정 분기를 제거
 
-  if (boot_mode_request.stage == USB_BOOT_MODE_REQ_STAGE_IDLE)
+  if (stage == USB_BOOT_MODE_REQ_STAGE_IDLE)
   {
-    boot_mode_request.stage      = USB_BOOT_MODE_REQ_STAGE_ARMED;
-    boot_mode_request.log_pending = true;
-    boot_mode_request.next_mode  = mode;
-    boot_mode_request.delta_us   = measured_delta_us;
-    boot_mode_request.expected_us = expected_us;                  // V251005R9 ISR에서 포화된 기대 간격을 그대로 유지
-    boot_mode_request.missed_frames = missed_frames;              // V251005R9 ISR 포화 값 저장으로 중복 연산 제거
-    boot_mode_request.ready_ms   = now_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS;
-    boot_mode_request.timeout_ms = boot_mode_request.ready_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS;
+    request->stage        = USB_BOOT_MODE_REQ_STAGE_ARMED;
+    request->log_pending  = true;
+    request->next_mode    = mode;
+    request->delta_us     = measured_delta_us;
+    request->expected_us  = expected_us;                           // V251005R9 ISR에서 포화된 기대 간격을 그대로 유지
+    request->missed_frames = missed_frames;                       // V251005R9 ISR 포화 값 저장으로 중복 연산 제거
+    request->ready_ms     = now_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS;
+    request->timeout_ms   = request->ready_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS;
     return USB_BOOT_DOWNGRADE_ARMED;
   }
 
-  if (boot_mode_request.stage == USB_BOOT_MODE_REQ_STAGE_ARMED)
+  if (stage == USB_BOOT_MODE_REQ_STAGE_ARMED)
   {
-    boot_mode_request.next_mode   = mode;
-    boot_mode_request.delta_us    = measured_delta_us;
-    boot_mode_request.expected_us = expected_us;                // V251005R9 ISR에서 포화된 기대 간격을 그대로 유지
-    boot_mode_request.missed_frames = missed_frames;            // V251005R9 ISR 포화 값 저장으로 중복 연산 제거
+    request->next_mode     = mode;
+    request->delta_us      = measured_delta_us;
+    request->expected_us   = expected_us;                       // V251005R9 ISR에서 포화된 기대 간격을 그대로 유지
+    request->missed_frames = missed_frames;                     // V251005R9 ISR 포화 값 저장으로 중복 연산 제거
 
-    if ((int32_t)(now_ms - (int32_t)boot_mode_request.ready_ms) >= 0)
+    if ((int32_t)(now_ms - (int32_t)request->ready_ms) >= 0)
     {
-      boot_mode_request.stage       = USB_BOOT_MODE_REQ_STAGE_COMMIT;
-      boot_mode_request.log_pending = true;
+      request->stage       = USB_BOOT_MODE_REQ_STAGE_COMMIT;
+      request->log_pending = true;
       return USB_BOOT_DOWNGRADE_CONFIRMED;
     }
 
