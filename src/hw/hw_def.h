@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251004R2"  // V251004R2: SOF 누락 프레임 캐시 및 계산식 경량화
+#define _DEF_FIRMWATRE_VERSION      "V251005R1"  // V251005R1: 다운그레이드 Stage 캐시 및 워밍업 마감 캐시 추가
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

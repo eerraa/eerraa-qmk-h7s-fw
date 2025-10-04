@@ -21,6 +21,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
 - **핵심 전이**
   1. 속도/상태 변화 → `usbHidSofMonitorPrime()` 호출로 캐시 리셋.
   2. 워밍업 조건 달성(HS 2048·FS 128 프레임) → 감시 활성화.
+  - 워밍업 마감 비교는 `warmup_deadline` 로컬 캐시를 사용해 ISR 메모리 접근을 줄인다. *(V251005R1)*
   3. 간격 초과 → 점수 가산(`clamp(0~4)`), 감쇠 타이머에 따라 1점 감소.
   4. `score >= degrade_threshold` → 다운그레이드 큐에 요청하며 누락 프레임 수를 함께 캐시.
 
@@ -30,6 +31,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
   - `ARMED`: 첫 로그 출력 후 `USB_BOOT_MONITOR_CONFIRM_DELAY_MS` 대기.
   - `COMMIT`: BootMode 저장 성공 시 리부트 → `usbHidSofMonitorPrime()` 재호출.
   - 실패 경로는 경고 로그 출력 후 큐 리셋.
+  - `usbProcess()`는 Stage 값을 로컬에 캐시하고, `ARMED` 단계에서만 `millis()`를 호출해 메인 루프 오버헤드를 줄인다. *(V251005R1)*
   - `usbProcess()`는 `stage == IDLE`일 때 즉시 반환.
 
 ---

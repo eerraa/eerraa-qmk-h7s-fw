@@ -246,14 +246,14 @@ usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
 
 void usbProcess(void)                                                                  // V250924R3 USB 안정성 이벤트 처리 루프
 {
-  if (boot_mode_request.stage == USB_BOOT_MODE_REQ_STAGE_IDLE)                         // V250924R3 비활성 시 오버헤드 방지
+  usb_boot_mode_request_stage_t stage = boot_mode_request.stage;                       // V251005R1 Stage 로컬 캐시로 분기 비용 축소
+
+  if (stage == USB_BOOT_MODE_REQ_STAGE_IDLE)                                           // V250924R3 비활성 시 오버헤드 방지
   {
     return;
   }
 
-  uint32_t now_ms = millis();
-
-  switch (boot_mode_request.stage)
+  switch (stage)
   {
     case USB_BOOT_MODE_REQ_STAGE_ARMED:
       if (boot_mode_request.log_pending == true)
@@ -267,9 +267,13 @@ void usbProcess(void)                                                           
         boot_mode_request.log_pending = false;
       }
 
-      if ((int32_t)(now_ms - (int32_t)boot_mode_request.timeout_ms) >= 0)
       {
-        usbBootModeRequestReset();
+        uint32_t now_ms = millis();                                           // V251005R1 타임아웃 계산 경로에서만 millis() 호출
+
+        if ((int32_t)(now_ms - (int32_t)boot_mode_request.timeout_ms) >= 0)
+        {
+          usbBootModeRequestReset();
+        }
       }
       break;
 
