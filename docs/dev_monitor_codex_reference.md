@@ -34,6 +34,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
 - `pdev->dev_speed`는 SOF ISR 진입 시 한 번만 로드해 상태 전환 Prime과 서스펜드/복귀 및 속도 검사 분기에서 재사용한다. *(V251006R2, V251006R3)*
 - 구성/서스펜드 상태에서만 `pdev->dev_speed`를 읽어 기본/주소 상태에서는 MMIO 접근을 피한다. *(V251006R6)*
 - 워밍업 완료 플래그는 로컬 변수로 캐시되어 감쇠 경로와 점수 갱신 시 구조체 재접근을 줄인다. *(V251006R6)*
+- 서스펜드 분기는 일반 비구성 처리보다 먼저 실행되어 동기화 호출을 생략하며, 최초 진입 시 속도 파라미터만 재적용한다. *(V251006R7)*
   - 속도 파라미터 적용은 기본값을 0으로 초기화한 뒤 HS/FS 열거형 값을 직접 인덱스로 사용해 분기 수를 줄인다. *(V251006R3)*
 
 ### 2.2 `usb_boot_mode_request_t` (다운그레이드 큐)
@@ -93,14 +94,31 @@ usb suspend/resume/reset
 usbHidMonitorSof(now):
   if (usbHidUpdateWakeUp()) return
 
-  if (pdev->dev_state != CONFIGURED):
-    usbHidSofMonitorSyncTick(now)
+  dev_state = pdev->dev_state
+  dev_speed = (dev_state in {CONFIGURED, SUSPENDED}) ?      // V251006R6 구성/서스펜드 상태에서만 속도 값을 읽어 불필요한 MMIO 제거
+              pdev->dev_speed : 0
+
+  if (dev_state == SUSPENDED):
+    if (!monitor.suspended_active):
+      if (dev_speed in {HS, FS} and (monitor.active_speed != dev_speed or monitor.expected_us == 0)): // V251006R7 서스펜드 최초 진입 시 파라미터만 재적용
+        usbHidSofMonitorApplySpeedParams(dev_speed)
+      monitor.suspended_active = true
     return
 
-  dev_speed = (state in {CONFIGURED, SUSPENDED}) ?         // V251006R6 구성/서스펜드 상태에서만 속도 값을 읽어 불필요한 MMIO 제거
-              pdev->dev_speed : 0
-  if (dev_speed != monitor.active_speed)
-    usbHidSofMonitorApplySpeedParams(dev_speed)
+  if (dev_state != CONFIGURED):
+    usbHidSofMonitorSyncTick(now)                              // V251006R7 구성 외 상태에서만 동기화
+    return
+
+  if (monitor.suspended_active):
+    usbHidSofMonitorPrime(now, RESUME_HOLDOFF, WARMUP_TIMEOUT, dev_speed)
+    return
+
+  if (dev_speed not in {HS, FS}):
+    usbHidSofMonitorPrime(now, 0, 0, UNKNOWN)
+    return
+
+  if (dev_speed != monitor.active_speed):
+    usbHidSofMonitorPrime(now, CONFIG_HOLDOFF, WARMUP_TIMEOUT, dev_speed)
 
   usbHidSofMonitorSyncTick(now)
   if (now < holdoff_end) return

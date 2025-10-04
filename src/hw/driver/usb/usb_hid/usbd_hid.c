@@ -1354,23 +1354,26 @@ static void usbHidMonitorSof(uint32_t now_us)
     sof_prev_dev_state = dev_state;
   }
 
-  if (dev_state != USBD_STATE_CONFIGURED)
-  {
-    usbHidSofMonitorSyncTick(now_us);                              // V251003R1 비구성 상태 타임스탬프 처리 공통화
-    return;                                                        // V251006R2 Prime 초기화 이후 중복 점수 기록 제거
-  }
-
-  if (dev_state == USBD_STATE_SUSPENDED)                           // V251006R5 dev_state 기반 판정으로 함수 호출 제거
+  if (dev_state == USBD_STATE_SUSPENDED)                           // V251006R7 서스펜드 선행 처리로 불필요한 동기화 제거
   {
     if (mon->suspended_active == false)
     {
-      usbHidSofMonitorPrime(now_us,
-                            0U,
-                            0U,
-                            dev_speed);                           // V251003R4 서스펜드 진입 시 최소 초기화
-      mon->suspended_active = true;                               // V251003R4 반복 초기화를 회피해 오버헤드 절감
+      if (dev_speed == USBD_SPEED_HIGH || dev_speed == USBD_SPEED_FULL)
+      {
+        if ((mon->active_speed != dev_speed) || (mon->expected_us == 0U))
+        {
+          usbHidSofMonitorApplySpeedParams(dev_speed);             // V251006R7 서스펜드 최초 진입 시 속도 파라미터만 갱신
+        }
+      }
+      mon->suspended_active = true;                                // V251006R7 서스펜드 상태 플래그 세트로 반복 초기화 회피
     }
     return;
+  }
+
+  if (dev_state != USBD_STATE_CONFIGURED)
+  {
+    usbHidSofMonitorSyncTick(now_us);                              // V251006R7 비구성 상태에서만 타임스탬프 동기화 유지
+    return;                                                        // V251006R7 구성 외 구간에서 감시 로직 미실행
   }
 
   if (mon->suspended_active)
