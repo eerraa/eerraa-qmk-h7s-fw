@@ -1293,8 +1293,18 @@ bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length)
 
 void usbHidMeasurePollRate(void)
 {
-  static uint32_t cnt = 0;
-  uint32_t        sample_window = usbBootModeIsFullSpeed() ? 1000U : 8000U; // V250924R1 Align poll window with active USB speed
+  static uint32_t        cnt               = 0;
+  static UsbBootMode_t   rate_cached_mode  = USB_BOOT_MODE_MAX;       // V251007R6 BootMode 변경 시에만 샘플 윈도우를 재계산하도록 캐시 추가
+  static uint32_t        rate_sample_window = 8000U;                  // V251007R6 HS 기본 값으로 초기화해 첫 호출에서 즉시 재설정
+  UsbBootMode_t          active_mode        = usbBootModeGet();
+
+  if (active_mode != rate_cached_mode)
+  {
+    rate_cached_mode   = active_mode;
+    rate_sample_window = (active_mode == USB_BOOT_MODE_FS_1K) ? 1000U : 8000U; // V251007R6 BootMode 변경 시에만 조건 분기를 수행
+  }
+
+  uint32_t sample_window = rate_sample_window;
 
   uint32_t now_us = micros();
 
@@ -1449,7 +1459,10 @@ static void usbHidMonitorSof(uint32_t now_us)
       warmup_good_frames = 0U;
     }
 
-    if (warmup_good_frames != warmup_good_original)
+    bool warmup_changed     = (warmup_good_frames != warmup_good_original);
+    bool warmup_incremented = warmup_changed && (warmup_good_frames > warmup_good_original); // V251007R6 정상 프레임 누적 시점을 구분해 데드라인 비교 최소화
+
+    if (warmup_changed)
     {
       mon->warmup_good_frames = warmup_good_frames;                    // V251005R2 값 변경 시에만 구조체 쓰기
     }
@@ -1459,6 +1472,10 @@ static void usbHidMonitorSof(uint32_t now_us)
       mon->warmup_complete = true;
       warmup_complete      = true;                                    // V251006R6 로컬 캐시와 구조체 상태를 동기화
       last_decay_us        = now_us;                                   // V251003R9 감쇠 시작점 로컬 캐시 갱신
+    }
+    else if (warmup_incremented)
+    {
+      return;                                                          // V251007R6 정상 프레임 누적 직후에는 데드라인 비교를 건너뛰어 분기 최소화
     }
     else
     {
