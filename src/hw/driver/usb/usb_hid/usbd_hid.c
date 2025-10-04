@@ -483,13 +483,6 @@ static TIM_HandleTypeDef htim2;
 
 static uint32_t sof_cnt = 0;
 
-static const uint16_t usb_boot_mode_interval_us_table[USB_BOOT_MODE_MAX] = { // V251006R4 BootMode별 기대 폴링 간격 테이블화
-  125U,
-  250U,
-  500U,
-  1000U,
-};
-
 enum
 {
   USB_SOF_MONITOR_CONFIG_HOLDOFF_MS = 750U,                                              // V250924R3 구성 직후 워밍업 지연(ms)
@@ -1209,14 +1202,7 @@ static uint8_t *USBD_HID_GetDeviceQualifierDesc(uint16_t *length)
 
 static uint32_t usbHidExpectedPollIntervalUs(void)
 {
-  UsbBootMode_t mode = usbBootModeGet();                             // V251006R4 BootMode 직접 조회로 분기 단순화
-
-  if (mode < USB_BOOT_MODE_MAX)
-  {
-    return (uint32_t)usb_boot_mode_interval_us_table[mode];          // V251006R4 테이블 사용으로 시프트/함수 호출 제거
-  }
-
-  return 125U;                                                       // V251006R4 기본값: HS 8kHz 간격 유지
+  return (uint32_t)usbBootModeGetExpectedIntervalUs();                // V251006R6 중앙 테이블 조회 함수 재사용으로 데이터 중복 제거
 }
 
 bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev)
@@ -1369,7 +1355,7 @@ static void usbHidMonitorSof(uint32_t now_us)
     return;                                                        // V251006R2 Prime 초기화 이후 중복 점수 기록 제거
   }
 
-  if (USBD_is_suspended())
+  if (dev_state == USBD_STATE_SUSPENDED)                           // V251006R6 dev_state 기반 판정으로 함수 호출 제거
   {
     if (mon->suspended_active == false)
     {
