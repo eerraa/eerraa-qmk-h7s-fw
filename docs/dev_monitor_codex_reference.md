@@ -26,6 +26,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
   - Prime 경량화 이후 속도 파라미터는 `usbHidSofMonitorApplySpeedParams()`에서 직접 채워져, 상태 전환 시 불필요한 0 초기화가 사라졌다. *(V251005R6)*
   - 기대 간격·안정 임계·감쇠 주기는 16비트로 저장되어 ISR에서의 로드/스토어 폭이 줄었다. *(V251005R7)*
   - 동일 속도로 Prime이 반복될 때는 캐시된 속도 파라미터를 재사용해 추가 메모리 쓰기를 방지한다. *(V251005R8)*
+  - 비구성 상태에서는 `score`가 0일 때 구조체 쓰기를 생략해 반복 초기화를 줄인다. *(V251005R9)*
   3. 간격 초과 → 누락 프레임을 8비트 패널티로 환산하고 `score + penalty` 비교로 점수를 누적하거나 즉시 다운그레이드. *(V251005R8)*
   4. `score >= degrade_threshold` → 다운그레이드 큐에 요청하며 누락 프레임 수를 함께 캐시.
 
@@ -39,7 +40,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
   - `usbProcess()`는 `stage == IDLE`일 때 즉시 반환.
   - `missed_frames` 캐시는 ISR에서 전달된 값을 유지하며, 로그 경로도 동일한 값을 재사용한다. *(V251005R3)*
   - 누락 프레임 재계산 시 `usbCalcMissedFrames()`를 사용해 ISR과 동일한 상수 분기 경로를 공유한다. *(V251005R6)*
-  - 기대 간격·누락 프레임 캐시는 16비트로 저장되어 큐 구조체가 경량화되었고, 재계산 시 범위를 초과하면 `UINT16_MAX`로 포화된다. *(V251005R7)*
+  - 기대 간격·누락 프레임 캐시는 16비트로 저장되며, ISR이 포화한 값을 그대로 받아 추가 연산 없이 유지한다. *(V251005R9)*
 
 ---
 
@@ -60,7 +61,7 @@ USBD_HID_SOF_ISR
   └─ usbHidMonitorSof(now_us)
         ├─ usbHidUpdateWakeUp()
         ├─ usbHidSofMonitorApplySpeedParams(dev_speed?)
-        └─ usbRequestBootModeDowngrade(..., missed_frames, ...)  // 임계 초과 시 누락 프레임 전달
+        └─ usbRequestBootModeDowngrade(..., missed_frames_report, ...)  // ISR 16비트 포화 값을 큐로 전달
 
 main loop (ap.c)
   └─ usbProcess()
@@ -84,6 +85,11 @@ usb suspend/resume/reset
 usbHidMonitorSof(now):
   if (usbHidUpdateWakeUp()) return
 
+  if (pdev->dev_state != CONFIGURED):
+    usbHidSofMonitorSyncTick(now)
+    if (score != 0) score = 0                             // V251005R9 구성 해제 반복 시 불필요한 쓰기 제거
+    return
+
   dev_speed = pdev->dev_speed
   if (dev_speed != monitor.active_speed)
     usbHidSofMonitorApplySpeedParams(dev_speed)
@@ -98,6 +104,7 @@ usbHidMonitorSof(now):
     return
 
   missed_frames = usbCalcMissedFrames(expected_us, interval)   // V251005R6 상수 분기 기반 누락 프레임 계산 공유
+  missed_frames_report = clamp16(missed_frames)                // V251005R9 큐 전달용 16비트 포화 값 준비
   penalty = clamp(missed_frames - 1, 0, SCORE_CAP)
   next_score = score + penalty                                // V251005R8 8비트 덧셈으로 누락 패널티 누적
   if (score >= degrade_threshold or next_score >= degrade_threshold)
@@ -109,7 +116,7 @@ usbHidMonitorSof(now):
     score = max(score - 1, 0)
 
   if (trigger_downgrade)
-    usbRequestBootModeDowngrade(next_mode, delta_us, expected_us, missed_frames)
+    usbRequestBootModeDowngrade(next_mode, delta_us, expected_us, missed_frames_report)
 ```
 
 ---

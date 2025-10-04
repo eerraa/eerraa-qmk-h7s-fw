@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251005R8"  // V251005R8: Prime 속도 캐시 재사용 및 다운그레이드 점수 계산 단순화
+#define _DEF_FIRMWATRE_VERSION      "V251005R9"  // V251005R9: 비구성 점수 초기화 최적화 및 다운그레이드 파라미터 포화 전달
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
