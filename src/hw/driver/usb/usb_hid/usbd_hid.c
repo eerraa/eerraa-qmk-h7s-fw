@@ -550,12 +550,7 @@ static inline bool usbHidTimeIsAfterOrEqual(uint32_t now_us,
 
 static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 속도별 모니터링 파라미터 캐시
 {
-  sof_monitor.active_speed         = speed_code;
-  sof_monitor.expected_us          = 0U;                            // V251006R3 기본값 0 초기화로 분기 최소화
-  sof_monitor.stable_threshold_us  = 0U;
-  sof_monitor.decay_interval_us    = 0U;
-  sof_monitor.degrade_threshold    = 0U;
-  sof_monitor.warmup_target_frames = 0U;
+  sof_monitor.active_speed = speed_code;
 
   if (speed_code <= USBD_SPEED_FULL)                                // V251006R3 열거형 인덱스를 직접 사용해 switch 제거
   {
@@ -566,6 +561,14 @@ static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 �
     sof_monitor.decay_interval_us    = params->decay_interval_us;   // V251005R7 16비트 감쇠 주기 복사로 구조체 축소
     sof_monitor.degrade_threshold    = params->degrade_threshold;   // V251003R5 속도 파라미터 직접 복사로 런타임 접근 최소화
     sof_monitor.warmup_target_frames = params->warmup_target_frames;// V251003R5 속도 파라미터 직접 복사로 런타임 접근 최소화
+  }
+  else
+  {
+    sof_monitor.expected_us          = 0U;                          // V251007R2 알 수 없는 속도에서는 0 초기화 유지
+    sof_monitor.stable_threshold_us  = 0U;
+    sof_monitor.decay_interval_us    = 0U;
+    sof_monitor.degrade_threshold    = 0U;
+    sof_monitor.warmup_target_frames = 0U;
   }
 }
 
@@ -1398,6 +1401,7 @@ static void usbHidMonitorSof(uint32_t now_us)
                           USB_SOF_MONITOR_CONFIG_HOLDOFF_US,
                           USB_SOF_MONITOR_WARMUP_TIMEOUT_US,
                           dev_speed);                             // V251002R3 속도 변경 홀드오프도 공용 초기화 사용
+    return;                                                        // V251007R2 Prime 이후 즉시 반환해 중복 분기 제거
   }
 
   if (mon->prev_tick_us == 0U)

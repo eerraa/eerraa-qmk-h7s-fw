@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251007R1"  // V251007R1: 다운그레이드 큐 누락 프레임 정규화 및 메인 루프 경량화
+#define _DEF_FIRMWATRE_VERSION      "V251007R2"  // V251007R2: SOF 속도 파라미터 캐시 최적화 및 Prime 반환 경량화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
