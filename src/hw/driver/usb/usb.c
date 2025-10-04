@@ -38,6 +38,13 @@ static const uint8_t usb_boot_mode_hs_interval_table[USB_BOOT_MODE_MAX] = {  // 
   0x01,
 };
 
+static const uint16_t usb_boot_mode_expected_interval_table[USB_BOOT_MODE_MAX] = { // V251006R5 BootMode 기대 간격을 중앙 테이블로 통합
+  125U,
+  250U,
+  500U,
+  1000U,
+};
+
 static const char *usbBootModeLabel(UsbBootMode_t mode);                     // V250923R1 helpers
 static bool        usbBootModeStore(UsbBootMode_t mode);
 
@@ -176,6 +183,16 @@ uint8_t usbBootModeGetHsInterval(void)
   }
 
   return 0x01;
+}
+
+uint16_t usbBootModeGetExpectedIntervalUs(void)                      // V251006R5 BootMode 기대 간격 조회 함수로 중복 테이블 제거
+{
+  if (usb_boot_mode < USB_BOOT_MODE_MAX)
+  {
+    return usb_boot_mode_expected_interval_table[usb_boot_mode];
+  }
+
+  return 125U;
 }
 
 static bool usbBootModeStore(UsbBootMode_t mode)
