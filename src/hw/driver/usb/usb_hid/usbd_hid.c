@@ -1546,12 +1546,10 @@ static void usbHidMonitorSof(uint32_t now_us)
 
       if (next_mode < USB_BOOT_MODE_MAX)
       {
-        uint32_t now_ms = millis();
         usb_boot_downgrade_result_t request_result = usbRequestBootModeDowngrade(next_mode,
                                                                                  delta_us,
                                                                                  expected_us,
-                                                                                 missed_frames_report,
-                                                                                 now_ms); // V251005R9 ISR에서 16비트 포화 후 전달
+                                                                                 missed_frames_report); // V251007R5 타임스탬프는 함수 내부에서 지연 획득
 
         if (request_result == USB_BOOT_DOWNGRADE_ARMED || request_result == USB_BOOT_DOWNGRADE_CONFIRMED)
         {
