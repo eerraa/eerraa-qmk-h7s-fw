@@ -50,7 +50,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
   - 실패 경로는 경고 로그 출력 후 큐 리셋.
     - `usbProcess()`는 큐 포인터와 Stage를 로컬에 캐시해 분기 내 구조체 접근을 최소화한다. *(V251007R1)*
     - `usbProcess()`는 `stage == IDLE`일 때 즉시 반환.
-    - `missed_frames` 캐시는 다운그레이드 ARM 등록 시 최소 1로 정규화되어 로그 출력이 재계산 없이 캐시 값을 사용한다. *(V251007R1)*
+    - `missed_frames` 캐시는 다운그레이드 ARM 등록 시 ISR에서 최소 1로 정규화되어 로그 출력이 재계산 없이 캐시 값을 사용한다. *(V251007R3)*
     - 기대 간격·누락 프레임 캐시는 16비트로 저장되며, ISR이 포화한 값을 그대로 받아 추가 연산 없이 유지한다. *(V251005R9, V251007R1)*
 
 ---
@@ -72,7 +72,7 @@ USBD_HID_SOF_ISR
   └─ usbHidMonitorSof(now_us)
         ├─ usbHidUpdateWakeUp()
         ├─ usbHidSofMonitorApplySpeedParams(dev_speed?)
-        └─ usbRequestBootModeDowngrade(..., missed_frames_report, ...)  // 다운그레이드 시 16비트 포화·최소 1 값으로 큐 전달 *(V251006R2, V251007R1)*
+        └─ usbRequestBootModeDowngrade(..., missed_frames_report, ...)  // 다운그레이드 시 16비트 포화·최소 1 값으로 큐 전달 *(V251006R2, V251007R3)*
 
 main loop (ap.c)
   └─ usbProcess()
@@ -163,7 +163,7 @@ usbHidMonitorSof(now):
 
     if (trigger_downgrade)
       missed_frames_report = clamp16(missed_frames)              // V251006R2 다운그레이드 발생 시에만 16비트 포화 수행
-      if (missed_frames_report == 0) missed_frames_report = 1    // V251007R1 큐 전송 전 최소 1프레임 보장
+      if (missed_frames_report == 0) missed_frames_report = 1    // V251007R3 큐 전송 전 ISR에서 최소 1프레임 보장
       usbRequestBootModeDowngrade(next_mode, delta_us, expected_us, missed_frames_report)
 ```
 
