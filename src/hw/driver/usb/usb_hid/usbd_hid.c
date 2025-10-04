@@ -590,6 +590,9 @@ static void usbHidSofMonitorPrime(uint32_t now_us,
                                   uint32_t warmup_delta_us,
                                   uint8_t speed_code)
 {
+  bool reuse_speed_cache = (speed_code == sof_monitor.active_speed) &&
+                           (sof_monitor.expected_us != 0U);        // V251005R8 동일 속도 Prime 시 파라미터 재적용 회피
+
   // V251002R3 속도 변경 홀드오프 경로까지 단일 초기화 루틴으로 통합
   sof_monitor.prev_tick_us       = now_us;                        // V251001R6 SOF 타임스탬프 초기화 일원화
   sof_monitor.score              = 0U;
@@ -600,7 +603,10 @@ static void usbHidSofMonitorPrime(uint32_t now_us,
   sof_monitor.warmup_complete    = false;
   sof_monitor.suspended_active   = false;                         // V251003R4 서스펜드 상태는 호출자 분기로 관리
   // V251005R6 속도 파라미터는 적용 함수에서 직접 갱신하도록 중복 초기화를 제거
-  usbHidSofMonitorApplySpeedParams(speed_code);
+  if (!reuse_speed_cache)
+  {
+    usbHidSofMonitorApplySpeedParams(speed_code);                // V251005R8 캐시 미사용 시에만 속도 파라미터 복사
+  }
 }
 
 static inline void usbHidSofMonitorSyncTick(uint32_t now_us)        // V251003R2 SOF 타임스탬프 인라인 갱신으로 호출 오버헤드 제거
@@ -1531,24 +1537,13 @@ static void usbHidMonitorSof(uint32_t now_us)
   last_decay_us = now_us;                                         // V251003R6 감쇠 기준 타임스탬프 즉시 갱신
 
   uint8_t degrade_threshold = mon->degrade_threshold;              // V251003R7 임계 파라미터 접근 지연으로 ISR 경량화
-  bool     downgrade_trigger = false;                              // V251005R5 8비트 예산 비교 기반 다운그레이드 판정
+  uint8_t next_score        = (uint8_t)(score + penalty);          // V251005R8 누락 패널티 누적을 단일 산술로 계산
+  bool    downgrade_trigger = (score >= degrade_threshold) ||
+                              (next_score >= degrade_threshold);   // V251005R8 점수/패널티 단일 비교 기반 다운그레이드 판정
 
-  if (score >= degrade_threshold)
+  if (!downgrade_trigger)
   {
-    downgrade_trigger = true;                                      // V251005R5 점수 초과 보호 경로 유지
-  }
-  else
-  {
-    uint8_t budget = (uint8_t)(degrade_threshold - score);         // V251005R5 남은 임계 예산
-
-    if (penalty >= budget)
-    {
-      downgrade_trigger = true;                                    // V251005R5 패널티가 예산을 소진하면 즉시 다운그레이드
-    }
-    else
-    {
-      score = (uint8_t)(score + penalty);                          // V251005R5 8비트 누적로직으로 점수 갱신
-    }
+    score = next_score;                                            // V251005R8 다운그레이드 미발생 시 누적 점수 갱신
   }
 
   if (downgrade_trigger)                                           // V251005R5 다운그레이드 경로 분리
@@ -1575,7 +1570,7 @@ static void usbHidMonitorSof(uint32_t now_us)
   }
   else
   {
-    // no-op: score가 8비트 누적으로 이미 갱신됨                 // V251005R5 예산 비교 경로에서는 추가 처리 불필요
+    // no-op: score가 8비트 누적으로 이미 갱신됨                 // V251005R8 단일 비교 경로에서는 추가 처리 불필요
   }
 
   if (score != score_orig)
