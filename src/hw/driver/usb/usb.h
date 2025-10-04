@@ -84,7 +84,8 @@ bool         usbBootModeSaveAndReset(UsbBootMode_t mode);
 usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
                                                         uint32_t      measured_delta_us,
                                                         uint32_t      expected_us,
-                                                        uint32_t      now_ms); // V250924R2 USB 다운그레이드 요청 인터페이스
+                                                        uint32_t      missed_frames,
+                                                        uint32_t      now_ms); // V251004R2 USB 다운그레이드 요청 인터페이스
 void         usbProcess(void);                         // V250924R2 USB 안정성 모니터 서비스 루프
 
 bool usbInit(void);

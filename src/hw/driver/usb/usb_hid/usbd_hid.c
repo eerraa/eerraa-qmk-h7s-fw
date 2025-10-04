@@ -1512,7 +1512,7 @@ static void usbHidMonitorSof(uint32_t now_us)
     return;
   }
 
-  uint32_t missed_frames = (delta_us + expected_us - 1U) / expected_us;
+  uint32_t missed_frames = ((delta_us - expected_us) / expected_us) + 1U; // V251004R2 기대 간격 차감 기반 누락 프레임 계산
   uint32_t penalty       = missed_frames - 1U;                     // V251003R6 안정 임계(≥2프레임) 가정으로 분기 제거
 
   if (penalty > USB_SOF_MONITOR_SCORE_CAP)
@@ -1537,7 +1537,8 @@ static void usbHidMonitorSof(uint32_t now_us)
       usb_boot_downgrade_result_t request_result = usbRequestBootModeDowngrade(next_mode,
                                                                                delta_us,
                                                                                expected_us,
-                                                                               now_ms);
+                                                                               missed_frames,
+                                                                               now_ms);   // V251004R2 누락 프레임 전달
 
       if (request_result == USB_BOOT_DOWNGRADE_ARMED || request_result == USB_BOOT_DOWNGRADE_CONFIRMED)
       {

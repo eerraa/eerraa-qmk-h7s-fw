@@ -60,11 +60,12 @@ typedef struct
   uint32_t                      expected_us;                    // V250924R2 기대 SOF 간격(us)
   uint32_t                      ready_ms;                       // V250924R2 2차 확인 가능 시각(ms)
   uint32_t                      timeout_ms;                     // V250924R2 요청 만료 시각(ms)
+  uint32_t                      missed_frames;                  // V251004R2 로그용 누락 프레임 캐시
 } usb_boot_mode_request_t;
 
 static usb_boot_mode_request_t boot_mode_request = {0};          // V250924R2 USB 안정성 이벤트 큐
 
-static uint32_t usbBootModeRequestMissedFrames(void);            // V251001R5 다운그레이드 트리거 프레임 산출
+static uint32_t usbBootModeRequestMissedFrames(void);            // V251004R2 다운그레이드 트리거 프레임 산출
 
 static void usbBootModeRequestReset(void)
 {
@@ -75,10 +76,16 @@ static void usbBootModeRequestReset(void)
   boot_mode_request.expected_us = 0U;
   boot_mode_request.ready_ms   = 0U;
   boot_mode_request.timeout_ms = 0U;
+  boot_mode_request.missed_frames = 0U;                          // V251004R2 누락 프레임 캐시 초기화
 }
 
-static uint32_t usbBootModeRequestMissedFrames(void)             // V251001R5 로그용 누락 프레임 계산기
+static uint32_t usbBootModeRequestMissedFrames(void)             // V251004R2 로그용 누락 프레임 계산기(캐시 우선)
 {
+  if (boot_mode_request.missed_frames > 0U)                      // V251004R2 ISR에서 계산한 값 우선 사용
+  {
+    return boot_mode_request.missed_frames;
+  }
+
   if (boot_mode_request.expected_us == 0U)
   {
     return 0U;
@@ -86,8 +93,12 @@ static uint32_t usbBootModeRequestMissedFrames(void)             // V251001R5 �
 
   uint32_t expected_us = boot_mode_request.expected_us;
   uint32_t delta_us    = boot_mode_request.delta_us;
+  if (delta_us <= expected_us)                                     // V251004R2 비정상 경로 보정
+  {
+    return 1U;
+  }
 
-  return (delta_us + expected_us - 1U) / expected_us;
+  return ((delta_us - expected_us) / expected_us) + 1U;            // V251004R2 차감 기반 누락 프레임 재계산
 }
 
 #if HW_USB_CMP == 1
@@ -192,7 +203,8 @@ bool usbBootModeSaveAndReset(UsbBootMode_t mode)
 usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
                                                         uint32_t      measured_delta_us,
                                                         uint32_t      expected_us,
-                                                        uint32_t      now_ms)  // V250924R2 비동기 USB 폴링 모드 다운그레이드 요청
+                                                        uint32_t      missed_frames,
+                                                        uint32_t      now_ms)  // V251004R2 누락 프레임 전달을 포함한 다운그레이드 요청
 {
   if (mode >= USB_BOOT_MODE_MAX)
   {
@@ -206,6 +218,7 @@ usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
     boot_mode_request.next_mode  = mode;
     boot_mode_request.delta_us   = measured_delta_us;
     boot_mode_request.expected_us = expected_us;
+    boot_mode_request.missed_frames = missed_frames;              // V251004R2 ISR에서 전달한 누락 프레임 기록
     boot_mode_request.ready_ms   = now_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS;
     boot_mode_request.timeout_ms = boot_mode_request.ready_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS;
     return USB_BOOT_DOWNGRADE_ARMED;
@@ -216,6 +229,7 @@ usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
     boot_mode_request.next_mode   = mode;
     boot_mode_request.delta_us    = measured_delta_us;
     boot_mode_request.expected_us = expected_us;
+    boot_mode_request.missed_frames = missed_frames;              // V251004R2 누락 프레임 갱신
 
     if ((int32_t)(now_ms - (int32_t)boot_mode_request.ready_ms) >= 0)
     {
