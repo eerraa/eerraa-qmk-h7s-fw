@@ -23,7 +23,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
   2. 워밍업 조건 달성(HS 2048·FS 128 프레임) → 감시 활성화.
   - 워밍업 마감 비교는 `warmup_deadline` 로컬 캐시를 사용해 ISR 메모리 접근을 줄인다. *(V251005R1)*
 - 워밍업 카운터는 값이 변할 때만 구조체에 기록해 동일 값 반복 쓰기를 피한다. *(V251005R2)*
-- 워밍업 카운터가 증가한 프레임에서는 데드라인 비교를 생략해 정상 누적 구간의 분기를 줄였다. *(V251007R6)*
+- 워밍업 카운터가 증가한 프레임에서는 목표 달성 여부만 확인하고, 미달이면 즉시 반환해 데드라인 비교를 건너뛴다. *(V251008R1)*
 - Prime 경량화 이후 속도 파라미터는 `usbHidSofMonitorApplySpeedParams()`에서 직접 채워져, 상태 전환 시 불필요한 0 초기화가 사라졌다. *(V251005R6)*
 - 유효 속도에서는 `usbHidSofMonitorApplySpeedParams()`가 곧바로 테이블 값을 복사해, 중복 0 초기화를 제거했다. *(V251007R2)*
 - 기대 간격·안정 임계·감쇠 주기는 16비트로 저장되어 ISR에서의 로드/스토어 폭이 줄었다. *(V251005R7)*
@@ -37,6 +37,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
   4. `score >= degrade_threshold` → 다운그레이드 큐에 요청하며 누락 프레임 수를 함께 캐시.
 - `pdev->dev_speed`는 SOF ISR 진입 시 한 번만 로드해 상태 전환 Prime과 서스펜드/복귀 및 속도 검사 분기에서 재사용한다. *(V251006R2, V251006R3)*
 - 구성/서스펜드 상태에서만 `pdev->dev_speed`를 읽어 기본/주소 상태에서는 MMIO 접근을 피한다. *(V251006R6)*
+- 캐시된 `active_speed`와 HS/FS 여부(`speed_valid`)는 지역 변수로 재사용해 서스펜드·속도 검사 분기의 비교 횟수를 줄인다. *(V251008R1)*
 - 워밍업 완료 플래그는 로컬 변수로 캐시되어 감쇠 경로와 점수 갱신 시 구조체 재접근을 줄인다. *(V251006R6)*
 - 서스펜드 분기는 일반 비구성 처리보다 먼저 실행되어 동기화 호출을 생략하며, 최초 진입 시 속도 파라미터만 재적용한다. *(V251006R7)*
   - 속도 파라미터 적용은 기본값을 0으로 초기화한 뒤 HS/FS 열거형 값을 직접 인덱스로 사용해 분기 수를 줄인다. *(V251006R3)*
@@ -107,9 +108,11 @@ usb suspend/resume/reset
 usbHidMonitorSof(now):
   if (usbHidUpdateWakeUp()) return
 
-  dev_state = pdev->dev_state
-  dev_speed = (dev_state in {CONFIGURED, SUSPENDED}) ?      // V251006R6 구성/서스펜드 상태에서만 속도 값을 읽어 불필요한 MMIO 제거
-              pdev->dev_speed : 0
+  dev_state    = pdev->dev_state
+  dev_speed    = (dev_state in {CONFIGURED, SUSPENDED}) ?      // V251006R6 구성/서스펜드 상태에서만 속도 값을 읽어 불필요한 MMIO 제거
+                   pdev->dev_speed : 0
+  active_speed = monitor.active_speed                          // V251008R1 구조체 속도 캐시를 지역으로 재사용
+  speed_valid  = (dev_speed in {HS, FS})                        // V251008R1 HS/FS 여부를 단일 비교로 유지
 
   if (dev_state != prev_state):
     holdoff, warmup = resolve_transition_params(dev_state)
@@ -118,9 +121,8 @@ usbHidMonitorSof(now):
     return
 
   if (dev_state == SUSPENDED):
-    if (!monitor.suspended_active):
-      if (dev_speed in {HS, FS} and (monitor.active_speed != dev_speed or monitor.expected_us == 0)): // V251006R7 서스펜드 최초 진입 시 파라미터만 재적용
-        usbHidSofMonitorApplySpeedParams(dev_speed)
+    if (!monitor.suspended_active and speed_valid and (active_speed != dev_speed or monitor.expected_us == 0)): // V251006R7 최초 진입 시 파라미터만 재적용
+      usbHidSofMonitorApplySpeedParams(dev_speed)
       monitor.suspended_active = true
     return
 
@@ -132,11 +134,11 @@ usbHidMonitorSof(now):
     usbHidSofMonitorPrime(now, RESUME_HOLDOFF, WARMUP_TIMEOUT, dev_speed)
     return
 
-  if (dev_speed not in {HS, FS}):
+  if (!speed_valid):
     usbHidSofMonitorPrime(now, 0, 0, UNKNOWN)
     return
 
-  if (dev_speed != monitor.active_speed):
+  if (dev_speed != active_speed):
     usbHidSofMonitorPrime(now, CONFIG_HOLDOFF, WARMUP_TIMEOUT, dev_speed)
 
   if (prev_tick == 0):
@@ -154,17 +156,18 @@ usbHidMonitorSof(now):
   below_threshold = (interval < stable_threshold)
   warmup_complete = monitor.warmed_up                    // V251006R6 워밍업 상태 로컬 캐시
   if (!warmup_complete):
-    if (below_threshold):
-      warmup_good_frames = min(warmup_good_frames + 1, warmup_target)
-    elif (warmup_good_frames != 0):
+    if (below_threshold and warmup_good_frames < warmup_target):
+      warmup_good_frames += 1
+      monitor.warmup_good_frames = warmup_good_frames
+      if (warmup_good_frames < warmup_target):
+        return                                         // V251008R1 목표 미달 시 즉시 다음 프레임 대기
+    elif (!below_threshold and warmup_good_frames != 0):
       warmup_good_frames = 0
-    monitor.warmup_good_frames = warmup_good_frames (if changed)
+      monitor.warmup_good_frames = 0
 
     if (warmup_good_frames >= warmup_target):
       monitor.warmed_up = true
       monitor.last_decay_us = now                        // V251007R8 워밍업 완주 시 감쇠 기준 즉시 갱신
-    elif (just_incremented):                                      // V251007R8 증가 직후에는 추가 비교 없이 다음 프레임 대기
-      return
     elif (now >= monitor.warmup_deadline_us):
       monitor.warmed_up = true
       monitor.last_decay_us = now                        // V251007R8 워밍업 타임아웃 시점 동기화
