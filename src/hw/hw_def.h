@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251005R6"  // V251005R6: SOF Prime 중복 초기화 제거 및 누락 프레임 계산 경량화
+#define _DEF_FIRMWATRE_VERSION      "V251005R7"  // V251005R7: SOF 모니터/다운그레이드 파라미터 16비트 경량화 및 타깃 계산 단순화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

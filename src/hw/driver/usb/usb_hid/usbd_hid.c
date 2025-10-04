@@ -505,9 +505,9 @@ typedef struct
   uint32_t                        last_decay_us;              // 점수 감소 시각(us)
   uint32_t                        holdoff_end_us;             // 다운그레이드 홀드오프 종료 시각(us)
   uint32_t                        warmup_deadline_us;         // 워밍업 타임아웃 시각(us)
-  uint32_t                        expected_us;                // V251003R5 속도별 기대 간격 직접 캐시
-  uint32_t                        stable_threshold_us;        // V251003R5 안정 범위 상한 직접 캐시
-  uint32_t                        decay_interval_us;          // V251003R5 점수 감쇠 주기 직접 캐시
+  uint16_t                        expected_us;                // V251005R7 16비트 캐시로 ISR 메모리 접근 축소
+  uint16_t                        stable_threshold_us;        // V251005R7 16비트 안정 범위 캐시로 로드 폭 축소
+  uint16_t                        decay_interval_us;          // V251005R7 16비트 감쇠 주기로 구조체 크기 경량화
   uint16_t                        warmup_target_frames;       // V251003R5 워밍업 목표 프레임 직접 캐시
   uint16_t                        warmup_good_frames;         // V250924R3 누적 정상 프레임 수
   uint8_t                         active_speed;               // V250924R4 캐시된 USB 속도 코드
@@ -520,9 +520,9 @@ typedef struct
 struct usb_sof_monitor_params_s
 {
   uint8_t  speed_code;                                            // V251002R1 속도별 SOF 파라미터 키
-  uint32_t expected_us;                                           // V251002R1 기대 SOF 간격(us)
-  uint32_t stable_threshold_us;                                   // V251002R1 정상 범위 상한(us)
-  uint32_t decay_interval_us;                                     // V251002R1 점수 감쇠 주기(us)
+  uint16_t expected_us;                                           // V251005R7 16비트 기대 간격으로 테이블 플래시 절감
+  uint16_t stable_threshold_us;                                   // V251005R7 16비트 정상 범위 상한으로 접근 폭 축소
+  uint16_t decay_interval_us;                                     // V251005R7 16비트 감쇠 주기 저장으로 경량화
   uint8_t  degrade_threshold;                                     // V251002R1 다운그레이드 임계 점수
   uint16_t warmup_target_frames;                                  // V251002R1 워밍업에 필요한 정상 프레임 수
 };
@@ -568,15 +568,15 @@ static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 �
 
   if (params != NULL)
   {
-    sof_monitor.expected_us          = params->expected_us;         // V251003R5 속도 파라미터 직접 복사로 런타임 접근 최소화
-    sof_monitor.stable_threshold_us  = params->stable_threshold_us; // V251003R5 속도 파라미터 직접 복사로 런타임 접근 최소화
-    sof_monitor.decay_interval_us    = params->decay_interval_us;   // V251003R5 속도 파라미터 직접 복사로 런타임 접근 최소화
+    sof_monitor.expected_us          = params->expected_us;         // V251005R7 16비트 파라미터 직접 복사로 ISR 폭 축소 유지
+    sof_monitor.stable_threshold_us  = params->stable_threshold_us; // V251005R7 16비트 파라미터 직접 복사로 메모리 접근 경량화
+    sof_monitor.decay_interval_us    = params->decay_interval_us;   // V251005R7 16비트 감쇠 주기 복사로 구조체 축소
     sof_monitor.degrade_threshold    = params->degrade_threshold;   // V251003R5 속도 파라미터 직접 복사로 런타임 접근 최소화
     sof_monitor.warmup_target_frames = params->warmup_target_frames;// V251003R5 속도 파라미터 직접 복사로 런타임 접근 최소화
   }
   else
   {
-    sof_monitor.expected_us          = 0U;                          // V251003R5 비구성/알 수 없는 속도 초기화
+    sof_monitor.expected_us          = 0U;                          // V251005R7 비구성 속도에서 16비트 캐시 초기화
     sof_monitor.stable_threshold_us  = 0U;
     sof_monitor.decay_interval_us    = 0U;
     sof_monitor.degrade_threshold    = 0U;
@@ -1337,21 +1337,16 @@ void usbHidMeasurePollRate(void)
   cnt++;
 }
 
-static UsbBootMode_t usbHidResolveDowngradeTarget(void)            // V250924R2 현재 모드 대비 하위 폴링 모드 계산
+static UsbBootMode_t usbHidResolveDowngradeTarget(void)            // V251005R7 Enum 순차 계산으로 분기 축소
 {
   UsbBootMode_t cur_mode = usbBootModeGet();
 
-  switch (cur_mode)
+  if (cur_mode < USB_BOOT_MODE_FS_1K)
   {
-    case USB_BOOT_MODE_HS_8K:
-      return USB_BOOT_MODE_HS_4K;
-    case USB_BOOT_MODE_HS_4K:
-      return USB_BOOT_MODE_HS_2K;
-    case USB_BOOT_MODE_HS_2K:
-      return USB_BOOT_MODE_FS_1K;
-    default:
-      return USB_BOOT_MODE_MAX;
+    return (UsbBootMode_t)(cur_mode + 1);                        // V251005R7 연속 Enum을 이용한 하위 모드 산출
   }
+
+  return USB_BOOT_MODE_MAX;
 }
 
 static void usbHidMonitorSof(uint32_t now_us)
