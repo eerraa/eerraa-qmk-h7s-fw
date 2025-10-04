@@ -79,26 +79,32 @@ static void usbBootModeRequestReset(void)
   boot_mode_request.missed_frames = 0U;                          // V251004R2 누락 프레임 캐시 초기화
 }
 
-static uint32_t usbBootModeRequestMissedFrames(void)             // V251004R2 로그용 누락 프레임 계산기(캐시 우선)
+static uint32_t usbBootModeRequestMissedFrames(void)             // V251005R3 로그용 누락 프레임 캐시 보강 계산기
 {
-  if (boot_mode_request.missed_frames > 0U)                      // V251004R2 ISR에서 계산한 값 우선 사용
+  uint32_t cached = boot_mode_request.missed_frames;              // V251005R3 ISR에서 전달된 누락 프레임 우선 사용
+
+  if (cached > 0U)
   {
-    return boot_mode_request.missed_frames;
+    return cached;
   }
 
-  if (boot_mode_request.expected_us == 0U)
+  uint32_t expected_us = boot_mode_request.expected_us;
+
+  if (expected_us == 0U)
   {
     return 0U;
   }
 
-  uint32_t expected_us = boot_mode_request.expected_us;
-  uint32_t delta_us    = boot_mode_request.delta_us;
-  if (delta_us <= expected_us)                                     // V251004R2 비정상 경로 보정
+  uint32_t frames = boot_mode_request.delta_us / expected_us;     // V251005R3 임계 구간 몫 계산으로 누락 프레임 복원
+
+  if (frames == 0U)
   {
-    return 1U;
+    frames = 1U;                                                  // V251005R3 예외 경로 최소 1프레임 보장
   }
 
-  return ((delta_us - expected_us) / expected_us) + 1U;            // V251004R2 차감 기반 누락 프레임 재계산
+  boot_mode_request.missed_frames = frames;                       // V251005R3 재계산 값을 캐시에 저장
+
+  return frames;
 }
 
 #if HW_USB_CMP == 1
