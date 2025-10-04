@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251005R3"  // V251005R3: SOF 누락 프레임 계산/캐시 경량화
+#define _DEF_FIRMWATRE_VERSION      "V251005R4"  // V251005R4: SOF 누락 가중치 확장 및 점수 기준 재검토
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
