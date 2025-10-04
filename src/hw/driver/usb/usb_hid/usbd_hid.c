@@ -1365,6 +1365,8 @@ static void usbHidMonitorSof(uint32_t now_us)
   usb_sof_monitor_t  *mon  = &sof_monitor;                         // V251003R3 SOF 모니터 지역 캐시로 분기 경량화 유지
   uint8_t             dev_state;
   uint8_t             dev_speed;                                   // V251006R3 SOF ISR 초기에 속도를 단일 로드해 전 구간 공유
+  uint8_t             active_speed;                                // V251008R1 구조체 속도 캐시를 지역 변수로 재사용해 로드 최소화
+  bool                speed_valid;                                 // V251008R1 HS/FS 여부를 단일 비교로 캐시해 분기당 재계산 제거
 
   dev_state = pdev->dev_state;
   dev_speed = 0U;                                                  // V251006R6 구성 전 단계에서는 속도 로드를 건너뛰어 MMIO 접근 축소
@@ -1373,6 +1375,10 @@ static void usbHidMonitorSof(uint32_t now_us)
   {
     dev_speed = pdev->dev_speed;                                   // V251006R6 구성/서스펜드 상태에서만 속도 값을 읽어 필요 시에만 접근
   }
+
+  active_speed = mon->active_speed;                                // V251008R1 Prime 여부와 무관하게 캐시된 속도를 지역에 보관
+  speed_valid  = (dev_speed == USBD_SPEED_HIGH) ||
+                 (dev_speed == USBD_SPEED_FULL);                   // V251008R1 HS/FS 분기를 단일 비교로 재사용
 
   if (dev_state != sof_prev_dev_state)
   {
@@ -1389,12 +1395,9 @@ static void usbHidMonitorSof(uint32_t now_us)
   {
     if (mon->suspended_active == false)
     {
-      if (dev_speed == USBD_SPEED_HIGH || dev_speed == USBD_SPEED_FULL)
+      if (speed_valid && ((active_speed != dev_speed) || (mon->expected_us == 0U)))
       {
-        if ((mon->active_speed != dev_speed) || (mon->expected_us == 0U))
-        {
-          usbHidSofMonitorApplySpeedParams(dev_speed);             // V251006R7 서스펜드 최초 진입 시 속도 파라미터만 갱신
-        }
+        usbHidSofMonitorApplySpeedParams(dev_speed);               // V251006R7 서스펜드 최초 진입 시 속도 파라미터만 갱신
       }
       mon->suspended_active = true;                                // V251006R7 서스펜드 상태 플래그 세트로 반복 초기화 회피
     }
@@ -1416,13 +1419,13 @@ static void usbHidMonitorSof(uint32_t now_us)
     return;
   }
 
-  if (dev_speed != USBD_SPEED_HIGH && dev_speed != USBD_SPEED_FULL)
+  if (!speed_valid)
   {
     usbHidSofMonitorPrime(now_us, 0U, 0U, 0xFFU);                 // V251001R6 지원 속도 외 상황 초기화
     return;
   }
 
-  if (dev_speed != mon->active_speed)
+  if (dev_speed != active_speed)
   {
     usbHidSofMonitorPrime(now_us,
                           USB_SOF_MONITOR_CONFIG_HOLDOFF_US,
@@ -1461,28 +1464,26 @@ static void usbHidMonitorSof(uint32_t now_us)
 
   if (warmup_complete == false)
   {
-    uint16_t warmup_target        = mon->warmup_target_frames;          // V251003R5 구조체 직접 캐시 활용
-    uint16_t warmup_good_frames   = mon->warmup_good_frames;            // V251003R8 워밍업 프레임 로컬 캐시로 접근 감소
-    uint16_t warmup_good_original = warmup_good_frames;                 // V251005R2 구조체 갱신 최소화를 위한 원본 값 캐시
+    uint16_t warmup_target      = mon->warmup_target_frames;          // V251003R5 구조체 직접 캐시 활용
+    uint16_t warmup_good_frames = mon->warmup_good_frames;            // V251003R8 워밍업 프레임 로컬 캐시로 접근 감소
 
     if (delta_below_threshold)
     {
       if (warmup_good_frames < warmup_target)
       {
-        warmup_good_frames++;
+        warmup_good_frames++;                                        // V251008R1 정상 프레임 누적 시 즉시 증가 후 결과 분기
+        mon->warmup_good_frames = warmup_good_frames;                 // V251008R1 값이 변한 경우에만 구조체를 갱신
+
+        if (warmup_good_frames < warmup_target)
+        {
+          return;                                                    // V251008R1 목표 미달 구간은 즉시 반환해 데드라인 비교 생략
+        }
       }
     }
-    else if (warmup_good_frames != 0U)                                  // V251005R2 동일 값 유지 시 불필요한 초기화 회피
+    else if (warmup_good_frames != 0U)                                // V251008R1 불안정 프레임에서만 누적 카운터 리셋
     {
       warmup_good_frames = 0U;
-    }
-
-    bool warmup_changed     = (warmup_good_frames != warmup_good_original);
-    bool warmup_incremented = warmup_changed && (warmup_good_frames > warmup_good_original); // V251007R6 정상 프레임 누적 시점을 구분해 데드라인 비교 최소화
-
-    if (warmup_changed)
-    {
-      mon->warmup_good_frames = warmup_good_frames;                    // V251005R2 값 변경 시에만 구조체 쓰기
+      mon->warmup_good_frames = 0U;
     }
 
     if (warmup_good_frames >= warmup_target)
@@ -1491,15 +1492,11 @@ static void usbHidMonitorSof(uint32_t now_us)
       warmup_complete      = true;                                    // V251006R6 로컬 캐시와 구조체 상태를 동기화
       mon->last_decay_us   = now_us;                                   // V251007R8 워밍업 완주 시 즉시 감쇠 기준 갱신
     }
-    else if (warmup_incremented)
-    {
-      return;                                                          // V251007R6 정상 프레임 누적 직후에는 데드라인 비교를 건너뛰어 분기 최소화
-    }
     else
     {
-      uint32_t warmup_deadline = mon->warmup_deadline_us;              // V251005R2 타임아웃 접근을 필요한 경우로 지연
+      uint32_t warmup_deadline = mon->warmup_deadline_us;            // V251005R2 타임아웃 접근을 필요한 경우로 지연
 
-      if (usbHidTimeIsAfterOrEqual(now_us, warmup_deadline))           // V251001R7 래핑 대응 워밍업 마감 비교
+      if (usbHidTimeIsAfterOrEqual(now_us, warmup_deadline))         // V251001R7 래핑 대응 워밍업 마감 비교
       {
         mon->warmup_complete = true;
         warmup_complete      = true;                                  // V251006R6 로컬 캐시와 구조체 상태를 동기화

@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251007R9"  // V251007R9: Prime 델타 0 처리 및 SOF 패널티/샘플 윈도우 경량화
+#define _DEF_FIRMWATRE_VERSION      "V251008R1"  // V251008R1: SOF 속도 캐시 재사용 및 워밍업 분기 단순화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
