@@ -197,12 +197,10 @@ bool usbBootModeSaveAndReset(UsbBootMode_t mode)
 usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
                                                         uint32_t      measured_delta_us,
                                                         uint16_t      expected_us,
-                                                        uint16_t      missed_frames)  // V251007R5 Stage별 필요 시에만 타임스탬프를 획득하도록 인터페이스 정리
+                                                        uint16_t      missed_frames)  // V251007R7 Stage 분기 스위치로 millis() 지연 획득 플래그 제거
 {
   usb_boot_mode_request_t *request = &boot_mode_request;                   // V251007R4 다운그레이드 큐 포인터 로컬 캐시로 구조체 접근 경량화
   usb_boot_mode_request_stage_t stage;                                     // V251007R4 Stage 로컬 캐시로 분기 비교 최소화
-  uint32_t                   now_ms = 0U;                                  // V251007R5 타임스탬프는 실제 사용 시에만 획득
-  bool                       now_ms_valid = false;                         // V251007R5 millis() 호출을 단 한 번만 수행하도록 캐시 플래그
 
   if (mode >= USB_BOOT_MODE_MAX)
   {
@@ -218,50 +216,49 @@ usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
 
   // V251007R3 ISR에서 최소 프레임 정규화를 수행하므로 추가 보정 분기를 제거
 
-  if (stage == USB_BOOT_MODE_REQ_STAGE_IDLE)
+  switch (stage)
   {
-    if (now_ms_valid == false)
+    case USB_BOOT_MODE_REQ_STAGE_IDLE:
     {
-      now_ms        = millis();                                            // V251007R5 ARM 진입 직전에 타임스탬프를 지연 획득
-      now_ms_valid  = true;
-    }
-    uint32_t confirm_delay_ms = USB_BOOT_MONITOR_CONFIRM_DELAY_MS;         // V251007R5 확인 지연 상수를 로컬에 캐시해 덧셈 경로 단축
-    uint32_t ready_ms         = now_ms + confirm_delay_ms;                 // V251007R5 구조체 쓰기 전에 로컬 값으로 확인 시각 계산
+      uint32_t confirm_delay_ms = USB_BOOT_MONITOR_CONFIRM_DELAY_MS;       // V251007R7 확인 지연 상수를 로컬에 캐시
+      uint32_t now_ms           = millis();                                // V251007R7 Stage별 분기에서만 타임스탬프를 지연 획득
+      uint32_t ready_ms         = now_ms + confirm_delay_ms;               // V251007R7 구조체 재로드 없이 확인 시각 계산
 
-    request->stage        = USB_BOOT_MODE_REQ_STAGE_ARMED;
-    request->log_pending  = true;
-    request->next_mode    = mode;
-    request->delta_us     = measured_delta_us;
-    request->expected_us  = expected_us;                           // V251005R9 ISR에서 포화된 기대 간격을 그대로 유지
-    request->missed_frames = missed_frames;                       // V251005R9 ISR 포화 값 저장으로 중복 연산 제거
-    request->ready_ms     = ready_ms;                                      // V251007R5 구조체 재로드 없이 확인 지연 시각 기록
-    request->timeout_ms   = ready_ms + confirm_delay_ms;                   // V251007R5 로컬 값을 재사용해 타임아웃 계산 경량화
-    return USB_BOOT_DOWNGRADE_ARMED;
+      request->stage         = USB_BOOT_MODE_REQ_STAGE_ARMED;
+      request->log_pending   = true;
+      request->next_mode     = mode;
+      request->delta_us      = measured_delta_us;
+      request->expected_us   = expected_us;                     // V251005R9 ISR에서 포화된 기대 간격을 그대로 유지
+      request->missed_frames = missed_frames;                   // V251005R9 ISR 포화 값 저장으로 중복 연산 제거
+      request->ready_ms      = ready_ms;                                  // V251007R7 Stage 분기에서 계산한 확인 시각 기록
+      request->timeout_ms    = ready_ms + confirm_delay_ms;               // V251007R7 확인 지연을 재사용해 타임아웃 계산 경량화
+      return USB_BOOT_DOWNGRADE_ARMED;
+    }
+
+    case USB_BOOT_MODE_REQ_STAGE_ARMED:
+    {
+      uint32_t now_ms = millis();                                          // V251007R7 Stage별로 필요한 시점에서만 millis() 호출
+
+      request->next_mode     = mode;
+      request->delta_us      = measured_delta_us;
+      request->expected_us   = expected_us;                     // V251005R9 ISR에서 포화된 기대 간격을 그대로 유지
+      request->missed_frames = missed_frames;                   // V251005R9 ISR 포화 값 저장으로 중복 연산 제거
+
+      if ((int32_t)(now_ms - (int32_t)request->ready_ms) >= 0)
+      {
+        request->stage       = USB_BOOT_MODE_REQ_STAGE_COMMIT;
+        request->log_pending = true;
+        return USB_BOOT_DOWNGRADE_CONFIRMED;
+      }
+
+      return USB_BOOT_DOWNGRADE_ARMED;
+    }
+
+    default:
+    {
+      return USB_BOOT_DOWNGRADE_REJECTED;
+    }
   }
-
-  if (stage == USB_BOOT_MODE_REQ_STAGE_ARMED)
-  {
-    if (now_ms_valid == false)
-    {
-      now_ms        = millis();                                            // V251007R5 ARMED 단계에서도 최초 한 번만 millis() 호출
-      now_ms_valid  = true;
-    }
-    request->next_mode     = mode;
-    request->delta_us      = measured_delta_us;
-    request->expected_us   = expected_us;                       // V251005R9 ISR에서 포화된 기대 간격을 그대로 유지
-    request->missed_frames = missed_frames;                     // V251005R9 ISR 포화 값 저장으로 중복 연산 제거
-
-    if ((int32_t)(now_ms - (int32_t)request->ready_ms) >= 0)
-    {
-      request->stage       = USB_BOOT_MODE_REQ_STAGE_COMMIT;
-      request->log_pending = true;
-      return USB_BOOT_DOWNGRADE_CONFIRMED;
-    }
-
-    return USB_BOOT_DOWNGRADE_ARMED;
-  }
-
-  return USB_BOOT_DOWNGRADE_REJECTED;
 }
 
 void usbProcess(void)                                                                  // V250924R3 USB 안정성 이벤트 처리 루프
@@ -278,13 +275,10 @@ void usbProcess(void)                                                           
   {
     if (request->log_pending == true)
     {
-      uint32_t missed_frames = (uint32_t)request->missed_frames;                       // V251007R1 누락 프레임 캐시 직접 사용
-      // V251007R3 최소값은 ISR에서 보장되어 재보정 분기 제거
-
       logPrintf("[NG] USB poll instability detected: expected %lu us, measured %lu us (~%lu frames, awaiting confirmation)\n",
                 request->expected_us,
                 request->delta_us,
-                missed_frames);
+                (unsigned long)request->missed_frames);                                // V251007R7 누락 프레임 캐시를 직접 캐스팅해 로그 경로 로드 축소
       logPrintf("[NG] USB poll downgrade pending -> %s\n", usbBootModeLabel(request->next_mode)); // V251001R5 영문화
       request->log_pending = false;
     }
@@ -302,13 +296,10 @@ void usbProcess(void)                                                           
   {
     if (request->log_pending == true)
     {
-      uint32_t missed_frames = (uint32_t)request->missed_frames;                       // V251007R1 누락 프레임 캐시 직접 사용
-      // V251007R3 최소값은 ISR에서 보장되어 재보정 분기 제거
-
       logPrintf("[NG] USB poll instability confirmed: expected %lu us, measured %lu us (~%lu frames)\n",
                 request->expected_us,
                 request->delta_us,
-                missed_frames);
+                (unsigned long)request->missed_frames);                                // V251007R7 누락 프레임 캐시를 직접 캐스팅해 로그 경로 로드 축소
       logPrintf("[NG] USB poll downgrade -> %s\n", usbBootModeLabel(request->next_mode)); // V251001R5 영문화
       request->log_pending = false;
     }
