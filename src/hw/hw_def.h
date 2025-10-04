@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251005R2"  // V251005R2: SOF 비교 인라인화 및 워밍업 카운터 갱신 최적화
+#define _DEF_FIRMWATRE_VERSION      "V251005R3"  // V251005R3: SOF 누락 프레임 계산/캐시 경량화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

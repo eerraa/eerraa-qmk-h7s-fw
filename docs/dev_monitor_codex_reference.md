@@ -34,6 +34,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
   - 실패 경로는 경고 로그 출력 후 큐 리셋.
   - `usbProcess()`는 Stage 값을 로컬에 캐시하고, `ARMED` 단계에서만 `millis()`를 호출해 메인 루프 오버헤드를 줄인다. *(V251005R1)*
   - `usbProcess()`는 `stage == IDLE`일 때 즉시 반환.
+  - `missed_frames` 캐시는 ISR에서 전달된 값을 유지하며, 로그 경로도 동일한 값을 재사용한다. *(V251005R3)*
 
 ---
 
@@ -89,9 +90,9 @@ usbHidMonitorSof(now):
     if (warmup_good_frames >= warmup_target) monitor.warmed_up = true
     return
 
-  delta_frames = clamp((interval - expected_us) / expected_us, 0, 4)
-  score = min(score + delta_frames, SCORE_CAP)
-  missed_frames = delta_frames + 1
+  missed_frames = interval / expected_us
+  penalty = clamp(missed_frames - 1, 0, SCORE_CAP)
+  score = min(score + penalty, SCORE_CAP)
 
   if (now - last_decay >= decay_interval)
     score = max(score - 1, 0)
