@@ -95,7 +95,8 @@ static uint32_t usbBootModeRequestMissedFrames(void)             // V251005R3 �
     return 0U;
   }
 
-  uint32_t frames = boot_mode_request.delta_us / expected_us;     // V251005R3 임계 구간 몫 계산으로 누락 프레임 복원
+  uint32_t frames = usbCalcMissedFrames(expected_us,
+                                        boot_mode_request.delta_us); // V251005R6 속도별 상수 나눗셈으로 누락 프레임 복원
 
   if (frames == 0U)
   {

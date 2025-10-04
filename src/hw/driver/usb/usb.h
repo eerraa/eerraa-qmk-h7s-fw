@@ -88,6 +88,24 @@ usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
                                                         uint32_t      now_ms); // V251004R2 USB 다운그레이드 요청 인터페이스
 void         usbProcess(void);                         // V250924R2 USB 안정성 모니터 서비스 루프
 
+static inline uint32_t usbCalcMissedFrames(uint32_t expected_us,
+                                           uint32_t delta_us)        // V251005R6 속도별 상수 나눗셈 분기로 누락 프레임 산출 경량화
+{
+  switch (expected_us)
+  {
+    case 125U:
+      return delta_us / 125U;
+    case 250U:
+      return delta_us / 250U;
+    case 500U:
+      return delta_us / 500U;
+    case 1000U:
+      return delta_us / 1000U;
+    default:
+      return (expected_us > 0U) ? (delta_us / expected_us) : 0U;
+  }
+}
+
 bool usbInit(void);
 bool usbBegin(UsbMode_t usb_mode);
 void usbDeInit(void);

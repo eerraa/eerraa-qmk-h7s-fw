@@ -580,7 +580,7 @@ static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 �
     sof_monitor.stable_threshold_us  = 0U;
     sof_monitor.decay_interval_us    = 0U;
     sof_monitor.degrade_threshold    = 0U;
-    sof_monitor.warmup_target_frames = 0U;
+    sof_monitor.warmup_target_frames = 0U;                          // V251005R6 Prime 경량화 이후에도 안전하게 초기화 유지
   }
 }
 
@@ -598,12 +598,8 @@ static void usbHidSofMonitorPrime(uint32_t now_us,
   sof_monitor.warmup_deadline_us = now_us + warmup_delta_us;
   sof_monitor.warmup_good_frames = 0U;
   sof_monitor.warmup_complete    = false;
-  sof_monitor.expected_us        = 0U;                            // V251003R5 속도 파라미터는 적용 함수에서 직접 채움
-  sof_monitor.stable_threshold_us = 0U;                           // V251003R5 속도 파라미터는 적용 함수에서 직접 채움
-  sof_monitor.decay_interval_us  = 0U;                            // V251003R5 속도 파라미터는 적용 함수에서 직접 채움
-  sof_monitor.degrade_threshold  = 0U;                            // V251003R5 속도 파라미터는 적용 함수에서 직접 채움
-  sof_monitor.warmup_target_frames = 0U;                          // V251003R5 속도 파라미터는 적용 함수에서 직접 채움
   sof_monitor.suspended_active   = false;                         // V251003R4 서스펜드 상태는 호출자 분기로 관리
+  // V251005R6 속도 파라미터는 적용 함수에서 직접 갱신하도록 중복 초기화를 제거
   usbHidSofMonitorApplySpeedParams(speed_code);
 }
 
@@ -1526,7 +1522,8 @@ static void usbHidMonitorSof(uint32_t now_us)
     return;
   }
 
-  uint32_t missed_frames = delta_us / expected_us;                 // V251005R3 임계 구간에서 몫 계산만으로 누락 프레임 산출
+  uint32_t missed_frames = usbCalcMissedFrames(expected_us,
+                                               delta_us);         // V251005R6 속도별 상수 나눗셈으로 누락 프레임 산출
   uint32_t penalty_base  = (missed_frames > 0U) ? missed_frames - 1U : 0U; // V251005R5 누락 프레임 기반 패널티 초기값 산출
 
   if (penalty_base > USB_SOF_MONITOR_SCORE_CAP)
