@@ -1472,8 +1472,10 @@ static void usbHidMonitorSof(uint32_t now_us)
 
     mon->warmup_good_frames = warmup_good_frames;                        // V251003R8 로컬 누적 결과 구조체에 재반영
 
+    uint32_t warmup_deadline = mon->warmup_deadline_us;                  // V251005R1 워밍업 마감 캐시로 구조체 접근 감소
+
     if (warmup_good_frames >= warmup_target
-        || usbHidTimeIsAfterOrEqual(now_us, mon->warmup_deadline_us))    // V251001R7 래핑 대응 워밍업 마감 비교
+        || usbHidTimeIsAfterOrEqual(now_us, warmup_deadline))            // V251001R7 래핑 대응 워밍업 마감 비교
     {
       mon->warmup_complete = true;
       last_decay_us        = now_us;                               // V251003R9 감쇠 시작점 로컬 캐시 갱신
