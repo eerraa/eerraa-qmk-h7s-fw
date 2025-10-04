@@ -576,7 +576,7 @@ static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 �
 static void usbHidSofMonitorPrime(uint32_t now_us,
                                   uint32_t holdoff_delta_us,
                                   uint32_t warmup_delta_us,
-                                  uint8_t speed_code)
+                                  uint8_t speed_code)            // V251001R6 SOF 초기화 루틴 공용화
 {
   bool reuse_speed_cache = (speed_code == sof_monitor.active_speed) &&
                            (sof_monitor.expected_us != 0U);        // V251005R8 동일 속도 Prime 시 파라미터 재적용 회피
@@ -585,15 +585,35 @@ static void usbHidSofMonitorPrime(uint32_t now_us,
   sof_monitor.prev_tick_us       = now_us;                        // V251001R6 SOF 타임스탬프 초기화 일원화
   sof_monitor.score              = 0U;
   sof_monitor.last_decay_us      = now_us;
-  sof_monitor.holdoff_end_us     = now_us + holdoff_delta_us;
-  sof_monitor.warmup_deadline_us = now_us + warmup_delta_us;
   sof_monitor.warmup_good_frames = 0U;
-  sof_monitor.warmup_complete    = false;
   sof_monitor.suspended_active   = false;                         // V251003R4 서스펜드 상태는 호출자 분기로 관리
   // V251005R6 속도 파라미터는 적용 함수에서 직접 갱신하도록 중복 초기화를 제거
   if (!reuse_speed_cache)
   {
     usbHidSofMonitorApplySpeedParams(speed_code);                // V251005R8 캐시 미사용 시에만 속도 파라미터 복사
+  }
+
+  if (holdoff_delta_us > 0U)
+  {
+    sof_monitor.holdoff_end_us = now_us + holdoff_delta_us;
+  }
+  else
+  {
+    sof_monitor.holdoff_end_us = 0U;                              // V251007R9 홀드오프가 없을 때 즉시 비활성화
+  }
+
+  bool warmup_required = (warmup_delta_us > 0U) &&
+                         (sof_monitor.warmup_target_frames > 0U); // V251007R9 워밍업 타겟이 없으면 즉시 완료 처리
+
+  if (warmup_required)
+  {
+    sof_monitor.warmup_deadline_us = now_us + warmup_delta_us;
+    sof_monitor.warmup_complete    = false;
+  }
+  else
+  {
+    sof_monitor.warmup_deadline_us = 0U;
+    sof_monitor.warmup_complete    = true;                        // V251007R9 워밍업이 필요 없는 구간은 즉시 완료
   }
 }
 
@@ -1293,9 +1313,9 @@ bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length)
 
 void usbHidMeasurePollRate(void)
 {
-  static uint32_t        cnt               = 0;
+  static uint16_t        cnt               = 0;                      // V251007R9 샘플 윈도우 한계에 맞춰 16비트로 축소
   static UsbBootMode_t   rate_cached_mode  = USB_BOOT_MODE_MAX;       // V251007R6 BootMode 변경 시에만 샘플 윈도우를 재계산하도록 캐시 추가
-  static uint32_t        rate_sample_window = 8000U;                  // V251007R6 HS 기본 값으로 초기화해 첫 호출에서 즉시 재설정
+  static uint16_t        rate_sample_window = 8000U;                 // V251007R9 HS 기본값 8000프레임을 16비트로 보관
   UsbBootMode_t          active_mode        = usbBootModeGet();
 
   if (active_mode != rate_cached_mode)
@@ -1304,13 +1324,11 @@ void usbHidMeasurePollRate(void)
     rate_sample_window = (active_mode == USB_BOOT_MODE_FS_1K) ? 1000U : 8000U; // V251007R6 BootMode 변경 시에만 조건 분기를 수행
   }
 
-  uint32_t sample_window = rate_sample_window;
-
   uint32_t now_us = micros();
 
   usbHidMonitorSof(now_us);                                       // V250924R2 SOF 간격 모니터링
   rate_time_sof_pre = now_us;
-  if (cnt >= sample_window)
+  if (++cnt >= rate_sample_window)                                 // V251007R9 전위 증가 비교로 분기 1회만 수행
   {
     cnt = 0;
     data_in_rate = data_in_cnt;
@@ -1327,7 +1345,6 @@ void usbHidMeasurePollRate(void)
     rate_time_excess_max_check = 0;
     rate_queue_depth_max_check = 0;
   }
-  cnt++;
 }
 
 static UsbBootMode_t usbHidResolveDowngradeTarget(void)            // V251005R7 Enum 순차 계산으로 분기 축소
@@ -1536,7 +1553,7 @@ static void usbHidMonitorSof(uint32_t now_us)
   {
     uint32_t missed_frames = usbCalcMissedFrames((uint32_t)expected_us,
                                                  delta_us);         // V251005R6 속도별 상수 나눗셈으로 누락 프레임 산출
-    uint32_t penalty_base  = (missed_frames > 0U) ? missed_frames - 1U : 0U; // V251005R5 누락 프레임 기반 패널티 초기값 산출
+    uint32_t penalty_base  = missed_frames - 1U;                    // V251007R9 안정 임계 ≥ 2×기대 간격이어서 최소 1프레임 보장
 
     if (penalty_base > USB_SOF_MONITOR_SCORE_CAP)
     {
