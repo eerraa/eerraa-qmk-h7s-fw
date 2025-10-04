@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251006R5"  // V251006R5: SOF 서스펜드 판정 경량화 및 기대 간격 조회 함수화
+#define _DEF_FIRMWATRE_VERSION      "V251006R6"  // V251006R6: SOF ISR 속도/워밍업 캐시 최적화로 구조 접근 최소화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

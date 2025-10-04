@@ -1337,7 +1337,12 @@ static void usbHidMonitorSof(uint32_t now_us)
   uint8_t             dev_speed;                                   // V251006R3 SOF ISR 초기에 속도를 단일 로드해 전 구간 공유
 
   dev_state = pdev->dev_state;
-  dev_speed = pdev->dev_speed;                                     // V251006R3 상태 전환과 정상 감시에서 공용 사용
+  dev_speed = 0U;                                                  // V251006R6 구성 전 단계에서는 속도 로드를 건너뛰어 MMIO 접근 축소
+
+  if (dev_state == USBD_STATE_CONFIGURED || dev_state == USBD_STATE_SUSPENDED)
+  {
+    dev_speed = pdev->dev_speed;                                   // V251006R6 구성/서스펜드 상태에서만 속도 값을 읽어 필요 시에만 접근
+  }
 
   if (dev_state != sof_prev_dev_state)
   {
@@ -1411,12 +1416,13 @@ static void usbHidMonitorSof(uint32_t now_us)
 
   mon->prev_tick_us = now_us;
 
-  uint8_t  score          = mon->score;                            // V251003R9 점수 로컬 캐시로 구조체 접근 최소화
-  uint8_t  score_orig     = score;                                 // V251003R9 구조체 반영 여부 판단용 원본
-  uint32_t last_decay_us  = mon->last_decay_us;                    // V251003R9 감쇠 타임스탬프 로컬 캐시
+  uint8_t  score           = mon->score;                           // V251003R9 점수 로컬 캐시로 구조체 접근 최소화
+  uint8_t  score_orig      = score;                                // V251003R9 구조체 반영 여부 판단용 원본
+  uint32_t last_decay_us   = mon->last_decay_us;                   // V251003R9 감쇠 타임스탬프 로컬 캐시
   uint32_t last_decay_orig = last_decay_us;                        // V251003R9 구조체 반영 여부 판단용 원본
+  bool     warmup_complete = mon->warmup_complete;                 // V251006R6 워밍업 상태를 로컬에 캐시해 구조체 접근 최소화
 
-  if (mon->warmup_complete == false)
+  if (warmup_complete == false)
   {
     uint16_t warmup_target        = mon->warmup_target_frames;          // V251003R5 구조체 직접 캐시 활용
     uint16_t warmup_good_frames   = mon->warmup_good_frames;            // V251003R8 워밍업 프레임 로컬 캐시로 접근 감소
@@ -1442,6 +1448,7 @@ static void usbHidMonitorSof(uint32_t now_us)
     if (warmup_good_frames >= warmup_target)
     {
       mon->warmup_complete = true;
+      warmup_complete      = true;                                    // V251006R6 로컬 캐시와 구조체 상태를 동기화
       last_decay_us        = now_us;                                   // V251003R9 감쇠 시작점 로컬 캐시 갱신
     }
     else
@@ -1451,6 +1458,7 @@ static void usbHidMonitorSof(uint32_t now_us)
       if (usbHidTimeIsAfterOrEqual(now_us, warmup_deadline))           // V251001R7 래핑 대응 워밍업 마감 비교
       {
         mon->warmup_complete = true;
+        warmup_complete      = true;                                  // V251006R6 로컬 캐시와 구조체 상태를 동기화
         last_decay_us        = now_us;                                 // V251003R9 감쇠 시작점 로컬 캐시 갱신
       }
       else
@@ -1460,7 +1468,7 @@ static void usbHidMonitorSof(uint32_t now_us)
     }
   }
 
-  if (delta_us < stable_threshold)
+  if (warmup_complete == true && delta_us < stable_threshold)       // V251006R6 워밍업 완료 후에만 감쇠 경로를 실행해 분기 일치 유지
   {
     if (score > 0U)                                                    // V251003R8 감쇠 파라미터 조회를 점수 존재 시로 지연
     {
