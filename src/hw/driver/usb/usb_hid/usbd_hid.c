@@ -1379,18 +1379,15 @@ static void usbHidMonitorSof(uint32_t now_us)
   if (dev_state != USBD_STATE_CONFIGURED)
   {
     usbHidSofMonitorSyncTick(now_us);                              // V251003R1 비구성 상태 타임스탬프 처리 공통화
-    if (mon->score != 0U)                                          // V251005R9 구성 해제 반복 시 불필요한 0 기록 제거
-    {
-      mon->score = 0U;
-    }
-    return;
+    return;                                                        // V251006R2 Prime 초기화 이후 중복 점수 기록 제거
   }
+
+  uint8_t dev_speed = pdev->dev_speed;                            // V251006R2 서스펜드/복귀 공용 속도 캐시로 중복 읽기 제거
 
   if (USBD_is_suspended())
   {
     if (mon->suspended_active == false)
     {
-      uint8_t dev_speed = pdev->dev_speed;
       usbHidSofMonitorPrime(now_us,
                             0U,
                             0U,
@@ -1399,8 +1396,6 @@ static void usbHidMonitorSof(uint32_t now_us)
     }
     return;
   }
-
-  uint8_t dev_speed = pdev->dev_speed;                            // V251004R1 서스펜드/복귀 분기 이후에 속도 접근으로 불필요한 읽기 제거
 
   if (mon->suspended_active)
   {
@@ -1531,8 +1526,6 @@ static void usbHidMonitorSof(uint32_t now_us)
     uint32_t missed_frames = usbCalcMissedFrames((uint32_t)expected_us,
                                                  delta_us);         // V251005R6 속도별 상수 나눗셈으로 누락 프레임 산출
     uint32_t penalty_base  = (missed_frames > 0U) ? missed_frames - 1U : 0U; // V251005R5 누락 프레임 기반 패널티 초기값 산출
-    uint16_t missed_frames_report = (missed_frames > UINT16_MAX) ? UINT16_MAX
-                                                               : (uint16_t)missed_frames; // V251005R9 큐 전달용 누락 프레임 16비트 포화
 
     if (penalty_base > USB_SOF_MONITOR_SCORE_CAP)
     {
@@ -1553,6 +1546,8 @@ static void usbHidMonitorSof(uint32_t now_us)
 
     if (downgrade_trigger)                                         // V251005R5 다운그레이드 경로 분리
     {
+      uint16_t missed_frames_report = (missed_frames > UINT16_MAX) ? UINT16_MAX
+                                                                  : (uint16_t)missed_frames; // V251006R2 다운그레이드 시에만 누락 프레임 포화 변환
       UsbBootMode_t next_mode = usbHidResolveDowngradeTarget();
       uint32_t      holdoff   = USB_SOF_MONITOR_RECOVERY_DELAY_US; // V251003R1 홀드오프 연장 경로 통합
 
