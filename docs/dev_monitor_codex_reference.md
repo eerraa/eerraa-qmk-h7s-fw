@@ -77,6 +77,7 @@ usb suspend/resume/reset
 - ISR에서는 `usbHidSofMonitorSyncTick()`으로 타임스탬프를 갱신한 뒤, 홀드오프 → 워밍업 → 안정 감시 → 임계 판단 순으로 진행합니다.
 - `usbHidUpdateWakeUp()`이 서스펜드를 감지하면 점수·타임스탬프를 리셋하고 즉시 반환합니다.
 - Prime은 동일 속도 재호출 시 캐시된 파라미터를 그대로 사용해 구조체 쓰기를 최소화합니다. *(V251005R8)*
+- BootMode에 따른 HS `bInterval`과 기대 폴링 간격은 정적 테이블에서 즉시 조회되어 분기와 시프트 연산을 제거했습니다. *(V251006R4)*
 - 다운그레이드 요청은 큐가 처리하며, ARM → COMMIT 단계에서 BootMode 저장과 리셋을 담당합니다.
 - SOF 타임스탬프 비교 보조 함수(`usbHidTimeIsBefore`, `usbHidTimeIsAfterOrEqual`)는 인라인화되어 ISR 호출 비용을 줄였습니다. *(V251005R2)*
 - 다운그레이드 타깃은 Enum 순차 증가 방식으로 계산되어 switch 분기가 제거되었습니다. *(V251005R7)*

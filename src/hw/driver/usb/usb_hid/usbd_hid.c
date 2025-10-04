@@ -483,6 +483,13 @@ static TIM_HandleTypeDef htim2;
 
 static uint32_t sof_cnt = 0;
 
+static const uint16_t usb_boot_mode_interval_us_table[USB_BOOT_MODE_MAX] = { // V251006R4 BootMode별 기대 폴링 간격 테이블화
+  125U,
+  250U,
+  500U,
+  1000U,
+};
+
 enum
 {
   USB_SOF_MONITOR_CONFIG_HOLDOFF_MS = 750U,                                              // V250924R3 구성 직후 워밍업 지연(ms)
@@ -1202,21 +1209,14 @@ static uint8_t *USBD_HID_GetDeviceQualifierDesc(uint16_t *length)
 
 static uint32_t usbHidExpectedPollIntervalUs(void)
 {
-  if (usbBootModeIsFullSpeed())
+  UsbBootMode_t mode = usbBootModeGet();                             // V251006R4 BootMode 직접 조회로 분기 단순화
+
+  if (mode < USB_BOOT_MODE_MAX)
   {
-    return 1000U;                                                   // V250928R3 FS 1kHz = 1000us 간격
+    return (uint32_t)usb_boot_mode_interval_us_table[mode];          // V251006R4 테이블 사용으로 시프트/함수 호출 제거
   }
 
-  uint8_t hs_interval = usbBootModeGetHsInterval();                  // V250928R3 HS 모드 bInterval 읽기
-
-  if (hs_interval < 1U)
-  {
-    hs_interval = 1U;
-  }
-
-  uint32_t microframes = 1UL << (hs_interval - 1U);                  // V250928R3 2^(bInterval-1) 마이크로프레임 수
-
-  return microframes * 125U;                                         // V250928R3 1 마이크로프레임 = 125us
+  return 125U;                                                       // V251006R4 기본값: HS 8kHz 간격 유지
 }
 
 bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev)
