@@ -80,6 +80,7 @@ bool         usbBootModeLoad(void);                    // V250923R1 Load stored 
 UsbBootMode_t usbBootModeGet(void);                    // V250923R1 Query active boot mode
 bool         usbBootModeIsFullSpeed(void);             // V250923R1 Check if FS (1 kHz) mode is requested
 uint8_t      usbBootModeGetHsInterval(void);           // V250923R1 Retrieve HS polling interval encoding
+uint16_t     usbBootModeGetExpectedIntervalUs(void);   // V251006R5 BootMode 기대 폴링 간격 조회 인라인 테이블 공유
 bool         usbBootModeSaveAndReset(UsbBootMode_t mode);
 usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
                                                         uint32_t      measured_delta_us,

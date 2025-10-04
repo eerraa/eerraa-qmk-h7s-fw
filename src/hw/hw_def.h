@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251006R4"  // V251006R4: HS 폴링/기대 간격 테이블화로 분기 비용 절감
+#define _DEF_FIRMWATRE_VERSION      "V251006R5"  // V251006R5: SOF 서스펜드 판정 경량화 및 기대 간격 조회 함수화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

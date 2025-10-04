@@ -8,7 +8,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
 | 파일 | 주요 심볼 | 역할 요약 |
 | --- | --- | --- |
 | `src/hw/driver/usb/usb_hid/usbd_hid.c` | `usbHidMonitorSof`, `usbHidSofMonitorPrime`, `usbHidSofMonitorApplySpeedParams` | SOF ISR, 초기화, 속도 캐시 및 점수 계산.
-| `src/hw/driver/usb/usb.c` | `usbRequestBootModeDowngrade`, `usbProcess`, `usbCalcMissedFrames` | 다운그레이드 큐, 누락 프레임 계산 도우미, BootMode 저장.
+| `src/hw/driver/usb/usb.c` | `usbRequestBootModeDowngrade`, `usbProcess`, `usbCalcMissedFrames`, `usbBootModeGetExpectedIntervalUs` | 다운그레이드 큐, 누락 프레임 계산, BootMode 저장 및 기대 간격 테이블 제공.
 | `src/hw/driver/usb/usbd_conf.c` | `usbBootModeIsFullSpeed` | PHY 속도 강제, `pdev->dev_speed` 상태 전달.
 | `src/ap/ap.c` | `usbProcess` 호출 | 메인 루프에서 큐 서비스.
 | `src/hw/hw.c`, `src/hw/hw_def.h` | `usbBootModeLoad`, `_DEF_FIRMWATRE_VERSION` | 부팅 시 BootMode 복원, 펌웨어 버전 태깅.
@@ -28,6 +28,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
 - 동일 속도로 Prime이 반복될 때는 캐시된 속도 파라미터를 재사용해 추가 메모리 쓰기를 방지한다. *(V251005R8)*
 - 비구성 상태에서는 Prime 초기화만으로 점수가 리셋되므로, 추가 구조체 쓰기를 제거해 반복 초기화를 줄였다. *(V251006R2)*
 - 홀드오프·비구성 구간에서 점수가 0이면 `usbHidSofMonitorSyncTick()`이 `last_decay_us`를 건드리지 않아 불필요한 쓰기를 제거한다. *(V251006R1)*
+ - 서스펜드 감지는 `pdev->dev_state == USBD_STATE_SUSPENDED` 비교로 처리해 `USBD_is_suspended()` 호출을 제거했다. *(V251006R5)*
   3. 간격 초과 → 누락 프레임을 8비트 패널티로 환산하고 `score + penalty` 비교로 점수를 누적하거나 즉시 다운그레이드. *(V251005R8)*
   4. `score >= degrade_threshold` → 다운그레이드 큐에 요청하며 누락 프레임 수를 함께 캐시.
   - `pdev->dev_speed`는 SOF ISR 진입 시 한 번만 로드해 상태 전환 Prime과 서스펜드/복귀 및 속도 검사 분기에서 재사용한다. *(V251006R2, V251006R3)*
@@ -77,7 +78,7 @@ usb suspend/resume/reset
 - ISR에서는 `usbHidSofMonitorSyncTick()`으로 타임스탬프를 갱신한 뒤, 홀드오프 → 워밍업 → 안정 감시 → 임계 판단 순으로 진행합니다.
 - `usbHidUpdateWakeUp()`이 서스펜드를 감지하면 점수·타임스탬프를 리셋하고 즉시 반환합니다.
 - Prime은 동일 속도 재호출 시 캐시된 파라미터를 그대로 사용해 구조체 쓰기를 최소화합니다. *(V251005R8)*
-- BootMode에 따른 HS `bInterval`과 기대 폴링 간격은 정적 테이블에서 즉시 조회되어 분기와 시프트 연산을 제거했습니다. *(V251006R4)*
+- BootMode에 따른 HS `bInterval`과 기대 폴링 간격은 `usb.c`의 공용 테이블에서 조회되며, `usbBootModeGetExpectedIntervalUs()`로 모든 모듈이 동일 값을 사용합니다. *(V251006R5)*
 - 다운그레이드 요청은 큐가 처리하며, ARM → COMMIT 단계에서 BootMode 저장과 리셋을 담당합니다.
 - SOF 타임스탬프 비교 보조 함수(`usbHidTimeIsBefore`, `usbHidTimeIsAfterOrEqual`)는 인라인화되어 ISR 호출 비용을 줄였습니다. *(V251005R2)*
 - 다운그레이드 타깃은 Enum 순차 증가 방식으로 계산되어 switch 분기가 제거되었습니다. *(V251005R7)*
