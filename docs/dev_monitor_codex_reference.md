@@ -31,7 +31,9 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
  - 서스펜드 감지는 `pdev->dev_state == USBD_STATE_SUSPENDED` 비교로 처리해 `USBD_is_suspended()` 호출을 제거했다. *(V251006R5)*
   3. 간격 초과 → 누락 프레임을 8비트 패널티로 환산하고 `score + penalty` 비교로 점수를 누적하거나 즉시 다운그레이드. *(V251005R8)*
   4. `score >= degrade_threshold` → 다운그레이드 큐에 요청하며 누락 프레임 수를 함께 캐시.
-  - `pdev->dev_speed`는 SOF ISR 진입 시 한 번만 로드해 상태 전환 Prime과 서스펜드/복귀 및 속도 검사 분기에서 재사용한다. *(V251006R2, V251006R3)*
+- `pdev->dev_speed`는 SOF ISR 진입 시 한 번만 로드해 상태 전환 Prime과 서스펜드/복귀 및 속도 검사 분기에서 재사용한다. *(V251006R2, V251006R3)*
+- 구성/서스펜드 상태에서만 `pdev->dev_speed`를 읽어 기본/주소 상태에서는 MMIO 접근을 피한다. *(V251006R6)*
+- 워밍업 완료 플래그는 로컬 변수로 캐시되어 감쇠 경로와 점수 갱신 시 구조체 재접근을 줄인다. *(V251006R6)*
   - 속도 파라미터 적용은 기본값을 0으로 초기화한 뒤 HS/FS 열거형 값을 직접 인덱스로 사용해 분기 수를 줄인다. *(V251006R3)*
 
 ### 2.2 `usb_boot_mode_request_t` (다운그레이드 큐)
@@ -95,7 +97,8 @@ usbHidMonitorSof(now):
     usbHidSofMonitorSyncTick(now)
     return
 
-  dev_speed = pdev->dev_speed                             // V251006R2 서스펜드/복귀 공용 속도 캐시 (V251006R3 Prime 경로까지 공유)
+  dev_speed = (state in {CONFIGURED, SUSPENDED}) ?         // V251006R6 구성/서스펜드 상태에서만 속도 값을 읽어 불필요한 MMIO 제거
+              pdev->dev_speed : 0
   if (dev_speed != monitor.active_speed)
     usbHidSofMonitorApplySpeedParams(dev_speed)
 
@@ -103,7 +106,8 @@ usbHidMonitorSof(now):
   if (now < holdoff_end) return
 
   interval = now - prev_tick
-  if (!monitor.warmed_up):
+  warmup_complete = monitor.warmed_up                    // V251006R6 워밍업 상태 로컬 캐시
+  if (!warmup_complete):
     if (interval <= stable_threshold) warmup_good_frames++
     if (warmup_good_frames >= warmup_target) monitor.warmed_up = true
     return
