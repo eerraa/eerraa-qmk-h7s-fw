@@ -536,13 +536,14 @@ static const usb_sof_monitor_params_t sof_monitor_params[] =      // V251002R1 �
 static usb_sof_monitor_t sof_monitor = {0};                       // V250924R2 SOF 안정성 상태
 static uint8_t           sof_prev_dev_state = USBD_STATE_DEFAULT; // V250924R2 마지막 USB 장치 상태
 
-static bool usbHidTimeIsBefore(uint32_t now_us, uint32_t target_us)  // V251001R7 마이크로초 타임스탬프 비교 보조
+static inline bool usbHidTimeIsBefore(uint32_t now_us,
+                                      uint32_t target_us)           // V251006R1 마이크로초 비교 인라인화로 호출 오버헤드 축소
 {
   return (int32_t)(now_us - target_us) < 0;
 }
 
-static bool usbHidTimeIsAfterOrEqual(uint32_t now_us,
-                                     uint32_t target_us)            // V251001R7 마이크로초 타임스탬프 비교 보조
+static inline bool usbHidTimeIsAfterOrEqual(uint32_t now_us,
+                                            uint32_t target_us)     // V251006R1 마이크로초 비교 인라인화로 호출 오버헤드 축소
 {
   return (int32_t)(now_us - target_us) >= 0;
 }
@@ -1455,8 +1456,9 @@ static void usbHidMonitorSof(uint32_t now_us)
 
   if (mon->warmup_complete == false)
   {
-    uint16_t warmup_target       = mon->warmup_target_frames;            // V251003R5 구조체 직접 캐시 활용
-    uint16_t warmup_good_frames  = mon->warmup_good_frames;              // V251003R8 워밍업 프레임 로컬 캐시로 접근 감소
+    uint16_t warmup_target        = mon->warmup_target_frames;          // V251003R5 구조체 직접 캐시 활용
+    uint16_t warmup_good_frames   = mon->warmup_good_frames;            // V251003R8 워밍업 프레임 로컬 캐시로 접근 감소
+    uint16_t warmup_good_original = warmup_good_frames;                 // V251006R1 구조체 갱신 최소화를 위한 원본 값 캐시
 
     if (delta_us < stable_threshold)
     {
@@ -1465,24 +1467,34 @@ static void usbHidMonitorSof(uint32_t now_us)
         warmup_good_frames++;
       }
     }
-    else
+    else if (warmup_good_frames != 0U)                                  // V251006R1 동일 값 유지 시 불필요한 초기화 회피
     {
       warmup_good_frames = 0U;
     }
 
-    mon->warmup_good_frames = warmup_good_frames;                        // V251003R8 로컬 누적 결과 구조체에 재반영
+    if (warmup_good_frames != warmup_good_original)
+    {
+      mon->warmup_good_frames = warmup_good_frames;                    // V251006R1 값 변경 시에만 구조체 쓰기
+    }
 
-    uint32_t warmup_deadline = mon->warmup_deadline_us;                  // V251005R1 워밍업 마감 캐시로 구조체 접근 감소
-
-    if (warmup_good_frames >= warmup_target
-        || usbHidTimeIsAfterOrEqual(now_us, warmup_deadline))            // V251001R7 래핑 대응 워밍업 마감 비교
+    if (warmup_good_frames >= warmup_target)
     {
       mon->warmup_complete = true;
-      last_decay_us        = now_us;                               // V251003R9 감쇠 시작점 로컬 캐시 갱신
+      last_decay_us        = now_us;                                   // V251003R9 감쇠 시작점 로컬 캐시 갱신
     }
     else
     {
-      return;
+      uint32_t warmup_deadline = mon->warmup_deadline_us;              // V251006R1 타임아웃 접근을 필요한 경우로 지연
+
+      if (usbHidTimeIsAfterOrEqual(now_us, warmup_deadline))           // V251001R7 래핑 대응 워밍업 마감 비교
+      {
+        mon->warmup_complete = true;
+        last_decay_us        = now_us;                                 // V251003R9 감쇠 시작점 로컬 캐시 갱신
+      }
+      else
+      {
+        return;
+      }
     }
   }
 
