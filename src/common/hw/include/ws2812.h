@@ -23,6 +23,7 @@ extern "C" {
 bool ws2812Init(void);
 void ws2812SetColor(uint32_t ch, uint32_t color);
 bool ws2812Refresh(void);
+bool ws2812HandleDmaComplete(TIM_HandleTypeDef *htim);             // V251008R8 DMA 완료 시점 후속 처리 헬퍼
 
 
 #endif

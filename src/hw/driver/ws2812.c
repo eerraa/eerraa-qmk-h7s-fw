@@ -22,6 +22,8 @@ typedef struct
 
 __attribute__((section(".non_cache")))
 static uint8_t bit_buf[BIT_ZERO + 24*(HW_WS2812_MAX_CH+1)];
+static volatile bool ws2812_dma_busy = false;                     // V251008R8 DMA 전송 상태 플래그로 즉시 중첩 갱신 방지
+static volatile bool ws2812_refresh_pending = false;              // V251008R8 DMA 완료 후 재전송 예약 플래그
 
 
 ws2812_t ws2812;
@@ -177,8 +179,23 @@ bool ws2812InitHw(void)
 
 bool ws2812Refresh(void)
 {
-  HAL_TIM_PWM_Stop_DMA(ws2812.h_timer, ws2812.channel);
-  HAL_TIM_PWM_Start_DMA(ws2812.h_timer, ws2812.channel,  (const uint32_t *)bit_buf, sizeof(bit_buf));
+  if (ws2812_dma_busy)
+  {
+    ws2812_refresh_pending = true;                                // V251008R8 진행 중인 DMA가 끝나면 한 번 더 전송
+    return true;
+  }
+
+  ws2812_refresh_pending = false;
+
+  if (HAL_TIM_PWM_Start_DMA(ws2812.h_timer,
+                            ws2812.channel,
+                            (const uint32_t *)bit_buf,
+                            sizeof(bit_buf)) != HAL_OK)
+  {
+    return false;                                                 // V251008R8 DMA 시작 실패 시 호출자에게 오류 전달
+  }
+
+  ws2812_dma_busy = true;                                         // V251008R8 DMA가 정상 시작되면 바쁜 상태로 표시
   return true;
 }
 
@@ -238,6 +255,30 @@ void ws2812SetColor(uint32_t ch, uint32_t color)
   memcpy(&bit_buf[offset + ch*24 + 8*0], g_bit, 8*1);
   memcpy(&bit_buf[offset + ch*24 + 8*1], r_bit, 8*1);
   memcpy(&bit_buf[offset + ch*24 + 8*2], b_bit, 8*1);
+}
+
+bool ws2812HandleDmaComplete(TIM_HandleTypeDef *htim)
+{
+  if (htim != ws2812.h_timer)
+  {
+    return false;
+  }
+
+  if (htim->Channel != HAL_TIM_ACTIVE_CHANNEL_1)
+  {
+    return false;
+  }
+
+  HAL_TIM_PWM_Stop_DMA(ws2812.h_timer, ws2812.channel);           // V251008R8 완료 시점에만 DMA 중지로 USB 간섭 최소화
+  ws2812_dma_busy = false;
+
+  if (ws2812_refresh_pending)
+  {
+    ws2812_refresh_pending = false;
+    (void)ws2812Refresh();                                        // V251008R8 누적 요청 즉시 처리 (재귀 허용)
+  }
+
+  return true;
 }
 
 void GPDMA1_Channel4_IRQHandler(void)
