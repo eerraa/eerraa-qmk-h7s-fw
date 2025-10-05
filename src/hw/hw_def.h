@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251008R5"  // V251008R5: SOF 모니터 임계 계산/측정 루틴 경량화
+#define _DEF_FIRMWATRE_VERSION      "V251008R6"  // V251008R6: 기대 간격 미확정 시 조기 반환 및 안정 임계 시프트 계산
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
