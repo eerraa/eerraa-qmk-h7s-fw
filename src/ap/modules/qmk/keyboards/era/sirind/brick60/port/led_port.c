@@ -37,15 +37,20 @@ static void via_qmk_led_save(uint8_t led_type);
 
 // static led_t leds_temp_for_via = {0};
 static led_config_t led_config[LED_TYPE_MAX_CH];
+static led_t leds = {0};                                    // V251008R9 SET_REPORT 지연 없이 전달하기 위한 호스트 LED 캐시
 
 
 EECONFIG_DEBOUNCE_HELPER(led_caps,   EECONFIG_USER_LED_CAPS,   led_config[LED_TYPE_CAPS]);
 
 
+uint8_t host_keyboard_leds(void)
+{
+  return leds.raw;                                           // V251008R9 USB SET_REPORT을 통해 수신한 LED 상태 반환
+}
+
 void usbHidSetStatusLed(uint8_t led_bits)
 {
-  // 받은 LED 상태를 QMK의 공식 LED 설정 함수에 전달합니다.
-  led_set(led_bits);
+  leds.raw = led_bits;                                       // V251008R9 인터럽트 문맥에서 LED 하드웨어 제어를 피하기 위해 상태만 기록
 }
 
 void led_init_ports(void)
@@ -187,7 +192,7 @@ void via_qmk_led_set_value(uint8_t led_type, uint8_t *data)
       }
   }
   
-  led_set(host_keyboard_led_state().raw);
+  led_update_ports(leds);                                    // V251008R9 호스트 LED 캐시 재적용으로 VIA 설정 변경 반영
 }
 
 void via_qmk_led_save(uint8_t led_type)

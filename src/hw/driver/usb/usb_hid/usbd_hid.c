@@ -489,6 +489,7 @@ enum
   USB_SOF_MONITOR_WARMUP_FRAMES_HS  = 2048U,                                             // V250924R3 HS 안정성 확인 프레임 수
   USB_SOF_MONITOR_WARMUP_FRAMES_FS  = 128U,                                              // V250924R3 FS 안정성 확인 프레임 수
   USB_SOF_MONITOR_SCORE_CAP         = 7U,                                                // V251005R4 대규모 SOF 누락 가중치 확장
+                                                                                         // V251008R9 테스트 회귀: 점수 상한을 V251008R7 기준으로 복원
   USB_SOF_MONITOR_CONFIG_HOLDOFF_US = USB_SOF_MONITOR_CONFIG_HOLDOFF_MS * 1000UL,        // 구성 직후 워밍업 지연(us)
   USB_SOF_MONITOR_WARMUP_TIMEOUT_US = USB_SOF_MONITOR_WARMUP_TIMEOUT_MS * 1000UL,        // 워밍업 최대 시간(us)
   USB_SOF_MONITOR_RESUME_HOLDOFF_US = 200U * 1000UL,                                      // 일시중지 해제 후 홀드오프(us)
@@ -1562,6 +1563,7 @@ static void usbHidMonitorSof(uint32_t now_us)
     uint8_t  penalty       = (missed_frames <= (USB_SOF_MONITOR_SCORE_CAP + 1U))
                                ? (uint8_t)(missed_frames - 1U)
                                : USB_SOF_MONITOR_SCORE_CAP;        // V251008R3 상수 비교로 8비트 패널티 즉시 산출 (V251005R5 8비트 산술 유지)
+                                                                   // V251008R9 테스트 회귀: V251008R7 패널티 누적 방식을 복원
 
     uint8_t degrade_threshold = mon->degrade_threshold;            // V251003R7 임계 파라미터 접근 지연으로 ISR 경량화
     bool    downgrade_trigger = (score >= degrade_threshold);      // V251008R2 기존 점수만으로 임계 초과 여부 선행 판단
