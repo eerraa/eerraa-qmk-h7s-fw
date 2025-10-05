@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251008R2"  // V251008R2: 워밍업 카운터 저장 지연 및 점수 포화 누적 경량화
+#define _DEF_FIRMWATRE_VERSION      "V251008R3"  // V251008R3: 다운그레이드 보고 조건 최적화 및 패널티 산술 단순화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

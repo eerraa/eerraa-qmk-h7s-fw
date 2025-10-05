@@ -1551,14 +1551,10 @@ static void usbHidMonitorSof(uint32_t now_us)
   {
     uint32_t missed_frames = usbCalcMissedFrames((uint32_t)expected_us,
                                                  delta_us);         // V251005R6 속도별 상수 나눗셈으로 누락 프레임 산출
-    uint32_t penalty_base  = missed_frames - 1U;                    // V251007R9 안정 임계 ≥ 2×기대 간격이어서 최소 1프레임 보장
-
-    if (penalty_base > USB_SOF_MONITOR_SCORE_CAP)
-    {
-      penalty_base = USB_SOF_MONITOR_SCORE_CAP;
-    }
-
-    uint8_t penalty = (uint8_t)penalty_base;                       // V251005R5 8비트 패널티로 산술 경량화
+                                                                    // V251007R9 안정 임계 ≥ 2×기대 간격이어서 최소 1프레임 보장
+    uint8_t  penalty       = (missed_frames <= (USB_SOF_MONITOR_SCORE_CAP + 1U))
+                               ? (uint8_t)(missed_frames - 1U)
+                               : USB_SOF_MONITOR_SCORE_CAP;        // V251008R3 상수 비교로 8비트 패널티 즉시 산출 (V251005R5 8비트 산술 유지)
 
     uint8_t degrade_threshold = mon->degrade_threshold;            // V251003R7 임계 파라미터 접근 지연으로 ISR 경량화
     bool    downgrade_trigger = (score >= degrade_threshold);      // V251008R2 기존 점수만으로 임계 초과 여부 선행 판단
@@ -1580,18 +1576,18 @@ static void usbHidMonitorSof(uint32_t now_us)
 
     if (downgrade_trigger)                                         // V251008R2 포화 이후에도 동일 조건으로 다운그레이드 유지
     {
-      uint16_t missed_frames_report = (missed_frames > UINT16_MAX) ? UINT16_MAX
-                                                                  : (uint16_t)missed_frames; // V251006R2 다운그레이드 시에만 누락 프레임 포화 변환
-
-      if (missed_frames_report == 0U)
-      {
-        missed_frames_report = 1U;                                 // V251007R3 다운그레이드 보고 시 최소 1프레임 보장 책임을 ISR에서 수행
-      }
       UsbBootMode_t next_mode = usbHidResolveDowngradeTarget();
       uint32_t      holdoff   = USB_SOF_MONITOR_RECOVERY_DELAY_US; // V251003R1 홀드오프 연장 경로 통합
 
-      if (next_mode < USB_BOOT_MODE_MAX)
+      if (next_mode < USB_BOOT_MODE_MAX)                           // V251008R3 다운그레이드 대상이 있을 때만 보고값 산출·큐 요청
       {
+        uint16_t missed_frames_report = (missed_frames > UINT16_MAX) ? UINT16_MAX
+                                                                  : (uint16_t)missed_frames; // V251006R2 다운그레이드 시에만 누락 프레임 포화 변환
+
+        if (missed_frames_report == 0U)
+        {
+          missed_frames_report = 1U;                               // V251007R3 다운그레이드 보고 시 최소 1프레임 보장 책임을 ISR에서 수행
+        }
         usb_boot_downgrade_result_t request_result = usbRequestBootModeDowngrade(next_mode,
                                                                                  delta_us,
                                                                                  expected_us,
