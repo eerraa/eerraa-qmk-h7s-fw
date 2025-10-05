@@ -24,7 +24,6 @@
 #include "util.h"
 #include "led_tables.h"
 #include <lib/lib8tion/lib8tion.h>
-#include "override.h" // 전역 오버라이드 플래그
 #ifdef EEPROM_ENABLE
 #    include "eeprom.h"
 #endif
@@ -144,6 +143,34 @@ void rgblight_set_effect_range(uint8_t start_pos, uint8_t num_leds) {
 
 __attribute__((weak)) RGB rgblight_hsv_to_rgb(HSV hsv) {
     return hsv_to_rgb(hsv);
+}
+
+__attribute__((weak)) bool rgblight_indicators_kb(void)
+{
+  return true;
+}
+
+// V251008R8 인디케이터 버퍼 오버레이 지원 함수 보강
+void rgblight_set_color_buffer_at(uint8_t index, uint8_t r, uint8_t g, uint8_t b)
+{
+  if (index >= RGBLIGHT_LED_COUNT) {
+    return;
+  }
+
+#ifdef RGBLIGHT_LED_MAP
+  uint8_t led_index = pgm_read_byte(&led_map[index]);
+#else
+  uint8_t led_index = index;
+#endif
+
+  uint16_t clip_start = rgblight_ranges.clipping_start_pos;
+  uint16_t clip_end   = clip_start + rgblight_ranges.clipping_num_leds;
+
+  if ((uint16_t)led_index < clip_start || (uint16_t)led_index >= clip_end) {
+    return;
+  }
+
+  setrgb(r, g, b, &led[led_index]);
 }
 
 void sethsv_raw(uint8_t hue, uint8_t sat, uint8_t val, rgb_led_t *led1) {
@@ -895,53 +922,68 @@ void rgblight_wakeup(void) {
 
 #endif
 
-void rgblight_set(void) {
-    if (rgblight_override_enable) {
-        return;
-    }
-    
-    rgb_led_t *start_led;
-    uint8_t    num_leds = rgblight_ranges.clipping_num_leds;
+void rgblight_set(void)
+{
+  rgb_led_t *start_led;
+  uint8_t    num_leds = rgblight_ranges.clipping_num_leds;
 
-    if (!rgblight_config.enable) {
-        for (uint8_t i = rgblight_ranges.effect_start_pos; i < rgblight_ranges.effect_end_pos; i++) {
-            led[i].r = 0;
-            led[i].g = 0;
-            led[i].b = 0;
-#ifdef RGBW
-            led[i].w = 0;
-#endif
-        }
+  // V251008R8 인디케이터 처리에 맞춰 정적 효과 버퍼 갱신 경로 재구성
+  if (!rgblight_config.enable) {
+    for (uint8_t i = rgblight_ranges.effect_start_pos; i < rgblight_ranges.effect_end_pos; i++) {
+      setrgb(0, 0, 0, &led[i]);
     }
+  } else if (is_static_effect(rgblight_config.mode)) {
+    if (rgblight_config.mode == RGBLIGHT_MODE_STATIC_LIGHT) {
+      RGB base_rgb = rgblight_hsv_to_rgb((HSV){rgblight_config.hue, rgblight_config.sat, rgblight_config.val});
+      for (uint8_t i = 0; i < rgblight_ranges.effect_num_leds; i++) {
+        setrgb(base_rgb.r, base_rgb.g, base_rgb.b, &led[i + rgblight_ranges.effect_start_pos]);
+      }
+    }
+#ifdef RGBLIGHT_EFFECT_STATIC_GRADIENT
+    else if (rgblight_status.base_mode == RGBLIGHT_MODE_STATIC_GRADIENT) {
+      uint8_t delta     = rgblight_config.mode - rgblight_status.base_mode;
+      bool    direction = (delta % 2) == 0;
+      uint8_t range     = pgm_read_byte(&RGBLED_GRADIENT_RANGES[delta / 2]);
+      for (uint8_t i = 0; i < rgblight_ranges.effect_num_leds; i++) {
+        uint8_t index = i + rgblight_ranges.effect_start_pos;
+        uint8_t hue   = ((uint16_t)i * (uint16_t)range) / rgblight_ranges.effect_num_leds;
+        hue           = direction ? (rgblight_config.hue + hue) : (rgblight_config.hue - hue);
+        sethsv(hue, rgblight_config.sat, rgblight_config.val, &led[index]);
+      }
+    }
+#endif
+  }
 
 #ifdef RGBLIGHT_LAYERS
-    if (rgblight_layers != NULL
+  if (rgblight_layers != NULL
 #    if !defined(RGBLIGHT_LAYERS_OVERRIDE_RGB_OFF)
-        && rgblight_config.enable
+      && rgblight_config.enable
 #    elif defined(RGBLIGHT_SLEEP)
-        && !is_suspended
+      && !is_suspended
 #    endif
-    ) {
-        rgblight_layers_write();
-    }
+  ) {
+    rgblight_layers_write();
+  }
 #endif
 
+  rgblight_indicators_kb();
+
 #ifdef RGBLIGHT_LED_MAP
-    rgb_led_t led0[RGBLIGHT_LED_COUNT];
-    for (uint8_t i = 0; i < RGBLIGHT_LED_COUNT; i++) {
-        led0[i] = led[pgm_read_byte(&led_map[i])];
-    }
-    start_led = led0 + rgblight_ranges.clipping_start_pos;
+  rgb_led_t led0[RGBLIGHT_LED_COUNT];
+  for (uint8_t i = 0; i < RGBLIGHT_LED_COUNT; i++) {
+    led0[i] = led[pgm_read_byte(&led_map[i])];
+  }
+  start_led = led0 + rgblight_ranges.clipping_start_pos;
 #else
-    start_led = led + rgblight_ranges.clipping_start_pos;
+  start_led = led + rgblight_ranges.clipping_start_pos;
 #endif
 
 #ifdef RGBW
-    for (uint8_t i = 0; i < num_leds; i++) {
-        convert_rgb_to_rgbw(&start_led[i]);
-    }
+  for (uint8_t i = 0; i < num_leds; i++) {
+    convert_rgb_to_rgbw(&start_led[i]);
+  }
 #endif
-    rgblight_driver.setleds(start_led, num_leds);
+  rgblight_driver.setleds(start_led, num_leds);
 }
 
 #ifdef RGBLIGHT_SPLIT
@@ -1045,9 +1087,6 @@ static void rgblight_effect_dummy(animation_status_t *anim) {
 }
 
 void rgblight_timer_task(void) {
-    if (rgblight_override_enable) {
-        return;
-    }
     if (rgblight_status.timer_enabled) {
         effect_func_t effect_func   = rgblight_effect_dummy;
         uint16_t      interval_time = 2000; // dummy interval
@@ -1536,6 +1575,7 @@ void rgblight_task(void) {
         rgblight_velocikey_decelerate();
     }
 #endif
+
 }
 
 #ifdef VELOCIKEY_ENABLE
