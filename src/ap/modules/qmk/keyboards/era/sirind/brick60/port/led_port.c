@@ -1,14 +1,7 @@
 #include "led_port.h"
 #include "color.h"
 #include "eeconfig.h"
-#include "led.h" // led_set() 함수를 사용하기 위해 추가
-#include "override.h" // 전역 오버라이드 플래그 사용하기 위해 추가
-#include "rgblight.h" // rgblight_mode_noeeprom()을 호출하기 위해 추가
-
-
-#define LED_TYPE_MAX_CH       1
-#define CAPS_LED_COUNT        30
-
+#include "rgblight.h"
 
 typedef union
 {
@@ -16,8 +9,7 @@ typedef union
 
   struct PACKED
   {
-    uint8_t enable : 2;
-    uint8_t mode   : 6;
+    uint8_t enable;
     HSV     hsv;
   };
 } led_config_t;
@@ -25,175 +17,259 @@ typedef union
 _Static_assert(sizeof(led_config_t) == sizeof(uint32_t), "EECONFIG out of spec.");
 
 enum via_qmk_led_value {
-    id_qmk_led_enable       = 1,
-    id_qmk_led_brightness   = 2,
-    id_qmk_led_color        = 3,
+  id_qmk_led_enable     = 1,
+  id_qmk_led_brightness = 2,
+  id_qmk_led_color      = 3,
 };
-
 
 static void via_qmk_led_get_value(uint8_t led_type, uint8_t *data);
 static void via_qmk_led_set_value(uint8_t led_type, uint8_t *data);
 static void via_qmk_led_save(uint8_t led_type);
+static void refresh_indicator_display(void);
+static bool indicator_config_valid(uint8_t led_type, bool *needs_migration);
+static bool should_light_indicator(uint8_t led_type, led_t led_state);
 
-// static led_t leds_temp_for_via = {0};
 static led_config_t led_config[LED_TYPE_MAX_CH];
 
+static const led_config_t indicator_defaults[LED_TYPE_MAX_CH] = {
+  [LED_TYPE_CAPS] = {.enable = true, .hsv = {0,   255, 255}},
+  [LED_TYPE_SCROLL] = {.enable = true, .hsv = {170, 255, 255}},
+  [LED_TYPE_NUM] = {.enable = true, .hsv = {85,  255, 255}},
+};
+
+static const struct
+{
+  uint8_t start;
+  uint8_t count;
+} indicator_ranges[LED_TYPE_MAX_CH] = {
+  [LED_TYPE_CAPS] = {0, 10},
+  [LED_TYPE_SCROLL] = {10, 10},
+  [LED_TYPE_NUM] = {20, 10},
+};
 
 EECONFIG_DEBOUNCE_HELPER(led_caps,   EECONFIG_USER_LED_CAPS,   led_config[LED_TYPE_CAPS]);
+EECONFIG_DEBOUNCE_HELPER(led_scroll, EECONFIG_USER_LED_SCROLL, led_config[LED_TYPE_SCROLL]);
+EECONFIG_DEBOUNCE_HELPER(led_num,    EECONFIG_USER_LED_NUM,    led_config[LED_TYPE_NUM]);
 
+static led_t host_led_status = {0};
 
 void usbHidSetStatusLed(uint8_t led_bits)
 {
-  // 받은 LED 상태를 QMK의 공식 LED 설정 함수에 전달합니다.
+  // V251008R8 호스트 LED 상태를 저장하여 rgblight_indicators_kb가 참조할 수 있도록 보강
+  host_led_status.raw = led_bits;
   led_set(led_bits);
+}
+
+uint8_t host_keyboard_leds(void)
+{
+  // V251008R8 WS2812 인디케이터가 사용할 Caps/Scroll/Num 상태 제공
+  return host_led_status.raw;
+}
+
+static void refresh_indicator_display(void)
+{
+  // V251008R8 인디케이터 변경 사항 즉시 재합성
+  if (!is_rgblight_initialized) {
+    return;
+  }
+
+  rgblight_set();
+}
+
+static void flush_indicator_config(uint8_t led_type)
+{
+  switch (led_type) {
+    case LED_TYPE_CAPS:
+      eeconfig_flush_led_caps(true);
+      break;
+    case LED_TYPE_SCROLL:
+      eeconfig_flush_led_scroll(true);
+      break;
+    case LED_TYPE_NUM:
+      eeconfig_flush_led_num(true);
+      break;
+  }
 }
 
 void led_init_ports(void)
 {
   eeconfig_init_led_caps();
-  if (led_config[LED_TYPE_CAPS].mode != 1)
-  {
-    led_config[LED_TYPE_CAPS].mode = 1;
-    led_config[LED_TYPE_CAPS].enable = true;
-    led_config[LED_TYPE_CAPS].hsv    = (HSV){HSV_GREEN};
-    eeconfig_flush_led_caps(true);
+  eeconfig_init_led_scroll();
+  eeconfig_init_led_num();
+
+  for (uint8_t i = 0; i < LED_TYPE_MAX_CH; i++) {
+    bool needs_migration = false;
+    // V251008R8 인디케이터 기본값/구버전 데이터 정리
+    if (!indicator_config_valid(i, &needs_migration)) {
+      led_config[i] = indicator_defaults[i];
+      flush_indicator_config(i);
+      continue;
+    }
+
+    if (needs_migration) {
+      flush_indicator_config(i);
+    }
   }
 }
 
 void led_update_ports(led_t led_state)
 {
-    // 이 함수가 호출되기 전, 오버라이드 플래그의 이전 상태를 저장합니다.
-    bool was_overridden = rgblight_override_enable;
-
-    // 현재 Caps Lock 상태에 따라 오버라이드 플래그의 새 상태를 결정합니다.
-    if (led_config[LED_TYPE_CAPS].enable && led_state.caps_lock) {
-        rgblight_override_enable = true;
-    } else {
-        rgblight_override_enable = false;
-    }
-
-
-    // 이제 결정된 상태에 따라 행동합니다.
-    if (rgblight_override_enable) {
-        // --- 경우 1: Caps Lock이 켜져 있음 ---
-        // led_port.c가 그리기를 독점합니다.
-        
-        uint32_t led_color;
-        RGB      rgb_color;
-
-        rgb_color = hsv_to_rgb(led_config[LED_TYPE_CAPS].hsv);
-        led_color = WS2812_COLOR(rgb_color.r, rgb_color.g, rgb_color.b);
-        
-        for (int i = 0; i < CAPS_LED_COUNT; i++) {
-            ws2812SetColor(i, led_color);
-        }
-        ws2812Refresh();
-
-    } else {
-        // --- 경우 2: Caps Lock이 꺼져 있음 ---
-        // led_port.c는 절대 LED를 그리지 않습니다.
-
-        // 방금 막 Caps Lock이 꺼졌는지(상태가 전환되었는지) 확인합니다.
-        if (was_overridden == true) {
-            // 네, 방금 꺼졌습니다.
-            // RGBLIGHT 시스템에게 제어권을 넘겨주고, 원래 효과를 복원하라고 명령합니다.
-            if (rgblight_is_enabled()) {
-                rgblight_mode_noeeprom(rgblight_get_mode());
-            }
-        }
-        // (만약 원래부터 꺼져 있었다면, 아무것도 하지 않고 rgblight가 계속 작동하도록 둡니다.)
-    }
+  // V251008R8 host_keyboard_led_state() 동기화를 위해 현재 상태를 저장
+  host_led_status = led_state;
+  refresh_indicator_display();
 }
 
 void via_qmk_led_command(uint8_t led_type, uint8_t *data, uint8_t length)
 {
-  // data = [ command_id, channel_id, value_id, value_data ]
+  if (led_type >= LED_TYPE_MAX_CH) {
+    data[0] = id_unhandled;
+    return;
+  }
+
   uint8_t *command_id        = &(data[0]);
   uint8_t *value_id_and_data = &(data[2]);
 
-  switch (*command_id)
-  {
+  switch (*command_id) {
     case id_custom_set_value:
-      {
-        via_qmk_led_set_value(led_type, value_id_and_data);
-        break;
-      }
+      via_qmk_led_set_value(led_type, value_id_and_data);
+      break;
     case id_custom_get_value:
-      {
-        via_qmk_led_get_value(led_type, value_id_and_data);
-        break;
-      }
+      via_qmk_led_get_value(led_type, value_id_and_data);
+      break;
     case id_custom_save:
-      {
-        via_qmk_led_save(led_type);
-        break;
-      }
+      via_qmk_led_save(led_type);
+      break;
     default:
-      {
-        *command_id = id_unhandled;
-        break;
-      }
+      *command_id = id_unhandled;
+      break;
+  }
+}
+
+static bool indicator_config_valid(uint8_t led_type, bool *needs_migration)
+{
+  // V251008R8 인디케이터 EEPROM 무결성 및 구버전 레이아웃 변환
+  if (needs_migration != NULL) {
+    *needs_migration = false;
+  }
+
+  uint32_t raw = led_config[led_type].raw;
+  if (raw == UINT32_MAX) {
+    return false;
+  }
+
+  if (led_config[led_type].enable <= 1) {
+    return true;
+  }
+
+  uint8_t legacy_enable = raw & 0x03;
+  if (legacy_enable <= 1) {
+    led_config[led_type].enable = legacy_enable;
+    if (needs_migration != NULL) {
+      *needs_migration = true;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+static bool should_light_indicator(uint8_t led_type, led_t led_state)
+{
+  if (!led_config[led_type].enable) {
+    return false;
+  }
+
+  switch (led_type) {
+    case LED_TYPE_CAPS:
+      return led_state.caps_lock;
+    case LED_TYPE_SCROLL:
+      return led_state.scroll_lock;
+    case LED_TYPE_NUM:
+      return led_state.num_lock;
+    default:
+      return false;
   }
 }
 
 void via_qmk_led_get_value(uint8_t led_type, uint8_t *data)
 {
-  // data = [ value_id, value_data ]
+  if (led_type >= LED_TYPE_MAX_CH) {
+    return;
+  }
+
   uint8_t *value_id   = &(data[0]);
   uint8_t *value_data = &(data[1]);
-  switch (*value_id)
-  {
+
+  switch (*value_id) {
     case id_qmk_led_enable:
-      {
-        value_data[0] = led_config[led_type].enable;
-        break;
-      }    
+      value_data[0] = led_config[led_type].enable;
+      break;
     case id_qmk_led_brightness:
-      {
-        value_data[0] = led_config[led_type].hsv.v;
-        break;
-      }
+      value_data[0] = led_config[led_type].hsv.v;
+      break;
     case id_qmk_led_color:
-      {
-        value_data[0] = led_config[led_type].hsv.h;
-        value_data[1] = led_config[led_type].hsv.s;
-        break;
-      }
+      value_data[0] = led_config[led_type].hsv.h;
+      value_data[1] = led_config[led_type].hsv.s;
+      break;
   }
 }
 
 void via_qmk_led_set_value(uint8_t led_type, uint8_t *data)
 {
-  // data = [ value_id, value_data ]
+  if (led_type >= LED_TYPE_MAX_CH) {
+    return;
+  }
+
   uint8_t *value_id   = &(data[0]);
   uint8_t *value_data = &(data[1]);
-  switch (*value_id)
-  {
+
+  switch (*value_id) {
     case id_qmk_led_enable:
-      {
-        led_config[led_type].enable = value_data[0];
-        break;
-      }
+      led_config[led_type].enable = value_data[0] ? 1 : 0;
+      break;
     case id_qmk_led_brightness:
-      {
-        led_config[led_type].hsv.v = value_data[0];
-        break;
-      }
+      led_config[led_type].hsv.v = value_data[0];
+      break;
     case id_qmk_led_color:
-      {
-        led_config[led_type].hsv.h = value_data[0];
-        led_config[led_type].hsv.s = value_data[1];
-        break;
-      }
+      led_config[led_type].hsv.h = value_data[0];
+      led_config[led_type].hsv.s = value_data[1];
+      break;
   }
-  
-  led_set(host_keyboard_led_state().raw);
+
+  refresh_indicator_display();
 }
 
 void via_qmk_led_save(uint8_t led_type)
 {
-  if (led_type == LED_TYPE_CAPS)
-  {
-    eeconfig_flush_led_caps(true);
-  }  
+  if (led_type >= LED_TYPE_MAX_CH) {
+    return;
+  }
+
+  flush_indicator_config(led_type);
+}
+
+bool rgblight_indicators_kb(void)
+{
+  // V251008R8 BRICK60 인디케이터 RGBlight 오버레이
+  led_t led_state = host_keyboard_led_state();
+
+  for (uint8_t i = 0; i < LED_TYPE_MAX_CH; i++) {
+    if (!should_light_indicator(i, led_state)) {
+      continue;
+    }
+
+    RGB rgb = hsv_to_rgb(led_config[i].hsv);
+    uint8_t start = indicator_ranges[i].start;
+    uint8_t count = indicator_ranges[i].count;
+
+    for (uint8_t offset = 0; offset < count; offset++) {
+      uint8_t led_index = start + offset;
+      if (led_index >= RGBLIGHT_LED_COUNT) {
+        break;
+      }
+      rgblight_set_color_buffer_at(led_index, rgb.r, rgb.g, rgb.b);
+    }
+  }
+
+  return true;
 }

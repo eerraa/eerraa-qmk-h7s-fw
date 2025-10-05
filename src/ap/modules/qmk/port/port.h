@@ -19,3 +19,4 @@
 #define EECONFIG_USER_KILL_SWITCH_UD  ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 16)) // 8B
 #define EECONFIG_USER_KKUK            ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 24)) // 4B
 #define EECONFIG_USER_BOOTMODE        ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 28)) // 4B // V250923R1 Boot mode selection slot
+#define EECONFIG_USER_LED_NUM         ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 32)) // 4B // V251008R8 넘버락 인디케이터 저장 슬롯

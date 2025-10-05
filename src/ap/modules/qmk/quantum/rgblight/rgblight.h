@@ -309,6 +309,7 @@ void rgblight_sethsv_at(uint8_t hue, uint8_t sat, uint8_t val, uint8_t index);
 void rgblight_setrgb_range(uint8_t r, uint8_t g, uint8_t b, uint8_t start, uint8_t end);
 void rgblight_sethsv_range(uint8_t hue, uint8_t sat, uint8_t val, uint8_t start, uint8_t end);
 void rgblight_setrgb(uint8_t r, uint8_t g, uint8_t b);
+void rgblight_set_color_buffer_at(uint8_t index, uint8_t r, uint8_t g, uint8_t b); // V251008R8 인디케이터 버퍼 갱신
 
 #ifndef RGBLIGHT_SPLIT
 void rgblight_setrgb_master(uint8_t r, uint8_t g, uint8_t b);
