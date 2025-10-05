@@ -36,16 +36,22 @@ static void via_qmk_led_set_value(uint8_t led_type, uint8_t *data);
 static void via_qmk_led_save(uint8_t led_type);
 
 // static led_t leds_temp_for_via = {0};
+static volatile led_t usb_led_state = {0};                     // V251008R8 USB SET_REPORT LED 상태 비동기 반영
+                                                              //            인터럽트-메인 루프 동기화
 static led_config_t led_config[LED_TYPE_MAX_CH];
 
 
 EECONFIG_DEBOUNCE_HELPER(led_caps,   EECONFIG_USER_LED_CAPS,   led_config[LED_TYPE_CAPS]);
 
 
+uint8_t host_keyboard_leds(void)
+{
+  return usb_led_state.raw;                                     // V251008R8 제어 전송 시 읽기 전용 캐시 제공
+}
+
 void usbHidSetStatusLed(uint8_t led_bits)
 {
-  // 받은 LED 상태를 QMK의 공식 LED 설정 함수에 전달합니다.
-  led_set(led_bits);
+  usb_led_state.raw = led_bits;                                 // V251008R8 EP0 제어 즉시 반환을 위한 상태 캐시
 }
 
 void led_init_ports(void)
@@ -187,7 +193,7 @@ void via_qmk_led_set_value(uint8_t led_type, uint8_t *data)
       }
   }
   
-  led_set(host_keyboard_led_state().raw);
+  led_set(host_keyboard_led_state().raw);                         // V251008R8 VIA 설정 변경 시 현재 LED 상태 재적용
 }
 
 void via_qmk_led_save(uint8_t led_type)
