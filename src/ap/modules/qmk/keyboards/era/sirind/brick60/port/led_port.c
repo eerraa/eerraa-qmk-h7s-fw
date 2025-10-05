@@ -30,7 +30,8 @@ static bool indicator_config_valid(uint8_t led_type, bool *needs_migration);
 static bool should_light_indicator(uint8_t led_type, led_t led_state);
 
 static led_config_t led_config[LED_TYPE_MAX_CH];
-static led_t       host_led_state = {0};  // V251008R9 호스트 LED 상태 동기화
+static led_t       host_led_state       = {0};  // V251008R9 호스트 LED 상태 동기화
+static led_t       indicator_led_state  = {0};  // V251009R1 인디케이터 갱신 상태 캐시
 
 static const led_config_t indicator_defaults[LED_TYPE_MAX_CH] = {
   [LED_TYPE_CAPS] = {.enable = true, .hsv = {0,   255, 255}},
@@ -107,6 +108,11 @@ void led_init_ports(void)
 void led_update_ports(led_t led_state)
 {
   host_led_state = led_state;  // V251008R9 QMK 경로에서 전달되는 LED 동기화
+  if (indicator_led_state.raw == led_state.raw) {
+    return;  // V251009R1 호스트 LED 변화 없을 때 중복 갱신 방지
+  }
+
+  indicator_led_state = led_state;  // V251009R1 인디케이터 상태 캐시 갱신
   refresh_indicator_display();
 }
 
@@ -218,21 +224,38 @@ void via_qmk_led_set_value(uint8_t led_type, uint8_t *data)
 
   uint8_t *value_id   = &(data[0]);
   uint8_t *value_data = &(data[1]);
+  bool     needs_refresh = false;  // V251009R1 설정 변경 시에만 RGBlight 갱신
 
   switch (*value_id) {
-    case id_qmk_led_enable:
-      led_config[led_type].enable = value_data[0] ? 1 : 0;
+    case id_qmk_led_enable: {
+      uint8_t enable = value_data[0] ? 1 : 0;
+      if (led_config[led_type].enable != enable) {
+        led_config[led_type].enable = enable;
+        needs_refresh              = true;
+      }
       break;
+    }
     case id_qmk_led_brightness:
-      led_config[led_type].hsv.v = value_data[0];
+      if (led_config[led_type].hsv.v != value_data[0]) {
+        led_config[led_type].hsv.v = value_data[0];
+        needs_refresh              = true;
+      }
       break;
-    case id_qmk_led_color:
-      led_config[led_type].hsv.h = value_data[0];
-      led_config[led_type].hsv.s = value_data[1];
+    case id_qmk_led_color: {
+      uint8_t hue        = value_data[0];
+      uint8_t saturation = value_data[1];
+      if (led_config[led_type].hsv.h != hue || led_config[led_type].hsv.s != saturation) {
+        led_config[led_type].hsv.h = hue;
+        led_config[led_type].hsv.s = saturation;
+        needs_refresh              = true;
+      }
       break;
+    }
   }
 
-  refresh_indicator_display();
+  if (needs_refresh) {
+    refresh_indicator_display();
+  }
 }
 
 void via_qmk_led_save(uint8_t led_type)

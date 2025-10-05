@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251008R9"  // V251008R9: 호스트 LED 상태 버퍼링으로 인디케이터 복구
+#define _DEF_FIRMWATRE_VERSION      "V251009R1"  // V251009R1: 인디케이터 중복 갱신 최소화 및 설정 변경 최적화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
