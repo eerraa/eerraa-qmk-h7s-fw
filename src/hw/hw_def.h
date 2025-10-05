@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251008R3"  // V251008R3: 다운그레이드 보고 조건 최적화 및 패널티 산술 단순화
+#define _DEF_FIRMWATRE_VERSION      "V251008R4"  // V251008R4: BootMode 간격 캐시 및 폴링 모니터 경량화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

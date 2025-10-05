@@ -74,7 +74,6 @@ static uint8_t USBD_HID_DataIn(USBD_HandleTypeDef *pdev, uint8_t epnum);
 static uint8_t USBD_HID_DataOut(USBD_HandleTypeDef *pdev, uint8_t epnum);
 static uint8_t USBD_HID_EP0_RxReady(USBD_HandleTypeDef *pdev);
 static uint8_t USBD_HID_SOF(USBD_HandleTypeDef *pdev);
-static uint32_t usbHidExpectedPollIntervalUs(void);                  // V250928R3 HID 폴링 간격 계산
 static bool usbHidTimeIsBefore(uint32_t now_us, uint32_t target_us); // V251001R7 마이크로초 래핑 비교 유틸리티
 static bool usbHidTimeIsAfterOrEqual(uint32_t now_us,
                                      uint32_t target_us);           // V251001R7 마이크로초 래핑 비교 유틸리티
@@ -1122,8 +1121,9 @@ static uint32_t rate_queue_depth_snapshot = 0;               // V250928R3 폴링
 static uint32_t rate_queue_depth_max = 0;                    // V250928R3 큐 잔량 최대값
 static uint32_t rate_queue_depth_max_check = 0;              // V250928R3 윈도우 내 큐 잔량 최대값 추적
 
-static uint32_t rate_time_sof_pre = 0; 
-static uint32_t rate_time_sof = 0; 
+static uint32_t rate_time_sof_pre = 0;
+static uint32_t rate_time_sof = 0;
+static uint32_t rate_expected_interval_us = 125U;                 // V251008R4 BootMode 변경 시 갱신되는 기대 폴링 간격 캐시
 
 static uint16_t rate_his_buf[100];
 
@@ -1223,11 +1223,6 @@ static uint8_t *USBD_HID_GetDeviceQualifierDesc(uint16_t *length)
 }
 #endif /* USE_USBD_COMPOSITE  */
 
-static uint32_t usbHidExpectedPollIntervalUs(void)
-{
-  return (uint32_t)usbBootModeGetExpectedIntervalUs();                // V251006R5 중앙 테이블 조회 함수 재사용으로 데이터 중복 제거
-}
-
 bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev)
 {
   PCD_HandleTypeDef *hpcd = (PCD_HandleTypeDef *)pdev->pData;
@@ -1322,6 +1317,7 @@ void usbHidMeasurePollRate(void)
   {
     rate_cached_mode   = active_mode;
     rate_sample_window = (active_mode == USB_BOOT_MODE_FS_1K) ? 1000U : 8000U; // V251007R6 BootMode 변경 시에만 조건 분기를 수행
+    rate_expected_interval_us = (uint32_t)usbBootModeGetExpectedIntervalUs(); // V251008R4 폴링 속도 모니터 기대값을 BootMode 변경 시 계산
   }
 
   uint32_t now_us = micros();
@@ -1637,7 +1633,7 @@ void usbHidMeasureRateTime(void)
       rate_time_max_check = rate_time_us;
     }
 
-    uint32_t expected_interval_us = usbHidExpectedPollIntervalUs();   // V250928R3 현재 모드 기준 기대 폴링 간격
+    uint32_t expected_interval_us = rate_expected_interval_us;        // V251008R4 BootMode 변경 시 캐시한 기대 폴링 간격 재사용
 
     if (rate_time_us > expected_interval_us)
     {

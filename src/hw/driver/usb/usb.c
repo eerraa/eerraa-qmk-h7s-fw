@@ -45,8 +45,12 @@ static const uint16_t usb_boot_mode_expected_interval_table[USB_BOOT_MODE_MAX] =
   1000U,
 };
 
+static uint8_t  usb_boot_mode_hs_interval_cache        = 0x01;  // V251008R4 BootMode 변경 시 미리 계산되는 HS bInterval 캐시
+static uint16_t usb_boot_mode_expected_interval_cache = 125U;   // V251008R4 BootMode별 기대 폴링 간격 캐시
+
 static const char *usbBootModeLabel(UsbBootMode_t mode);                     // V250923R1 helpers
 static bool        usbBootModeStore(UsbBootMode_t mode);
+static void        usbBootModeRefreshCaches(void);                           // V251008R4 BootMode 파생 값 캐시 갱신
 
 typedef enum
 {
@@ -78,6 +82,22 @@ typedef struct
 } usb_boot_mode_request_t;
 
 static usb_boot_mode_request_t boot_mode_request = {0};          // V250924R2 USB 안정성 이벤트 큐
+
+static void usbBootModeRefreshCaches(void)                                     // V251008R4 BootMode 변경 시 파생 값 재계산
+{
+  UsbBootMode_t mode = usb_boot_mode;
+
+  if (mode < USB_BOOT_MODE_MAX)
+  {
+    usb_boot_mode_hs_interval_cache       = usb_boot_mode_hs_interval_table[mode];
+    usb_boot_mode_expected_interval_cache = usb_boot_mode_expected_interval_table[mode];
+  }
+  else
+  {
+    usb_boot_mode_hs_interval_cache       = usb_boot_mode_hs_interval_table[USB_BOOT_MODE_HS_8K];
+    usb_boot_mode_expected_interval_cache = usb_boot_mode_expected_interval_table[USB_BOOT_MODE_HS_8K];
+  }
+}
 
 static void usbBootModeRequestReset(void)
 {
@@ -124,6 +144,7 @@ bool usbBootModeLoad(void)
   }
 
   usb_boot_mode = (UsbBootMode_t)raw_mode;
+  usbBootModeRefreshCaches();                                                  // V251008R4 부팅 시 파생 캐시 동기화
   logPrintf("[  ] USB BootMode : %s\n", usbBootModeLabel(usb_boot_mode));  // V250923R1 Log persisted boot mode
 
   return true;
@@ -141,22 +162,12 @@ bool usbBootModeIsFullSpeed(void)
 
 uint8_t usbBootModeGetHsInterval(void)
 {
-  if (usb_boot_mode < USB_BOOT_MODE_MAX)
-  {
-    return usb_boot_mode_hs_interval_table[usb_boot_mode];          // V251006R4 테이블 조회로 분기 예측 비용 축소
-  }
-
-  return 0x01;
+  return usb_boot_mode_hs_interval_cache;                                     // V251008R4 BootMode 변경 시 미리 계산된 HS bInterval
 }
 
 uint16_t usbBootModeGetExpectedIntervalUs(void)                      // V251006R5 BootMode 기대 간격 조회 함수로 중복 테이블 제거
 {
-  if (usb_boot_mode < USB_BOOT_MODE_MAX)
-  {
-    return usb_boot_mode_expected_interval_table[usb_boot_mode];
-  }
-
-  return 125U;
+  return usb_boot_mode_expected_interval_cache;                               // V251008R4 BootMode 변경 시 갱신된 기대 폴링 간격 반환
 }
 
 static bool usbBootModeStore(UsbBootMode_t mode)
@@ -177,6 +188,7 @@ static bool usbBootModeStore(UsbBootMode_t mode)
   if (eepromWrite(addr, (uint8_t *)&raw_mode, sizeof(raw_mode)) == true)
   {
     usb_boot_mode = mode;
+    usbBootModeRefreshCaches();                                                // V251008R4 BootMode 저장 시 파생 캐시 업데이트
     return true;
   }
 
