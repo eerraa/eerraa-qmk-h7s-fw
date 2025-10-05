@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251008R7"  // V251008R7: 안정 임계 캐시와 HS/FS 단일 비교로 SOF 모니터 경량화
+#define _DEF_FIRMWATRE_VERSION      "V251008R8"  // V251008R8: Caps Lock LED SET_REPORT 비동기화로 USB SOF 공백 제거
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

@@ -37,15 +37,20 @@ static void via_qmk_led_save(uint8_t led_type);
 
 // static led_t leds_temp_for_via = {0};
 static led_config_t led_config[LED_TYPE_MAX_CH];
+static volatile led_t host_led_state = {0};  // V251008R8 Caps Lock SET_REPORT 시 LED 갱신을 지연 적용해 USB SOF 공백 방지
 
 
 EECONFIG_DEBOUNCE_HELPER(led_caps,   EECONFIG_USER_LED_CAPS,   led_config[LED_TYPE_CAPS]);
 
 
+uint8_t host_keyboard_leds(void)
+{
+  return host_led_state.raw;
+}
+
 void usbHidSetStatusLed(uint8_t led_bits)
 {
-  // 받은 LED 상태를 QMK의 공식 LED 설정 함수에 전달합니다.
-  led_set(led_bits);
+  host_led_state.raw = led_bits;  // V251008R8 EP0 컨텍스트에서 직접 LED를 구동하지 않고 QMK 루프에서 처리하도록 저장
 }
 
 void led_init_ports(void)
