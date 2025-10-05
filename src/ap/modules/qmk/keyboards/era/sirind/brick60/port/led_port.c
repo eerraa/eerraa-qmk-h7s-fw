@@ -3,22 +3,13 @@
 #include "eeconfig.h"
 #include "rgblight.h"
 
-enum indicator_mode {
-  IND_MODE_OFF    = 0,
-  IND_MODE_CAPS   = 1,
-  IND_MODE_SCROLL = 2,
-  IND_MODE_NUM    = 3,
-  IND_MODE_ON     = 4,
-};
-
 typedef union
 {
   uint32_t raw;
 
   struct PACKED
   {
-    uint8_t enable : 2;
-    uint8_t mode   : 6;
+    uint8_t enable;
     HSV     hsv;
   };
 } led_config_t;
@@ -35,13 +26,15 @@ static void via_qmk_led_get_value(uint8_t led_type, uint8_t *data);
 static void via_qmk_led_set_value(uint8_t led_type, uint8_t *data);
 static void via_qmk_led_save(uint8_t led_type);
 static void refresh_indicator_display(void);
+static bool indicator_config_valid(uint8_t led_type, bool *needs_migration);
+static bool should_light_indicator(uint8_t led_type, led_t led_state);
 
 static led_config_t led_config[LED_TYPE_MAX_CH];
 
 static const led_config_t indicator_defaults[LED_TYPE_MAX_CH] = {
-  [LED_TYPE_CAPS] = {.enable = true, .mode = IND_MODE_CAPS,   .hsv = {0,   255, 255}},
-  [LED_TYPE_SCROLL] = {.enable = true, .mode = IND_MODE_SCROLL, .hsv = {170, 255, 255}},
-  [LED_TYPE_NUM] = {.enable = true, .mode = IND_MODE_NUM,    .hsv = {85,  255, 255}},
+  [LED_TYPE_CAPS] = {.enable = true, .hsv = {0,   255, 255}},
+  [LED_TYPE_SCROLL] = {.enable = true, .hsv = {170, 255, 255}},
+  [LED_TYPE_NUM] = {.enable = true, .hsv = {85,  255, 255}},
 };
 
 static const struct
@@ -95,8 +88,15 @@ void led_init_ports(void)
   eeconfig_init_led_num();
 
   for (uint8_t i = 0; i < LED_TYPE_MAX_CH; i++) {
-    if (led_config[i].mode == IND_MODE_OFF) {
+    bool needs_migration = false;
+    // V251008R8 인디케이터 기본값/구버전 데이터 정리
+    if (!indicator_config_valid(i, &needs_migration)) {
       led_config[i] = indicator_defaults[i];
+      flush_indicator_config(i);
+      continue;
+    }
+
+    if (needs_migration) {
       flush_indicator_config(i);
     }
   }
@@ -134,20 +134,46 @@ void via_qmk_led_command(uint8_t led_type, uint8_t *data, uint8_t length)
   }
 }
 
-static bool is_indicator_enabled(uint8_t led_type, led_t led_state)
+static bool indicator_config_valid(uint8_t led_type, bool *needs_migration)
+{
+  // V251008R8 인디케이터 EEPROM 무결성 및 구버전 레이아웃 변환
+  if (needs_migration != NULL) {
+    *needs_migration = false;
+  }
+
+  uint32_t raw = led_config[led_type].raw;
+  if (raw == UINT32_MAX) {
+    return false;
+  }
+
+  if (led_config[led_type].enable <= 1) {
+    return true;
+  }
+
+  uint8_t legacy_enable = raw & 0x03;
+  if (legacy_enable <= 1) {
+    led_config[led_type].enable = legacy_enable;
+    if (needs_migration != NULL) {
+      *needs_migration = true;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+static bool should_light_indicator(uint8_t led_type, led_t led_state)
 {
   if (!led_config[led_type].enable) {
     return false;
   }
 
-  switch (led_config[led_type].mode) {
-    case IND_MODE_ON:
-      return true;
-    case IND_MODE_CAPS:
+  switch (led_type) {
+    case LED_TYPE_CAPS:
       return led_state.caps_lock;
-    case IND_MODE_SCROLL:
+    case LED_TYPE_SCROLL:
       return led_state.scroll_lock;
-    case IND_MODE_NUM:
+    case LED_TYPE_NUM:
       return led_state.num_lock;
     default:
       return false;
@@ -188,7 +214,7 @@ void via_qmk_led_set_value(uint8_t led_type, uint8_t *data)
 
   switch (*value_id) {
     case id_qmk_led_enable:
-      led_config[led_type].enable = value_data[0];
+      led_config[led_type].enable = value_data[0] ? 1 : 0;
       break;
     case id_qmk_led_brightness:
       led_config[led_type].hsv.v = value_data[0];
@@ -217,7 +243,7 @@ bool rgblight_indicators_kb(void)
   led_t led_state = host_keyboard_led_state();
 
   for (uint8_t i = 0; i < LED_TYPE_MAX_CH; i++) {
-    if (!is_indicator_enabled(i, led_state)) {
+    if (!should_light_indicator(i, led_state)) {
       continue;
     }
 
