@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251009R2"  // V251009R2: BRICK60 LED 포트 메타데이터 테이블화 및 루프 최적화
+#define _DEF_FIRMWATRE_VERSION      "V251009R3"  // V251009R3: BRICK60 LED 포트 색상 캐시 및 리뷰 문서 갱신
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
