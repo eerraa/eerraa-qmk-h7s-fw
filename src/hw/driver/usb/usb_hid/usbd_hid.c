@@ -506,7 +506,8 @@ typedef struct
   uint32_t                        last_decay_us;              // 점수 감소 시각(us)
   uint32_t                        holdoff_end_us;             // 다운그레이드 홀드오프 종료 시각(us)
   uint32_t                        warmup_deadline_us;         // 워밍업 타임아웃 시각(us)
-  uint16_t                        expected_us;                // V251005R7 16비트 캐시로 ISR 메모리 접근 축소
+  uint16_t                        expected_us;                // V251005R7 16비트 캐시로 ISR 메모리 접근 축소, V251008R7 안정 임계는 별도 필드로 이동
+  uint16_t                        stable_threshold_us;        // V251008R7 안정 임계 캐시로 ISR 시프트 연산 제거
   uint16_t                        decay_interval_us;          // V251005R7 16비트 감쇠 주기로 구조체 크기 경량화
   uint16_t                        warmup_target_frames;       // V251003R5 워밍업 목표 프레임 직접 캐시
   uint16_t                        warmup_good_frames;         // V250924R3 누적 정상 프레임 수
@@ -555,14 +556,16 @@ static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 �
   {
     const usb_sof_monitor_params_t *params = &sof_monitor_params[speed_code];
 
-    sof_monitor.expected_us          = params->expected_us;         // V251005R7 16비트 파라미터 직접 복사로 ISR 폭 축소 유지, V251008R5 안정 임계는 런타임 계산으로 대체
+    sof_monitor.expected_us          = params->expected_us;         // V251005R7 16비트 파라미터 직접 복사, V251008R7 안정 임계 캐시와 연동
+    sof_monitor.stable_threshold_us  = (uint16_t)(params->expected_us << USB_SOF_MONITOR_STABLE_MARGIN_SHIFT); // V251008R7 안정 임계값을 Prime 단계에서 계산해 캐시
     sof_monitor.decay_interval_us    = params->decay_interval_us;   // V251005R7 16비트 감쇠 주기 복사로 구조체 축소
     sof_monitor.degrade_threshold    = params->degrade_threshold;   // V251003R5 속도 파라미터 직접 복사로 런타임 접근 최소화
     sof_monitor.warmup_target_frames = params->warmup_target_frames;// V251003R5 속도 파라미터 직접 복사로 런타임 접근 최소화
   }
   else
   {
-    sof_monitor.expected_us          = 0U;                          // V251007R2 알 수 없는 속도에서는 0 초기화 유지 (안정 임계 계산도 0)
+    sof_monitor.expected_us          = 0U;                          // V251007R2 알 수 없는 속도에서는 0 초기화 유지
+    sof_monitor.stable_threshold_us  = 0U;                          // V251008R7 안정 임계 캐시도 함께 리셋해 이후 분기에서 즉시 반환
     sof_monitor.decay_interval_us    = 0U;
     sof_monitor.degrade_threshold    = 0U;
     sof_monitor.warmup_target_frames = 0U;
@@ -1360,7 +1363,7 @@ static void usbHidMonitorSof(uint32_t now_us)
   uint8_t             dev_state;
   uint8_t             dev_speed;                                   // V251006R3 SOF ISR 초기에 속도를 단일 로드해 전 구간 공유
   uint8_t             active_speed;                                // V251008R1 구조체 속도 캐시를 지역 변수로 재사용해 로드 최소화
-  bool                speed_valid;                                 // V251008R1 HS/FS 여부를 단일 비교로 캐시해 분기당 재계산 제거
+  bool                speed_valid;                                 // V251008R7 HS/FS 범위를 단일 비교로 캐시해 분기당 재계산 제거
 
   dev_state = pdev->dev_state;
   dev_speed = 0U;                                                  // V251006R6 구성 전 단계에서는 속도 로드를 건너뛰어 MMIO 접근 축소
@@ -1371,8 +1374,7 @@ static void usbHidMonitorSof(uint32_t now_us)
   }
 
   active_speed = mon->active_speed;                                // V251008R1 Prime 여부와 무관하게 캐시된 속도를 지역에 보관
-  speed_valid  = (dev_speed == USBD_SPEED_HIGH) ||
-                 (dev_speed == USBD_SPEED_FULL);                   // V251008R1 HS/FS 분기를 단일 비교로 재사용
+  speed_valid  = (dev_speed <= USBD_SPEED_FULL);                   // V251008R7 HS/FS 범위를 단일 비교로 재사용
 
   if (dev_state != sof_prev_dev_state)
   {
@@ -1447,9 +1449,10 @@ static void usbHidMonitorSof(uint32_t now_us)
     mon->holdoff_end_us = 0U;                                      // V251007R8 홀드오프 만료 후 즉시 0으로 초기화해 반복 비교 제거
   }
 
-  uint32_t prev_tick_us    = mon->prev_tick_us;
-  uint16_t expected_us = mon->expected_us;                      // V251008R5 안정 임계와 패널티 계산에 재사용할 기대 간격 캐시
-  uint32_t delta_us     = now_us - prev_tick_us;
+  uint32_t prev_tick_us     = mon->prev_tick_us;
+  uint16_t expected_us      = mon->expected_us;                      // V251008R5 안정 임계와 패널티 계산에 재사용할 기대 간격 캐시
+  uint16_t stable_threshold = mon->stable_threshold_us;             // V251008R7 Prime 단계에서 계산된 안정 임계 캐시 재사용
+  uint32_t delta_us         = now_us - prev_tick_us;
 
   mon->prev_tick_us = now_us;
 
@@ -1458,8 +1461,13 @@ static void usbHidMonitorSof(uint32_t now_us)
     return;
   }
 
-  uint32_t stable_threshold = (uint32_t)expected_us << USB_SOF_MONITOR_STABLE_MARGIN_SHIFT; // V251008R6 곱셈 대신 시프트로 안정 범위 산출
-  bool     delta_below_threshold = (delta_us < stable_threshold);   // V251008R6 기대값 존재 조건에서만 비교 수행
+  if (stable_threshold == 0U)
+  {
+    stable_threshold = (uint16_t)(expected_us << USB_SOF_MONITOR_STABLE_MARGIN_SHIFT); // V251008R7 캐시 초기화 누락 시 1회 보정
+    mon->stable_threshold_us = stable_threshold;
+  }
+
+  bool delta_below_threshold = (delta_us < (uint32_t)stable_threshold);   // V251008R7 캐시된 안정 임계와 비교해 분기 비용 절약
 
   bool warmup_complete = mon->warmup_complete;                     // V251006R6 워밍업 상태를 로컬에 캐시해 구조체 접근 최소화
 

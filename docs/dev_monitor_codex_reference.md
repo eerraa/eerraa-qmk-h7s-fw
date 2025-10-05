@@ -27,7 +27,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
 - 목표에 도달한 프레임에서는 완료 분기에서 한 번만 기록해 최종 저장을 지연한다. *(V251008R2)*
 - Prime 경량화 이후 속도 파라미터는 `usbHidSofMonitorApplySpeedParams()`에서 직접 채워져, 상태 전환 시 불필요한 0 초기화가 사라졌다. *(V251005R6)*
 - 유효 속도에서는 `usbHidSofMonitorApplySpeedParams()`가 곧바로 테이블 값을 복사해, 중복 0 초기화를 제거했다. *(V251007R2)*
-- 기대 간격과 감쇠 주기는 16비트로 저장되며, 안정 임계는 런타임에서 `expected_us << 1`로 계산되어 구조체 접근이 한 번 줄었다. *(V251005R7, V251008R5, V251008R6)*
+- 기대 간격과 감쇠 주기는 16비트로 저장되며, 안정 임계는 Prime 시 캐시해 ISR에서는 단순 비교만 수행한다. *(V251005R7, V251008R7)*
 - 동일 속도로 Prime이 반복될 때는 캐시된 속도 파라미터를 재사용해 추가 메모리 쓰기를 방지한다. *(V251005R8)*
 - 비구성 상태에서는 Prime 초기화만으로 점수가 리셋되므로, 추가 구조체 쓰기를 제거해 반복 초기화를 줄였다. *(V251006R2)*
 - 홀드오프 혹은 워밍업 델타가 0이면 Prime이 바로 0을 기록하고 워밍업 완료로 표시해, 구성 외 구간의 다음 SOF부터 조건 분기를 건너뛴다. *(V251007R9)*
@@ -40,7 +40,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
   4. `score >= degrade_threshold` → 다운그레이드 큐에 요청하며 누락 프레임 수를 함께 캐시.
 - `pdev->dev_speed`는 SOF ISR 진입 시 한 번만 로드해 상태 전환 Prime과 서스펜드/복귀 및 속도 검사 분기에서 재사용한다. *(V251006R2, V251006R3)*
 - 구성/서스펜드 상태에서만 `pdev->dev_speed`를 읽어 기본/주소 상태에서는 MMIO 접근을 피한다. *(V251006R6)*
-- 캐시된 `active_speed`와 HS/FS 여부(`speed_valid`)는 지역 변수로 재사용해 서스펜드·속도 검사 분기의 비교 횟수를 줄인다. *(V251008R1)*
+- 캐시된 `active_speed`와 HS/FS 여부(`speed_valid`)는 지역 변수로 재사용하며, HS/FS 판정은 `<= USBD_SPEED_FULL` 단일 비교로 단순화했다. *(V251008R1, V251008R7)*
 - 워밍업 완료 플래그는 로컬 변수로 캐시되어 감쇠 경로와 점수 갱신 시 구조체 재접근을 줄인다. *(V251006R6)*
 - 서스펜드 분기는 일반 비구성 처리보다 먼저 실행되어 동기화 호출을 생략하며, 최초 진입 시 속도 파라미터만 재적용한다. *(V251006R7)*
   - 속도 파라미터 적용은 기본값을 0으로 초기화한 뒤 HS/FS 열거형 값을 직접 인덱스로 사용해 분기 수를 줄인다. *(V251006R3)*
@@ -118,7 +118,7 @@ usbHidMonitorSof(now):
   dev_speed    = (dev_state in {CONFIGURED, SUSPENDED}) ?      // V251006R6 구성/서스펜드 상태에서만 속도 값을 읽어 불필요한 MMIO 제거
                    pdev->dev_speed : 0
   active_speed = monitor.active_speed                          // V251008R1 구조체 속도 캐시를 지역으로 재사용
-  speed_valid  = (dev_speed in {HS, FS})                        // V251008R1 HS/FS 여부를 단일 비교로 유지
+  speed_valid  = (dev_speed <= USBD_SPEED_FULL)                 // V251008R7 HS/FS 범위를 단일 비교로 유지
 
   if (dev_state != prev_state):
     holdoff, warmup = resolve_transition_params(dev_state)
@@ -163,7 +163,9 @@ usbHidMonitorSof(now):
   if (expected == 0):                                      // V251008R6 유효 속도 캐시가 없으면 즉시 감시를 생략
     return
 
-  stable_threshold = expected << 1                         // V251008R6 곱셈 대신 시프트로 안정 범위 산출
+  stable_threshold = monitor.stable_threshold_us           // V251008R7 Prime 시 계산된 안정 임계 캐시 사용
+  if (stable_threshold == 0):
+    stable_threshold = expected << 1                       // V251008R7 캐시 누락 시 1회 보정
   below_threshold = (interval < stable_threshold)
   warmup_complete = monitor.warmed_up                    // V251006R6 워밍업 상태 로컬 캐시
   if (!warmup_complete):
