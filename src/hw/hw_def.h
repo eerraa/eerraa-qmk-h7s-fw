@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251009R1"  // V251009R1: 인디케이터 중복 갱신 최소화 및 설정 변경 최적화
+#define _DEF_FIRMWATRE_VERSION      "V251009R2"  // V251009R2: BRICK60 LED 포트 메타데이터 테이블화 및 루프 최적화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
