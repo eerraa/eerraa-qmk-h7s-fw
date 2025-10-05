@@ -494,7 +494,8 @@ enum
   USB_SOF_MONITOR_RESUME_HOLDOFF_US = 200U * 1000UL,                                      // 일시중지 해제 후 홀드오프(us)
   USB_SOF_MONITOR_RECOVERY_DELAY_US = 50U * 1000UL,                                      // 다운그레이드 실패 후 지연(us)
   USB_BOOT_MONITOR_CONFIRM_DELAY_US = USB_BOOT_MONITOR_CONFIRM_DELAY_MS * 1000UL,         // 다운그레이드 확인 대기(us)
-  USB_SOF_MONITOR_STABLE_MARGIN_MULTIPLIER = 2U                                           // V251008R5 안정 임계는 기대 간격의 2배로 계산
+  USB_SOF_MONITOR_STABLE_MARGIN_MULTIPLIER = 2U,                                          // V251008R5 안정 임계는 기대 간격의 2배로 계산
+  USB_SOF_MONITOR_STABLE_MARGIN_SHIFT      = 1U                                           // V251008R6 안정 임계 계산을 시프트 기반으로 재구성
 };
 
 typedef struct usb_sof_monitor_params_s usb_sof_monitor_params_t;   // V251003R1 파라미터 전방 선언
@@ -1447,12 +1448,18 @@ static void usbHidMonitorSof(uint32_t now_us)
   }
 
   uint32_t prev_tick_us    = mon->prev_tick_us;
-  uint16_t expected_us     = mon->expected_us;                      // V251008R5 안정 임계와 패널티 계산에 재사용할 기대 간격 캐시
-  uint32_t stable_threshold = (uint32_t)expected_us * USB_SOF_MONITOR_STABLE_MARGIN_MULTIPLIER; // V251008R5 기대 간격의 두 배로 안정 범위 산출
-  uint32_t delta_us         = now_us - prev_tick_us;
-  bool     delta_below_threshold = (expected_us != 0U) && (delta_us < stable_threshold);     // V251006R8 임계 비교 결과 캐시, V251008R5 기대값이 없을 때 안정 판정 생략
+  uint16_t expected_us = mon->expected_us;                      // V251008R5 안정 임계와 패널티 계산에 재사용할 기대 간격 캐시
+  uint32_t delta_us     = now_us - prev_tick_us;
 
   mon->prev_tick_us = now_us;
+
+  if (expected_us == 0U)                                             // V251008R6 유효 속도 캐시 부재 시 즉시 반환해 불필요한 산술 제거
+  {
+    return;
+  }
+
+  uint32_t stable_threshold = (uint32_t)expected_us << USB_SOF_MONITOR_STABLE_MARGIN_SHIFT; // V251008R6 곱셈 대신 시프트로 안정 범위 산출
+  bool     delta_below_threshold = (delta_us < stable_threshold);   // V251008R6 기대값 존재 조건에서만 비교 수행
 
   bool warmup_complete = mon->warmup_complete;                     // V251006R6 워밍업 상태를 로컬에 캐시해 구조체 접근 최소화
 

@@ -27,7 +27,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
 - 목표에 도달한 프레임에서는 완료 분기에서 한 번만 기록해 최종 저장을 지연한다. *(V251008R2)*
 - Prime 경량화 이후 속도 파라미터는 `usbHidSofMonitorApplySpeedParams()`에서 직접 채워져, 상태 전환 시 불필요한 0 초기화가 사라졌다. *(V251005R6)*
 - 유효 속도에서는 `usbHidSofMonitorApplySpeedParams()`가 곧바로 테이블 값을 복사해, 중복 0 초기화를 제거했다. *(V251007R2)*
-- 기대 간격과 감쇠 주기는 16비트로 저장되며, 안정 임계는 런타임에서 `expected_us * 2`로 계산되어 구조체 접근이 한 번 줄었다. *(V251005R7, V251008R5)*
+- 기대 간격과 감쇠 주기는 16비트로 저장되며, 안정 임계는 런타임에서 `expected_us << 1`로 계산되어 구조체 접근이 한 번 줄었다. *(V251005R7, V251008R5, V251008R6)*
 - 동일 속도로 Prime이 반복될 때는 캐시된 속도 파라미터를 재사용해 추가 메모리 쓰기를 방지한다. *(V251005R8)*
 - 비구성 상태에서는 Prime 초기화만으로 점수가 리셋되므로, 추가 구조체 쓰기를 제거해 반복 초기화를 줄였다. *(V251006R2)*
 - 홀드오프 혹은 워밍업 델타가 0이면 Prime이 바로 0을 기록하고 워밍업 완료로 표시해, 구성 외 구간의 다음 SOF부터 조건 분기를 건너뛴다. *(V251007R9)*
@@ -48,6 +48,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
 - 속도 변경으로 Prime이 호출되면 같은 프레임에서 즉시 반환해 홀드오프 분기를 재실행하지 않는다. *(V251007R2)*
 - SOF 간격 임계 비교는 불리언 캐시를 재사용해 워밍업·감쇠 경로에서 반복 비교를 제거한다. *(V251006R8)*
 - 임계 이하 간격에서는 누락 프레임 계산과 패널티 산술을 건너뛰어 정상 SOF 구간의 ISR 비용을 줄인다. *(V251006R9)*
+- 기대 간격이 0으로 비어 있으면 즉시 반환해 워밍업·패널티 분기 연산을 모두 생략한다. *(V251008R6)*
 
 ### 2.2 `usb_boot_mode_request_t` (다운그레이드 큐)
 - **필드**: `stage`(IDLE→ARMED→COMMIT), `next_mode`, `delta_us`, `expected_us`, `missed_frames`, `ready_ms`, `timeout_ms`, `log_pending`.
@@ -159,8 +160,11 @@ usbHidMonitorSof(now):
 
   interval = now - prev_tick
   expected = monitor.expected_us
-  stable_threshold = expected * 2                          // V251008R5 안정 범위는 기대 간격의 두 배로 계산
-  below_threshold = (expected != 0) and (interval < stable_threshold)
+  if (expected == 0):                                      // V251008R6 유효 속도 캐시가 없으면 즉시 감시를 생략
+    return
+
+  stable_threshold = expected << 1                         // V251008R6 곱셈 대신 시프트로 안정 범위 산출
+  below_threshold = (interval < stable_threshold)
   warmup_complete = monitor.warmed_up                    // V251006R6 워밍업 상태 로컬 캐시
   if (!warmup_complete):
     if (below_threshold and warmup_good_frames < warmup_target):
