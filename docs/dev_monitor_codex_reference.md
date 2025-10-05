@@ -35,6 +35,8 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
  - 서스펜드 감지는 `pdev->dev_state == USBD_STATE_SUSPENDED` 비교로 처리해 `USBD_is_suspended()` 호출을 제거했다. *(V251006R5)*
   3. 간격 초과 → 누락 프레임을 8비트 패널티로 환산하고, 임계까지 남은 여유와 비교해 점수를 포화 누적하거나 즉시 다운그레이드. *(V251008R2)*
      - 안정 임계값은 항상 기대 간격의 두 배 이상이라 누락 프레임이 최소 2로 계산되어, 패널티는 Prime 이후에도 1 이상으로 바로 산출된다. *(V251007R9)*
+     - 패널티 상한은 `SCORE_CAP + 1` 비교로 즉시 산출해 임시 변수를 줄였다. *(V251008R3)*
+     - 이미 최저 모드에서 더 느린 타깃이 없을 때는 보고값 변환을 생략해 홀드오프만 연장한다. *(V251008R3)*
   4. `score >= degrade_threshold` → 다운그레이드 큐에 요청하며 누락 프레임 수를 함께 캐시.
 - `pdev->dev_speed`는 SOF ISR 진입 시 한 번만 로드해 상태 전환 Prime과 서스펜드/복귀 및 속도 검사 분기에서 재사용한다. *(V251006R2, V251006R3)*
 - 구성/서스펜드 상태에서만 `pdev->dev_speed`를 읽어 기본/주소 상태에서는 MMIO 접근을 피한다. *(V251006R6)*
@@ -82,7 +84,7 @@ USBD_HID_SOF_ISR
   └─ usbHidMonitorSof(now_us)
         ├─ usbHidUpdateWakeUp()
         ├─ usbHidSofMonitorApplySpeedParams(dev_speed?)
-        └─ usbRequestBootModeDowngrade(..., missed_frames_report)  // 다운그레이드 시 16비트 포화·최소 1 값으로 큐 전달, Stage 분기별로 millis() 호출 *(V251006R2, V251007R3, V251007R7)*
+        └─ usbRequestBootModeDowngrade(..., missed_frames_report)  // 다운그레이드 시 16비트 포화·최소 1 값으로 큐 전달, Stage 분기별로 millis() 호출 *(V251006R2, V251007R3, V251007R7, V251008R3 — 타깃 존재 시에만 큐 요청)*
 
 main loop (ap.c)
   └─ usbProcess()
@@ -183,7 +185,7 @@ usbHidMonitorSof(now):
     return
 
   missed_frames = usbCalcMissedFrames(expected_us, interval)   // V251005R6 상수 분기 기반 누락 프레임 계산 공유 (안정 감시 단계에서만 expected_us 사용, V251006R1 — 임계 이하 구간은 V251006R9로 조기 반환)
-  penalty = clamp(missed_frames - 1, 0, SCORE_CAP)
+  penalty = min(missed_frames - 1, SCORE_CAP)                  // V251008R3 SCORE_CAP + 1 비교로 즉시 상한 결정
   trigger_downgrade = (score >= degrade_threshold)
   if (!trigger_downgrade and penalty != 0):                     // V251008R2 패널티 존재 시에만 연산 수행
     room = degrade_threshold - score
@@ -196,10 +198,16 @@ usbHidMonitorSof(now):
   if ((now - last_decay) >= decay_interval)
     score = max(score - 1, 0)
 
-    if (trigger_downgrade)
-      missed_frames_report = clamp16(missed_frames)              // V251006R2 다운그레이드 발생 시에만 16비트 포화 수행
-      if (missed_frames_report == 0) missed_frames_report = 1    // V251007R3 큐 전송 전 ISR에서 최소 1프레임 보장
-      usbRequestBootModeDowngrade(next_mode, delta_us, expected_us, missed_frames_report) // V251007R7 Stage 분기에서만 millis() 호출
+  if (trigger_downgrade)
+    next_mode = resolve_downgrade_target()
+    holdoff = RECOVERY_DELAY
+    if (next_mode < USB_BOOT_MODE_MAX)                         // V251008R3 유효 타깃에서만 보고값 계산 및 큐 요청
+      missed_frames_report = clamp16(missed_frames)            // V251006R2 다운그레이드 발생 시에만 16비트 포화 수행
+      if (missed_frames_report == 0) missed_frames_report = 1  // V251007R3 큐 전송 전 ISR에서 최소 1프레임 보장
+      request_result = usbRequestBootModeDowngrade(next_mode, delta_us, expected_us, missed_frames_report) // V251007R7 Stage 분기에서만 millis() 호출
+      if (request_result in {ARMED, CONFIRMED}) holdoff = CONFIRM_DELAY
+    monitor.holdoff_end_us = now + holdoff
+    monitor.score = 0
 ```
 
 ---
