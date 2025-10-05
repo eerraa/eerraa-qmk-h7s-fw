@@ -12,7 +12,21 @@ void via_custom_value_command_kb(uint8_t *data, uint8_t length)
 
   if (*channel_id == id_qmk_led_caps_channel)
   {
-    via_qmk_led_command(0, data, length);
+    via_qmk_led_command(LED_TYPE_CAPS, data, length);
+    return;
+  }
+
+  if (*channel_id == id_qmk_led_scroll_channel)
+  {
+    // V251008R8 스크롤락 인디케이터 채널 매핑
+    via_qmk_led_command(LED_TYPE_SCROLL, data, length);
+    return;
+  }
+
+  if (*channel_id == id_qmk_led_num_channel)
+  {
+    // V251008R8 넘버락 인디케이터 채널 매핑
+    via_qmk_led_command(LED_TYPE_NUM, data, length);
     return;
   }
 
