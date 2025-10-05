@@ -30,6 +30,7 @@ static bool indicator_config_valid(uint8_t led_type, bool *needs_migration);
 static bool should_light_indicator(uint8_t led_type, led_t led_state);
 
 static led_config_t led_config[LED_TYPE_MAX_CH];
+static led_t       host_led_state = {0};  // V251008R9 호스트 LED 상태 동기화
 
 static const led_config_t indicator_defaults[LED_TYPE_MAX_CH] = {
   [LED_TYPE_CAPS] = {.enable = true, .hsv = {0,   255, 255}},
@@ -53,6 +54,7 @@ EECONFIG_DEBOUNCE_HELPER(led_num,    EECONFIG_USER_LED_NUM,    led_config[LED_TY
 
 void usbHidSetStatusLed(uint8_t led_bits)
 {
+  host_led_state.raw = led_bits;  // V251008R9 호스트 LED 수신 즉시 버퍼링
   led_set(led_bits);
 }
 
@@ -104,8 +106,13 @@ void led_init_ports(void)
 
 void led_update_ports(led_t led_state)
 {
-  (void)led_state;
+  host_led_state = led_state;  // V251008R9 QMK 경로에서 전달되는 LED 동기화
   refresh_indicator_display();
+}
+
+uint8_t host_keyboard_leds(void)
+{
+  return host_led_state.raw;  // V251008R9 인디케이터 계산용 호스트 LED 조회
 }
 
 void via_qmk_led_command(uint8_t led_type, uint8_t *data, uint8_t length)
