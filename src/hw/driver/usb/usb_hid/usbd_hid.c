@@ -626,7 +626,6 @@ static inline void usbHidSofMonitorSyncTick(uint32_t now_us)        // V251003R2
   }
 }
 
-
 /**
   * @brief  USBD_HID_Init
   *         Initialize the HID interface
@@ -791,9 +790,10 @@ static uint8_t USBD_HID_Setup(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *re
           (void)USBD_CtlSendData(pdev, (uint8_t *)&hhid->IdleState, 1U);
           break;
 
-        case USBD_HID_REQ_SET_REPORT:  
-          logDebug("  USBD_HID_REQ_SET_REPORT  : 0x%X, 0x%d\n", req->wValue, req->wLength);     
+        case USBD_HID_REQ_SET_REPORT:
+          logDebug("  USBD_HID_REQ_SET_REPORT  : 0x%X, 0x%d\n", req->wValue, req->wLength);
           ep0_req = *req;
+          // V251008R8 LED 상태는 EP0에서 캐시만 갱신해 추가 SOF 홀드오프가 필요 없음
           USBD_CtlPrepareRx(pdev, ep0_req_buf, req->wLength);
           break;
 
@@ -923,7 +923,7 @@ uint8_t USBD_HID_EP0_RxReady(USBD_HandleTypeDef *pdev)
   {
     uint8_t led_bits = ep0_req_buf[0];
 
-    usbHidSetStatusLed(led_bits);
+    usbHidSetStatusLed(led_bits);                                    // V251008R8 LED 상태 캐시만 갱신해 인터럽트 지연 제거
   }
   return (uint8_t)USBD_OK;
 }
