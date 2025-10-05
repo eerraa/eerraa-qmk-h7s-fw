@@ -17,7 +17,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
 
 ## 2. 데이터 구조 스냅샷
 ### 2.1 `usb_sof_monitor_t` (SOF 모니터)
-- **주요 필드**: `score`, `holdoff_end_us`, `warmup_deadline_us`, `warmup_good_frames`, `expected_us`, `stable_threshold_us`, `decay_interval_us`, `degrade_threshold`, `active_speed`, `warmup_complete`, `suspended_active`.
+- **주요 필드**: `score`, `holdoff_end_us`, `warmup_deadline_us`, `warmup_good_frames`, `expected_us`, `decay_interval_us`, `degrade_threshold`, `active_speed`, `warmup_complete`, `suspended_active`.
 - **핵심 전이**
   1. 속도/상태 변화 → `usbHidSofMonitorPrime()` 호출로 캐시 리셋.
   2. 워밍업 조건 달성(HS 2048·FS 128 프레임) → 감시 활성화.
@@ -27,7 +27,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
 - 목표에 도달한 프레임에서는 완료 분기에서 한 번만 기록해 최종 저장을 지연한다. *(V251008R2)*
 - Prime 경량화 이후 속도 파라미터는 `usbHidSofMonitorApplySpeedParams()`에서 직접 채워져, 상태 전환 시 불필요한 0 초기화가 사라졌다. *(V251005R6)*
 - 유효 속도에서는 `usbHidSofMonitorApplySpeedParams()`가 곧바로 테이블 값을 복사해, 중복 0 초기화를 제거했다. *(V251007R2)*
-- 기대 간격·안정 임계·감쇠 주기는 16비트로 저장되어 ISR에서의 로드/스토어 폭이 줄었다. *(V251005R7)*
+- 기대 간격과 감쇠 주기는 16비트로 저장되며, 안정 임계는 런타임에서 `expected_us * 2`로 계산되어 구조체 접근이 한 번 줄었다. *(V251005R7, V251008R5)*
 - 동일 속도로 Prime이 반복될 때는 캐시된 속도 파라미터를 재사용해 추가 메모리 쓰기를 방지한다. *(V251005R8)*
 - 비구성 상태에서는 Prime 초기화만으로 점수가 리셋되므로, 추가 구조체 쓰기를 제거해 반복 초기화를 줄였다. *(V251006R2)*
 - 홀드오프 혹은 워밍업 델타가 0이면 Prime이 바로 0을 기록하고 워밍업 완료로 표시해, 구성 외 구간의 다음 SOF부터 조건 분기를 건너뛴다. *(V251007R9)*
@@ -69,7 +69,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
 ---
 
 ## 3. 파라미터 레퍼런스 (`sof_monitor_params[]`)
-| USB 속도 | `expected_us` | `stable_threshold_us` | `decay_interval_us` | `degrade_threshold` | 워밍업 필요 프레임 |
+| USB 속도 | `expected_us` | 안정 임계 (`expected*2`) | `decay_interval_us` | `degrade_threshold` | 워밍업 필요 프레임 |
 | --- | --- | --- | --- | --- | --- |
 | HS (8k/4k/2k 공통) | 125 | 250 | 4000 | 12 | 2048 |
 | FS (1k) | 1000 | 2000 | 20000 | 6 | 128 |
@@ -101,6 +101,7 @@ usb suspend/resume/reset
 - BootMode에 따른 HS `bInterval`과 기대 폴링 간격은 `usbBootModeRefreshCaches()`가 BootMode 변경 시 계산해 두며, 조회 함수는 캐시된 값을 바로 반환합니다. *(V251006R5, V251008R4)*
 - 다운그레이드 요청은 큐가 처리하며, ARM → COMMIT 단계에서 BootMode 저장과 리셋을 담당합니다.
 - `usbHidMeasurePollRate()`는 BootMode가 변경될 때만 폴링 샘플 윈도우와 기대 간격 캐시를 갱신하며, 카운터를 16비트/전위 증가 비교로 유지해 루프당 연산을 줄입니다. *(V251007R6, V251007R9, V251008R4)*
+- `usbHidMeasureRateTime()`은 데이터 IN 처리 시 단일 `micros()` 결과를 공유해 폴링 지표·키 지연 기록을 동시에 계산합니다. *(V251008R5)*
 - SOF 타임스탬프 비교 보조 함수(`usbHidTimeIsBefore`, `usbHidTimeIsAfterOrEqual`)는 인라인화되어 ISR 호출 비용을 줄였습니다. *(V251005R2)*
 - 다운그레이드 타깃은 Enum 순차 증가 방식으로 계산되어 switch 분기가 제거되었습니다. *(V251005R7)*
 - 안정 감시 단계에서만 `expected_us`를 읽어 워밍업 및 정상 프레임에서는 구조체 접근이 발생하지 않습니다. *(V251006R1)*
@@ -157,7 +158,9 @@ usbHidMonitorSof(now):
     monitor.holdoff_end_us = 0
 
   interval = now - prev_tick
-  below_threshold = (interval < stable_threshold)
+  expected = monitor.expected_us
+  stable_threshold = expected * 2                          // V251008R5 안정 범위는 기대 간격의 두 배로 계산
+  below_threshold = (expected != 0) and (interval < stable_threshold)
   warmup_complete = monitor.warmed_up                    // V251006R6 워밍업 상태 로컬 캐시
   if (!warmup_complete):
     if (below_threshold and warmup_good_frames < warmup_target):
@@ -185,7 +188,7 @@ usbHidMonitorSof(now):
     decay_score_if_needed()
     return
 
-  missed_frames = usbCalcMissedFrames(expected_us, interval)   // V251005R6 상수 분기 기반 누락 프레임 계산 공유 (안정 감시 단계에서만 expected_us 사용, V251006R1 — 임계 이하 구간은 V251006R9로 조기 반환)
+  missed_frames = usbCalcMissedFrames(expected, interval)   // V251005R6 상수 분기 기반 누락 프레임 계산 공유 (안정 감시 단계에서만 expected_us 사용, V251006R1 — 임계 이하 구간은 V251006R9로 조기 반환)
   penalty = min(missed_frames - 1, SCORE_CAP)                  // V251008R3 SCORE_CAP + 1 비교로 즉시 상한 결정
   trigger_downgrade = (score >= degrade_threshold)
   if (!trigger_downgrade and penalty != 0):                     // V251008R2 패널티 존재 시에만 연산 수행

@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251008R4"  // V251008R4: BootMode 간격 캐시 및 폴링 모니터 경량화
+#define _DEF_FIRMWATRE_VERSION      "V251008R5"  // V251008R5: SOF 모니터 임계 계산/측정 루틴 경량화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

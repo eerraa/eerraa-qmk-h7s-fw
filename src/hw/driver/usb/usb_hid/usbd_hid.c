@@ -493,7 +493,8 @@ enum
   USB_SOF_MONITOR_WARMUP_TIMEOUT_US = USB_SOF_MONITOR_WARMUP_TIMEOUT_MS * 1000UL,        // 워밍업 최대 시간(us)
   USB_SOF_MONITOR_RESUME_HOLDOFF_US = 200U * 1000UL,                                      // 일시중지 해제 후 홀드오프(us)
   USB_SOF_MONITOR_RECOVERY_DELAY_US = 50U * 1000UL,                                      // 다운그레이드 실패 후 지연(us)
-  USB_BOOT_MONITOR_CONFIRM_DELAY_US = USB_BOOT_MONITOR_CONFIRM_DELAY_MS * 1000UL          // 다운그레이드 확인 대기(us)
+  USB_BOOT_MONITOR_CONFIRM_DELAY_US = USB_BOOT_MONITOR_CONFIRM_DELAY_MS * 1000UL,         // 다운그레이드 확인 대기(us)
+  USB_SOF_MONITOR_STABLE_MARGIN_MULTIPLIER = 2U                                           // V251008R5 안정 임계는 기대 간격의 2배로 계산
 };
 
 typedef struct usb_sof_monitor_params_s usb_sof_monitor_params_t;   // V251003R1 파라미터 전방 선언
@@ -505,7 +506,6 @@ typedef struct
   uint32_t                        holdoff_end_us;             // 다운그레이드 홀드오프 종료 시각(us)
   uint32_t                        warmup_deadline_us;         // 워밍업 타임아웃 시각(us)
   uint16_t                        expected_us;                // V251005R7 16비트 캐시로 ISR 메모리 접근 축소
-  uint16_t                        stable_threshold_us;        // V251005R7 16비트 안정 범위 캐시로 로드 폭 축소
   uint16_t                        decay_interval_us;          // V251005R7 16비트 감쇠 주기로 구조체 크기 경량화
   uint16_t                        warmup_target_frames;       // V251003R5 워밍업 목표 프레임 직접 캐시
   uint16_t                        warmup_good_frames;         // V250924R3 누적 정상 프레임 수
@@ -520,7 +520,6 @@ struct usb_sof_monitor_params_s
 {
   uint8_t  speed_code;                                            // V251002R1 속도별 SOF 파라미터 키
   uint16_t expected_us;                                           // V251005R7 16비트 기대 간격으로 테이블 플래시 절감
-  uint16_t stable_threshold_us;                                   // V251005R7 16비트 정상 범위 상한으로 접근 폭 축소
   uint16_t decay_interval_us;                                     // V251005R7 16비트 감쇠 주기 저장으로 경량화
   uint8_t  degrade_threshold;                                     // V251002R1 다운그레이드 임계 점수
   uint16_t warmup_target_frames;                                  // V251002R1 워밍업에 필요한 정상 프레임 수
@@ -528,8 +527,8 @@ struct usb_sof_monitor_params_s
 
 static const usb_sof_monitor_params_t sof_monitor_params[] =      // V251002R1 속도별 SOF 파라미터 테이블
 {
-  {USBD_SPEED_HIGH, 125U, 250U, 4000U, 12U, USB_SOF_MONITOR_WARMUP_FRAMES_HS},
-  {USBD_SPEED_FULL, 1000U, 2000U, 20000U, 6U, USB_SOF_MONITOR_WARMUP_FRAMES_FS},
+  {USBD_SPEED_HIGH, 125U, 4000U, 12U, USB_SOF_MONITOR_WARMUP_FRAMES_HS},
+  {USBD_SPEED_FULL, 1000U, 20000U, 6U, USB_SOF_MONITOR_WARMUP_FRAMES_FS},
 };
 
 static usb_sof_monitor_t sof_monitor = {0};                       // V250924R2 SOF 안정성 상태
@@ -555,16 +554,14 @@ static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 �
   {
     const usb_sof_monitor_params_t *params = &sof_monitor_params[speed_code];
 
-    sof_monitor.expected_us          = params->expected_us;         // V251005R7 16비트 파라미터 직접 복사로 ISR 폭 축소 유지
-    sof_monitor.stable_threshold_us  = params->stable_threshold_us; // V251005R7 16비트 파라미터 직접 복사로 메모리 접근 경량화
+    sof_monitor.expected_us          = params->expected_us;         // V251005R7 16비트 파라미터 직접 복사로 ISR 폭 축소 유지, V251008R5 안정 임계는 런타임 계산으로 대체
     sof_monitor.decay_interval_us    = params->decay_interval_us;   // V251005R7 16비트 감쇠 주기 복사로 구조체 축소
     sof_monitor.degrade_threshold    = params->degrade_threshold;   // V251003R5 속도 파라미터 직접 복사로 런타임 접근 최소화
     sof_monitor.warmup_target_frames = params->warmup_target_frames;// V251003R5 속도 파라미터 직접 복사로 런타임 접근 최소화
   }
   else
   {
-    sof_monitor.expected_us          = 0U;                          // V251007R2 알 수 없는 속도에서는 0 초기화 유지
-    sof_monitor.stable_threshold_us  = 0U;
+    sof_monitor.expected_us          = 0U;                          // V251007R2 알 수 없는 속도에서는 0 초기화 유지 (안정 임계 계산도 0)
     sof_monitor.decay_interval_us    = 0U;
     sof_monitor.degrade_threshold    = 0U;
     sof_monitor.warmup_target_frames = 0U;
@@ -1450,9 +1447,10 @@ static void usbHidMonitorSof(uint32_t now_us)
   }
 
   uint32_t prev_tick_us    = mon->prev_tick_us;
-  uint32_t stable_threshold = mon->stable_threshold_us;
+  uint16_t expected_us     = mon->expected_us;                      // V251008R5 안정 임계와 패널티 계산에 재사용할 기대 간격 캐시
+  uint32_t stable_threshold = (uint32_t)expected_us * USB_SOF_MONITOR_STABLE_MARGIN_MULTIPLIER; // V251008R5 기대 간격의 두 배로 안정 범위 산출
   uint32_t delta_us         = now_us - prev_tick_us;
-  bool     delta_below_threshold = delta_us < stable_threshold;     // V251006R8 임계 비교 결과 캐시로 반복 비교 제거
+  bool     delta_below_threshold = (expected_us != 0U) && (delta_us < stable_threshold);     // V251006R8 임계 비교 결과 캐시, V251008R5 기대값이 없을 때 안정 판정 생략
 
   mon->prev_tick_us = now_us;
 
@@ -1541,8 +1539,6 @@ static void usbHidMonitorSof(uint32_t now_us)
 
   last_decay_us = now_us;                                         // V251003R6 감쇠 기준 타임스탬프 즉시 갱신
 
-  uint16_t expected_us = mon->expected_us;                         // V251006R1 안정 감시 단계에서만 기대 간격 로드
-
   if ((delta_below_threshold == false) && (expected_us != 0U))     // V251006R9 임계 이하 간격에서는 누락 프레임 계산을 생략
   {
     uint32_t missed_frames = usbCalcMissedFrames((uint32_t)expected_us,
@@ -1615,14 +1611,13 @@ static void usbHidMonitorSof(uint32_t now_us)
 
 void usbHidMeasureRateTime(void)
 {
-  rate_time_sof = micros() - rate_time_sof_pre;
+  uint32_t now_us = micros();                                      // V251008R5 데이터 IN 이후 측정에 단일 타임스탬프 재사용
+
+  rate_time_sof = now_us - rate_time_sof_pre;
 
   if (rate_time_req)
   {
-    uint32_t rate_time_cur;
-
-    rate_time_cur = micros();
-    rate_time_us  = rate_time_cur - rate_time_pre;
+    rate_time_us = now_us - rate_time_pre;
     rate_time_sum += rate_time_us;
     if (rate_time_min_check > rate_time_us)
     {
@@ -1664,7 +1659,7 @@ void usbHidMeasureRateTime(void)
 
   if (key_time_req)
   {
-    key_time_end = micros()-key_time_pre;
+    key_time_end = now_us - key_time_pre;
     key_time_req = false;
 
     key_time_log[key_time_idx] = key_time_end;
@@ -1672,7 +1667,7 @@ void usbHidMeasureRateTime(void)
     if (key_time_raw_req)
     {
       key_time_raw_req = false;
-      key_time_raw_log[key_time_idx] = micros()-key_time_raw_pre;
+      key_time_raw_log[key_time_idx] = now_us - key_time_raw_pre;
       key_time_pre_log[key_time_idx] = key_time_pre-key_time_raw_pre;
     }
     else
