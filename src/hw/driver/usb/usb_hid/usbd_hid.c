@@ -43,6 +43,7 @@
 #include "usbd_ctlreq.h"
 #include "usbd_desc.h"
 #include "usb.h"                                                // V250923R1 Boot mode aware intervals
+#include "ws2812.h"                                            // V251008R8 WS2812 DMA 완료 콜백 연동
 
 #include "cli.h"
 #include "log.h"
@@ -1807,6 +1808,13 @@ volatile uint32_t timer_end = 0;
 
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 {
+#ifdef _USE_HW_WS2812
+  if (ws2812HandleDmaComplete(htim) == true)
+  {
+    return;                                                      // V251008R8 WS2812 DMA 완료 시 다른 경로 차단
+  }
+#endif
+
   timer_cnt++;
   timer_end = micros()-rate_time_sof_pre;
 
