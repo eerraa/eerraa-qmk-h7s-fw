@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251008R8"  // V251008R8: LED 상태 경로 비동기화 및 EP0 홀드오프 제거 재검토
+#define _DEF_FIRMWATRE_VERSION      "V251008R8"  // V251008R8: USB SOF 점수 상한을 테스트용으로 V251001R6 수준으로 복귀
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
