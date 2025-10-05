@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251009R1"  // V251009R1: 인디케이터 중복 갱신 최소화 및 설정 변경 최적화
+#define _DEF_FIRMWATRE_VERSION      "V251009R2"  // V251009R2: 인디케이터 테이블 구조 단순화 및 밝기 0 변환 생략
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

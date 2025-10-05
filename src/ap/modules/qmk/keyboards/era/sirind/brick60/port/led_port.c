@@ -33,21 +33,18 @@ static led_config_t led_config[LED_TYPE_MAX_CH];
 static led_t       host_led_state       = {0};  // V251008R9 호스트 LED 상태 동기화
 static led_t       indicator_led_state  = {0};  // V251009R1 인디케이터 갱신 상태 캐시
 
-static const led_config_t indicator_defaults[LED_TYPE_MAX_CH] = {
-  [LED_TYPE_CAPS] = {.enable = true, .hsv = {0,   255, 255}},
-  [LED_TYPE_SCROLL] = {.enable = true, .hsv = {170, 255, 255}},
-  [LED_TYPE_NUM] = {.enable = true, .hsv = {85,  255, 255}},
-};
-
-static const struct
+typedef struct
 {
-  uint8_t start;
-  uint8_t count;
-} indicator_ranges[LED_TYPE_MAX_CH] = {
-  [LED_TYPE_CAPS] = {0, 10},
-  [LED_TYPE_SCROLL] = {10, 10},
-  [LED_TYPE_NUM] = {20, 10},
-};
+  led_config_t defaults;
+  uint8_t      start;
+  uint8_t      count;
+} indicator_profile_t;
+
+static const indicator_profile_t indicator_profiles[LED_TYPE_MAX_CH] = {
+  [LED_TYPE_CAPS] = {.defaults = {.enable = true, .hsv = {0,   255, 255}}, .start = 0,  .count = 10},
+  [LED_TYPE_SCROLL] = {.defaults = {.enable = true, .hsv = {170, 255, 255}}, .start = 10, .count = 10},
+  [LED_TYPE_NUM] = {.defaults = {.enable = true, .hsv = {85,  255, 255}}, .start = 20, .count = 10},
+};  // V251009R2 인디케이터 기본값과 범위 결합으로 테이블 동기화 단순화
 
 EECONFIG_DEBOUNCE_HELPER(led_caps,   EECONFIG_USER_LED_CAPS,   led_config[LED_TYPE_CAPS]);
 EECONFIG_DEBOUNCE_HELPER(led_scroll, EECONFIG_USER_LED_SCROLL, led_config[LED_TYPE_SCROLL]);
@@ -71,16 +68,14 @@ static void refresh_indicator_display(void)
 
 static void flush_indicator_config(uint8_t led_type)
 {
-  switch (led_type) {
-    case LED_TYPE_CAPS:
-      eeconfig_flush_led_caps(true);
-      break;
-    case LED_TYPE_SCROLL:
-      eeconfig_flush_led_scroll(true);
-      break;
-    case LED_TYPE_NUM:
-      eeconfig_flush_led_num(true);
-      break;
+  static void (*const flush_handler[LED_TYPE_MAX_CH])(bool writeback) = {
+    [LED_TYPE_CAPS] = eeconfig_flush_led_caps,
+    [LED_TYPE_SCROLL] = eeconfig_flush_led_scroll,
+    [LED_TYPE_NUM] = eeconfig_flush_led_num,
+  };  // V251009R2 플러시 함수 테이블화로 조건 분기 제거
+
+  if (led_type < LED_TYPE_MAX_CH && flush_handler[led_type] != NULL) {
+    flush_handler[led_type](true);
   }
 }
 
@@ -94,7 +89,7 @@ void led_init_ports(void)
     bool needs_migration = false;
     // V251008R8 인디케이터 기본값/구버전 데이터 정리
     if (!indicator_config_valid(i, &needs_migration)) {
-      led_config[i] = indicator_defaults[i];
+      led_config[i] = indicator_profiles[i].defaults;
       flush_indicator_config(i);
       continue;
     }
@@ -222,32 +217,33 @@ void via_qmk_led_set_value(uint8_t led_type, uint8_t *data)
     return;
   }
 
-  uint8_t *value_id   = &(data[0]);
-  uint8_t *value_data = &(data[1]);
-  bool     needs_refresh = false;  // V251009R1 설정 변경 시에만 RGBlight 갱신
+  uint8_t      *value_id   = &(data[0]);
+  uint8_t      *value_data = &(data[1]);
+  led_config_t *config     = &led_config[led_type];  // V251009R2 테이블 접근 캐싱으로 반복 인덱싱 감소
+  bool          needs_refresh = false;               // V251009R1 설정 변경 시에만 RGBlight 갱신
 
   switch (*value_id) {
     case id_qmk_led_enable: {
       uint8_t enable = value_data[0] ? 1 : 0;
-      if (led_config[led_type].enable != enable) {
-        led_config[led_type].enable = enable;
-        needs_refresh              = true;
+      if (config->enable != enable) {
+        config->enable = enable;
+        needs_refresh  = true;
       }
       break;
     }
     case id_qmk_led_brightness:
-      if (led_config[led_type].hsv.v != value_data[0]) {
-        led_config[led_type].hsv.v = value_data[0];
-        needs_refresh              = true;
+      if (config->hsv.v != value_data[0]) {
+        config->hsv.v = value_data[0];
+        needs_refresh  = true;
       }
       break;
     case id_qmk_led_color: {
       uint8_t hue        = value_data[0];
       uint8_t saturation = value_data[1];
-      if (led_config[led_type].hsv.h != hue || led_config[led_type].hsv.s != saturation) {
-        led_config[led_type].hsv.h = hue;
-        led_config[led_type].hsv.s = saturation;
-        needs_refresh              = true;
+      if (config->hsv.h != hue || config->hsv.s != saturation) {
+        config->hsv.h = hue;
+        config->hsv.s = saturation;
+        needs_refresh  = true;
       }
       break;
     }
@@ -277,9 +273,16 @@ bool rgblight_indicators_kb(void)
       continue;
     }
 
-    RGB rgb = hsv_to_rgb(led_config[i].hsv);
-    uint8_t start = indicator_ranges[i].start;
-    uint8_t count = indicator_ranges[i].count;
+    const led_config_t        *config  = &led_config[i];
+    const indicator_profile_t *profile = &indicator_profiles[i];
+
+    if (config->hsv.v == 0) {
+      continue;  // V251009R2 밝기 0인 경우 변환 생략으로 오버헤드 감소
+    }
+
+    RGB rgb = hsv_to_rgb(config->hsv);
+    uint8_t start = profile->start;
+    uint8_t count = profile->count;
 
     for (uint8_t offset = 0; offset < count; offset++) {
       uint8_t led_index = start + offset;
