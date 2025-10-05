@@ -8,7 +8,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
 | 파일 | 주요 심볼 | 역할 요약 |
 | --- | --- | --- |
 | `src/hw/driver/usb/usb_hid/usbd_hid.c` | `usbHidMonitorSof`, `usbHidSofMonitorPrime`, `usbHidSofMonitorApplySpeedParams` | SOF ISR, 초기화, 속도 캐시 및 점수 계산.
-| `src/hw/driver/usb/usb.c` | `usbRequestBootModeDowngrade`, `usbProcess`, `usbCalcMissedFrames`, `usbBootModeGetExpectedIntervalUs` | 다운그레이드 큐, 누락 프레임 정규화, BootMode 저장 및 기대 간격 테이블 제공.
+| `src/hw/driver/usb/usb.c` | `usbRequestBootModeDowngrade`, `usbProcess`, `usbCalcMissedFrames`, `usbBootModeGetExpectedIntervalUs` | 다운그레이드 큐, 누락 프레임 정규화, BootMode 저장 및 기대 간격 캐시 제공.
 | `src/hw/driver/usb/usbd_conf.c` | `usbBootModeIsFullSpeed` | PHY 속도 강제, `pdev->dev_speed` 상태 전달.
 | `src/ap/ap.c` | `usbProcess` 호출 | 메인 루프에서 큐 서비스.
 | `src/hw/hw.c`, `src/hw/hw_def.h` | `usbBootModeLoad`, `_DEF_FIRMWATRE_VERSION` | 부팅 시 BootMode 복원, 펌웨어 버전 태깅.
@@ -64,6 +64,7 @@ Codex가 USB 불안정성 탐지 로직을 빠르게 파악하도록 **핵심 �
     - `usbProcess()` 로그는 `missed_frames` 캐시를 직접 캐스팅해 임시 변수를 만들지 않는다. *(V251007R7)*
     - 기대 간격·누락 프레임 캐시는 16비트로 저장되며, ISR이 포화한 값을 그대로 받아 추가 연산 없이 유지한다. *(V251005R9, V251007R1)*
     - 기대 간격 혹은 누락 프레임이 0으로 전달되면 ARM 단계에 진입하기 전에 즉시 거부해 초기화 잔여값으로 인한 불필요한 Stage 소모를 막는다. *(V251007R4)*
+- BootMode 파생 파라미터(HS `bInterval`, 기대 폴링 간격)는 `usbBootModeRefreshCaches()`가 BootMode 변경 시 한 번에 계산해 두어, 조회 함수가 캐시된 값을 즉시 제공한다. *(V251008R4)*
 
 ---
 
@@ -97,9 +98,9 @@ usb suspend/resume/reset
 - ISR에서는 `usbHidSofMonitorSyncTick()`으로 타임스탬프를 갱신한 뒤, 홀드오프 → 워밍업 → 안정 감시 → 임계 판단 순으로 진행합니다.
 - `usbHidUpdateWakeUp()`이 서스펜드를 감지하면 점수·타임스탬프를 리셋하고 즉시 반환합니다.
 - Prime은 동일 속도 재호출 시 캐시된 파라미터를 그대로 사용해 구조체 쓰기를 최소화합니다. *(V251005R8)*
-- BootMode에 따른 HS `bInterval`과 기대 폴링 간격은 `usb.c`의 공용 테이블에서 조회되며, `usbBootModeGetExpectedIntervalUs()`로 모든 모듈이 동일 값을 사용합니다. *(V251006R5)*
+- BootMode에 따른 HS `bInterval`과 기대 폴링 간격은 `usbBootModeRefreshCaches()`가 BootMode 변경 시 계산해 두며, 조회 함수는 캐시된 값을 바로 반환합니다. *(V251006R5, V251008R4)*
 - 다운그레이드 요청은 큐가 처리하며, ARM → COMMIT 단계에서 BootMode 저장과 리셋을 담당합니다.
-- `usbHidMeasurePollRate()`는 BootMode가 변경될 때만 폴링 샘플 윈도우를 갱신하며, 카운터를 16비트/전위 증가 비교로 유지해 루프당 연산을 줄입니다. *(V251007R6, V251007R9)*
+- `usbHidMeasurePollRate()`는 BootMode가 변경될 때만 폴링 샘플 윈도우와 기대 간격 캐시를 갱신하며, 카운터를 16비트/전위 증가 비교로 유지해 루프당 연산을 줄입니다. *(V251007R6, V251007R9, V251008R4)*
 - SOF 타임스탬프 비교 보조 함수(`usbHidTimeIsBefore`, `usbHidTimeIsAfterOrEqual`)는 인라인화되어 ISR 호출 비용을 줄였습니다. *(V251005R2)*
 - 다운그레이드 타깃은 Enum 순차 증가 방식으로 계산되어 switch 분기가 제거되었습니다. *(V251005R7)*
 - 안정 감시 단계에서만 `expected_us`를 읽어 워밍업 및 정상 프레임에서는 구조체 접근이 발생하지 않습니다. *(V251006R1)*
