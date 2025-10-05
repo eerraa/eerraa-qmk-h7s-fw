@@ -614,6 +614,11 @@ void rgblight_sethsv_eeprom_helper(uint8_t hue, uint8_t sat, uint8_t val, bool w
         rgblight_config.hue = hue;
         rgblight_config.sat = sat;
         rgblight_config.val = val;
+#ifdef RGBLIGHT_USE_TIMER
+        if (!is_static_effect(rgblight_config.mode)) {
+            animation_status.restart = true;  // V251009R5 동적 효과 색상 변경 시 즉시 재렌더링
+        }
+#endif
         if (write_to_eeprom) {
             eeconfig_update_rgblight(rgblight_config.raw);
             dprintf("rgblight set hsv [EEPROM]: %u,%u,%u\n", rgblight_config.hue, rgblight_config.sat, rgblight_config.val);
@@ -1157,13 +1162,13 @@ void rgblight_timer_task(void) {
             effect_func   = (effect_func_t)rgblight_effect_twinkle;
         }
 #    endif
+        uint16_t now = sync_timer_read();
         if (animation_status.restart) {
             animation_status.restart    = false;
-            animation_status.last_timer = sync_timer_read();
-            animation_status.pos16      = 0; // restart signal to local each effect
-        }
-        uint16_t now = sync_timer_read();
-        if (timer_expired(now, animation_status.last_timer)) {
+            animation_status.pos16      = 0;  // restart signal to local each effect
+            animation_status.last_timer = now + interval_time;  // V251009R5 재시작 즉시 렌더링 후 다음 틱 예약
+            effect_func(&animation_status);
+        } else if (timer_expired(now, animation_status.last_timer)) {
 #    if defined(RGBLIGHT_SPLIT) && !defined(RGBLIGHT_SPLIT_NO_ANIMATION_SYNC)
             static uint16_t report_last_timer = 0;
             static bool     tick_flag         = false;
