@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251008R8"  // V251008R8: RGBlight 인디케이터 일괄 갱신 흐름 유지
+#define _DEF_FIRMWATRE_VERSION      "V251008R9"  // V251008R9: 호스트 LED 상태 버퍼링으로 인디케이터 복구
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
