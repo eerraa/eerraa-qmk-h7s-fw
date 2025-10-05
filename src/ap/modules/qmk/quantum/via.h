@@ -113,12 +113,12 @@ enum via_channel_id {
     id_qmk_led_matrix_channel = 5,
     id_qmk_led_caps_channel   = 6,
     id_qmk_led_scroll_channel = 7,
-    id_qmk_version            = 8,
-    id_qmk_system             = 9,
-    id_qmk_kill_switch_lr     = 10,
-    id_qmk_kill_switch_ud     = 11,
-    id_qmk_kkuk               = 12,
-    id_qmk_led_num_channel    = 13, // V251008R8 넘버락 인디케이터 채널
+    id_qmk_led_num_channel    = 8,  // V251009R1 넘버락 인디케이터 채널 재배치
+    id_qmk_version            = 9,
+    id_qmk_system             = 10,
+    id_qmk_kill_switch_lr     = 11,
+    id_qmk_kill_switch_ud     = 12,
+    id_qmk_kkuk               = 13,
 };
 
 enum via_qmk_backlight_value {

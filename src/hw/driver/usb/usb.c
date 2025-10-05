@@ -136,7 +136,7 @@ static const char *usbBootModeLabel(UsbBootMode_t mode)
 
 bool usbBootModeLoad(void)
 {
-  uint32_t raw_mode = eeprom_read_dword((const uint32_t *)EECONFIG_USER_BOOTMODE);
+  uint32_t raw_mode = eeprom_read_dword((const uint32_t *)EECONFIG_USER_BOOTMODE); // V251009R1 부트 모드 슬롯 재배치 반영
 
   if (raw_mode >= USB_BOOT_MODE_MAX)
   {
@@ -173,7 +173,7 @@ uint16_t usbBootModeGetExpectedIntervalUs(void)                      // V251006R
 static bool usbBootModeStore(UsbBootMode_t mode)
 {
   uint32_t raw_mode = (uint32_t)mode;
-  uint32_t addr     = (uint32_t)EECONFIG_USER_BOOTMODE;
+  uint32_t addr     = (uint32_t)EECONFIG_USER_BOOTMODE;                              // V251009R1 부트 모드 슬롯 재배치 반영
 
   if (mode >= USB_BOOT_MODE_MAX)
   {

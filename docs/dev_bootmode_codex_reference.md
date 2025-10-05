@@ -48,6 +48,11 @@
 ### V250924R1 — 폴링 계측 정합
 - `usbHidMeasurePollRate()`가 부트 모드를 참조해 SOF 샘플 윈도우(1000 vs 8000)를 자동 선택하고, 버전 문자열을 `V250924R1`으로 갱신했습니다.
 
+### V251009R1 — EEPROM 슬롯 재배치
+- 사용자 EEPROM 재배치에 맞춰 `EECONFIG_USER_BOOTMODE` 오프셋을 `0x20`(32)으로 이동하고, 인디케이터 · SOCD · KKUK 슬롯을 선행 배치했습니다.
+- `qmk/port/port.h`에 슬롯 오프셋 상수를 분리하고 `_Static_assert`로 사용자 영역 크기 내 배치를 검증합니다.
+- `usb.c`의 부트 모드 저장/로드 경로가 신규 오프셋을 참조함을 명시해 향후 점검 시 혼선을 줄였습니다.
+
 ## 5. CODEX 점검 팁
 - `usbBootModeGetHsInterval()` 호출이 추가되는 지점에서는 FS 강제 시 `HID_FS_BINTERVAL`이 유지되는지 동시에 확인하십시오.
 - `usbBootModeSaveAndReset()`은 즉시 리셋을 수행하므로, CLI 확장 시 사용자 메시지 출력 후 리셋되도록 순서를 조정해야 합니다.
