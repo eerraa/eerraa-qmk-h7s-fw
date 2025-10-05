@@ -49,6 +49,7 @@
 #include "keys.h"
 #include "qbuffer.h"
 #include "report.h"
+#include "ws2812.h"                                           // V251009R5 WS2812 DMA 콜백 연동
 
 
 #if HW_USB_LOG == 1
@@ -1807,6 +1808,12 @@ volatile uint32_t timer_end = 0;
 
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 {
+  if (htim->Instance == TIM15)
+  {
+    ws2812DmaTransferDone();  // V251009R5 WS2812 DMA 완료 처리
+    return;
+  }
+
   timer_cnt++;
   timer_end = micros()-rate_time_sof_pre;
 

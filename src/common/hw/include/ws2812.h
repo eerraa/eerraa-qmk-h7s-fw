@@ -23,6 +23,7 @@ extern "C" {
 bool ws2812Init(void);
 void ws2812SetColor(uint32_t ch, uint32_t color);
 bool ws2812Refresh(void);
+void ws2812DmaTransferDone(void);  // V251009R5 WS2812 DMA 완료 콜백 포워딩
 
 
 #endif

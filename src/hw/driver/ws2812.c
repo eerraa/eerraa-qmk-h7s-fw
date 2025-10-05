@@ -11,6 +11,7 @@
 #define BIT_ZERO   (50)
 
 bool is_init = false;
+static volatile bool is_refresh_busy = false;  // V251009R5 WS2812 DMA 완료 동기화 플래그
 
 
 typedef struct
@@ -22,6 +23,8 @@ typedef struct
 
 __attribute__((section(".non_cache")))
 static uint8_t bit_buf[BIT_ZERO + 24*(HW_WS2812_MAX_CH+1)];
+
+static void ws2812WaitForIdle(void);  // V251009R5 DMA 완료 대기 헬퍼
 
 
 ws2812_t ws2812;
@@ -36,6 +39,29 @@ static bool ws2812InitHw(void);
 
 
 
+
+
+static void ws2812WaitForIdle(void)
+{
+  if (is_init == false)
+  {
+    return;
+  }
+
+  if (is_refresh_busy == false)
+  {
+    return;
+  }
+
+  uint32_t start_time = micros();
+  while (is_refresh_busy)
+  {
+    if ((micros() - start_time) > 3000)
+    {
+      break;  // V251009R5 DMA 정지 타임아웃 가드
+    }
+  }
+}
 
 
 bool ws2812Init(void)
@@ -177,9 +203,27 @@ bool ws2812InitHw(void)
 
 bool ws2812Refresh(void)
 {
+  if (is_init == false)
+  {
+    return false;
+  }
+
   HAL_TIM_PWM_Stop_DMA(ws2812.h_timer, ws2812.channel);
-  HAL_TIM_PWM_Start_DMA(ws2812.h_timer, ws2812.channel,  (const uint32_t *)bit_buf, sizeof(bit_buf));
+  is_refresh_busy = false;  // V251009R5 DMA 중단 시 상태 초기화
+
+  is_refresh_busy = true;
+  if (HAL_TIM_PWM_Start_DMA(ws2812.h_timer, ws2812.channel, (const uint32_t *)bit_buf, sizeof(bit_buf)) != HAL_OK)
+  {
+    is_refresh_busy = false;
+    return false;
+  }
+
   return true;
+}
+
+void ws2812DmaTransferDone(void)
+{
+  is_refresh_busy = false;  // V251009R5 DMA 완료 시 상태 갱신
 }
 
 void ws2812SetColor(uint32_t ch, uint32_t color)
@@ -194,6 +238,8 @@ void ws2812SetColor(uint32_t ch, uint32_t color)
 
   if (ch >= WS2812_MAX_CH)
     return;
+
+  ws2812WaitForIdle();  // V251009R5 DMA 완료 후 버퍼 업데이트
 
   red   = (color >> 16) & 0xFF;
   green = (color >> 8) & 0xFF;

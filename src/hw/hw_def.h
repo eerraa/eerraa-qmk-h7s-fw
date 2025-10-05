@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251009R4"  // V251009R4: BRICK60 LED 포트 가드 헬퍼/범위 캐싱 및 리뷰 문서 갱신
+#define _DEF_FIRMWATRE_VERSION      "V251009R5"  // V251009R5: WS2812 DMA 완료 동기화 및 RGB 지연 개선
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
