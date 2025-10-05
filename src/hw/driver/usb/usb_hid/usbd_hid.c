@@ -488,7 +488,7 @@ enum
   USB_SOF_MONITOR_WARMUP_TIMEOUT_MS = USB_SOF_MONITOR_CONFIG_HOLDOFF_MS + USB_BOOT_MONITOR_CONFIRM_DELAY_MS, // V250924R3 워밍업 최대 시간(ms)
   USB_SOF_MONITOR_WARMUP_FRAMES_HS  = 2048U,                                             // V250924R3 HS 안정성 확인 프레임 수
   USB_SOF_MONITOR_WARMUP_FRAMES_FS  = 128U,                                              // V250924R3 FS 안정성 확인 프레임 수
-  USB_SOF_MONITOR_SCORE_CAP         = 7U,                                                // V251005R4 대규모 SOF 누락 가중치 확장
+  USB_SOF_MONITOR_SCORE_CAP         = 3U,                                                // V251008R8 테스트 복귀: V251001R6 점수 상한 원복
   USB_SOF_MONITOR_CONFIG_HOLDOFF_US = USB_SOF_MONITOR_CONFIG_HOLDOFF_MS * 1000UL,        // 구성 직후 워밍업 지연(us)
   USB_SOF_MONITOR_WARMUP_TIMEOUT_US = USB_SOF_MONITOR_WARMUP_TIMEOUT_MS * 1000UL,        // 워밍업 최대 시간(us)
   USB_SOF_MONITOR_RESUME_HOLDOFF_US = 200U * 1000UL,                                      // 일시중지 해제 후 홀드오프(us)
@@ -1559,34 +1559,44 @@ static void usbHidMonitorSof(uint32_t now_us)
     uint32_t missed_frames = usbCalcMissedFrames((uint32_t)expected_us,
                                                  delta_us);         // V251005R6 속도별 상수 나눗셈으로 누락 프레임 산출
                                                                     // V251007R9 안정 임계 ≥ 2×기대 간격이어서 최소 1프레임 보장
-    uint8_t  penalty       = (missed_frames <= (USB_SOF_MONITOR_SCORE_CAP + 1U))
-                               ? (uint8_t)(missed_frames - 1U)
-                               : USB_SOF_MONITOR_SCORE_CAP;        // V251008R3 상수 비교로 8비트 패널티 즉시 산출 (V251005R5 8비트 산술 유지)
+    uint8_t  delta_score   = 1U;                                    // V251008R8 테스트 복귀: V251001R6 점수제와 동일한 가중치 계산
 
-    uint8_t degrade_threshold = mon->degrade_threshold;            // V251003R7 임계 파라미터 접근 지연으로 ISR 경량화
-    bool    downgrade_trigger = (score >= degrade_threshold);      // V251008R2 기존 점수만으로 임계 초과 여부 선행 판단
-
-    if (!downgrade_trigger && penalty != 0U)                       // V251008R2 패널티가 있을 때만 누적 연산 실행
+    if (missed_frames > 4U)
     {
-      uint8_t room = (uint8_t)(degrade_threshold - score);         // V251008R2 임계까지 남은 점수 여유 계산
-
-      if (penalty >= room)
-      {
-        score             = degrade_threshold;                     // V251008R2 임계 도달 시 점수를 포화해 후속 비교 제거
-        downgrade_trigger = true;
-      }
-      else
-      {
-        score = (uint8_t)(score + penalty);                        // V251008R2 임계 미도달 시 패널티만 누적
-      }
+      delta_score = 4U;                                            // V251008R8 대규모 누락 시 가중치 4점 부여
+    }
+    else if (missed_frames > 1U)
+    {
+      delta_score = (uint8_t)(missed_frames - 1U);                 // V251008R8 누락 프레임 수 - 1 만큼 가중치
     }
 
-    if (downgrade_trigger)                                         // V251008R2 포화 이후에도 동일 조건으로 다운그레이드 유지
+    if (delta_score > USB_SOF_MONITOR_SCORE_CAP)
+    {
+      delta_score = USB_SOF_MONITOR_SCORE_CAP;                     // V251008R8 테스트 복귀: 점수 상한 3점으로 제한
+    }
+
+    if (delta_score < 1U)
+    {
+      delta_score = 1U;                                            // V251008R8 최소 가중치는 1점 고정
+    }
+
+    if (score <= (uint8_t)(0xFFU - delta_score))
+    {
+      score = (uint8_t)(score + delta_score);                      // V251008R8 8비트 누적으로 점수 증가
+    }
+    else
+    {
+      score = 0xFFU;                                               // V251008R8 오버플로 방지를 위한 포화 처리
+    }
+
+    uint8_t degrade_threshold = mon->degrade_threshold;            // V251003R7 임계 파라미터 접근 지연으로 ISR 경량화
+
+    if (score >= degrade_threshold)                                // V251008R8 임계 초과 시 다운그레이드 절차 진입
     {
       UsbBootMode_t next_mode = usbHidResolveDowngradeTarget();
       uint32_t      holdoff   = USB_SOF_MONITOR_RECOVERY_DELAY_US; // V251003R1 홀드오프 연장 경로 통합
 
-      if (next_mode < USB_BOOT_MODE_MAX)                           // V251008R3 다운그레이드 대상이 있을 때만 보고값 산출·큐 요청
+      if (next_mode < USB_BOOT_MODE_MAX)
       {
         uint16_t missed_frames_report = (missed_frames > UINT16_MAX) ? UINT16_MAX
                                                                   : (uint16_t)missed_frames; // V251006R2 다운그레이드 시에만 누락 프레임 포화 변환
@@ -1602,15 +1612,11 @@ static void usbHidMonitorSof(uint32_t now_us)
 
         if (request_result == USB_BOOT_DOWNGRADE_ARMED || request_result == USB_BOOT_DOWNGRADE_CONFIRMED)
         {
-          holdoff = USB_BOOT_MONITOR_CONFIRM_DELAY_US;
+          holdoff = USB_BOOT_MONITOR_CONFIRM_DELAY_US;             // V251008R8 기존 대비 홀드오프 계산은 유지
         }
       }
       mon->holdoff_end_us = now_us + holdoff;
-      score               = 0U;                                    // V251003R9 로컬 점수 초기화 후 구조체 반영
-    }
-    else
-    {
-      // no-op: score가 8비트 누적으로 이미 갱신됨               // V251005R8 단일 비교 경로에서는 추가 처리 불필요
+      score               = 0U;                                    // V251008R8 다운그레이드 후 점수 초기화
     }
   }
 
