@@ -36,8 +36,8 @@ typedef struct
   indicator_flush_fn_t flush;
 } indicator_profile_t;
 
-static void via_qmk_led_get_value(uint8_t led_type, uint8_t *data);
-static void via_qmk_led_set_value(uint8_t led_type, uint8_t *data);
+static bool via_qmk_led_get_value(uint8_t led_type, uint8_t *data, uint8_t length);  // V251009R9 VIA 페이로드 길이 검증 헬퍼 확장
+static bool via_qmk_led_set_value(uint8_t led_type, uint8_t *data, uint8_t length);  // V251009R9 VIA 페이로드 길이 검증 헬퍼 확장
 static void via_qmk_led_save(uint8_t led_type);
 static void refresh_indicator_display(void);
 static bool indicator_config_valid(uint8_t led_type, bool *needs_migration);
@@ -210,13 +210,18 @@ void via_qmk_led_command(uint8_t led_type, uint8_t *data, uint8_t length)
 
   uint8_t *command_id        = &(data[0]);
   uint8_t *value_id_and_data = &(data[2]);
+  uint8_t  payload_length    = length - 2;  // V251009R9 VIA 페이로드 가용 길이 계산
 
   switch (*command_id) {
     case id_custom_set_value:
-      via_qmk_led_set_value(led_type, value_id_and_data);
+      if (!via_qmk_led_set_value(led_type, value_id_and_data, payload_length)) {
+        *command_id = id_unhandled;  // V251009R9 VIA 서브커맨드 실패 시 에러 보고
+      }
       break;
     case id_custom_get_value:
-      via_qmk_led_get_value(led_type, value_id_and_data);
+      if (!via_qmk_led_get_value(led_type, value_id_and_data, payload_length)) {
+        *command_id = id_unhandled;  // V251009R9 VIA 서브커맨드 실패 시 에러 보고
+      }
       break;
     case id_custom_save:
       via_qmk_led_save(led_type);
@@ -273,43 +278,69 @@ static bool should_light_indicator(const led_config_t *config, const indicator_p
   return (led_state.raw & profile->host_mask) != 0;  // V251009R2 호스트 LED 비트 매핑 단순화, V251009R4 프로파일 포인터 재사용
 }
 
-void via_qmk_led_get_value(uint8_t led_type, uint8_t *data)
+static bool via_qmk_led_get_value(uint8_t led_type, uint8_t *data, uint8_t length)
 {
-  led_config_t *config = led_config_from_type(led_type);
-  if (config == NULL) {
-    return;
+  if (data == NULL || length == 0) {
+    return false;  // V251009R9 VIA 응답 버퍼 가용성 검증
   }
 
-  uint8_t *value_id   = &(data[0]);
-  uint8_t *value_data = &(data[1]);
+  led_config_t *config = led_config_from_type(led_type);
+  if (config == NULL) {
+    return false;
+  }
+
+  uint8_t *value_id     = &(data[0]);
+  uint8_t *value_data   = &(data[1]);
+  uint8_t  value_length = (length > 0) ? (length - 1) : 0;
 
   switch (*value_id) {
     case id_qmk_led_enable:
+      if (value_length < 1) {
+        return false;  // V251009R9 VIA 응답 길이 부족 시 실패 처리
+      }
       value_data[0] = config->enable;
-      break;
+      return true;
     case id_qmk_led_brightness:
+      if (value_length < 1) {
+        return false;  // V251009R9 VIA 응답 길이 부족 시 실패 처리
+      }
       value_data[0] = config->hsv.v;
-      break;
+      return true;
     case id_qmk_led_color:
+      if (value_length < 2) {
+        return false;  // V251009R9 VIA 응답 길이 부족 시 실패 처리
+      }
       value_data[0] = config->hsv.h;
       value_data[1] = config->hsv.s;
+      return true;
+    default:
       break;
   }
+
+  return false;
 }
 
-void via_qmk_led_set_value(uint8_t led_type, uint8_t *data)
+static bool via_qmk_led_set_value(uint8_t led_type, uint8_t *data, uint8_t length)
 {
-  led_config_t *config = led_config_from_type(led_type);
-  if (config == NULL) {
-    return;
+  if (data == NULL || length == 0) {
+    return false;  // V251009R9 VIA 설정 페이로드 가용성 검증
   }
 
-  uint8_t *value_id   = &(data[0]);
-  uint8_t *value_data = &(data[1]);
+  led_config_t *config = led_config_from_type(led_type);
+  if (config == NULL) {
+    return false;
+  }
+
+  uint8_t *value_id     = &(data[0]);
+  uint8_t *value_data   = &(data[1]);
+  uint8_t  value_length = (length > 0) ? (length - 1) : 0;
   bool     needs_refresh = false;  // V251009R1 설정 변경 시에만 RGBlight 갱신
 
   switch (*value_id) {
     case id_qmk_led_enable: {
+      if (value_length < 1) {
+        return false;  // V251009R9 VIA 설정 길이 부족 시 실패 처리
+      }
       uint8_t enable = value_data[0] ? 1 : 0;
       if (config->enable != enable) {
         config->enable = enable;
@@ -318,6 +349,9 @@ void via_qmk_led_set_value(uint8_t led_type, uint8_t *data)
       break;
     }
     case id_qmk_led_brightness:
+      if (value_length < 1) {
+        return false;  // V251009R9 VIA 설정 길이 부족 시 실패 처리
+      }
       if (config->hsv.v != value_data[0]) {
         config->hsv.v = value_data[0];
         mark_indicator_color_dirty(led_type);  // V251009R3 밝기 변경 시 색상 캐시 무효화
@@ -325,6 +359,9 @@ void via_qmk_led_set_value(uint8_t led_type, uint8_t *data)
       }
       break;
     case id_qmk_led_color: {
+      if (value_length < 2) {
+        return false;  // V251009R9 VIA 설정 길이 부족 시 실패 처리
+      }
       uint8_t hue        = value_data[0];
       uint8_t saturation = value_data[1];
       if (config->hsv.h != hue || config->hsv.s != saturation) {
@@ -335,11 +372,15 @@ void via_qmk_led_set_value(uint8_t led_type, uint8_t *data)
       }
       break;
     }
+    default:
+      return false;  // V251009R9 알 수 없는 VIA 서브커맨드 거부
   }
 
   if (needs_refresh) {
     refresh_indicator_display();
   }
+
+  return true;
 }
 
 void via_qmk_led_save(uint8_t led_type)

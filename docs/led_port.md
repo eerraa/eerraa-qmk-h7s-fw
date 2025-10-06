@@ -1,4 +1,4 @@
-# BRICK60 LED 포트 최적화 검토 (V251009R8)
+# BRICK60 LED 포트 최적화 검토 (V251009R9)
 
 ## 1. 개요
 - 대상 파일: `src/ap/modules/qmk/keyboards/era/sirind/brick60/port/led_port.c`
@@ -240,8 +240,102 @@
 - RGB 합성 경로, 더티 플래그 관리, 호스트 LED 동기화는 이미 최신 개선안(V251009R5) 수준을 유지하고 있으며, 별도의 성능 저하 징후나 리팩토링 필요성이 관찰되지 않았습니다.
 - EEPROM 마이그레이션 로직은 `legacy_enable` 변환 외에는 수정이 필요하지 않으며, 추가적인 상태 캐시나 메모리 최적화는 기대 이득이 제한적이라 현행을 유지하기로 결정했습니다.
 
+### 3-7. VIA 페이로드 길이 기반 응답/설정 가드 강화
+- **변경 전**
+  ```c
+  static void via_qmk_led_get_value(uint8_t led_type, uint8_t *data)
+  {
+    led_config_t *config = led_config_from_type(led_type);
+    ...
+    switch (*value_id) {
+      case id_qmk_led_enable:
+        value_data[0] = config->enable;
+        break;
+      case id_qmk_led_brightness:
+        value_data[0] = config->hsv.v;
+        break;
+      case id_qmk_led_color:
+        value_data[0] = config->hsv.h;
+        value_data[1] = config->hsv.s;
+        break;
+    }
+  }
+
+  static void via_qmk_led_set_value(uint8_t led_type, uint8_t *data)
+  {
+    led_config_t *config = led_config_from_type(led_type);
+    ...
+    case id_qmk_led_color: {
+      uint8_t hue        = value_data[0];
+      uint8_t saturation = value_data[1];
+      ...
+    }
+  }
+  ```
+- **변경 후**
+  ```c
+  static bool via_qmk_led_get_value(uint8_t led_type, uint8_t *data, uint8_t length)
+  {
+    if (data == NULL || length == 0) {
+      return false;  // V251009R9 VIA 응답 버퍼 가용성 검증
+    }
+    ...
+    case id_qmk_led_color:
+      if (value_length < 2) {
+        return false;  // V251009R9 VIA 응답 길이 부족 시 실패 처리
+      }
+      value_data[0] = config->hsv.h;
+      value_data[1] = config->hsv.s;
+      return true;
+    default:
+      break;
+    }
+    return false;
+  }
+
+  static bool via_qmk_led_set_value(uint8_t led_type, uint8_t *data, uint8_t length)
+  {
+    if (data == NULL || length == 0) {
+      return false;  // V251009R9 VIA 설정 페이로드 가용성 검증
+    }
+    ...
+    case id_qmk_led_color: {
+      if (value_length < 2) {
+        return false;  // V251009R9 VIA 설정 길이 부족 시 실패 처리
+      }
+      uint8_t hue        = value_data[0];
+      uint8_t saturation = value_data[1];
+      ...
+    }
+    default:
+      return false;  // V251009R9 알 수 없는 VIA 서브커맨드 거부
+    }
+    ...
+    return true;
+  }
+  ```
+- **이득**
+  - 응답/설정 서브커맨드마다 필요한 페이로드 길이를 검증하여, 짧은 VIA 패킷으로 인한 읽기/쓰기 범위를 사전에 차단합니다.
+  - 처리 성공 여부를 호출자에게 반환해, 상위 `via_qmk_led_command()`가 즉시 `id_unhandled`를 통지할 수 있도록 했습니다.
+- **부작용 검토**
+  - 성공 여부를 반환하도록 시그니처가 변경되었으나, 정적 함수라 외부 영향은 없습니다.
+  - 길이 검증이 추가되어 비교 연산이 늘었지만, 커맨드 빈도가 낮아 체감 성능 영향이 없습니다.
+- **적용 여부**
+  - 적용. 안전성 향상 효과가 확실하며, 정상 시나리오에는 영향이 없습니다.
+
+### 3-8. `id_custom_save` 단축 패킷 허용 여부 재검토
+- **제안 내용**
+  - `via_qmk_led_command()`의 길이 가드가 모든 커맨드에 대해 `length >= 3`을 요구하므로, `id_custom_save`처럼 추가 데이터가 필요 없는 명령에는 다소 과한 조건이라는 의견을 재검토했습니다.
+- **이득 예상**
+  - 최소 길이를 2바이트로 완화하면, 호스트 구현이 2바이트 패킷만 보내더라도 호환성이 확보됩니다.
+- **부작용 검토**
+  - 짧은 패킷 허용 시 `value_id_and_data` 포인터 계산을 분기 처리해야 하며, 커맨드별로 상이한 길이 정책이 생겨 코드 복잡도가 증가합니다.
+  - 현재 호스트 구현(VIA 기반)은 3바이트 이상을 전송하고 있어 실익이 확인되지 않았습니다.
+- **적용 여부**
+  - 미적용. 일관된 길이 규칙을 유지해 코드 단순성과 검증 용이성을 우선했습니다.
+
 ## 5. 결론
 - LED 타입 가드 일관화를 유지하면서, 인디케이터 합성 루프에서 포인터 재사용을 지속 적용하고 RGB 캐시 접근 범위를 추가로 보호했습니다.
-- VIA 명령 길이 검증을 강화해 비정상 패킷으로 인한 OOB 접근 가능성을 제거했습니다.
-- 즉시 재합성 지연 전략은 여전히 부작용 우려가 크다고 판단하여 도입하지 않았습니다.
-- 본 변경으로 펌웨어 버전을 `V251009R8`으로 갱신했습니다.
+- VIA 명령 길이 검증을 페이로드 단위까지 확장하여, 비정상 패킷이 전달되더라도 OOB 접근 가능성을 원천적으로 제거했습니다.
+- `id_custom_save` 패킷 길이 완화는 실익보다 복잡도 증가 요인이 커 현행을 유지하기로 결정했습니다.
+- 본 변경으로 펌웨어 버전을 `V251009R9`으로 갱신했습니다.
