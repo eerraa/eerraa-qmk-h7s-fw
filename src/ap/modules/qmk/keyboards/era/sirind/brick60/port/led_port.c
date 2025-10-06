@@ -136,6 +136,10 @@ static RGB get_indicator_rgb(uint8_t led_type, const led_config_t *config)
 {
   RGB rgb = {0, 0, 0};
 
+  if (led_type >= LED_TYPE_MAX_CH) {
+    return rgb;  // V251009R8 인디케이터 색상 캐시 범위 가드 추가
+  }
+
   if (config == NULL) {
     return rgb;
   }
@@ -195,7 +199,11 @@ uint8_t host_keyboard_leds(void)
 
 void via_qmk_led_command(uint8_t led_type, uint8_t *data, uint8_t length)
 {
-  if (led_type >= LED_TYPE_MAX_CH) {
+  if (data == NULL || length == 0) {
+    return;  // V251009R8 VIA 명령 유효성 검사: 데이터 포인터/길이 확인
+  }
+
+  if (led_type >= LED_TYPE_MAX_CH || length < 3) {
     data[0] = id_unhandled;
     return;
   }

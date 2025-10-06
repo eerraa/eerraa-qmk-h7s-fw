@@ -1,14 +1,14 @@
-# BRICK60 LED 포트 최적화 검토 (V251009R7)
+# BRICK60 LED 포트 최적화 검토 (V251009R8)
 
 ## 1. 개요
 - 대상 파일: `src/ap/modules/qmk/keyboards/era/sirind/brick60/port/led_port.c`
-- 검토 범위: 인디케이터 설정 로딩 경로, EEPROM 무결성 검사, LED 갱신 흐름의 안정성 및 가드 처리.
-- 기존 버전(V251009R5)은 인디케이터 메타데이터 테이블화, RGB 캐시, 호스트 LED 상태 캐시 등을 도입해 전반적인 성능은 양호하지만, 타입 가드 처리의 일관성이 다소 미흡했습니다.
+- 검토 범위: 인디케이터 설정 로딩 경로, EEPROM 무결성 검사, LED 갱신 흐름의 안정성 및 가드 처리, VIA 커맨드 인터페이스 유효성.
+- 기존 버전(V251009R7)은 인디케이터 메타데이터 테이블화, RGB 캐시, 호스트 LED 상태 캐시 등을 도입해 전반적인 성능은 양호하지만, 범위 가드와 커맨드 길이 검증이 부족했습니다.
 
-## 2. 주요 관찰 사항
-- `led_config_from_type()` / `indicator_profile_from_type()` 헬퍼가 이미 존재하지만, 초기화 루틴과 EEPROM 검증 루틴 일부가 여전히 전역 배열을 직접 참조하고 있어 향후 LED 타입이 확장될 때 방어 코드가 누락될 가능성이 있었습니다.
-- EEPROM 데이터가 손상되었을 때 `indicator_config_valid()`가 곧바로 `led_config[led_type]`에 접근하여 범위를 벗어날 여지가 있었습니다. 현재 호출부에서는 안전하지만, 유지보수 측면에서 헬퍼 사용이 일관되지 않은 점이 눈에 띄었습니다.
-- RGB 합성·캐시 경로는 이미 더티 플래그 기반으로 최적화되어 있으며, 추가적인 성능 문제는 관찰되지 않았습니다.
+- `led_config_from_type()` / `indicator_profile_from_type()` 헬퍼를 통한 타입 가드 일관화는 여전히 중요한 안정성 축입니다.
+- RGB 합성·캐시 경로는 더티 플래그 기반으로 최적화되어 있으며, 추가적인 성능 문제는 관찰되지 않았습니다.
+- VIA 커맨드 처리 루틴이 입력 버퍼 길이를 검증하지 않아, 호스트의 비정상 패킷을 그대로 역참조할 위험이 있었습니다.
+- RGB 캐시 조회 함수인 `get_indicator_rgb()`가 LED 타입 범위를 검증하지 않아, 외부에서 잘못된 타입이 전달될 경우 캐시 배열이 손상될 가능성이 있었습니다.
 
 ## 3. 개선 제안 및 평가
 
@@ -132,11 +132,116 @@
 - **적용 여부**
   - 미적용. 즉시 갱신 경로가 안정적으로 동작하고, 지연으로 얻는 이득보다 사용자 피드백 지연 위험이 더 크다고 판단했습니다.
 
+### 3-4. `get_indicator_rgb()` LED 타입 범위 가드 추가
+- **변경 전**
+  ```c
+  static RGB get_indicator_rgb(uint8_t led_type, const led_config_t *config)
+  {
+    RGB rgb = {0, 0, 0};
+
+    if (config == NULL) {
+      return rgb;
+    }
+
+    if (indicator_rgb_dirty[led_type]) {
+      indicator_rgb_cache[led_type] = hsv_to_rgb(config->hsv);
+      indicator_rgb_dirty[led_type] = false;
+    }
+
+    return indicator_rgb_cache[led_type];
+  }
+  ```
+- **변경 후**
+  ```c
+  static RGB get_indicator_rgb(uint8_t led_type, const led_config_t *config)
+  {
+    RGB rgb = {0, 0, 0};
+
+    if (led_type >= LED_TYPE_MAX_CH) {
+      return rgb;  // V251009R8 인디케이터 색상 캐시 범위 가드 추가
+    }
+
+    if (config == NULL) {
+      return rgb;
+    }
+
+    if (indicator_rgb_dirty[led_type]) {
+      indicator_rgb_cache[led_type] = hsv_to_rgb(config->hsv);
+      indicator_rgb_dirty[led_type] = false;
+    }
+
+    return indicator_rgb_cache[led_type];
+  }
+  ```
+- **이득**
+  - 외부 호출 경로가 LED 타입을 잘못 전달하더라도 색상 캐시 배열에 접근하기 전에 즉시 차단하여 OOB 접근 위험을 제거합니다.
+  - 반환값을 0 초기화된 `RGB`로 통일함으로써 후속 로직이 안전하게 동작합니다.
+- **부작용 검토**
+  - 정상 경로에서는 추가 비교 연산이 1회 늘어나지만, 함수 호출 빈도가 낮아 성능 영향은 무시할 수준입니다.
+  - 잘못된 타입이 전달되면 조용히 0 RGB를 반환하는데, 이는 기존 가드 정책과 일관됩니다.
+- **적용 여부**
+  - 적용. 안전성 강화 효과가 명확하며, 부작용이 없습니다.
+
+### 3-5. `via_qmk_led_command()` 입력 길이 검증 강화
+- **변경 전**
+  ```c
+  void via_qmk_led_command(uint8_t led_type, uint8_t *data, uint8_t length)
+  {
+    if (led_type >= LED_TYPE_MAX_CH) {
+      data[0] = id_unhandled;
+      return;
+    }
+
+    uint8_t *command_id        = &(data[0]);
+    uint8_t *value_id_and_data = &(data[2]);
+
+    ...
+  }
+  ```
+- **변경 후**
+  ```c
+  void via_qmk_led_command(uint8_t led_type, uint8_t *data, uint8_t length)
+  {
+    if (data == NULL || length == 0) {
+      return;  // V251009R8 VIA 명령 유효성 검사: 데이터 포인터/길이 확인
+    }
+
+    if (led_type >= LED_TYPE_MAX_CH || length < 3) {
+      data[0] = id_unhandled;
+      return;
+    }
+
+    uint8_t *command_id        = &(data[0]);
+    uint8_t *value_id_and_data = &(data[2]);
+
+    ...
+  }
+  ```
+- **이득**
+  - VIA에서 비정상적인 짧은 패킷이 도착해도 즉시 차단하여 OOB 접근을 방지합니다.
+  - 데이터 포인터 자체가 `NULL`로 전달된 예외 상황도 조용히 무시하여 펌웨어 안정성을 높입니다.
+- **부작용 검토**
+  - `length == 0`인 경우 응답 코드를 쓸 수 없지만, 호출자에게 전달할 버퍼가 없는 상황에서 안전하게 탈출하는 편이 합리적입니다.
+  - 정상 패킷 경로에서는 조건 비교가 두 번 추가되지만, 명령 처리 빈도가 낮아 체감 영향은 없습니다.
+- **적용 여부**
+  - 적용. 안정성 확보를 위해 필수적인 가드입니다.
+
+### 3-6. RGBlight 합성 호출 최소화 재검토
+- **제안 내용**
+  - `refresh_indicator_display()` 호출 횟수를 줄이기 위해, `via_qmk_led_set_value()`에서 설정값이 변경되더라도 더티 플래그만 설정하고 합성은 타이머 루틴에서 일괄 처리하는 방안을 재검토했습니다.
+- **이득 예상**
+  - 명령 폭주 상황에서 RGBlight 호출을 묶어 CPU 사용량을 더 낮출 가능성이 있습니다.
+- **부작용 검토**
+  - 이벤트 처리 지연으로 VIA UI 피드백이 늦어질 수 있으며, 8kHz 스케줄에 추가적인 주기 작업을 삽입해야 합니다.
+- **적용 여부**
+  - 미적용. 즉시 갱신 경로가 안정적이고, 지연을 도입할 필요성을 확인하지 못했습니다.
+
 ## 4. 추가 검토 결과
 - RGB 합성 경로, 더티 플래그 관리, 호스트 LED 동기화는 이미 최신 개선안(V251009R5) 수준을 유지하고 있으며, 별도의 성능 저하 징후나 리팩토링 필요성이 관찰되지 않았습니다.
 - EEPROM 마이그레이션 로직은 `legacy_enable` 변환 외에는 수정이 필요하지 않으며, 추가적인 상태 캐시나 메모리 최적화는 기대 이득이 제한적이라 현행을 유지하기로 결정했습니다.
 
 ## 5. 결론
-- LED 타입 가드 일관화를 유지하면서, 인디케이터 합성 루프에서 포인터를 재사용하도록 리팩토링하여 가드 로직과 캐시 활용을 더욱 명확히 했습니다.
-- 즉시 재합성 지연 전략은 부작용 우려로 도입하지 않았으며, 현재 설계가 요구 조건에 부합한다고 결론내렸습니다.
-- 본 변경으로 펌웨어 버전을 `V251009R7`으로 갱신했습니다.
+- LED 타입 가드 일관화를 유지하면서, 인디케이터 합성 루프에서 포인터 재사용을 지속 적용하고 RGB 캐시 접근 범위를 추가로 보호했습니다.
+- VIA 명령 길이 검증을 강화해 비정상 패킷으로 인한 OOB 접근 가능성을 제거했습니다.
+- 즉시 재합성 지연 전략은 여전히 부작용 우려가 크다고 판단하여 도입하지 않았습니다.
+- 본 변경으로 펌웨어 버전을 `V251009R8`으로 갱신했습니다.
