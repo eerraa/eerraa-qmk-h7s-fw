@@ -555,16 +555,8 @@ void rgblight_sethsv_eeprom_helper(uint8_t hue, uint8_t sat, uint8_t val, bool w
         }
 #endif
         rgblight_status.base_mode = mode_base_table[rgblight_config.mode];
-        if (rgblight_config.mode == RGBLIGHT_MODE_STATIC_LIGHT) {
-            // same static color
-            rgb_led_t tmp_led;
-#ifdef RGBLIGHT_LAYERS_RETAIN_VAL
-            // needed for rgblight_layers_write() to get the new val, since it reads rgblight_config.val
-            rgblight_config.val = val;
-#endif
-            sethsv(hue, sat, val, &tmp_led);
-            rgblight_setrgb(tmp_led.r, tmp_led.g, tmp_led.b);
-        } else {
+
+        if (rgblight_config.mode != RGBLIGHT_MODE_STATIC_LIGHT) {
             // all LEDs in same color
             if (1 == 0) { // dummy
             }
@@ -586,34 +578,37 @@ void rgblight_sethsv_eeprom_helper(uint8_t hue, uint8_t sat, uint8_t val, bool w
                 hue = rgblight_config.hue;
             }
 #endif
-#ifdef RGBLIGHT_EFFECT_STATIC_GRADIENT
-            else if (rgblight_status.base_mode == RGBLIGHT_MODE_STATIC_GRADIENT) {
-                // static gradient
-                uint8_t delta     = rgblight_config.mode - rgblight_status.base_mode;
-                bool    direction = (delta % 2) == 0;
-
-                uint8_t range = pgm_read_byte(&RGBLED_GRADIENT_RANGES[delta / 2]);
-                for (uint8_t i = 0; i < rgblight_ranges.effect_num_leds; i++) {
-                    uint8_t _hue = ((uint16_t)i * (uint16_t)range) / rgblight_ranges.effect_num_leds;
-                    if (direction) {
-                        _hue = hue + _hue;
-                    } else {
-                        _hue = hue - _hue;
-                    }
-                    dprintf("rgblight rainbow set hsv: %d,%d,%d,%u\n", i, _hue, direction, range);
-                    sethsv(_hue, sat, val, (rgb_led_t *)&led[i + rgblight_ranges.effect_start_pos]);
-                }
-#    ifdef RGBLIGHT_LAYERS_RETAIN_VAL
-                // needed for rgblight_layers_write() to get the new val, since it reads rgblight_config.val
-                rgblight_config.val = val;
-#    endif
-                rgblight_set();
-            }
-#endif
         }
+
         rgblight_config.hue = hue;
         rgblight_config.sat = sat;
         rgblight_config.val = val;
+
+        if (rgblight_config.mode == RGBLIGHT_MODE_STATIC_LIGHT) {
+            // V251009R5 정적 효과 업데이트 순서 보정: 설정 값을 먼저 저장한 뒤 즉시 버퍼 반영
+            rgb_led_t tmp_led;
+            sethsv(hue, sat, val, &tmp_led);
+            rgblight_setrgb(tmp_led.r, tmp_led.g, tmp_led.b);
+#ifdef RGBLIGHT_EFFECT_STATIC_GRADIENT
+        } else if (rgblight_status.base_mode == RGBLIGHT_MODE_STATIC_GRADIENT) {
+            // static gradient
+            uint8_t delta     = rgblight_config.mode - rgblight_status.base_mode;
+            bool    direction = (delta % 2) == 0;
+
+            uint8_t range = pgm_read_byte(&RGBLED_GRADIENT_RANGES[delta / 2]);
+            for (uint8_t i = 0; i < rgblight_ranges.effect_num_leds; i++) {
+                uint8_t _hue = ((uint16_t)i * (uint16_t)range) / rgblight_ranges.effect_num_leds;
+                if (direction) {
+                    _hue = hue + _hue;
+                } else {
+                    _hue = hue - _hue;
+                }
+                dprintf("rgblight rainbow set hsv: %d,%d,%d,%u\n", i, _hue, direction, range);
+                sethsv(_hue, sat, val, (rgb_led_t *)&led[i + rgblight_ranges.effect_start_pos]);
+            }
+            rgblight_set();
+#endif
+        }
         if (write_to_eeprom) {
             eeconfig_update_rgblight(rgblight_config.raw);
             dprintf("rgblight set hsv [EEPROM]: %u,%u,%u\n", rgblight_config.hue, rgblight_config.sat, rgblight_config.val);
