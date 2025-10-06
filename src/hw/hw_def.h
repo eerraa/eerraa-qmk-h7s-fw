@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251009R8"  // V251009R8: VIA 명령 길이 검증 및 RGB 캐시 범위 가드 보강
+#define _DEF_FIRMWATRE_VERSION      "V251009R9"  // V251009R9: VIA 페이로드 길이 가드 및 에러 전파 강화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
