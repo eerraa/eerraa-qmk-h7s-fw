@@ -157,10 +157,17 @@ void led_init_ports(void)
 
   for (uint8_t i = 0; i < LED_TYPE_MAX_CH; i++) {
     bool needs_migration = false;
+    led_config_t *config = led_config_from_type(i);
+    const indicator_profile_t *profile = indicator_profile_from_type(i);
+
+    if (config == NULL || profile == NULL) {
+      continue;  // V251009R6 LED 타입 가드 일관화
+    }
+
     mark_indicator_color_dirty(i);  // V251009R3 초기화 시 색상 캐시 재계산 예약
     // V251008R8 인디케이터 기본값/구버전 데이터 정리
     if (!indicator_config_valid(i, &needs_migration)) {
-      led_config[i] = indicator_profiles[i].default_config;  // V251009R2 기본 설정 테이블 적용
+      *config = profile->default_config;  // V251009R2 기본 설정 테이블 적용, V251009R6 포인터 경유 저장
       flush_indicator_config(i);
       continue;
     }
@@ -220,18 +227,23 @@ static bool indicator_config_valid(uint8_t led_type, bool *needs_migration)
     *needs_migration = false;
   }
 
-  uint32_t raw = led_config[led_type].raw;
+  led_config_t *config = led_config_from_type(led_type);
+  if (config == NULL) {
+    return false;  // V251009R6 LED 타입 가드 일관화
+  }
+
+  uint32_t raw = config->raw;
   if (raw == UINT32_MAX) {
     return false;
   }
 
-  if (led_config[led_type].enable <= 1) {
+  if (config->enable <= 1) {
     return true;
   }
 
   uint8_t legacy_enable = raw & 0x03;
   if (legacy_enable <= 1) {
-    led_config[led_type].enable = legacy_enable;
+    config->enable = legacy_enable;
     if (needs_migration != NULL) {
       *needs_migration = true;
     }

@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251009R5"  // V251009R5: 정적 RGB 효과 즉시 적용 순서 보정
+#define _DEF_FIRMWATRE_VERSION      "V251009R6"  // V251009R6: LED 타입 가드 일관화 및 EEPROM 검증 안전성 보강
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
