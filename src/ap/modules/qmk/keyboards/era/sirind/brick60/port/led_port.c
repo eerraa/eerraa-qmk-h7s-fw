@@ -41,9 +41,9 @@ static void via_qmk_led_set_value(uint8_t led_type, uint8_t *data);
 static void via_qmk_led_save(uint8_t led_type);
 static void refresh_indicator_display(void);
 static bool indicator_config_valid(uint8_t led_type, bool *needs_migration);
-static bool should_light_indicator(uint8_t led_type, const indicator_profile_t *profile, led_t led_state);
+static bool should_light_indicator(const led_config_t *config, const indicator_profile_t *profile, led_t led_state);  // V251009R7 인디케이터 구성 포인터 인계
 static void mark_indicator_color_dirty(uint8_t led_type);          // V251009R3 인디케이터 색상 캐시 무효화
-static RGB  get_indicator_rgb(uint8_t led_type);                   // V251009R3 인디케이터 색상 캐시 조회
+static RGB  get_indicator_rgb(uint8_t led_type, const led_config_t *config);  // V251009R7 인디케이터 구성 포인터 재사용
 
 static led_config_t led_config[LED_TYPE_MAX_CH];
 static led_t       host_led_state      = {0};  // V251008R9 호스트 LED 상태 동기화
@@ -132,17 +132,16 @@ static void mark_indicator_color_dirty(uint8_t led_type)
   indicator_rgb_dirty[led_type] = true;  // V251009R3 인디케이터 색상 캐시 무효화
 }
 
-static RGB get_indicator_rgb(uint8_t led_type)
+static RGB get_indicator_rgb(uint8_t led_type, const led_config_t *config)
 {
   RGB rgb = {0, 0, 0};
 
-  led_config_t *config = led_config_from_type(led_type);
   if (config == NULL) {
     return rgb;
   }
 
   if (indicator_rgb_dirty[led_type]) {
-    indicator_rgb_cache[led_type] = hsv_to_rgb(config->hsv);  // V251009R3 HSV→RGB 1회 변환, V251009R4 LED 설정 포인터 재사용
+    indicator_rgb_cache[led_type] = hsv_to_rgb(config->hsv);  // V251009R3 HSV→RGB 1회 변환, V251009R4 LED 설정 포인터 재사용, V251009R7 구성 포인터 재활용
     indicator_rgb_dirty[led_type] = false;
   }
 
@@ -253,11 +252,10 @@ static bool indicator_config_valid(uint8_t led_type, bool *needs_migration)
   return false;
 }
 
-static bool should_light_indicator(uint8_t led_type, const indicator_profile_t *profile, led_t led_state)
+static bool should_light_indicator(const led_config_t *config, const indicator_profile_t *profile, led_t led_state)
 {
-  const led_config_t *config = led_config_from_type(led_type);
   if (config == NULL || profile == NULL) {
-    return false;
+    return false;  // V251009R7 구성/프로파일 포인터 직접 가드
   }
 
   if (!config->enable) {
@@ -347,14 +345,19 @@ bool rgblight_indicators_kb(void)
   led_t led_state = host_keyboard_led_state();
 
   for (uint8_t i = 0; i < LED_TYPE_MAX_CH; i++) {
+    const led_config_t        *config  = led_config_from_type(i);
     const indicator_profile_t *profile = indicator_profile_from_type(i);
-    if (!should_light_indicator(i, profile, led_state)) {
-      continue;
+    if (config == NULL || profile == NULL) {
+      continue;  // V251009R7 인디케이터 구성/프로파일 포인터 동시 가드
     }
 
-    RGB rgb = get_indicator_rgb(i);  // V251009R3 캐시된 RGB 조회
-    uint8_t start = profile->start;                                  // V251009R2 범위 메타데이터 통합
-    uint8_t limit = profile->end;                                    // V251009R4 인디케이터 범위 상한 캐시 사용
+    if (!should_light_indicator(config, profile, led_state)) {
+      continue;  // V251009R7 인디케이터 헬퍼에 구성 포인터 직접 전달
+    }
+
+    RGB rgb = get_indicator_rgb(i, config);  // V251009R7 인디케이터 구성 포인터 재사용
+    uint8_t start = profile->start;                                   // V251009R2 범위 메타데이터 통합
+    uint8_t limit = profile->end;                                     // V251009R4 인디케이터 범위 상한 캐시 사용
 
     for (uint8_t led_index = start; led_index < limit; led_index++) {
       rgblight_set_color_buffer_at(led_index, rgb.r, rgb.g, rgb.b);

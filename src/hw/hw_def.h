@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251009R6"  // V251009R6: LED 타입 가드 일관화 및 EEPROM 검증 안전성 보강
+#define _DEF_FIRMWATRE_VERSION      "V251009R7"  // V251009R7: 인디케이터 포인터 재사용 및 합성 루프 가드 정리
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
