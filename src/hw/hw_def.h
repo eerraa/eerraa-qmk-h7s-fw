@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251009R9"  // V251009R9: VIA 페이로드 길이 가드 및 에러 전파 강화
+#define _DEF_FIRMWATRE_VERSION      "V251010R1"  // V251010R1: WS2812 DMA 비동기 서비스 이관
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

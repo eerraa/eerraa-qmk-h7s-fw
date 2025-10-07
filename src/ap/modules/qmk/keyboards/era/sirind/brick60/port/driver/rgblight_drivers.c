@@ -13,7 +13,8 @@ void ws2812_setleds(rgb_led_t *ledarray, uint16_t leds)
     b = ledarray[i].b;
     ws2812SetColor(HW_WS2812_RGB + i, WS2812_COLOR(r, g, b));
   }
-  ws2812Refresh();
+  // V251010R1 WS2812 DMA 재기동을 메인 루프로 이관
+  ws2812RequestRefresh(leds);
 }
 
 
