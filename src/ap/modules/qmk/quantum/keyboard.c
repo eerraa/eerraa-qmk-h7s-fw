@@ -59,6 +59,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifdef RGB_MATRIX_ENABLE
 #    include "rgb_matrix.h"
 #endif
+#ifdef _USE_HW_WS2812
+#    include "ws2812.h"  // V251010R1 WS2812 DMA 메인 루프 연동
+#endif
 #ifdef ENCODER_ENABLE
 #    include "encoder.h"
 #endif
@@ -890,5 +893,9 @@ void keyboard_task(void) {
 
 #ifdef OS_DETECTION_ENABLE
     os_detection_task();
+#endif
+
+#ifdef _USE_HW_WS2812
+    ws2812ServicePending();  // V251010R1 WS2812 DMA 메인 루프 서비스
 #endif
 }

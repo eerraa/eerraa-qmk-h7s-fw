@@ -29,10 +29,6 @@
 
 #include <lib/lib8tion/lib8tion.h>
 
-#ifdef _USE_HW_WS2812
-#    include "ws2812.h"  // V251010R1 WS2812 DMA 서비스 연동
-#endif
-
 #ifndef RGB_MATRIX_CENTER
 const led_point_t k_rgb_matrix_center = {112, 32};
 #else
@@ -387,10 +383,6 @@ void rgb_matrix_task(void) {
             rgb_task_sync();
             break;
     }
-
-#ifdef _USE_HW_WS2812
-    ws2812ServicePending();  // V251010R1 WS2812 DMA 요청 처리
-#endif
 }
 
 void rgb_matrix_indicators(void) {
