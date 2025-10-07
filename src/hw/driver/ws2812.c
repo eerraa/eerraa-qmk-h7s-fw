@@ -1,7 +1,5 @@
 #include "ws2812.h"
 
-
-
 #ifdef _USE_HW_WS2812
 #include "cli.h"
 
@@ -23,6 +21,10 @@ typedef struct
 __attribute__((section(".non_cache")))
 static uint8_t bit_buf[BIT_ZERO + 24*(HW_WS2812_MAX_CH+1)];
 
+static volatile bool ws2812_pending = false;      // V251010R1 WS2812 DMA 요청 플래그
+static volatile bool ws2812_busy = false;         // V251010R1 WS2812 DMA 진행 상태
+static volatile uint16_t ws2812_pending_len = 0;  // V251010R1 WS2812 DMA 프레임 길이
+
 
 ws2812_t ws2812;
 static TIM_HandleTypeDef htim15;
@@ -33,6 +35,8 @@ static DMA_HandleTypeDef handle_GPDMA1_Channel4;
 static void cliCmd(cli_args_t *args);
 #endif
 static bool ws2812InitHw(void);
+static void ws2812RestorePrimask(uint32_t primask);   // V251010R1 크리티컬 섹션 복원 유틸
+static uint16_t ws2812CalcFrameSize(uint16_t leds);   // V251010R1 DMA 프레임 길이 계산
 
 
 
@@ -110,6 +114,9 @@ bool ws2812Init(void)
 
 
   ws2812.led_cnt = WS2812_MAX_CH;
+  ws2812_pending_len = ws2812CalcFrameSize(ws2812.led_cnt);  // V251010R1 기본 프레임 길이 초기화
+  ws2812_pending = false;
+  ws2812_busy = false;
   is_init = true;
 
   for (int i=0; i<WS2812_MAX_CH; i++)
@@ -177,9 +184,81 @@ bool ws2812InitHw(void)
 
 bool ws2812Refresh(void)
 {
-  HAL_TIM_PWM_Stop_DMA(ws2812.h_timer, ws2812.channel);
-  HAL_TIM_PWM_Start_DMA(ws2812.h_timer, ws2812.channel,  (const uint32_t *)bit_buf, sizeof(bit_buf));
+  ws2812RequestRefresh(ws2812.led_cnt);  // V251010R1 기본 갱신 요청만 등록
+  if (__get_IPSR() == 0U)
+  {
+    ws2812ServicePending();
+  }
   return true;
+}
+
+void ws2812RequestRefresh(uint16_t leds)
+{
+  uint16_t frame_len = ws2812CalcFrameSize(leds);
+  uint32_t primask = __get_PRIMASK();
+
+  __disable_irq();
+  ws2812_pending_len = frame_len;
+  ws2812_pending = true;
+  ws2812RestorePrimask(primask);
+}
+
+void ws2812ServicePending(void)
+{
+  uint16_t transfer_len = 0;
+  uint32_t primask = __get_PRIMASK();
+
+  __disable_irq();
+  if (ws2812_pending && ws2812_busy == false)
+  {
+    ws2812_pending = false;
+    ws2812_busy = true;
+    transfer_len = ws2812_pending_len;
+  }
+  ws2812RestorePrimask(primask);
+
+  if (transfer_len > 0U)
+  {
+    HAL_TIM_PWM_Stop_DMA(ws2812.h_timer, ws2812.channel);
+    HAL_TIM_PWM_Start_DMA(ws2812.h_timer, ws2812.channel, (const uint32_t *)bit_buf, transfer_len);
+  }
+}
+
+bool ws2812HandleDmaTransferCompleteFromISR(TIM_HandleTypeDef *htim)
+{
+  if (htim->Instance != ws2812.h_timer->Instance)
+  {
+    return false;
+  }
+
+  ws2812_busy = false;  // V251010R1 DMA 완료 시 다음 요청 처리 준비
+  return true;
+}
+
+static void ws2812RestorePrimask(uint32_t primask)
+{
+  if (primask == 0U)
+  {
+    __enable_irq();
+  }
+}
+
+static uint16_t ws2812CalcFrameSize(uint16_t leds)
+{
+  uint32_t limited = leds;
+
+  if (limited > ws2812.led_cnt)
+  {
+    limited = ws2812.led_cnt;
+  }
+  uint32_t frame_leds = limited;
+  uint32_t frame = BIT_ZERO + 24U * (frame_leds + 1U);
+
+  if (frame > sizeof(bit_buf))
+  {
+    frame = sizeof(bit_buf);
+  }
+  return (uint16_t)frame;
 }
 
 void ws2812SetColor(uint32_t ch, uint32_t color)
