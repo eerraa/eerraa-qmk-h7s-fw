@@ -48,6 +48,7 @@
 #include "usbd_def.h"
 #include "usbd_core.h"
 #include "usbd_cdc.h"
+#include "usbd_hid.h"  // V251010R3 USB 호스트 LED 비동기 버퍼 초기화 연동
 
 
 PCD_HandleTypeDef hpcd_USB_OTG_HS;
@@ -220,6 +221,9 @@ void HAL_PCD_ResetCallback(PCD_HandleTypeDef *hpcd)
 
   /* Reset Device. */
   USBD_LL_Reset((USBD_HandleTypeDef*)hpcd->pData);
+#if HW_USB_HID == 1
+  usbHidResetStatusLedState();                                           // V251010R3 버스 리셋 시 호스트 LED 버퍼 초기화
+#endif
 }
 
 /**
@@ -248,6 +252,9 @@ void HAL_PCD_SuspendCallback(PCD_HandleTypeDef *hpcd)
   is_connected = false;
   is_suspended = true;
   logPrintf("[  ] USB Suspend\n");
+#if HW_USB_HID == 1
+  usbHidResetStatusLedState();                                           // V251010R3 서스펜드 진입 시 호스트 LED 버퍼 초기화
+#endif
   /* USER CODE END 2 */
 }
 
