@@ -49,6 +49,9 @@
 #include "keys.h"
 #include "qbuffer.h"
 #include "report.h"
+#ifdef _USE_HW_WS2812
+#include "ws2812.h"  // V251010R1 WS2812 DMA 완료 처리 연동
+#endif
 
 
 #if HW_USB_LOG == 1
@@ -1807,6 +1810,12 @@ volatile uint32_t timer_end = 0;
 
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 {
+#ifdef _USE_HW_WS2812
+  if (ws2812HandleDmaTransferCompleteFromISR(htim))
+  {
+    return;  // V251010R1 WS2812 DMA 인터럽트 분리 처리
+  }
+#endif
   timer_cnt++;
   timer_end = micros()-rate_time_sof_pre;
 

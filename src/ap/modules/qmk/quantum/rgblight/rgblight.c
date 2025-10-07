@@ -1571,6 +1571,7 @@ void rgblight_task(void) {
     }
 #endif
 
+    // V251010R1 WS2812 DMA 서비스 호출은 keyboard_task() 메인 루프에서 일괄 처리합니다.
 }
 
 #ifdef VELOCIKEY_ENABLE
