@@ -29,7 +29,6 @@
 
 #include <lib/lib8tion/lib8tion.h>
 
-
 #ifndef RGB_MATRIX_CENTER
 const led_point_t k_rgb_matrix_center = {112, 32};
 #else
@@ -384,7 +383,6 @@ void rgb_matrix_task(void) {
             rgb_task_sync();
             break;
     }
-
 }
 
 void rgb_matrix_indicators(void) {
