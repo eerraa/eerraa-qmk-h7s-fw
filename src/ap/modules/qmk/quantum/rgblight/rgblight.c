@@ -24,9 +24,6 @@
 #include "util.h"
 #include "led_tables.h"
 #include <lib/lib8tion/lib8tion.h>
-#ifdef _USE_HW_WS2812
-#    include "ws2812.h"  // V251010R1 WS2812 DMA 서비스 연동
-#endif
 #ifdef EEPROM_ENABLE
 #    include "eeprom.h"
 #endif
@@ -1572,10 +1569,6 @@ void rgblight_task(void) {
     if (rgblight_velocikey_enabled()) {
         rgblight_velocikey_decelerate();
     }
-#endif
-
-#ifdef _USE_HW_WS2812
-    ws2812ServicePending();  // V251010R1 WS2812 DMA 요청 처리
 #endif
 }
 
