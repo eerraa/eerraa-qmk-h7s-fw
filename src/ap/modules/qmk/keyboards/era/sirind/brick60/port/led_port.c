@@ -1,5 +1,4 @@
 #include "led_port.h"
-#include "cmsis_compiler.h"  // V251010R2 USB 호스트 LED 비동기 처리용 크리티컬 섹션 유틸
 #include "color.h"
 #include "eeconfig.h"
 #include "rgblight.h"
@@ -48,8 +47,6 @@ static RGB  get_indicator_rgb(uint8_t led_type, const led_config_t *config);  //
 
 static led_config_t led_config[LED_TYPE_MAX_CH];
 static led_t       host_led_state      = {0};  // V251008R9 호스트 LED 상태 동기화
-static volatile uint8_t host_led_pending_bits = 0;  // V251010R2 USB 호스트 LED 비동기 버퍼
-static volatile bool    host_led_dirty        = false;  // V251010R2 USB 호스트 LED 갱신 플래그
 static led_t       indicator_led_state = {0};  // V251009R1 인디케이터 갱신 상태 캐시
 static RGB         indicator_rgb_cache[LED_TYPE_MAX_CH];           // V251009R3 인디케이터 색상 캐시
 static bool        indicator_rgb_dirty[LED_TYPE_MAX_CH] = {0};     // V251009R3 색상 캐시 동기화 플래그
@@ -100,37 +97,14 @@ static const indicator_profile_t *indicator_profile_from_type(uint8_t led_type)
   return &indicator_profiles[led_type];
 }
 
-static uint32_t led_port_enter_critical(void)
-{
-  uint32_t primask = __get_PRIMASK();  // V251010R2 USB 호스트 LED 비동기 크리티컬 섹션 진입
-  __disable_irq();
-  return primask;
-}
-
-static void led_port_exit_critical(uint32_t primask)
-{
-  __set_PRIMASK(primask);  // V251010R2 USB 호스트 LED 비동기 크리티컬 섹션 복원
-}
-
-static void service_pending_host_led(void)
-{
-  if (!host_led_dirty)
-  {
-    return;  // V251010R2 처리할 호스트 LED 요청 없음
-  }
-
-  uint32_t primask = led_port_enter_critical();
-  uint8_t  pending_bits = host_led_pending_bits;  // V251010R2 마지막 SET_REPORT 상태 확보
-  host_led_dirty = false;
-  led_port_exit_critical(primask);
-
-  host_led_state.raw = pending_bits;  // V251010R2 호스트 LED 상태를 메인 루프에서 갱신
-}
-
 void usbHidSetStatusLed(uint8_t led_bits)
 {
-  host_led_pending_bits = led_bits;  // V251010R2 USB 인터럽트 컨텍스트에서 마지막 상태만 큐잉
-  host_led_dirty = true;
+  if (host_led_state.raw == led_bits)
+  {
+    return;  // V251010R3 변화가 없으면 추가 처리 불필요
+  }
+
+  led_set(led_bits);  // V251010R3 메인 루프에서 LED를 직접 갱신
 }
 
 static void refresh_indicator_display(void)
@@ -224,8 +198,7 @@ void led_update_ports(led_t led_state)
 
 uint8_t host_keyboard_leds(void)
 {
-  service_pending_host_led();  // V251010R2 USB 호스트 LED 비동기 상태 반영
-  return host_led_state.raw;  // V251008R9 인디케이터 계산용 호스트 LED 조회
+  return host_led_state.raw;  // V251010R3 메인 루프에서 유지되는 호스트 LED 상태 반환
 }
 
 void via_qmk_led_command(uint8_t led_type, uint8_t *data, uint8_t length)

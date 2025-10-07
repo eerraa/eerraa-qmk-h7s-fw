@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251010R2"  // V251010R2: USB 호스트 LED 비동기 처리 전환
+#define _DEF_FIRMWATRE_VERSION      "V251010R3"  // V251010R3: USB 호스트 LED 비동기화 최종 정착
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

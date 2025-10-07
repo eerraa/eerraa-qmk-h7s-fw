@@ -62,6 +62,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifdef _USE_HW_WS2812
 #    include "ws2812.h"  // V251010R1 WS2812 DMA 메인 루프 연동
 #endif
+#ifdef _USE_HW_USB
+#    include "usbd_hid.h"  // V251010R3 USB 호스트 LED 비동기 서비스 연동
+#endif
 #ifdef ENCODER_ENABLE
 #    include "encoder.h"
 #endif
@@ -887,6 +890,10 @@ void keyboard_task(void) {
 
 #ifdef HAPTIC_ENABLE
     haptic_task();
+#endif
+
+#ifdef _USE_HW_USB
+    usbHidServiceStatusLed();  // V251010R3 USB 호스트 LED 비동기 서비스
 #endif
 
     led_task();
