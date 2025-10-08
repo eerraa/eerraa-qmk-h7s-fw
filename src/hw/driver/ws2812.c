@@ -1,5 +1,4 @@
 #include "ws2812.h"
-#include <limits.h>
 
 #ifdef _USE_HW_WS2812
 #include "cli.h"
@@ -25,8 +24,6 @@ static uint8_t bit_buf[BIT_ZERO + 24*(HW_WS2812_MAX_CH+1)];
 static volatile bool ws2812_pending = false;      // V251010R1 WS2812 DMA 요청 플래그
 static volatile bool ws2812_busy = false;         // V251010R1 WS2812 DMA 진행 상태
 static volatile uint16_t ws2812_pending_len = 0;  // V251010R1 WS2812 DMA 프레임 길이
-static uint32_t ws2812_shadow_color[WS2812_MAX_CH];  // V251010R5 WS2812 마지막 전송 색상 캐시
-static bool ws2812_buffer_dirty = false;              // V251010R5 WS2812 DMA 더티 플래그
 
 
 ws2812_t ws2812;
@@ -117,10 +114,6 @@ bool ws2812Init(void)
 
 
   ws2812.led_cnt = WS2812_MAX_CH;
-  for (uint16_t i = 0; i < WS2812_MAX_CH; i++)
-  {
-    ws2812_shadow_color[i] = UINT32_MAX;                              // V251010R5 WS2812 색상 캐시 초기화
-  }
   ws2812_pending_len = ws2812CalcFrameSize(ws2812.led_cnt);  // V251010R1 기본 프레임 길이 초기화
   ws2812_pending = false;
   ws2812_busy = false;
@@ -201,11 +194,6 @@ bool ws2812Refresh(void)
 
 void ws2812RequestRefresh(uint16_t leds)
 {
-  if (ws2812_buffer_dirty == false)
-  {
-    return;                                                           // V251010R5 LED 버퍼 변경 없으면 DMA 요청 생략
-  }
-
   uint16_t frame_len = ws2812CalcFrameSize(leds);
   uint32_t primask = __get_PRIMASK();
 
@@ -226,7 +214,6 @@ void ws2812ServicePending(void)
     ws2812_pending = false;
     ws2812_busy = true;
     transfer_len = ws2812_pending_len;
-    ws2812_buffer_dirty = false;                                      // V251010R5 DMA 전송 시작 시 더티 플래그 해제
   }
   ws2812RestorePrimask(primask);
 
@@ -285,17 +272,7 @@ void ws2812SetColor(uint32_t ch, uint32_t color)
   uint32_t offset;
 
   if (ch >= WS2812_MAX_CH)
-  {
     return;
-  }
-
-  if (ws2812_shadow_color[ch] == color)
-  {
-    return;                                                           // V251010R5 변경 없는 픽셀은 비트 버퍼 갱신 생략
-  }
-
-  ws2812_shadow_color[ch] = color;                                    // V251010R5 픽셀 색상 캐시 갱신
-  ws2812_buffer_dirty = true;                                          // V251010R5 다음 루프에서 DMA 재기동 요청
 
   red   = (color >> 16) & 0xFF;
   green = (color >> 8) & 0xFF;

@@ -1,32 +1,103 @@
-#include "led_port_internal.h"
+#include "led_port.h"
+#include "color.h"
+#include "eeconfig.h"
+#include "rgblight.h"
 
-// V251010R5 LED 호스트 큐 전용 모듈
-
-static uint8_t host_led_pending_raw = 0;                      // V251010R4 호스트 LED 지연 적용 버퍼
-static bool    host_led_pending_dirty = false;                // V251010R4 호스트 LED 지연 적용 플래그
-static led_t   host_led_state = {0};                          // V251010R5 호스트 LED 상태 캐시 분리
-
-static void service_pending_host_led(void);
-
-void led_port_set_host_state(led_t state)
+typedef union
 {
-  host_led_state = state;                                     // V251010R5 QMK 경로 호스트 LED 상태 동기화
-}
+  uint32_t raw;
 
-led_t led_port_get_host_state(void)
-{
-  return host_led_state;                                      // V251010R5 호스트 LED 상태 조회 핸들러
-}
-
-static void service_pending_host_led(void)
-{
-  if (!host_led_pending_dirty)
+  struct PACKED
   {
-    return;  // V251010R4 지연 적용할 호스트 LED 없음
+    uint8_t enable;
+    HSV     hsv;
+  };
+} led_config_t;
+
+_Static_assert(sizeof(led_config_t) == sizeof(uint32_t), "EECONFIG out of spec.");
+
+enum via_qmk_led_value {
+  id_qmk_led_enable     = 1,
+  id_qmk_led_brightness = 2,
+  id_qmk_led_color      = 3,
+};
+
+#define INDICATOR_LED_END(start, count) \
+  ((uint8_t)(((start) + (count)) > RGBLIGHT_LED_COUNT ? RGBLIGHT_LED_COUNT : ((start) + (count))))  // V251009R4 인디케이터 범위 상한 캐싱
+
+typedef void (*indicator_flush_fn_t)(bool);
+
+typedef struct
+{
+  led_config_t         default_config;
+  uint8_t              start;
+  uint8_t              end;       // V251009R4 인디케이터 범위 상한 캐시
+  uint8_t              host_mask;
+  indicator_flush_fn_t flush;
+} indicator_profile_t;
+
+static bool via_qmk_led_get_value(uint8_t led_type, uint8_t *data, uint8_t length);  // V251009R9 VIA 페이로드 길이 검증 헬퍼 확장
+static bool via_qmk_led_set_value(uint8_t led_type, uint8_t *data, uint8_t length);  // V251009R9 VIA 페이로드 길이 검증 헬퍼 확장
+static void via_qmk_led_save(uint8_t led_type);
+static void refresh_indicator_display(void);
+static void service_pending_host_led(void);                                        // V251010R4 호스트 LED 지연 적용 서비스
+static bool indicator_config_valid(uint8_t led_type, bool *needs_migration);
+static bool should_light_indicator(const led_config_t *config, const indicator_profile_t *profile, led_t led_state);  // V251009R7 인디케이터 구성 포인터 인계
+static void mark_indicator_color_dirty(uint8_t led_type);          // V251009R3 인디케이터 색상 캐시 무효화
+static RGB  get_indicator_rgb(uint8_t led_type, const led_config_t *config);  // V251009R7 인디케이터 구성 포인터 재사용
+
+static led_config_t led_config[LED_TYPE_MAX_CH];
+static led_t       host_led_state      = {0};  // V251008R9 호스트 LED 상태 동기화
+static led_t       indicator_led_state = {0};  // V251009R1 인디케이터 갱신 상태 캐시
+static RGB         indicator_rgb_cache[LED_TYPE_MAX_CH];           // V251009R3 인디케이터 색상 캐시
+static bool        indicator_rgb_dirty[LED_TYPE_MAX_CH] = {0};     // V251009R3 색상 캐시 동기화 플래그
+static uint8_t     host_led_pending_raw   = 0;                      // V251010R4 호스트 LED 지연 적용 버퍼
+static bool        host_led_pending_dirty = false;                  // V251010R4 호스트 LED 지연 적용 플래그
+
+EECONFIG_DEBOUNCE_HELPER(led_caps,   EECONFIG_USER_LED_CAPS,   led_config[LED_TYPE_CAPS]);
+EECONFIG_DEBOUNCE_HELPER(led_scroll, EECONFIG_USER_LED_SCROLL, led_config[LED_TYPE_SCROLL]);
+EECONFIG_DEBOUNCE_HELPER(led_num,    EECONFIG_USER_LED_NUM,    led_config[LED_TYPE_NUM]);
+
+static const indicator_profile_t indicator_profiles[LED_TYPE_MAX_CH] = {
+  [LED_TYPE_CAPS] = {
+    .default_config = {.enable = true, .hsv = {0, 255, 255}},
+    .start          = 0,
+    .end            = INDICATOR_LED_END(0, 10),
+    .host_mask      = (1 << 1),
+    .flush          = eeconfig_flush_led_caps,
+  },
+  [LED_TYPE_SCROLL] = {
+    .default_config = {.enable = true, .hsv = {170, 255, 255}},
+    .start          = 10,
+    .end            = INDICATOR_LED_END(10, 10),
+    .host_mask      = (1 << 2),
+    .flush          = eeconfig_flush_led_scroll,
+  },
+  [LED_TYPE_NUM] = {
+    .default_config = {.enable = true, .hsv = {85, 255, 255}},
+    .start          = 20,
+    .end            = INDICATOR_LED_END(20, 10),
+    .host_mask      = (1 << 0),
+    .flush          = eeconfig_flush_led_num,
+  },
+};
+
+static led_config_t *led_config_from_type(uint8_t led_type)
+{
+  if (led_type >= LED_TYPE_MAX_CH) {
+    return NULL;  // V251009R4 LED 타입 범위 가드 통합
   }
 
-  host_led_state.raw     = host_led_pending_raw;              // V251010R4 지연 적용된 호스트 LED 반영
-  host_led_pending_dirty = false;                             // V251010R4 적용 완료 플래그 클리어
+  return &led_config[led_type];
+}
+
+static const indicator_profile_t *indicator_profile_from_type(uint8_t led_type)
+{
+  if (led_type >= LED_TYPE_MAX_CH) {
+    return NULL;  // V251009R4 인디케이터 프로파일 가드 통합
+  }
+
+  return &indicator_profiles[led_type];
 }
 
 void usbHidSetStatusLed(uint8_t led_bits)
@@ -45,9 +116,327 @@ void usbHidSetStatusLed(uint8_t led_bits)
   host_led_pending_dirty = true;       // V251010R4 메인 루프 적용 예약
 }
 
+static void service_pending_host_led(void)
+{
+  if (!host_led_pending_dirty)
+  {
+    return;  // V251010R4 지연 적용할 호스트 LED 없음
+  }
+
+  host_led_state.raw      = host_led_pending_raw;   // V251010R4 지연 적용된 호스트 LED 반영
+  host_led_pending_dirty  = false;                  // V251010R4 적용 완료 플래그 클리어
+}
+
+static void refresh_indicator_display(void)
+{
+  // V251008R8 인디케이터 변경 사항 즉시 재합성
+  if (!is_rgblight_initialized) {
+    return;
+  }
+
+  rgblight_set();
+}
+
+static void flush_indicator_config(uint8_t led_type)
+{
+  const indicator_profile_t *profile = indicator_profile_from_type(led_type);
+  if (profile == NULL) {
+    return;
+  }
+
+  profile->flush(true);  // V251009R2 인디케이터 메타데이터 테이블화, V251009R4 LED 타입 가드 헬퍼 적용
+}
+
+static void mark_indicator_color_dirty(uint8_t led_type)
+{
+  if (led_type >= LED_TYPE_MAX_CH) {
+    return;
+  }
+
+  indicator_rgb_dirty[led_type] = true;  // V251009R3 인디케이터 색상 캐시 무효화
+}
+
+static RGB get_indicator_rgb(uint8_t led_type, const led_config_t *config)
+{
+  RGB rgb = {0, 0, 0};
+
+  if (led_type >= LED_TYPE_MAX_CH) {
+    return rgb;  // V251009R8 인디케이터 색상 캐시 범위 가드 추가
+  }
+
+  if (config == NULL) {
+    return rgb;
+  }
+
+  if (indicator_rgb_dirty[led_type]) {
+    indicator_rgb_cache[led_type] = hsv_to_rgb(config->hsv);  // V251009R3 HSV→RGB 1회 변환, V251009R4 LED 설정 포인터 재사용, V251009R7 구성 포인터 재활용
+    indicator_rgb_dirty[led_type] = false;
+  }
+
+  return indicator_rgb_cache[led_type];
+}
+
+void led_init_ports(void)
+{
+  eeconfig_init_led_caps();
+  eeconfig_init_led_scroll();
+  eeconfig_init_led_num();
+
+  for (uint8_t i = 0; i < LED_TYPE_MAX_CH; i++) {
+    bool needs_migration = false;
+    led_config_t *config = led_config_from_type(i);
+    const indicator_profile_t *profile = indicator_profile_from_type(i);
+
+    if (config == NULL || profile == NULL) {
+      continue;  // V251009R6 LED 타입 가드 일관화
+    }
+
+    mark_indicator_color_dirty(i);  // V251009R3 초기화 시 색상 캐시 재계산 예약
+    // V251008R8 인디케이터 기본값/구버전 데이터 정리
+    if (!indicator_config_valid(i, &needs_migration)) {
+      *config = profile->default_config;  // V251009R2 기본 설정 테이블 적용, V251009R6 포인터 경유 저장
+      flush_indicator_config(i);
+      continue;
+    }
+
+    if (needs_migration) {
+      flush_indicator_config(i);
+    }
+  }
+}
+
+void led_update_ports(led_t led_state)
+{
+  host_led_state = led_state;  // V251008R9 QMK 경로에서 전달되는 LED 동기화
+  if (indicator_led_state.raw == led_state.raw) {
+    return;  // V251009R1 호스트 LED 변화 없을 때 중복 갱신 방지
+  }
+
+  indicator_led_state = led_state;  // V251009R1 인디케이터 상태 캐시 갱신
+  refresh_indicator_display();
+}
+
 uint8_t host_keyboard_leds(void)
 {
   service_pending_host_led();  // V251010R4 지연 적용된 호스트 LED 상태 소화
-  return host_led_state.raw;   // V251010R5 메인 루프에서 유지되는 호스트 LED 상태 반환
+  return host_led_state.raw;   // V251010R4 메인 루프에서 유지되는 호스트 LED 상태 반환
 }
 
+void via_qmk_led_command(uint8_t led_type, uint8_t *data, uint8_t length)
+{
+  if (data == NULL || length == 0) {
+    return;  // V251009R8 VIA 명령 유효성 검사: 데이터 포인터/길이 확인
+  }
+
+  if (led_type >= LED_TYPE_MAX_CH || length < 3) {
+    data[0] = id_unhandled;
+    return;
+  }
+
+  uint8_t *command_id        = &(data[0]);
+  uint8_t *value_id_and_data = &(data[2]);
+  uint8_t  payload_length    = length - 2;  // V251009R9 VIA 페이로드 가용 길이 계산
+
+  switch (*command_id) {
+    case id_custom_set_value:
+      if (!via_qmk_led_set_value(led_type, value_id_and_data, payload_length)) {
+        *command_id = id_unhandled;  // V251009R9 VIA 서브커맨드 실패 시 에러 보고
+      }
+      break;
+    case id_custom_get_value:
+      if (!via_qmk_led_get_value(led_type, value_id_and_data, payload_length)) {
+        *command_id = id_unhandled;  // V251009R9 VIA 서브커맨드 실패 시 에러 보고
+      }
+      break;
+    case id_custom_save:
+      via_qmk_led_save(led_type);
+      break;
+    default:
+      *command_id = id_unhandled;
+      break;
+  }
+}
+
+static bool indicator_config_valid(uint8_t led_type, bool *needs_migration)
+{
+  // V251008R8 인디케이터 EEPROM 무결성 및 구버전 레이아웃 변환
+  if (needs_migration != NULL) {
+    *needs_migration = false;
+  }
+
+  led_config_t *config = led_config_from_type(led_type);
+  if (config == NULL) {
+    return false;  // V251009R6 LED 타입 가드 일관화
+  }
+
+  uint32_t raw = config->raw;
+  if (raw == UINT32_MAX) {
+    return false;
+  }
+
+  if (config->enable <= 1) {
+    return true;
+  }
+
+  uint8_t legacy_enable = raw & 0x03;
+  if (legacy_enable <= 1) {
+    config->enable = legacy_enable;
+    if (needs_migration != NULL) {
+      *needs_migration = true;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+static bool should_light_indicator(const led_config_t *config, const indicator_profile_t *profile, led_t led_state)
+{
+  if (config == NULL || profile == NULL) {
+    return false;  // V251009R7 구성/프로파일 포인터 직접 가드
+  }
+
+  if (!config->enable) {
+    return false;
+  }
+
+  return (led_state.raw & profile->host_mask) != 0;  // V251009R2 호스트 LED 비트 매핑 단순화, V251009R4 프로파일 포인터 재사용
+}
+
+static bool via_qmk_led_get_value(uint8_t led_type, uint8_t *data, uint8_t length)
+{
+  if (data == NULL || length == 0) {
+    return false;  // V251009R9 VIA 응답 버퍼 가용성 검증
+  }
+
+  led_config_t *config = led_config_from_type(led_type);
+  if (config == NULL) {
+    return false;
+  }
+
+  uint8_t *value_id     = &(data[0]);
+  uint8_t *value_data   = &(data[1]);
+  uint8_t  value_length = (length > 0) ? (length - 1) : 0;
+
+  switch (*value_id) {
+    case id_qmk_led_enable:
+      if (value_length < 1) {
+        return false;  // V251009R9 VIA 응답 길이 부족 시 실패 처리
+      }
+      value_data[0] = config->enable;
+      return true;
+    case id_qmk_led_brightness:
+      if (value_length < 1) {
+        return false;  // V251009R9 VIA 응답 길이 부족 시 실패 처리
+      }
+      value_data[0] = config->hsv.v;
+      return true;
+    case id_qmk_led_color:
+      if (value_length < 2) {
+        return false;  // V251009R9 VIA 응답 길이 부족 시 실패 처리
+      }
+      value_data[0] = config->hsv.h;
+      value_data[1] = config->hsv.s;
+      return true;
+    default:
+      break;
+  }
+
+  return false;
+}
+
+static bool via_qmk_led_set_value(uint8_t led_type, uint8_t *data, uint8_t length)
+{
+  if (data == NULL || length == 0) {
+    return false;  // V251009R9 VIA 설정 페이로드 가용성 검증
+  }
+
+  led_config_t *config = led_config_from_type(led_type);
+  if (config == NULL) {
+    return false;
+  }
+
+  uint8_t *value_id     = &(data[0]);
+  uint8_t *value_data   = &(data[1]);
+  uint8_t  value_length = (length > 0) ? (length - 1) : 0;
+  bool     needs_refresh = false;  // V251009R1 설정 변경 시에만 RGBlight 갱신
+
+  switch (*value_id) {
+    case id_qmk_led_enable: {
+      if (value_length < 1) {
+        return false;  // V251009R9 VIA 설정 길이 부족 시 실패 처리
+      }
+      uint8_t enable = value_data[0] ? 1 : 0;
+      if (config->enable != enable) {
+        config->enable = enable;
+        needs_refresh  = true;
+      }
+      break;
+    }
+    case id_qmk_led_brightness:
+      if (value_length < 1) {
+        return false;  // V251009R9 VIA 설정 길이 부족 시 실패 처리
+      }
+      if (config->hsv.v != value_data[0]) {
+        config->hsv.v = value_data[0];
+        mark_indicator_color_dirty(led_type);  // V251009R3 밝기 변경 시 색상 캐시 무효화
+        needs_refresh  = true;
+      }
+      break;
+    case id_qmk_led_color: {
+      if (value_length < 2) {
+        return false;  // V251009R9 VIA 설정 길이 부족 시 실패 처리
+      }
+      uint8_t hue        = value_data[0];
+      uint8_t saturation = value_data[1];
+      if (config->hsv.h != hue || config->hsv.s != saturation) {
+        config->hsv.h = hue;
+        config->hsv.s = saturation;
+        mark_indicator_color_dirty(led_type);  // V251009R3 색상 변경 시 캐시 재계산
+        needs_refresh  = true;
+      }
+      break;
+    }
+    default:
+      return false;  // V251009R9 알 수 없는 VIA 서브커맨드 거부
+  }
+
+  if (needs_refresh) {
+    refresh_indicator_display();
+  }
+
+  return true;
+}
+
+void via_qmk_led_save(uint8_t led_type)
+{
+  flush_indicator_config(led_type);  // V251009R4 LED 타입 가드 헬퍼 경유 저장
+}
+
+bool rgblight_indicators_kb(void)
+{
+  // V251008R8 BRICK60 인디케이터 RGBlight 오버레이
+  led_t led_state = host_keyboard_led_state();
+
+  for (uint8_t i = 0; i < LED_TYPE_MAX_CH; i++) {
+    const led_config_t        *config  = led_config_from_type(i);
+    const indicator_profile_t *profile = indicator_profile_from_type(i);
+    if (config == NULL || profile == NULL) {
+      continue;  // V251009R7 인디케이터 구성/프로파일 포인터 동시 가드
+    }
+
+    if (!should_light_indicator(config, profile, led_state)) {
+      continue;  // V251009R7 인디케이터 헬퍼에 구성 포인터 직접 전달
+    }
+
+    RGB rgb = get_indicator_rgb(i, config);  // V251009R7 인디케이터 구성 포인터 재사용
+    uint8_t start = profile->start;                                   // V251009R2 범위 메타데이터 통합
+    uint8_t limit = profile->end;                                     // V251009R4 인디케이터 범위 상한 캐시 사용
+
+    for (uint8_t led_index = start; led_index < limit; led_index++) {
+      rgblight_set_color_buffer_at(led_index, rgb.r, rgb.g, rgb.b);
+    }
+  }
+
+  return true;
+}
