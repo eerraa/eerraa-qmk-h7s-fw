@@ -205,6 +205,11 @@ void ws2812RequestRefresh(uint16_t leds)
 
 void ws2812ServicePending(void)
 {
+  if (ws2812_pending == false || ws2812_busy)
+  {
+    return;                                                           // V251010R7 비대기/바쁨 상태면 인터럽트 마스크 생략
+  }
+
   uint16_t transfer_len = 0;
   uint32_t primask = __get_PRIMASK();
 
@@ -213,7 +218,7 @@ void ws2812ServicePending(void)
   {
     ws2812_pending = false;
     ws2812_busy = true;
-    transfer_len = ws2812_pending_len;
+    transfer_len = ws2812_pending_len;                                 // V251010R7 크리티컬 섹션 내에서 전송 길이 확보
   }
   ws2812RestorePrimask(primask);
 

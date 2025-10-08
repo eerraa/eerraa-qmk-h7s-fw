@@ -8,6 +8,7 @@ static RGB indicator_rgb_cache[LED_TYPE_MAX_CH];
 static bool indicator_rgb_dirty[LED_TYPE_MAX_CH] = {0};
 
 static led_config_t led_config[LED_TYPE_MAX_CH];
+static uint8_t indicator_last_active_mask = 0;                                  // V251010R7 마지막 DMA 커밋 시 활성화된 호스트 LED 마스크
 
 EECONFIG_DEBOUNCE_HELPER(led_caps,   EECONFIG_USER_LED_CAPS,   led_config[LED_TYPE_CAPS]);      // V251010R5 인디케이터 EEPROM 매크로 분리 재정의
 EECONFIG_DEBOUNCE_HELPER(led_scroll, EECONFIG_USER_LED_SCROLL, led_config[LED_TYPE_SCROLL]);    // V251010R5 인디케이터 EEPROM 매크로 분리 재정의
@@ -97,7 +98,32 @@ RGB led_port_indicator_get_rgb(uint8_t led_type, const led_config_t *config)
 
 void led_port_indicator_refresh(void)
 {
+  led_t led_state = led_port_host_cached_state();                               // V251010R7 현재 호스트 LED 상태 조회
+  uint8_t active_mask = 0;
+
+  for (uint8_t i = 0; i < LED_TYPE_MAX_CH; i++)
+  {
+    const led_config_t        *config  = led_port_config_from_type(i);
+    const indicator_profile_t *profile = led_port_indicator_profile_from_type(i);
+
+    if (config == NULL || profile == NULL)
+    {
+      continue;                                                                // V251010R7 설정/프로파일 범위 가드 유지
+    }
+
+    if (led_port_should_light_indicator(config, profile, led_state))
+    {
+      active_mask |= profile->host_mask;                                       // V251010R7 실제 활성화된 호스트 LED 비트 누적
+    }
+  }
+
+  if (active_mask == 0 && indicator_last_active_mask == 0)
+  {
+    return;                                                                    // V251010R7 비점등 상태 유지 시 DMA 커밋 생략
+  }
+
   refresh_indicator_display();
+  indicator_last_active_mask = active_mask;                                    // V251010R7 DMA 커밋 후 마지막 활성 상태 갱신
 }
 
 bool led_port_indicator_config_valid(uint8_t led_type, bool *needs_migration)

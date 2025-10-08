@@ -1754,17 +1754,7 @@ static void usbHidRequestStatusLedSync(uint8_t led_bits)
   usbHidExitCritical(primask);
 }
 
-bool usbHidStatusLedPending(void)
-{
-  bool pending = false;
-  uint32_t primask = usbHidEnterCritical();
-
-  pending = usb_hid_host_led_sync_pending;                                 // V251010R5 호스트 LED 큐 상태 조회
-
-  usbHidExitCritical(primask);
-  return pending;
-}
-
+// V251010R7 외부 큐 상태 조회 API 제거로 내부 비동기 서비스만 유지
 void usbHidServiceStatusLed(void)
 {
   if (usb_hid_host_led_sync_pending == false)
