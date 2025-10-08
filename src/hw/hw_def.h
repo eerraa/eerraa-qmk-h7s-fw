@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251010R8"  // V251010R8: LED DMA 커밋 최적화 및 호스트 LED 큐 중복 방지
+#define _DEF_FIRMWATRE_VERSION      "V251010R9"  // V251010R9: WS2812 is_init 정리 및 프레임 길이 캐시화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
