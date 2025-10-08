@@ -64,6 +64,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #ifdef _USE_HW_USB
 #    include "usbd_hid.h"  // V251010R3 USB 호스트 LED 비동기 서비스 연동
+bool led_port_host_apply_pending(void);  // V251010R6 호스트 LED 큐 즉시 적용 보조 경로
 #endif
 #ifdef ENCODER_ENABLE
 #    include "encoder.h"
@@ -810,10 +811,8 @@ void quantum_task(void) {
 void keyboard_task(void) {
     __attribute__((unused)) bool activity_has_occurred = false;
 #ifdef _USE_HW_USB
-    if (usbHidStatusLedPending())
-    {
-        usbHidServiceStatusLed();  // V251010R5 USB 호스트 LED 큐 선행 처리
-    }
+    usbHidServiceStatusLed();       // V251010R6 USB 호스트 LED 큐 직접 서비스 진입
+    led_port_host_apply_pending();  // V251010R6 LED 작업 비활성 대비 보조 적용
 #endif
     if (matrix_task()) {
         last_matrix_activity_trigger();
@@ -905,9 +904,6 @@ void keyboard_task(void) {
 #endif
 
 #ifdef _USE_HW_WS2812
-    if (ws2812HasPendingTransfer())
-    {
-        ws2812ServicePending();  // V251010R5 WS2812 DMA 조건부 서비스
-    }
+    ws2812ServicePending();  // V251010R6 WS2812 대기 전송 단일 진입 경량화
 #endif
 }

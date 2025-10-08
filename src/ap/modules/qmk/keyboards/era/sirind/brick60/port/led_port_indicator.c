@@ -37,6 +37,26 @@ static const indicator_profile_t indicator_profiles[LED_TYPE_MAX_CH] = {
   },
 };
 
+static bool indicator_has_active_channel(led_t led_state)
+{
+  for (uint8_t i = 0; i < LED_TYPE_MAX_CH; i++)
+  {
+    const led_config_t        *config  = led_port_config_from_type(i);
+    const indicator_profile_t *profile = led_port_indicator_profile_from_type(i);
+    if (config == NULL || profile == NULL)
+    {
+      continue;  // V251010R6 인디케이터 활성 채널 탐색 범위 가드
+    }
+
+    if (config->enable && ((led_state.raw & profile->host_mask) != 0))
+    {
+      return true;  // V251010R6 점등 중인 인디케이터 채널 존재
+    }
+  }
+
+  return false;
+}
+
 static void refresh_indicator_display(void)
 {
   if (!is_rgblight_initialized)
@@ -95,8 +115,17 @@ RGB led_port_indicator_get_rgb(uint8_t led_type, const led_config_t *config)
   return indicator_rgb_cache[led_type];
 }
 
-void led_port_indicator_refresh(void)
+void led_port_indicator_refresh(bool force_flush)
 {
+  if (!force_flush)
+  {
+    led_t led_state = led_port_host_cached_state();
+    if (!indicator_has_active_channel(led_state))
+    {
+      return;  // V251010R6 호스트 LED 비점등 시 DMA 재시작 생략
+    }
+  }
+
   refresh_indicator_display();
 }
 

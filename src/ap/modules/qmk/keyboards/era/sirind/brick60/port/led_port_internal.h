@@ -38,10 +38,11 @@ led_config_t *led_port_config_from_type(uint8_t led_type);
 const indicator_profile_t *led_port_indicator_profile_from_type(uint8_t led_type);
 void led_port_indicator_mark_color_dirty(uint8_t led_type);
 RGB  led_port_indicator_get_rgb(uint8_t led_type, const led_config_t *config);
-void led_port_indicator_refresh(void);
+void led_port_indicator_refresh(bool force_flush);
 bool led_port_indicator_config_valid(uint8_t led_type, bool *needs_migration);
 void led_port_indicator_flush_config(uint8_t led_type);
 bool led_port_should_light_indicator(const led_config_t *config, const indicator_profile_t *profile, led_t led_state);
 
 led_t led_port_host_cached_state(void);
 void  led_port_host_store_cached_state(led_t led_state);
+bool  led_port_host_apply_pending(void);

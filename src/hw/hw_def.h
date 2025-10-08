@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251010R5"  // V251010R5: LED 큐 선행 처리 및 WS2812 조건부 DMA 서비스
+#define _DEF_FIRMWATRE_VERSION      "V251010R6"  // V251010R6: LED 큐 직접 서비스 및 WS2812 단일 진입 최적화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

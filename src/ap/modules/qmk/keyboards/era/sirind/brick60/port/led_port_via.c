@@ -175,7 +175,7 @@ static bool via_qmk_led_set_value(uint8_t led_type, uint8_t *data, uint8_t lengt
 
   if (needs_refresh)
   {
-    led_port_indicator_refresh();
+    led_port_indicator_refresh(false);  // V251010R6 호스트 LED 비점등 시 DMA 생략 분기
   }
 
   return true;

@@ -18,6 +18,18 @@ static void service_pending_host_led(void)
   host_led_pending_dirty  = false;                 // V251010R5 적용 완료 플래그 초기화
 }
 
+bool led_port_host_apply_pending(void)
+{
+  if (!host_led_pending_dirty)
+  {
+    return false;  // V251010R6 대기 중인 호스트 LED 변경 없음
+  }
+
+  service_pending_host_led();
+  led_update_ports(host_led_state);  // V251010R6 LED 작업 비활성 대비 직접 갱신
+  return true;
+}
+
 led_t led_port_host_cached_state(void)
 {
   return host_led_state;  // V251010R5 인디케이터 합성용 호스트 LED 상태 제공
@@ -53,7 +65,7 @@ void led_update_ports(led_t led_state)
   }
 
   indicator_led_state = led_state;  // V251010R5 인디케이터 상태 캐시 갱신
-  led_port_indicator_refresh();
+  led_port_indicator_refresh(true);  // V251010R6 호스트 LED 업데이트 강제 플러시
 }
 
 uint8_t host_keyboard_leds(void)
