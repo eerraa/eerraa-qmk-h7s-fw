@@ -1748,6 +1748,12 @@ static void usbHidRequestStatusLedSync(uint8_t led_bits)
 {
   uint32_t primask = usbHidEnterCritical();
 
+  if (!usb_hid_host_led_sync_pending && usb_hid_host_led_last_applied == led_bits)
+  {
+    usbHidExitCritical(primask);
+    return;                                                                   // V251010R8 동일 상태 재큐잉 방지
+  }
+
   usb_hid_host_led_pending_bits = led_bits;                               // V251010R3 마지막 SET_REPORT 비트 캐시
   usb_hid_host_led_sync_pending = true;                                   // V251010R3 메인 루프 서비스 플래그
 
