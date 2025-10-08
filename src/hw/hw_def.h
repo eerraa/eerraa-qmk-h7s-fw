@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251010R7"  // V251010R7: LED 큐 API 정리 및 WS2812/인디케이터 경량화 적용
+#define _DEF_FIRMWATRE_VERSION      "V251010R8"  // V251010R8: LED DMA 커밋 최적화 및 호스트 LED 큐 중복 방지
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

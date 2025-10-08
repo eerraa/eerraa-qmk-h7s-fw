@@ -100,6 +100,7 @@ void led_port_indicator_refresh(void)
 {
   led_t led_state = led_port_host_cached_state();                               // V251010R7 현재 호스트 LED 상태 조회
   uint8_t active_mask = 0;
+  bool    has_dirty   = false;                                                 // V251010R8 더티 캐시 존재 여부 추적
 
   for (uint8_t i = 0; i < LED_TYPE_MAX_CH; i++)
   {
@@ -111,6 +112,11 @@ void led_port_indicator_refresh(void)
       continue;                                                                // V251010R7 설정/프로파일 범위 가드 유지
     }
 
+    if (indicator_rgb_dirty[i])
+    {
+      has_dirty = true;                                                        // V251010R8 색상 재계산 필요 시 커밋 강제
+    }
+
     if (led_port_should_light_indicator(config, profile, led_state))
     {
       active_mask |= profile->host_mask;                                       // V251010R7 실제 활성화된 호스트 LED 비트 누적
@@ -120,6 +126,11 @@ void led_port_indicator_refresh(void)
   if (active_mask == 0 && indicator_last_active_mask == 0)
   {
     return;                                                                    // V251010R7 비점등 상태 유지 시 DMA 커밋 생략
+  }
+
+  if (!has_dirty && active_mask == indicator_last_active_mask)
+  {
+    return;                                                                    // V251010R8 색상/활성 비트 변화 없을 때 DMA 커밋 생략
   }
 
   refresh_indicator_display();
