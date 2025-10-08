@@ -24,8 +24,7 @@ bool ws2812Init(void);
 void ws2812SetColor(uint32_t ch, uint32_t color);
 bool ws2812Refresh(void);
 void ws2812RequestRefresh(uint16_t leds);                  // V251010R1 WS2812 DMA 비동기 요청 API
-bool ws2812HasPendingTransfer(void);                       // V251010R5 WS2812 서비스 필요 여부 조회
-void ws2812ServicePending(void);                           // V251010R1 WS2812 DMA 서비스 헬퍼
+void ws2812ServicePending(void);                           // V251010R6 메인 루프 단일 진입 WS2812 DMA 서비스 헬퍼
 bool ws2812HandleDmaTransferCompleteFromISR(TIM_HandleTypeDef *htim);  // V251010R1 WS2812 DMA 완료 처리
 
 
