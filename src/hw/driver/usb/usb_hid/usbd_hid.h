@@ -170,8 +170,7 @@ bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length);
 bool usbHidGetRateInfo(usb_hid_rate_info_t *p_info);
 bool usbHidSetTimeLog(uint16_t index, uint32_t time_us);
 void usbHidSetStatusLed(uint8_t led_bits);
-void usbHidServiceStatusLed(void);                                      // V251010R3 USB 호스트 LED 비동기 서비스 진입점
-void usbHidResetStatusLedState(void);                                   // V251010R3 USB 호스트 LED 버퍼 초기화 API
+void usbHidResetStatusLedState(void);                                   // V251011R1 버스 이벤트 시 호스트 LED 초기화 API
 
 /**
   * @}

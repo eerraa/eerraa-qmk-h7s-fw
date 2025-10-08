@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251010R9"  // V251010R9: WS2812 is_init 정리 및 프레임 길이 캐시화
+#define _DEF_FIRMWATRE_VERSION      "V251011R1"  // V251011R1 호스트 LED 즉시 처리 및 WS2812 DMA 인라인 서비스
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

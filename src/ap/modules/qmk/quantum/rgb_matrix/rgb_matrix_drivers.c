@@ -149,6 +149,7 @@ static void init(void) {
 static void flush(void) {
     if (ws2812_dirty) {
         ws2812_setleds(rgb_matrix_ws2812_array, WS2812_LED_COUNT);
+        ws2812Refresh();  // V251011R1 RGB Matrix 프레임 즉시 DMA 반영
         ws2812_dirty = false;
     }
 }

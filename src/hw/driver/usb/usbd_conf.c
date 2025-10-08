@@ -222,7 +222,7 @@ void HAL_PCD_ResetCallback(PCD_HandleTypeDef *hpcd)
   /* Reset Device. */
   USBD_LL_Reset((USBD_HandleTypeDef*)hpcd->pData);
 #if HW_USB_HID == 1
-  usbHidResetStatusLedState();                                           // V251010R3 버스 리셋 시 호스트 LED 버퍼 초기화
+  usbHidSetStatusLed(0);                                                 // V251011R1 버스 리셋 즉시 호스트 LED 소등
 #endif
 }
 
@@ -253,7 +253,7 @@ void HAL_PCD_SuspendCallback(PCD_HandleTypeDef *hpcd)
   is_suspended = true;
   logPrintf("[  ] USB Suspend\n");
 #if HW_USB_HID == 1
-  usbHidResetStatusLedState();                                           // V251010R3 서스펜드 진입 시 호스트 LED 버퍼 초기화
+  usbHidSetStatusLed(0);                                                 // V251011R1 서스펜드 진입 시 호스트 LED 소등
 #endif
   /* USER CODE END 2 */
 }

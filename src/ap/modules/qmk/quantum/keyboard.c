@@ -809,9 +809,6 @@ void quantum_task(void) {
 /** \brief Main task that is repeatedly called as fast as possible. */
 void keyboard_task(void) {
     __attribute__((unused)) bool activity_has_occurred = false;
-#ifdef _USE_HW_USB
-    usbHidServiceStatusLed();  // V251010R6 USB 호스트 LED 큐 직접 서비스로 크리티컬 섹션 축소
-#endif
     if (matrix_task()) {
         last_matrix_activity_trigger();
         activity_has_occurred = true;
@@ -901,7 +898,5 @@ void keyboard_task(void) {
     os_detection_task();
 #endif
 
-#ifdef _USE_HW_WS2812
-    ws2812ServicePending();  // V251010R6 WS2812 DMA 진입 조건 단일화로 인터럽트 토글 최소화
-#endif
+    // V251011R1 WS2812 DMA는 각 RGB 경로가 직접 재기동한다
 }

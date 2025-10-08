@@ -45,7 +45,8 @@ void ws2812_setleds(rgb_led_t *ledarray, uint16_t leds)
 
   if (frame_dirty)
   {
-    ws2812RequestRefresh(limit);  // V251010R5 변경이 있는 경우에만 DMA 갱신 요청
+    ws2812RequestRefresh(limit);  // V251011R1 부분 프레임 길이 큐잉
+    ws2812Refresh();              // V251011R1 변경 발생 시 즉시 DMA 재기동
   }
 }
 

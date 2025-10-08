@@ -19,10 +19,10 @@ typedef struct
 __attribute__((section(".non_cache")))
 static uint8_t bit_buf[BIT_ZERO + 24*(HW_WS2812_MAX_CH+1)];
 
-static volatile bool ws2812_pending = false;      // V251010R1 WS2812 DMA 요청 플래그
-static volatile bool ws2812_busy = false;         // V251010R1 WS2812 DMA 진행 상태
-static volatile uint16_t ws2812_pending_len = 0;  // V251010R1 WS2812 DMA 프레임 길이
-static uint16_t ws2812_full_frame_len = 0;        // V251010R9 전체 프레임 길이 캐시
+static volatile bool     ws2812_pending = false;      // V251011R1 WS2812 DMA 요청 플래그
+static volatile bool     ws2812_busy = false;         // V251011R1 WS2812 DMA 진행 상태
+static volatile uint16_t ws2812_pending_len = 0;      // V251011R1 WS2812 DMA 프레임 길이
+static uint16_t          ws2812_full_frame_len = 0;   // V251011R1 전체 프레임 길이 캐시
 
 
 ws2812_t ws2812;
@@ -183,11 +183,34 @@ bool ws2812InitHw(void)
 
 bool ws2812Refresh(void)
 {
-  ws2812RequestRefresh(ws2812.led_cnt);  // V251010R1 기본 갱신 요청만 등록
-  if (__get_IPSR() == 0U)
+  if (!ws2812_pending)
   {
-    ws2812ServicePending();
+    ws2812RequestRefresh(ws2812.led_cnt);                                  // V251011R1 대기 요청이 없으면 전체 프레임 계산
   }
+
+  if (__get_IPSR() != 0U)
+  {
+    return true;                                                           // V251011R1 인터럽트 컨텍스트에서는 DMA 재기동 생략
+  }
+
+  uint16_t transfer_len = 0;
+  uint32_t primask = __get_PRIMASK();                                       // V251011R1 DMA 상태 갱신 전 인터럽트 마스크 저장
+
+  __disable_irq();
+  if (ws2812_pending && ws2812_busy == false)
+  {
+    ws2812_pending = false;
+    ws2812_busy    = true;
+    transfer_len   = ws2812_pending_len;                                    // V251011R1 크리티컬 섹션 내에서 전송 길이 확보
+  }
+  ws2812RestorePrimask(primask);                                            // V251011R1 PRIMASK 복원
+
+  if (transfer_len > 0U)
+  {
+    HAL_TIM_PWM_Stop_DMA(ws2812.h_timer, ws2812.channel);
+    HAL_TIM_PWM_Start_DMA(ws2812.h_timer, ws2812.channel, (const uint32_t *)bit_buf, transfer_len);
+  }
+
   return true;
 }
 
@@ -210,35 +233,9 @@ void ws2812RequestRefresh(uint16_t leds)
   uint32_t primask = __get_PRIMASK();
 
   __disable_irq();
-  ws2812_pending_len = frame_len;
-  ws2812_pending = true;
+  ws2812_pending_len = frame_len;                               // V251011R1 DMA 재기동을 위한 프레임 길이 캐시
+  ws2812_pending = true;                                        // V251011R1 다음 ws2812Refresh() 호출 시 DMA 시작
   ws2812RestorePrimask(primask);
-}
-
-void ws2812ServicePending(void)
-{
-  if (ws2812_pending == false || ws2812_busy)
-  {
-    return;                                                           // V251010R7 비대기/바쁨 상태면 인터럽트 마스크 생략
-  }
-
-  uint16_t transfer_len = 0;
-  uint32_t primask = __get_PRIMASK();
-
-  __disable_irq();                                                    // V251010R6 메인 루프 단일 호출 경량화
-  if (ws2812_pending && ws2812_busy == false)
-  {
-    ws2812_pending = false;
-    ws2812_busy = true;
-    transfer_len = ws2812_pending_len;                                 // V251010R7 크리티컬 섹션 내에서 전송 길이 확보
-  }
-  ws2812RestorePrimask(primask);
-
-  if (transfer_len > 0U)
-  {
-    HAL_TIM_PWM_Stop_DMA(ws2812.h_timer, ws2812.channel);
-    HAL_TIM_PWM_Start_DMA(ws2812.h_timer, ws2812.channel, (const uint32_t *)bit_buf, transfer_len);
-  }
 }
 
 bool ws2812HandleDmaTransferCompleteFromISR(TIM_HandleTypeDef *htim)

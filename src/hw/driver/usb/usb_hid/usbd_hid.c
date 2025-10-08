@@ -81,11 +81,7 @@ static uint8_t USBD_HID_SOF(USBD_HandleTypeDef *pdev);
 static bool usbHidTimeIsBefore(uint32_t now_us, uint32_t target_us); // V251001R7 마이크로초 래핑 비교 유틸리티
 static bool usbHidTimeIsAfterOrEqual(uint32_t now_us,
                                      uint32_t target_us);           // V251001R7 마이크로초 래핑 비교 유틸리티
-static void usbHidRequestStatusLedSync(uint8_t led_bits);            // V251010R3 USB 호스트 LED 비동기 플래그 세터
-static uint32_t usbHidEnterCritical(void);                           // V251010R3 USB 호스트 LED 공유 상태 보호
-static void usbHidExitCritical(uint32_t primask);                    // V251010R3 USB 호스트 LED 공유 상태 보호
-void usbHidServiceStatusLed(void);                                   // V251010R3 USB 호스트 LED 메인 루프 서비스
-void usbHidResetStatusLedState(void);                                // V251010R3 USB 호스트 LED 버퍼 초기화
+void usbHidResetStatusLedState(void);                                // V251011R1 버스 이벤트 시 호스트 LED 초기화
 
 #ifndef USE_USBD_COMPOSITE
 static uint8_t *USBD_HID_GetFSCfgDesc(uint16_t *length);
@@ -150,12 +146,6 @@ __ALIGN_BEGIN  static uint8_t hid_buf[HID_KEYBOARD_REPORT_SIZE] __ALIGN_END = {0
 static qbuffer_t              report_exk_q;
 static exk_report_info_t      report_exk_buf[128];
 __ALIGN_BEGIN  static uint8_t hid_buf_exk[HID_EXK_EP_SIZE] __ALIGN_END = {0,};
-
-static volatile uint8_t usb_hid_host_led_pending_bits = 0;           // V251010R3 USB 호스트 LED 비동기 버퍼
-static volatile bool    usb_hid_host_led_sync_pending = false;       // V251010R3 USB 호스트 LED 동기화 요청 플래그
-static uint8_t          usb_hid_host_led_last_applied = 0;           // V251010R3 마지막으로 반영된 호스트 LED 상태
-
-
 
 USBD_ClassTypeDef USBD_HID =
 {
@@ -668,7 +658,7 @@ static uint8_t USBD_HID_Init(USBD_HandleTypeDef *pdev, uint8_t cfgidx)
 
   uint8_t hs_interval = usbBootModeGetHsInterval();                      // V250923R1 Dynamic HS polling interval
 
-  usbHidResetStatusLedState();                                           // V251010R3 USB 호스트 LED 버퍼 초기화
+  usbHidResetStatusLedState();                                           // V251011R1 초기 연결 시 호스트 LED 동기화
 
 
 #ifdef USE_USBD_COMPOSITE
@@ -752,7 +742,7 @@ static uint8_t USBD_HID_DeInit(USBD_HandleTypeDef *pdev, uint8_t cfgidx)
     pdev->pClassDataCmsit[pdev->classId] = NULL;
   }
 
-  usbHidResetStatusLedState();                                           // V251010R3 디바이스 종료 시 호스트 LED 버퍼 초기화
+  usbHidResetStatusLedState();                                           // V251011R1 디바이스 종료 시 호스트 LED 초기화
 
   return (uint8_t)USBD_OK;
 }
@@ -940,7 +930,7 @@ uint8_t USBD_HID_EP0_RxReady(USBD_HandleTypeDef *pdev)
   {
     uint8_t led_bits = ep0_req_buf[0];
 
-    usbHidRequestStatusLedSync(led_bits);                                // V251010R3 USB 호스트 LED 비동기 서비스 요청
+    usbHidSetStatusLed(led_bits);                                         // V251011R1 SET_REPORT 즉시 호스트 LED 반영
   }
   return (uint8_t)USBD_OK;
 }
@@ -1732,64 +1722,9 @@ bool usbHidSetTimeLog(uint16_t index, uint32_t time_us)
   return true;
 }
 
-static uint32_t usbHidEnterCritical(void)
-{
-  uint32_t primask = __get_PRIMASK();                                     // V251010R3 USB 호스트 LED 크리티컬 섹션 진입
-  __disable_irq();
-  return primask;
-}
-
-static void usbHidExitCritical(uint32_t primask)
-{
-  __set_PRIMASK(primask);                                                 // V251010R3 USB 호스트 LED 크리티컬 섹션 복원
-}
-
-static void usbHidRequestStatusLedSync(uint8_t led_bits)
-{
-  uint32_t primask = usbHidEnterCritical();
-
-  if (!usb_hid_host_led_sync_pending && usb_hid_host_led_last_applied == led_bits)
-  {
-    usbHidExitCritical(primask);
-    return;                                                                   // V251010R8 동일 상태 재큐잉 방지
-  }
-
-  usb_hid_host_led_pending_bits = led_bits;                               // V251010R3 마지막 SET_REPORT 비트 캐시
-  usb_hid_host_led_sync_pending = true;                                   // V251010R3 메인 루프 서비스 플래그
-
-  usbHidExitCritical(primask);
-}
-
-// V251010R7 외부 큐 상태 조회 API 제거로 내부 비동기 서비스만 유지
-void usbHidServiceStatusLed(void)
-{
-  if (usb_hid_host_led_sync_pending == false)
-  {
-    return;                                                               // V251010R3 처리할 호스트 LED 요청 없음
-  }
-
-  uint32_t primask = usbHidEnterCritical();
-  uint8_t  pending_bits = usb_hid_host_led_pending_bits;                  // V251010R3 인터럽트 컨텍스트에서 전달된 LED 상태
-  usb_hid_host_led_sync_pending = false;
-  usbHidExitCritical(primask);
-
-  if (usb_hid_host_led_last_applied == pending_bits)
-  {
-    return;                                                               // V251010R3 이미 반영된 상태와 동일
-  }
-
-  usb_hid_host_led_last_applied = pending_bits;                           // V251010R3 새 호스트 LED 상태 적용 기록
-  usbHidSetStatusLed(pending_bits);                                       // V251010R3 메인 루프에서 실제 LED 갱신 수행
-}
-
 void usbHidResetStatusLedState(void)
 {
-  uint32_t primask = usbHidEnterCritical();
-
-  usb_hid_host_led_pending_bits = usb_hid_host_led_last_applied;          // V251010R3 마지막 반영 상태로 버퍼 초기화
-  usb_hid_host_led_sync_pending = false;                                  // V251010R3 대기 중인 요청 해제
-
-  usbHidExitCritical(primask);
+  usbHidSetStatusLed(0);                                                  // V251011R1 버스 이벤트 시 호스트 LED 초기화
 }
 
 __weak void usbHidSetStatusLed(uint8_t led_bits)
