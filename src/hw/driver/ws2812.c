@@ -8,8 +8,6 @@
 #define BIT_LOW    (35)  // 350ns
 #define BIT_ZERO   (50)
 
-bool is_init = false;
-
 
 typedef struct
 {
@@ -24,6 +22,7 @@ static uint8_t bit_buf[BIT_ZERO + 24*(HW_WS2812_MAX_CH+1)];
 static volatile bool ws2812_pending = false;      // V251010R1 WS2812 DMA 요청 플래그
 static volatile bool ws2812_busy = false;         // V251010R1 WS2812 DMA 진행 상태
 static volatile uint16_t ws2812_pending_len = 0;  // V251010R1 WS2812 DMA 프레임 길이
+static uint16_t ws2812_full_frame_len = 0;        // V251010R9 전체 프레임 길이 캐시
 
 
 ws2812_t ws2812;
@@ -115,9 +114,9 @@ bool ws2812Init(void)
 
   ws2812.led_cnt = WS2812_MAX_CH;
   ws2812_pending_len = ws2812CalcFrameSize(ws2812.led_cnt);  // V251010R1 기본 프레임 길이 초기화
+  ws2812_full_frame_len = ws2812_pending_len;                // V251010R9 최대 LED 프레임 길이 저장
   ws2812_pending = false;
   ws2812_busy = false;
-  is_init = true;
 
   for (int i=0; i<WS2812_MAX_CH; i++)
   {
@@ -194,7 +193,20 @@ bool ws2812Refresh(void)
 
 void ws2812RequestRefresh(uint16_t leds)
 {
-  uint16_t frame_len = ws2812CalcFrameSize(leds);
+  uint16_t frame_len;
+
+  if (leds >= ws2812.led_cnt)                                  // V251010R9 전체 길이 요청 시 캐시 재사용
+  {
+    frame_len = ws2812_full_frame_len;
+  }
+  else
+  {
+    frame_len = ws2812CalcFrameSize(leds);                     // V251010R9 부분 전송만 계산 수행
+  }
+  if (frame_len == 0U)
+  {
+    frame_len = ws2812CalcFrameSize(ws2812.led_cnt);            // V251010R9 초기화 가드
+  }
   uint32_t primask = __get_PRIMASK();
 
   __disable_irq();
