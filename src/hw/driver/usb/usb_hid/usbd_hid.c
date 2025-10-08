@@ -1754,6 +1754,17 @@ static void usbHidRequestStatusLedSync(uint8_t led_bits)
   usbHidExitCritical(primask);
 }
 
+bool usbHidStatusLedPending(void)
+{
+  bool pending = false;
+  uint32_t primask = usbHidEnterCritical();
+
+  pending = usb_hid_host_led_sync_pending;                                 // V251010R5 호스트 LED 큐 상태 조회
+
+  usbHidExitCritical(primask);
+  return pending;
+}
+
 void usbHidServiceStatusLed(void)
 {
   if (usb_hid_host_led_sync_pending == false)

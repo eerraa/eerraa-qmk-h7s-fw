@@ -1,8 +1,8 @@
-# USB 불안정성 모니터 Codex 레퍼런스 (V251009R9)
+# USB 불안정성 모니터 Codex 레퍼런스 (V251010R5)
 
 ## 1. 파일 개요
 - **핵심 파일**
-  - `src/hw/driver/usb/usb_hid/usbd_hid.c`: SOF 감시, 점수 기반 패널티 누적, 다운그레이드 큐 요청 트리거. `usbHidMonitorSof()`가 모든 감시 분기를 담당합니다.
+  - `src/hw/driver/usb/usb_hid/usbd_hid.c`: SOF 감시, 점수 기반 패널티 누적, 다운그레이드 큐 요청 트리거. `usbHidMonitorSof()`가 모든 감시 분기를 담당하며, `usbHidStatusLedPending()`으로 호스트 LED 큐 상태를 조회합니다. (V251010R5)
   - `src/hw/driver/usb/usb.c`: 부트 모드 캐시와 `usbRequestBootModeDowngrade()` 큐, `usbProcess()` 서비스 루프를 통해 다운그레이드 요청을 확정합니다.
   - `src/hw/driver/usb/usb.h`: 부트 모드 열거형과 기대 간격 계산기(`usbCalcMissedFrames()`), 모니터 확인 지연 상수를 정의합니다.
 - **호출 흐름**
