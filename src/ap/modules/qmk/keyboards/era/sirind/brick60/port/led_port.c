@@ -40,6 +40,7 @@ static bool via_qmk_led_get_value(uint8_t led_type, uint8_t *data, uint8_t lengt
 static bool via_qmk_led_set_value(uint8_t led_type, uint8_t *data, uint8_t length);  // V251009R9 VIA 페이로드 길이 검증 헬퍼 확장
 static void via_qmk_led_save(uint8_t led_type);
 static void refresh_indicator_display(void);
+static void service_pending_host_led(void);                                        // V251010R4 호스트 LED 지연 적용 서비스
 static bool indicator_config_valid(uint8_t led_type, bool *needs_migration);
 static bool should_light_indicator(const led_config_t *config, const indicator_profile_t *profile, led_t led_state);  // V251009R7 인디케이터 구성 포인터 인계
 static void mark_indicator_color_dirty(uint8_t led_type);          // V251009R3 인디케이터 색상 캐시 무효화
@@ -50,6 +51,8 @@ static led_t       host_led_state      = {0};  // V251008R9 호스트 LED 상태
 static led_t       indicator_led_state = {0};  // V251009R1 인디케이터 갱신 상태 캐시
 static RGB         indicator_rgb_cache[LED_TYPE_MAX_CH];           // V251009R3 인디케이터 색상 캐시
 static bool        indicator_rgb_dirty[LED_TYPE_MAX_CH] = {0};     // V251009R3 색상 캐시 동기화 플래그
+static uint8_t     host_led_pending_raw   = 0;                      // V251010R4 호스트 LED 지연 적용 버퍼
+static bool        host_led_pending_dirty = false;                  // V251010R4 호스트 LED 지연 적용 플래그
 
 EECONFIG_DEBOUNCE_HELPER(led_caps,   EECONFIG_USER_LED_CAPS,   led_config[LED_TYPE_CAPS]);
 EECONFIG_DEBOUNCE_HELPER(led_scroll, EECONFIG_USER_LED_SCROLL, led_config[LED_TYPE_SCROLL]);
@@ -99,12 +102,29 @@ static const indicator_profile_t *indicator_profile_from_type(uint8_t led_type)
 
 void usbHidSetStatusLed(uint8_t led_bits)
 {
-  if (host_led_state.raw == led_bits)
+  if (host_led_pending_dirty && host_led_pending_raw == led_bits)
   {
-    return;  // V251010R3 변화가 없으면 추가 처리 불필요
+    return;  // V251010R4 동일한 지연 적용 요청 중복 방지
   }
 
-  led_set(led_bits);  // V251010R3 메인 루프에서 LED를 직접 갱신
+  if (!host_led_pending_dirty && host_led_state.raw == led_bits)
+  {
+    return;  // V251010R4 변화가 없으면 추가 처리 불필요
+  }
+
+  host_led_pending_raw   = led_bits;   // V251010R4 호스트 LED 변경분 저장
+  host_led_pending_dirty = true;       // V251010R4 메인 루프 적용 예약
+}
+
+static void service_pending_host_led(void)
+{
+  if (!host_led_pending_dirty)
+  {
+    return;  // V251010R4 지연 적용할 호스트 LED 없음
+  }
+
+  host_led_state.raw      = host_led_pending_raw;   // V251010R4 지연 적용된 호스트 LED 반영
+  host_led_pending_dirty  = false;                  // V251010R4 적용 완료 플래그 클리어
 }
 
 static void refresh_indicator_display(void)
@@ -198,7 +218,8 @@ void led_update_ports(led_t led_state)
 
 uint8_t host_keyboard_leds(void)
 {
-  return host_led_state.raw;  // V251010R3 메인 루프에서 유지되는 호스트 LED 상태 반환
+  service_pending_host_led();  // V251010R4 지연 적용된 호스트 LED 상태 소화
+  return host_led_state.raw;   // V251010R4 메인 루프에서 유지되는 호스트 LED 상태 반환
 }
 
 void via_qmk_led_command(uint8_t led_type, uint8_t *data, uint8_t length)

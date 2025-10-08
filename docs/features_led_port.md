@@ -41,8 +41,10 @@
 4. `indicator_config_valid()` 결과가 false이면 프로파일 기본값을 RAM에 복사하고 즉시 EEPROM을 플러시합니다.
 5. 마이그레이션이 발생한 경우에도 플러시를 호출해 변경 사항을 확정합니다.
 
-### 4.2 호스트 LED 입력: `usbHidSetStatusLed` → `led_set`
-- USB 경로에서 전달된 `led_bits`를 `host_led_state`에 저장하고, QMK 기본 구현(`led_set`)을 호출해 표준 동작을 유지합니다.
+### 4.2 호스트 LED 입력: `usbHidSetStatusLed` → `host_keyboard_leds` → `led_task`
+- USB 경로에서 전달된 `led_bits`는 `usbHidSetStatusLed()`에서 `host_led_pending_raw`와 더티 플래그로 큐잉됩니다. (V251010R4)
+- `host_keyboard_leds()`가 호출되면 `service_pending_host_led()`가 큐잉된 값을 `host_led_state`에 반영하고 플래그를 해제합니다.
+- `led_task()`는 변화가 감지될 때만 `led_set()`을 호출하므로 RGBlight 재합성 및 WS2812 리프레시는 루프당 1회만 수행됩니다. (V251010R4)
 
 ### 4.3 QMK 갱신 루프: `led_update_ports`
 1. QMK가 보고하는 `led_t`를 `host_led_state`와 `indicator_led_state`에 반영합니다.
