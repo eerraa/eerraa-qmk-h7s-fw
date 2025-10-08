@@ -809,6 +809,9 @@ void quantum_task(void) {
 /** \brief Main task that is repeatedly called as fast as possible. */
 void keyboard_task(void) {
     __attribute__((unused)) bool activity_has_occurred = false;
+#ifdef _USE_HW_USB
+    usbHidServiceStatusLed();  // V251010R5 USB 호스트 LED 큐 선처리
+#endif
     if (matrix_task()) {
         last_matrix_activity_trigger();
         activity_has_occurred = true;
@@ -890,10 +893,6 @@ void keyboard_task(void) {
 
 #ifdef HAPTIC_ENABLE
     haptic_task();
-#endif
-
-#ifdef _USE_HW_USB
-    usbHidServiceStatusLed();  // V251010R3 USB 호스트 LED 비동기 서비스
 #endif
 
     led_task();
