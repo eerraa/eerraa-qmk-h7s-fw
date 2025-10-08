@@ -810,10 +810,7 @@ void quantum_task(void) {
 void keyboard_task(void) {
     __attribute__((unused)) bool activity_has_occurred = false;
 #ifdef _USE_HW_USB
-    if (usbHidStatusLedPending())
-    {
-        usbHidServiceStatusLed();  // V251010R5 USB 호스트 LED 큐 선행 처리
-    }
+    usbHidServiceStatusLed();  // V251010R6 USB 호스트 LED 큐 직접 서비스로 크리티컬 섹션 축소
 #endif
     if (matrix_task()) {
         last_matrix_activity_trigger();
@@ -905,9 +902,6 @@ void keyboard_task(void) {
 #endif
 
 #ifdef _USE_HW_WS2812
-    if (ws2812HasPendingTransfer())
-    {
-        ws2812ServicePending();  // V251010R5 WS2812 DMA 조건부 서비스
-    }
+    ws2812ServicePending();  // V251010R6 WS2812 DMA 진입 조건 단일화로 인터럽트 토글 최소화
 #endif
 }

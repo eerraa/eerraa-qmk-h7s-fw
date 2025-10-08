@@ -203,24 +203,12 @@ void ws2812RequestRefresh(uint16_t leds)
   ws2812RestorePrimask(primask);
 }
 
-bool ws2812HasPendingTransfer(void)
-{
-  bool pending = false;
-  uint32_t primask = __get_PRIMASK();
-
-  __disable_irq();
-  pending = ws2812_pending;
-  ws2812RestorePrimask(primask);
-
-  return pending;  // V251010R5 메인 루프에서 WS2812 서비스 필요 여부 조회
-}
-
 void ws2812ServicePending(void)
 {
   uint16_t transfer_len = 0;
   uint32_t primask = __get_PRIMASK();
 
-  __disable_irq();
+  __disable_irq();                                                    // V251010R6 메인 루프 단일 호출 경량화
   if (ws2812_pending && ws2812_busy == false)
   {
     ws2812_pending = false;

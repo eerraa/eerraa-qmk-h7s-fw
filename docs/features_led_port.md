@@ -49,12 +49,12 @@
 4. `indicator_config_valid()` 결과가 false이면 프로파일 기본값을 RAM에 복사하고 즉시 EEPROM을 플러시합니다.
 5. 마이그레이션이 발생한 경우에도 플러시를 호출해 변경 사항을 확정합니다.
 
-### 4.2 호스트 LED 입력: `usbHidSetStatusLed` → `usbHidStatusLedPending` → `host_keyboard_leds`
+### 4.2 호스트 LED 입력: `usbHidSetStatusLed` → `usbHidServiceStatusLed` → `host_keyboard_leds`
 - USB 경로에서 전달된 `led_bits`는 `usbHidSetStatusLed()`에서 `host_led_pending_raw`와 더티 플래그로 큐잉됩니다. (V251010R5)
-- `keyboard_task()`는 루프 초입에서 `usbHidStatusLedPending()`을 확인한 뒤, 대기 중일 때 `usbHidServiceStatusLed()`를 즉시 호출해 큐를 비웁니다. (V251010R5)
+- `keyboard_task()`는 루프 초입에서 무조건 `usbHidServiceStatusLed()`를 호출해, 내부 가드가 직접 큐 상태를 확인하도록 변경되었습니다. (V251010R6)
 - `host_keyboard_leds()`가 호출되면 `service_pending_host_led()`가 큐잉된 값을 `host_led_state`에 반영하고 플래그를 해제합니다.
 - `led_task()`는 변화가 감지될 때만 `led_set()`을 호출하므로 RGBlight 재합성 및 WS2812 리프레시는 루프당 1회만 수행됩니다.
-- WS2812 DMA 서비스는 `keyboard_task()` 말미에서 `ws2812HasPendingTransfer()`로 조건을 확인한 뒤 `ws2812ServicePending()`을 호출합니다. (V251010R5)
+- WS2812 DMA 서비스는 `keyboard_task()` 말미에서 `ws2812ServicePending()`을 바로 호출하여, 내부에서만 크리티컬 섹션을 수행합니다. (V251010R6)
 
 ### 4.3 QMK 갱신 루프: `led_update_ports`
 1. QMK가 보고하는 `led_t`를 `host_led_state`와 `indicator_led_state`에 반영합니다.
@@ -104,4 +104,4 @@
 - RGB 변환은 `hsv_to_rgb()` 한 곳에서만 수행되므로, 캐시가 갱신되지 않으면 `indicator_rgb_dirty[]` 상태를 확인합니다.
 - VIA 동작 이상 시 `via_qmk_led_command()`에서 `command_id`가 `id_unhandled`로 바뀌었는지 확인하면 문제 지점을 좁힐 수 있습니다.
 - 인디케이터가 켜지지 않으면 `host_led_state.raw`와 `indicator_profiles[].host_mask`의 비트 매칭을 우선 점검합니다.
-- `keyboard_task()` 초반의 `usbHidStatusLedPending()` 결과가 `false`라면 큐가 비어 있으므로 LED 서비스가 생략된 상태입니다.
+- `keyboard_task()`는 `usbHidServiceStatusLed()`를 매 루프 호출하므로, 큐 상태는 함수 내부의 더티 플래그를 통해 자동으로 확인됩니다.
