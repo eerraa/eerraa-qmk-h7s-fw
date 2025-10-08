@@ -1,37 +1,45 @@
-# BRICK60 LED 포트 Codex 레퍼런스 (V251009R9)
+# BRICK60 LED 포트 Codex 레퍼런스 (V251010R5)
 
 ## 1. 파일 개요
-- 대상: `src/ap/modules/qmk/keyboards/era/sirind/brick60/port/led_port.c`
-- 포함 헤더: `led_port.h`, `color.h`, `eeconfig.h`, `rgblight.h`
-- 기능 요약: 호스트 LED 비트맵을 RGB 인디케이터로 재구성하고, VIA 커맨드를 통해 사용자 지정 HSV 설정을 EEPROM과 RGB 버퍼에 반영합니다.
+- 대상 모듈:
+  - `led_port_indicator.c`: 인디케이터 합성/캐시 관리
+  - `led_port_host.c`: 호스트 LED 큐 및 QMK 연동
+  - `led_port_via.c`: VIA 커맨드 처리기
+  - `led_port_internal.h`: 모듈 간 공유 구조체 정의
+- 포함 헤더: `led_port.h`, `led_port_internal.h`, `color.h`, `eeconfig.h`, `rgblight.h`
+- 기능 요약: 호스트 LED 비트맵을 RGB 인디케이터로 재구성하고, VIA 커맨드를 통해 사용자 지정 HSV 설정을 EEPROM과 RGB 버퍼에 반영하며, 큐된 호스트 LED 변경을 메인 루프에서 안전하게 적용합니다.
 
 ## 2. 핵심 데이터 구조
 | 심볼 | 정의 | 주요 필드 | 용도 |
 | --- | --- | --- | --- |
-| `led_config_t` | 32비트 union (`raw` ↔ `{enable, HSV}`) | `enable`, `HSV hsv` | EEPROM에 저장되는 LED 타입별 사용자 설정 |
-| `indicator_profile_t` | 인디케이터 메타데이터 테이블 | `default_config`, `start`, `end`, `host_mask`, `flush` | 각 LED 타입의 기본 HSV/범위/EECONFIG 플러시 함수 |
-| `indicator_profiles[]` | `LED_TYPE_MAX_CH` 길이 상수 테이블 | CAPS/SCROLL/NUM에 대한 기본값 | 타입별 기본 설정 로딩 및 범위 캐시 |
-| `led_config[]` | 가변 배열 | `led_config_t` | RAM 캐시 (EEPROM 동기화 대상) |
-| `indicator_rgb_cache[]` & `indicator_rgb_dirty[]` | RGB 캐시 및 더티 플래그 | `RGB`, `bool` | HSV→RGB 변환 최소화 |
-| `host_led_state`, `indicator_led_state` | `led_t` | `raw` 비트필드 | 호스트/인디케이터 상태 동기화 |
+| `led_config_t` | 32비트 union (`raw` ↔ `{enable, HSV}`) | `enable`, `HSV hsv` | `led_port_internal.h`에 선언된 EEPROM 동기화 구조체 |
+| `indicator_profile_t` | 인디케이터 메타데이터 테이블 | `default_config`, `start`, `end`, `host_mask`, `flush` | 타입별 기본 설정/범위/플러시 함수 캐시 |
+| `indicator_profiles[]` | `LED_TYPE_MAX_CH` 길이 상수 테이블 (`led_port_indicator.c`) | CAPS/SCROLL/NUM 기본값 | 타입별 기본 설정 로딩 |
+| `led_config[]` | 가변 배열 (`led_port_indicator.c`) | `led_config_t` | RAM 캐시 (EEPROM 동기화 대상) |
+| `indicator_rgb_cache[]` & `indicator_rgb_dirty[]` | RGB 캐시 및 더티 플래그 (`led_port_indicator.c`) | `RGB`, `bool` | HSV→RGB 변환 최소화 |
+| `host_led_state`, `indicator_led_state` | `led_t` (`led_port_host.c`) | `raw` 비트필드 | 호스트/인디케이터 상태 동기화 및 큐 처리 |
+| `host_led_pending_raw`, `host_led_pending_dirty` | 큐잉된 호스트 LED (`led_port_host.c`) | `uint8_t`, `bool` | 인터럽트와 메인 루프 간 LED 상태 교환 |
 
 ## 3. 정적 헬퍼 함수 요약
-- `led_config_from_type(uint8_t led_type)`
-  - 범위 가드를 통과한 경우 `led_config[]` 포인터를 반환합니다.
-- `indicator_profile_from_type(uint8_t led_type)`
-  - 프로파일 테이블 포인터를 반환하며, 타입 범위를 벗어나면 `NULL`을 리턴합니다.
-- `indicator_config_valid(uint8_t led_type, bool *needs_migration)`
-  - EEPROM 슬롯 무결성을 검사하고, 구버전 데이터를 현재 레이아웃으로 마이그레이션합니다.
-- `mark_indicator_color_dirty(uint8_t led_type)`
-  - 캐시 플래그를 설정해 HSV 변경 시 RGB 재계산을 예약합니다.
-- `get_indicator_rgb(uint8_t led_type, const led_config_t *config)`
-  - 더티 플래그를 확인해 `hsv_to_rgb()`를 지연 평가합니다.
-- `should_light_indicator(const led_config_t *config, const indicator_profile_t *profile, led_t led_state)`
-  - 사용자 설정과 호스트 LED 비트를 모두 만족할 때만 true를 반환합니다.
-- `refresh_indicator_display(void)`
-  - RGBlight가 초기화된 경우에만 `rgblight_set()` 호출로 합성된 버퍼를 커밋합니다.
-- `flush_indicator_config(uint8_t led_type)` / `via_qmk_led_save(uint8_t led_type)`
-  - 프로파일 테이블의 `flush` 콜백을 통해 EEPROM을 업데이트합니다.
+### 3.1 인디케이터 합성 (`led_port_indicator.c`)
+- `led_port_config_from_type(uint8_t led_type)` : 범위 가드를 통과한 경우 `led_config[]` 포인터를 반환합니다.
+- `led_port_indicator_profile_from_type(uint8_t led_type)` : 프로파일 테이블 포인터를 반환하며, 타입 범위를 벗어나면 `NULL`을 리턴합니다.
+- `led_port_indicator_config_valid(uint8_t led_type, bool *needs_migration)` : EEPROM 슬롯 무결성을 검사하고, 구버전 데이터를 현재 레이아웃으로 마이그레이션합니다.
+- `led_port_indicator_mark_color_dirty(uint8_t led_type)` : 캐시 플래그를 설정해 HSV 변경 시 RGB 재계산을 예약합니다.
+- `led_port_indicator_get_rgb(uint8_t led_type, const led_config_t *config)` : 더티 플래그를 확인해 `hsv_to_rgb()`를 지연 평가합니다.
+- `led_port_should_light_indicator(const led_config_t *config, const indicator_profile_t *profile, led_t led_state)` : 사용자 설정과 호스트 LED 비트를 모두 만족할 때만 true를 반환합니다.
+- `led_port_indicator_refresh(void)` : RGBlight가 초기화된 경우에만 `rgblight_set()` 호출로 합성된 버퍼를 커밋합니다.
+
+### 3.2 호스트 LED 큐 (`led_port_host.c`)
+- `usbHidSetStatusLed(uint8_t led_bits)` : 인터럽트 컨텍스트에서 큐잉된 호스트 LED 상태를 저장합니다.
+- `led_port_host_store_cached_state(led_t led_state)` : 최신 호스트 LED 상태를 캐시에 반영합니다.
+- `led_port_host_cached_state(void)` : 인디케이터 합성 시 사용할 호스트 LED 비트를 제공합니다.
+- `service_pending_host_led(void)` (정적) : 큐잉된 LED 비트를 QMK에서 읽기 전에 적용합니다.
+
+### 3.3 VIA 커맨드 (`led_port_via.c`)
+- `via_qmk_led_command(uint8_t led_type, uint8_t *data, uint8_t length)` : VIA 채널별 커맨드를 분기 처리합니다.
+- `via_qmk_led_get_value()` / `via_qmk_led_set_value()` : 페이로드 길이 검증 및 HSV/enable 접근자를 제공합니다.
+- `via_qmk_led_save(uint8_t led_type)` : 프로파일 테이블의 `flush` 콜백을 통해 EEPROM을 업데이트합니다.
 
 ## 4. 주요 실행 흐름
 ### 4.1 초기화: `led_init_ports`
@@ -41,15 +49,17 @@
 4. `indicator_config_valid()` 결과가 false이면 프로파일 기본값을 RAM에 복사하고 즉시 EEPROM을 플러시합니다.
 5. 마이그레이션이 발생한 경우에도 플러시를 호출해 변경 사항을 확정합니다.
 
-### 4.2 호스트 LED 입력: `usbHidSetStatusLed` → `host_keyboard_leds` → `led_task`
-- USB 경로에서 전달된 `led_bits`는 `usbHidSetStatusLed()`에서 `host_led_pending_raw`와 더티 플래그로 큐잉됩니다. (V251010R4)
+### 4.2 호스트 LED 입력: `usbHidSetStatusLed` → `usbHidStatusLedPending` → `host_keyboard_leds`
+- USB 경로에서 전달된 `led_bits`는 `usbHidSetStatusLed()`에서 `host_led_pending_raw`와 더티 플래그로 큐잉됩니다. (V251010R5)
+- `keyboard_task()`는 루프 초입에서 `usbHidStatusLedPending()`을 확인한 뒤, 대기 중일 때 `usbHidServiceStatusLed()`를 즉시 호출해 큐를 비웁니다. (V251010R5)
 - `host_keyboard_leds()`가 호출되면 `service_pending_host_led()`가 큐잉된 값을 `host_led_state`에 반영하고 플래그를 해제합니다.
-- `led_task()`는 변화가 감지될 때만 `led_set()`을 호출하므로 RGBlight 재합성 및 WS2812 리프레시는 루프당 1회만 수행됩니다. (V251010R4)
+- `led_task()`는 변화가 감지될 때만 `led_set()`을 호출하므로 RGBlight 재합성 및 WS2812 리프레시는 루프당 1회만 수행됩니다.
+- WS2812 DMA 서비스는 `keyboard_task()` 말미에서 `ws2812HasPendingTransfer()`로 조건을 확인한 뒤 `ws2812ServicePending()`을 호출합니다. (V251010R5)
 
 ### 4.3 QMK 갱신 루프: `led_update_ports`
 1. QMK가 보고하는 `led_t`를 `host_led_state`와 `indicator_led_state`에 반영합니다.
 2. 상태가 이전과 동일하면 조기 반환하여 중복 갱신을 방지합니다.
-3. 변경이 감지되면 `refresh_indicator_display()`를 호출해 RGBlight 버퍼를 재합성합니다.
+3. 변경이 감지되면 `led_port_indicator_refresh()`를 호출해 RGBlight 버퍼를 재합성합니다.
 
 ### 4.4 VIA 커맨드 처리: `via_qmk_led_command`
 1. 인자 유효성(포인터, 길이, `LED_TYPE_MAX_CH`)을 검사합니다.
@@ -68,7 +78,7 @@
 ## 5. VIA 서브 커맨드 규격
 | 서브 커맨드 | 최소 페이로드 길이 | 동작 | 추가 처리 |
 | --- | --- | --- | --- |
-| `id_qmk_led_enable` | 1바이트 | `enable` 읽기/쓰기 | 값 변경 시 즉시 `refresh_indicator_display()` 호출 |
+| `id_qmk_led_enable` | 1바이트 | `enable` 읽기/쓰기 | 값 변경 시 즉시 `led_port_indicator_refresh()` 호출 |
 | `id_qmk_led_brightness` | 1바이트 | `hsv.v` 읽기/쓰기 | 쓰기 시 `mark_indicator_color_dirty()`로 캐시 무효화 |
 | `id_qmk_led_color` | 2바이트 | `hsv.h`, `hsv.s` 읽기/쓰기 | 쓰기 시 더티 플래그 세팅 및 합성 트리거 |
 - 유효하지 않은 서브 커맨드는 `false`를 반환하여 `id_unhandled` 응답으로 전파됩니다.
@@ -94,3 +104,4 @@
 - RGB 변환은 `hsv_to_rgb()` 한 곳에서만 수행되므로, 캐시가 갱신되지 않으면 `indicator_rgb_dirty[]` 상태를 확인합니다.
 - VIA 동작 이상 시 `via_qmk_led_command()`에서 `command_id`가 `id_unhandled`로 바뀌었는지 확인하면 문제 지점을 좁힐 수 있습니다.
 - 인디케이터가 켜지지 않으면 `host_led_state.raw`와 `indicator_profiles[].host_mask`의 비트 매칭을 우선 점검합니다.
+- `keyboard_task()` 초반의 `usbHidStatusLedPending()` 결과가 `false`라면 큐가 비어 있으므로 LED 서비스가 생략된 상태입니다.
