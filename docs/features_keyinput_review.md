@@ -1,4 +1,4 @@
-# 키 입력 경로 리팩토링/최적화 리뷰 (기준: V251009R2)
+# 키 입력 경로 리팩토링/최적화 리뷰 (기준: V251009R3)
 
 ## 1. 분석 범위
 - DMA 기반 키 스캔 드라이버(`src/hw/driver/keys.c`)
@@ -12,7 +12,7 @@
 - V251009R2에서 `keys` CLI 명령을 제거해 DMA 자동 갱신 경로만 유지되고, 디버그는 QMK 레이어로 위임했습니다.【F:src/hw/driver/keys.c†L36-L330】【F:src/ap/modules/qmk/port/matrix.c†L101-L144】
 
 ### 2.2 QMK 매트릭스 브리지
-- `matrix_scan()`은 스캔마다 두 번의 `micros()` 호출로 `key_scan_time`을 계산하고, 변화가 있을 때마다 HID 타임로그를 갱신합니다.【F:src/ap/modules/qmk/port/matrix.c†L50-L99】 그러나 `key_scan_time`은 디버그 CLI 또는 로깅이 활성화될 때만 소비되므로, 평시에도 매 스캔마다 계측하는 것은 불필요한 타이머 접근 오버헤드가 됩니다.
+- `matrix_scan()`은 스캔마다 두 번의 `micros()` 호출로 `key_scan_time`을 계산하고, 변화가 있을 때마다 HID 타임로그를 갱신합니다.【F:src/ap/modules/qmk/port/matrix.c†L50-L101】 폴백 복사 블록이 제거돼 DMA 경로만 검증하면 되므로, 계측 최적화를 적용할 경우 영향 범위가 더욱 명확해졌습니다. 다만 `key_scan_time`은 디버그 CLI 또는 로깅이 활성화될 때만 소비되므로, 평시에도 매 스캔마다 계측하는 것은 여전히 불필요한 타이머 접근 오버헤드가 됩니다.
 
 ### 2.3 매트릭스 태스크 & 이벤트 처리
 - `matrix_task()`는 행 변화가 없으면 즉시 탈출하고, 고스트 판정도 캐시로 줄이는 등 이미 공격적으로 최적화돼 있습니다.【F:src/ap/modules/qmk/quantum/keyboard.c†L615-L725】 추가적인 CPU 절감 포인트는 크지 않았습니다.

@@ -6,7 +6,7 @@
   1. GPDMA가 열 버퍼(`col_rd_buf`)를 지속적으로 채우고, QMK 포팅층이 DMA 버퍼를 직접 참조해 매트릭스를 구성합니다.
   2. `matrix_task()`가 변화 행을 선별하고 고스트를 차단한 뒤, `action_exec()`/`send_keyboard_report()` 흐름으로 키 이벤트를 전달합니다.
   3. `host_keyboard_send()` → `usbHidSendReport()` 체인이 HID IN 엔드포인트를 전송하거나 큐잉하며, USB 시간/큐 진단값을 업데이트합니다.
-- **현재 펌웨어 버전**: `V251009R2`.
+- **현재 펌웨어 버전**: `V251009R3`.
 
 ## 2. 파일 토폴로지 & 책임
 | 경로 | 핵심 심볼/함수 | 역할 |
@@ -26,7 +26,7 @@
 - 기존 `keysReadColsBuf()` 경로도 유지되어 필요 시 안전 복사 기반 접근이 가능합니다.【F:src/hw/driver/keys.c†L295-L299】
 
 ### 3.2 QMK 매트릭스 브리지 (`port/matrix.c`)
-- `matrix_scan()`은 DMA 버퍼를 `matrix_row_t` 배열과 1:1 매핑하여 변화가 있는 행만 `raw_matrix`에 반영하고, QMK 디바운스(`debounce()`)를 거쳐 `matrix[]`를 확정합니다.【F:src/ap/modules/qmk/port/matrix.c†L55-L99】
+- `matrix_scan()`은 DMA 버퍼를 `matrix_row_t` 배열과 1:1 매핑하여 변화가 있는 행만 `raw_matrix`에 반영하고, QMK 디바운스(`debounce()`)를 거쳐 `matrix[]`를 확정합니다. 폴백 복사 경로는 V251009R3에서 제거되어 DMA 경로만 유지됩니다.【F:src/ap/modules/qmk/port/matrix.c†L55-L99】
 - 스캔 시작 시각과 변화 여부가 USB 진단에 전달되어 HID 폴링 초과 시간을 추적합니다 (`usbHidSetTimeLog`).【F:src/ap/modules/qmk/port/matrix.c†L96-L101】
 - `matrix_can_read()`는 현재는 상시 true를 반환하지만, 전력/안전 모드에서 스캔을 차단하고 tick 이벤트만 생성하는 훅으로 확장 가능합니다.【F:src/ap/modules/qmk/port/matrix.c†L41-L58】
 - `matrix_info()` CLI는 1초 주기 스캔/폴링 속도, 큐 심도, 스캔 소요 시간을 로그로 출력하도록 설계돼 있습니다.【F:src/ap/modules/qmk/port/matrix.c†L101-L125】
@@ -95,6 +95,7 @@
 - **V251001R4**: 고스트 판정용 행 캐시 도입으로 키맵 필터 재계산 제거.【F:src/ap/modules/qmk/quantum/keyboard.c†L232-L249】【F:src/ap/modules/qmk/quantum/keyboard.c†L667-L696】
 - **V251009R1**: `keysUpdate()` API 제거 및 DMA 스냅샷 기반 경로만 유지.【F:src/common/hw/include/keys.h†L13-L19】【F:src/hw/driver/keys.c†L32-L304】【F:src/ap/modules/qmk/port/matrix.c†L55-L99】
 - **V251009R2**: DMA 자동 갱신에 중복되던 `keys` CLI 명령 제거, 진단 흐름을 QMK `matrix info`로 통합.【F:src/hw/driver/keys.c†L32-L330】【F:src/ap/modules/qmk/port/matrix.c†L101-L144】
+- **V251009R3**: `matrix.c` 폴백 블록 제거로 DMA 전용 경로를 확정하고 유지보수 범위를 축소.【F:src/ap/modules/qmk/port/matrix.c†L55-L99】
 
 ## 10. Codex 작업 체크리스트
 1. DMA/매트릭스 계층을 수정할 때는 `keysPeekColsBuf()`가 여전히 `volatile` 포인터를 반환하고, `matrix_scan()`이 `debounce()`와 USB 시간 로그를 호출하는지 확인합니다.

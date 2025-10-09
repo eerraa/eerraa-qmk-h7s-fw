@@ -55,11 +55,11 @@ uint8_t matrix_scan(void)
 
   pre_time = micros();
 
-  #if 1
   _Static_assert(sizeof(matrix_row_t) == sizeof(uint16_t),
                  "matrix_row_t must match keysReadColsBuf element size");
 
   const volatile matrix_row_t *hw_matrix = (const volatile matrix_row_t *)keysPeekColsBuf();  // V250924R5: DMA 버퍼를 직접 참조하여 스캔 복사 비용 제거 (재검토: volatile 로 최신 스캔 보장)
+  // V251009R3: DMA 폴백 블록을 제거해 단일 경로로 단순화
 
   for (uint32_t rows=0; rows<MATRIX_ROWS; rows++)
   {
@@ -71,20 +71,6 @@ uint8_t matrix_scan(void)
       changed          = true;
     }
   }
-#else
-  matrix_row_t curr_matrix[MATRIX_ROWS];
-
-  if (!keysReadColsBuf((uint16_t *)curr_matrix, MATRIX_ROWS))
-  {
-    return 0;  // V251009R1: DMA 스냅샷 복사가 실패하면 즉시 탈출
-  }
-
-  changed = memcmp(raw_matrix, curr_matrix, sizeof(curr_matrix)) != 0;
-  if (changed)
-  {
-    memcpy(raw_matrix, curr_matrix, sizeof(curr_matrix));
-  }
-  #endif
 
   key_scan_time = micros() - pre_time;
 

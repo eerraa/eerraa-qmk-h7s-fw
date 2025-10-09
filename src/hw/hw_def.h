@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251009R2"  // V251009R2: DMA 기반 스캔에 맞춰 keys CLI 명령을 제거
+#define _DEF_FIRMWATRE_VERSION      "V251009R3"  // V251009R3: QMK 매트릭스 폴백 블록 제거로 DMA 전용 경로 확정
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
