@@ -6,7 +6,7 @@
   1. GPDMA가 열 버퍼(`col_rd_buf`)를 지속적으로 채우고, QMK 포팅층이 DMA 버퍼를 직접 참조해 매트릭스를 구성합니다.
   2. `matrix_task()`가 변화 행을 선별하고 고스트를 차단한 뒤, `action_exec()`/`send_keyboard_report()` 흐름으로 키 이벤트를 전달합니다.
   3. `host_keyboard_send()` → `usbHidSendReport()` 체인이 HID IN 엔드포인트를 전송하거나 큐잉하며, USB 시간/큐 진단값을 업데이트합니다.
-- **현재 펌웨어 버전**: `V251001R4`.
+- **현재 펌웨어 버전**: `V251009R3`.
 
 ## 2. 파일 토폴로지 & 책임
 | 경로 | 핵심 심볼/함수 | 역할 |
@@ -21,15 +21,15 @@
 
 ## 3. 입력 데이터 획득 계층
 ### 3.1 DMA 기반 행/열 버퍼
-- `keysInit()`은 `col_rd_buf`를 대상으로 하는 GPDMA 링크드 리스트를 구성해 스캔 결과를 자동 적재합니다. `.non_cache` 영역에 위치하여 CPU 캐시 동기화가 필요 없습니다.【F:src/hw/driver/keys.c†L250-L318】
-- `keysPeekColsBuf()`는 `const volatile uint16_t *`를 반환해 매트릭스 레이어가 DMA 버퍼를 직접 조회하되, 컴파일러가 값을 캐시하지 못하도록 보장합니다.【F:src/hw/driver/keys.c†L332-L339】【F:src/common/hw/include/keys.h†L19-L19】
-- 기존 `keysReadColsBuf()` 경로도 유지되어 필요 시 안전 복사 기반 접근이 가능합니다.【F:src/hw/driver/keys.c†L324-L330】
+- `keysInit()`은 `col_rd_buf`를 대상으로 하는 GPDMA 링크드 리스트를 구성해 스캔 결과를 자동 적재합니다. `.non_cache` 영역에 위치하여 CPU 캐시 동기화가 필요 없습니다.【F:src/hw/driver/keys.c†L240-L318】
+- `keysPeekColsBuf()`는 `const volatile uint16_t *`를 반환해 매트릭스 레이어가 DMA 버퍼를 직접 조회하되, 컴파일러가 값을 캐시하지 못하도록 보장합니다.【F:src/hw/driver/keys.c†L301-L304】【F:src/common/hw/include/keys.h†L15-L19】
+- 기존 `keysReadColsBuf()` 경로도 유지되어 필요 시 안전 복사 기반 접근이 가능합니다.【F:src/hw/driver/keys.c†L295-L299】
 
 ### 3.2 QMK 매트릭스 브리지 (`port/matrix.c`)
-- `matrix_scan()`은 DMA 버퍼를 `matrix_row_t` 배열과 1:1 매핑하여 변화가 있는 행만 `raw_matrix`에 반영하고, QMK 디바운스(`debounce()`)를 거쳐 `matrix[]`를 확정합니다.【F:src/ap/modules/qmk/port/matrix.c†L55-L101】
+- `matrix_scan()`은 DMA 버퍼를 `matrix_row_t` 배열과 1:1 매핑하여 변화가 있는 행만 `raw_matrix`에 반영하고, QMK 디바운스(`debounce()`)를 거쳐 `matrix[]`를 확정합니다. 폴백 복사 경로는 V251009R3에서 제거되어 DMA 경로만 유지됩니다.【F:src/ap/modules/qmk/port/matrix.c†L55-L99】
 - 스캔 시작 시각과 변화 여부가 USB 진단에 전달되어 HID 폴링 초과 시간을 추적합니다 (`usbHidSetTimeLog`).【F:src/ap/modules/qmk/port/matrix.c†L96-L101】
 - `matrix_can_read()`는 현재는 상시 true를 반환하지만, 전력/안전 모드에서 스캔을 차단하고 tick 이벤트만 생성하는 훅으로 확장 가능합니다.【F:src/ap/modules/qmk/port/matrix.c†L41-L58】
-- `matrix_info()` CLI는 1초 주기 스캔/폴링 속도, 큐 심도, 스캔 소요 시간을 로그로 출력하도록 설계돼 있습니다.【F:src/ap/modules/qmk/port/matrix.c†L103-L158】
+- `matrix_info()` CLI는 1초 주기 스캔/폴링 속도, 큐 심도, 스캔 소요 시간을 로그로 출력하도록 설계돼 있습니다.【F:src/ap/modules/qmk/port/matrix.c†L101-L125】
 
 ## 4. 매트릭스 태스크 & 이벤트 준비 (`quantum/keyboard.c`)
 ### 4.1 진입 조건과 진단
@@ -79,12 +79,12 @@
 - 인코더·포인팅 디바이스 활동도 별도 타임스탬프를 유지하지만, `last_input_modification_time`과 최대값을 공유해 OLED 타임아웃 등 입력 기반 기능이 모든 소스에 반응하도록 합니다.【F:src/ap/modules/qmk/quantum/keyboard.c†L77-L134】
 
 ## 8. 진단 & 확장 포인트
-- `matrix_info` CLI와 `DEBUG_MATRIX_SCAN_RATE` 빌드는 스캔 주기, 폴링 주파수, 큐 잔량, 스캔 시간(us)을 실시간으로 확인하는 데 사용됩니다.【F:src/ap/modules/qmk/port/matrix.c†L103-L158】
+- `matrix_info` CLI와 `DEBUG_MATRIX_SCAN_RATE` 빌드는 스캔 주기, 폴링 주파수, 큐 잔량, 스캔 시간(us)을 실시간으로 확인하는 데 사용됩니다.【F:src/ap/modules/qmk/port/matrix.c†L101-L126】
 - `matrix_can_read()`와 `should_process_keypress()`는 저전력 모드(슬레이브 반쪽, USB 절전 등)에서 스캔/이벤트 생성을 제한하기 위한 훅입니다.【F:src/ap/modules/qmk/port/matrix.c†L41-L58】【F:src/ap/modules/qmk/quantum/keyboard.c†L410-L442】
 - `switch_events()`는 LED/RGB 매트릭스 동기화를 담당하는 확장 지점이며, 필요 시 다른 전기 이벤트 소비자를 추가할 수 있습니다.【F:src/ap/modules/qmk/quantum/keyboard.c†L527-L541】
 
 ## 9. 버전 히스토리 (주요 변경)
-- **V250924R5**: DMA 버퍼 직접 참조(`keysPeekColsBuf()`), `volatile` 지정으로 최신 스캔 확보.【F:src/ap/modules/qmk/port/matrix.c†L55-L85】【F:src/hw/driver/keys.c†L324-L339】
+- **V250924R5**: DMA 버퍼 직접 참조(`keysPeekColsBuf()`), `volatile` 지정으로 최신 스캔 확보.【F:src/ap/modules/qmk/port/matrix.c†L55-L83】【F:src/hw/driver/keys.c†L309-L312】
 - **V250924R6**: `ghost_pending` 도입으로 고스트 해소 전까지 행 비교 유지.【F:src/ap/modules/qmk/quantum/keyboard.c†L633-L661】
 - **V250924R7**: 열 비트 스캔(`__builtin_ctz`)으로 행 변화 처리 비용 축소.【F:src/ap/modules/qmk/quantum/keyboard.c†L697-L719】
 - **V250924R8**: 고스트 판정 전 물리 비트 수로 조기 종료하여 키맵 필터 재계산 최소화.【F:src/ap/modules/qmk/quantum/keyboard.c†L252-L270】
@@ -93,6 +93,9 @@
 - **V251001R2**: `should_process_keypress()` 지연 호출로 고스트 반복 시 낭비 제거.【F:src/ap/modules/qmk/quantum/keyboard.c†L678-L695】
 - **V251001R3**: 행 변화 시 32비트 타임스탬프 공유 및 활동 타이머 동기화.【F:src/ap/modules/qmk/quantum/keyboard.c†L139-L170】【F:src/ap/modules/qmk/quantum/keyboard.c†L671-L741】
 - **V251001R4**: 고스트 판정용 행 캐시 도입으로 키맵 필터 재계산 제거.【F:src/ap/modules/qmk/quantum/keyboard.c†L232-L249】【F:src/ap/modules/qmk/quantum/keyboard.c†L667-L696】
+- **V251009R1**: `keysUpdate()` API 제거 및 DMA 스냅샷 기반 경로만 유지.【F:src/common/hw/include/keys.h†L13-L19】【F:src/hw/driver/keys.c†L32-L304】【F:src/ap/modules/qmk/port/matrix.c†L55-L99】
+- **V251009R2**: DMA 자동 갱신에 중복되던 `keys` CLI 명령 제거, 진단 흐름을 QMK `matrix info`로 통합.【F:src/hw/driver/keys.c†L32-L330】【F:src/ap/modules/qmk/port/matrix.c†L101-L144】
+- **V251009R3**: `matrix.c` 폴백 블록 제거로 DMA 전용 경로를 확정하고 유지보수 범위를 축소.【F:src/ap/modules/qmk/port/matrix.c†L55-L99】
 
 ## 10. Codex 작업 체크리스트
 1. DMA/매트릭스 계층을 수정할 때는 `keysPeekColsBuf()`가 여전히 `volatile` 포인터를 반환하고, `matrix_scan()`이 `debounce()`와 USB 시간 로그를 호출하는지 확인합니다.

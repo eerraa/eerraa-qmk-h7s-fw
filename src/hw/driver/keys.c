@@ -3,13 +3,9 @@
 
 #ifdef _USE_HW_KEYS
 #include "button.h"
-#include "cli.h"
 
 
 
-#if CLI_USE(HW_KEYS)
-static void cliCmd(cli_args_t *args);
-#endif
 static bool keysInitTimer(void);
 static bool keysInitDma(void);
 static bool keysInitGpio(void);
@@ -44,12 +40,8 @@ bool keysInit(void)
   HAL_TIM_Base_Start(&htim16);
   HAL_TIM_OC_Start(&htim16, TIM_CHANNEL_1);
 
-  
 
-#if CLI_USE(HW_KEYS)
-  cliAdd("keys", cliCmd);
-#endif
-
+  // V251009R2: DMA 기반 자동 스캔이 상시 갱신되므로 CLI 키 매트릭스 뷰어를 제거함
   return true;
 }
 
@@ -295,11 +287,6 @@ bool keysIsBusy(void)
   return false;
 }
 
-bool keysUpdate(void)
-{
-  return true;
-}
-
 bool keysReadBuf(uint8_t *p_data, uint32_t length)
 {
   return true;
@@ -330,57 +317,5 @@ bool keysGetPressed(uint16_t row, uint16_t col)
 
   return ret;
 }
-
-#if CLI_USE(HW_KEYS)
-void cliCmd(cli_args_t *args)
-{
-  bool ret = false;
-
-
-
-  if (args->argc == 1 && args->isStr(0, "info"))
-  {
-    cliShowCursor(false);
-
-
-    while(cliKeepLoop())
-    {
-      keysUpdate();
-      delay(10);
-
-      cliPrintf("     ");
-      for (int cols=0; cols<MATRIX_COLS; cols++)
-      {
-        cliPrintf("%02d ", cols);
-      }
-      cliPrintf("\n");
-
-      for (int rows=0; rows<MATRIX_ROWS; rows++)
-      {
-        cliPrintf("%02d : ", rows);
-
-        for (int cols=0; cols<MATRIX_COLS; cols++)
-        {
-          if (keysGetPressed(rows, cols))
-            cliPrintf("O  ");
-          else
-            cliPrintf("_  ");
-        }
-        cliPrintf("\n");
-      }
-      cliMoveUp(MATRIX_ROWS+1);
-    }
-    cliMoveDown(MATRIX_ROWS+1);
-
-    cliShowCursor(true);
-    ret = true;
-  }
-
-  if (ret == false)
-  {
-    cliPrintf("keys info\n");
-  }
-}
-#endif
 
 #endif
