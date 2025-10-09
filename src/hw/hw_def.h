@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251001R4"  // V251001R4: 고스트 판정용 행 캐시로 키맵 필터 재계산 최소화
+#define _DEF_FIRMWATRE_VERSION      "V251009R2"  // V251009R2: DMA 기반 스캔에 맞춰 keys CLI 명령을 제거
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
