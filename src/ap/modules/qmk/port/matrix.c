@@ -74,16 +74,11 @@ uint8_t matrix_scan(void)
 #else
   matrix_row_t curr_matrix[MATRIX_ROWS];
 
-  memset(curr_matrix, 0, sizeof(curr_matrix));
-
-  keysUpdate();
-  for (uint32_t rows=0; rows<MATRIX_ROWS; rows++)
+  if (!keysReadColsBuf((uint16_t *)curr_matrix, MATRIX_ROWS))
   {
-    for (uint32_t cols=0; cols<MATRIX_COLS; cols++)
-    {
-      curr_matrix[rows] |= (keysGetPressed(rows, cols)<<cols);
-    }
+    return 0;  // V251009R1: DMA 스냅샷 복사가 실패하면 즉시 탈출
   }
+
   changed = memcmp(raw_matrix, curr_matrix, sizeof(curr_matrix)) != 0;
   if (changed)
   {
