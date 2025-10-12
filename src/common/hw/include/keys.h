@@ -12,7 +12,7 @@ extern "C" {
 
 bool keysInit(void);
 bool keysIsBusy(void);
-bool keysUpdate(void);
+// V251009R1: DMA 전용 스캔으로 keysUpdate() API 제거
 bool keysGetPressed(uint16_t row, uint16_t col);
 bool keysReadBuf(uint8_t *p_data, uint32_t length);
 bool keysReadColsBuf(uint16_t *p_data, uint32_t rows_cnt);
