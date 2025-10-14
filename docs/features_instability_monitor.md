@@ -6,6 +6,7 @@
   1. **SOF 모니터**: USB 속도와 상태를 감시하면서 누락된 프레임을 점수화합니다.
   2. **다운그레이드 큐**: 감지된 불안정성을 기반으로 다음 부트 모드를 예약하고, 사용자에게 로그를 노출한 뒤 저장/리셋을 수행합니다.
   3. **BootMode 연동**: EEPROM에 저장된 부트 모드와 모니터 파라미터가 동기화되며, 재부팅 후에도 모니터 상태가 일관됩니다.
+- **컴파일 제어**: `_USE_USB_MONITOR` 매크로가 SOF 모니터 전체를 포함하거나 제외하며, V251009R6부터 HID 계측 매크로와 완전히 독립적으로 동작합니다.
 - **주요 소비자**: `src/hw/driver/usb/usb_hid/usbd_hid.c`, `src/hw/driver/usb/usb.[ch]`, `src/ap/ap.c`, `src/hw/hw.c`, `src/ap/modules/qmk/port/port.h`, `src/hw/hw_def.h`.
 
 ## 2. 파일 토폴로지 & 책임

@@ -93,8 +93,10 @@ static void usbHidMeasurePollRate(void);
 static void usbHidMeasureRateTime(void);
 static bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev);
 static void usbHidInitTimer(void);
+#if _USE_USB_MONITOR
 static void usbHidMonitorSof(uint32_t now_us);                     // V250924R2 SOF 안정성 추적
 static UsbBootMode_t usbHidResolveDowngradeTarget(void);           // V250924R2 다운그레이드 대상 계산
+#endif
 
 
 
@@ -477,8 +479,9 @@ static TIM_HandleTypeDef htim2;
 static uint32_t sof_cnt = 0;                                         // V251009R5: CLI 계측 활성 시에만 SOF 카운터 유지
 #endif
 
+#if _USE_USB_MONITOR  // V251009R6: USB 불안정성 감시 블록을 독립 매크로로 분리
 enum
-{
+{ 
   USB_SOF_MONITOR_CONFIG_HOLDOFF_MS = 750U,                                              // V250924R3 구성 직후 워밍업 지연(ms)
   USB_SOF_MONITOR_WARMUP_TIMEOUT_MS = USB_SOF_MONITOR_CONFIG_HOLDOFF_MS + USB_BOOT_MONITOR_CONFIRM_DELAY_MS, // V250924R3 워밍업 최대 시간(ms)
   USB_SOF_MONITOR_WARMUP_FRAMES_HS  = 2048U,                                             // V250924R3 HS 안정성 확인 프레임 수
@@ -1252,7 +1255,9 @@ void usbHidMeasurePollRate(void)
 {
   uint32_t now_us = micros();
 
+#if _USE_USB_MONITOR
   usbHidMonitorSof(now_us);                                       // V250924R2 SOF 간격 모니터링
+#endif
 #if _DEF_ENABLE_USB_HID_TIMING_PROBE
   static uint32_t cnt = 0;
   uint32_t        sample_window = usbBootModeIsFullSpeed() ? 1000U : 8000U; // V250924R1 Align poll window with active USB speed
@@ -1276,6 +1281,9 @@ void usbHidMeasurePollRate(void)
     rate_queue_depth_max_check = 0;
   }
   cnt++;
+#endif
+#if (!_USE_USB_MONITOR) && (!_DEF_ENABLE_USB_HID_TIMING_PROBE)
+  UNUSED(now_us);                                                 // V251009R6: 모든 계측 비활성 시 경고 억제
 #endif
 }
 
@@ -1490,6 +1498,8 @@ static void usbHidMonitorSof(uint32_t now_us)
     sof_monitor.score = 0U;
   }
 }
+
+#endif  // _USE_USB_MONITOR
 
 #if _DEF_ENABLE_USB_HID_TIMING_PROBE
 void usbHidMeasureRateTime(void)
