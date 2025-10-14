@@ -1,4 +1,5 @@
-#include "usbd_hid_instrumentation.h"  // V251009R9: HID 계측 경로 분리 구현
+#include "usb.h"                        // V251010R2: 계측 매크로 정의를 선행해 헤더 확장 시 중복 심벌 생성을 방지
+#include "usbd_hid_instrumentation.h"   // V251009R9: HID 계측 경로 분리 구현
 
 #include <string.h>
 
@@ -6,7 +7,6 @@
 #include "def.h"
 #include "log.h"
 #include "micros.h"
-#include "usb.h"
 
 #if _DEF_ENABLE_USB_HID_TIMING_PROBE
 
