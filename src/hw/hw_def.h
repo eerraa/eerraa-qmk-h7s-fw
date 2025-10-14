@@ -6,12 +6,13 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251009R5"  // V251009R5: HID 계측과 USB 불안정성 감지 분리, 릴리스 빌드 계측 제거
+#define _DEF_FIRMWATRE_VERSION      "V251009R6"  // V251009R6: USB 모니터 매크로 분리 및 계측 선택지 완전 분리
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
 #define _DEF_ENABLE_MATRIX_TIMING_PROBE   0  // V251009R4: matrix_scan() 계측 기본 비활성화, 개발 환경에서만 1로 재정의
 #define _DEF_ENABLE_USB_HID_TIMING_PROBE  0  // V251009R5: usbd_hid 계측 기본 비활성화, 필요 시 빌드 옵션으로만 활성화
+#define _USE_USB_MONITOR                  1  // V251009R6: USB 불안정성 감지를 기본 활성화, 필요 시 빌드로 선택 해제
 
 
 #define _USE_HW_CACHE
