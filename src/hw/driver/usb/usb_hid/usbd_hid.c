@@ -49,6 +49,8 @@
 #include "keys.h"
 #include "qbuffer.h"
 #include "report.h"
+#include "usbd_hid_internal.h"           // V251009R9: 계측 전용 상수를 공유
+#include "usbd_hid_instrumentation.h"    // V251009R9: HID 계측 로직을 전용 모듈로 이관
 
 
 #if HW_USB_LOG == 1
@@ -63,10 +65,6 @@
 #endif
 
 
-#define HID_KEYBOARD_REPORT_SIZE (HW_KEYS_PRESS_MAX + 2U)
-#define KEY_TIME_LOG_MAX         32
-
-
 static uint8_t USBD_HID_Init(USBD_HandleTypeDef *pdev, uint8_t cfgidx);
 static uint8_t USBD_HID_DeInit(USBD_HandleTypeDef *pdev, uint8_t cfgidx);
 static uint8_t USBD_HID_Setup(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *req);
@@ -74,9 +72,6 @@ static uint8_t USBD_HID_DataIn(USBD_HandleTypeDef *pdev, uint8_t epnum);
 static uint8_t USBD_HID_DataOut(USBD_HandleTypeDef *pdev, uint8_t epnum);
 static uint8_t USBD_HID_EP0_RxReady(USBD_HandleTypeDef *pdev);
 static uint8_t USBD_HID_SOF(USBD_HandleTypeDef *pdev);
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-static uint32_t usbHidExpectedPollIntervalUs(void);                  // V250928R3 HID 폴링 간격 계산
-#endif
 
 #ifndef USE_USBD_COMPOSITE
 static uint8_t *USBD_HID_GetFSCfgDesc(uint16_t *length);
@@ -92,7 +87,6 @@ static uint8_t *USBD_HID_GetUsrStrDescriptor(struct _USBD_HandleTypeDef *pdev, u
 
 static void cliCmd(cli_args_t *args);
 static void usbHidMeasurePollRate(void);
-static void usbHidMeasureRateTime(void);
 static bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev);
 static void usbHidInitTimer(void);
 #if _USE_USB_MONITOR
@@ -476,10 +470,6 @@ static USBD_HID_HandleTypeDef *p_hhid = NULL;
 static uint8_t HIDInEpAdd = HID_EPIN_ADDR;
 extern USBD_HandleTypeDef USBD_Device;
 static TIM_HandleTypeDef htim2;
-
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-static uint32_t sof_cnt = 0;                                         // V251009R5: CLI 계측 활성 시에만 SOF 카운터 유지
-#endif
 
 #if _USE_USB_MONITOR  // V251009R6: USB 불안정성 감시 블록을 독립 매크로로 분리
 enum
@@ -1024,80 +1014,6 @@ static uint8_t *USBD_HID_GetOtherSpeedCfgDesc(uint16_t *length)
 }
 #endif /* USE_USBD_COMPOSITE  */
 
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-static uint32_t data_in_cnt = 0;                                   // V251009R5: 개발용 계측이 활성화될 때만 누적 카운트 유지
-static uint32_t data_in_rate = 0;
-
-static bool     rate_time_req = false;
-static uint32_t rate_time_pre = 0;
-static uint32_t rate_time_us  = 0;
-static uint32_t rate_time_min = 0;
-static uint32_t rate_time_avg = 0;
-static uint32_t rate_time_sum = 0;
-static uint32_t rate_time_max = 0;
-static uint32_t rate_time_min_check = 0xFFFF;
-static uint32_t rate_time_max_check = 0;
-static uint32_t rate_time_excess_max = 0;                    // V250928R3 폴링 지연 초과분 누적 최대값
-static uint32_t rate_time_excess_max_check = 0;              // V250928R3 윈도우 내 초과분 최대값 추적
-static uint32_t rate_queue_depth_snapshot = 0;               // V250928R3 폴링 시작 시점의 큐 길이 스냅샷
-static uint32_t rate_queue_depth_max = 0;                    // V250928R3 큐 잔량 최대값
-static uint32_t rate_queue_depth_max_check = 0;              // V250928R3 윈도우 내 큐 잔량 최대값 추적
-
-static uint32_t rate_time_sof_pre = 0;
-static uint32_t rate_time_sof = 0;
-
-static uint16_t rate_his_buf[100];
-
-static bool     key_time_req = false;
-static uint32_t key_time_pre;
-static uint32_t key_time_end;
-static uint32_t key_time_idx = 0;
-static uint32_t key_time_cnt = 0;
-static uint32_t key_time_log[KEY_TIME_LOG_MAX];
-static bool     key_time_raw_req = false;
-static uint32_t key_time_raw_pre;
-static uint32_t key_time_raw_log[KEY_TIME_LOG_MAX];
-static uint32_t key_time_pre_log[KEY_TIME_LOG_MAX];
-#endif
-
-static inline uint32_t usbHidInstrumentationNow(void)
-{
-#if _USE_USB_MONITOR || _DEF_ENABLE_USB_HID_TIMING_PROBE
-  return micros();  // V251009R8: 활성화된 계측/모니터가 있을 때만 타이머 접근
-#else
-  return 0U;
-#endif
-}
-
-static inline void usbHidInstrumentationOnSof(uint32_t now_us)
-{
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-  static uint32_t sample_cnt = 0;
-  uint32_t        sample_window = usbBootModeIsFullSpeed() ? 1000U : 8000U; // V251009R8: USB 속도에 맞춰 윈도우 계산 유지
-
-  rate_time_sof_pre = now_us;
-  if (sample_cnt >= sample_window)
-  {
-    sample_cnt = 0;
-    data_in_rate = data_in_cnt;
-    rate_time_min = rate_time_min_check;
-    rate_time_max = rate_time_max_check;
-    rate_time_avg = rate_time_sum / (data_in_cnt + 1);
-    rate_time_excess_max = rate_time_excess_max_check;               // V251009R8: 폴링 초과 지연을 윈도우 경계에서 라치
-    rate_queue_depth_max = rate_queue_depth_max_check;
-    data_in_cnt = 0;
-
-    rate_time_min_check = 0xFFFF;
-    rate_time_max_check = 0;
-    rate_time_sum = 0;
-    rate_time_excess_max_check = 0;
-    rate_queue_depth_max_check = 0;
-  }
-  sample_cnt++;
-#else
-  (void)now_us;
-#endif
-}
 
 /**
   * @brief  USBD_HID_DataIn
@@ -1118,10 +1034,7 @@ static uint8_t USBD_HID_DataIn(USBD_HandleTypeDef *pdev, uint8_t epnum)
     return (uint8_t)USBD_OK;
   }
   
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-  data_in_cnt++;                                                   // V251009R5: 계측 활성 빌드에서만 HID 전송 카운트 누적
-#endif
-
+  usbHidInstrumentationOnDataIn();
 
   usbHidMeasureRateTime();
 
@@ -1186,27 +1099,6 @@ static uint8_t *USBD_HID_GetDeviceQualifierDesc(uint16_t *length)
 }
 #endif /* USE_USBD_COMPOSITE  */
 
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-static uint32_t usbHidExpectedPollIntervalUs(void)
-{
-  if (usbBootModeIsFullSpeed())
-  {
-    return 1000U;                                                   // V250928R3 FS 1kHz = 1000us 간격
-  }
-
-  uint8_t hs_interval = usbBootModeGetHsInterval();                  // V250928R3 HS 모드 bInterval 읽기
-
-  if (hs_interval < 1U)
-  {
-    hs_interval = 1U;
-  }
-
-  uint32_t microframes = 1UL << (hs_interval - 1U);                  // V250928R3 2^(bInterval-1) 마이크로프레임 수
-
-  return microframes * 125U;                                         // V250928R3 1 마이크로프레임 = 125us
-}
-#endif
-
 bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev)
 {
   PCD_HandleTypeDef *hpcd = (PCD_HandleTypeDef *)pdev->pData;
@@ -1241,19 +1133,12 @@ bool usbHidSendReport(uint8_t *p_data, uint16_t length)
 
   if (!USBD_is_suspended())
   {
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-    key_time_pre = micros();                                         // V251009R5: 계측 활성 시에만 전송 직전 타임스탬프 기록
-#endif
+    usbHidInstrumentationMarkReportStart();
 
     memcpy(hid_buf, p_data, length);
     if (USBD_HID_SendReport((uint8_t *)hid_buf, HID_KEYBOARD_REPORT_SIZE))
     {
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-      key_time_req = true;
-      rate_time_req = true;
-      rate_time_pre = micros();
-      rate_queue_depth_snapshot = qbufferAvailable(&report_q);       // V250928R3 즉시 전송 시 큐 잔량 캡처
-#endif
+      usbHidInstrumentationOnImmediateSendSuccess(qbufferAvailable(&report_q));
     }
     else
     {
@@ -1518,123 +1403,6 @@ static void usbHidMonitorSof(uint32_t now_us)
 
 #endif  // _USE_USB_MONITOR
 
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-void usbHidMeasureRateTime(void)
-{
-  rate_time_sof = micros() - rate_time_sof_pre;
-
-  if (rate_time_req)
-  {
-    uint32_t rate_time_cur;
-
-    rate_time_cur = micros();
-    rate_time_us  = rate_time_cur - rate_time_pre;
-    rate_time_sum += rate_time_us;
-    if (rate_time_min_check > rate_time_us)
-    {
-      rate_time_min_check = rate_time_us;
-    }
-    if (rate_time_max_check < rate_time_us)
-    {
-      rate_time_max_check = rate_time_us;
-    }
-
-    uint32_t expected_interval_us = usbHidExpectedPollIntervalUs();   // V250928R3 현재 모드 기준 기대 폴링 간격
-
-    if (rate_time_us > expected_interval_us)
-    {
-      uint32_t excess_us = rate_time_us - expected_interval_us;       // V250928R3 초과 지연 계산
-
-      if (rate_time_excess_max_check < excess_us)
-      {
-        rate_time_excess_max_check = excess_us;
-      }
-
-      if (rate_queue_depth_max_check < rate_queue_depth_snapshot)
-      {
-        rate_queue_depth_max_check = rate_queue_depth_snapshot;
-      }
-    }
-
-
-    uint32_t rate_time_idx;
-
-    rate_time_idx = constrain(rate_time_us/10, 0, 99);
-    if (rate_his_buf[rate_time_idx] < 0xFFFF)
-    {
-      rate_his_buf[rate_time_idx]++;
-    }
-
-    rate_time_req = false;
-  }
-
-  if (key_time_req)
-  {
-    key_time_end = micros()-key_time_pre;
-    key_time_req = false;
-
-    key_time_log[key_time_idx] = key_time_end;
-
-    if (key_time_raw_req)
-    {
-      key_time_raw_req = false;
-      key_time_raw_log[key_time_idx] = micros()-key_time_raw_pre;
-      key_time_pre_log[key_time_idx] = key_time_pre-key_time_raw_pre;
-    }
-    else
-    {
-      key_time_raw_log[key_time_idx] = key_time_end;
-    }
-
-    key_time_idx = (key_time_idx + 1) % KEY_TIME_LOG_MAX;
-    if (key_time_cnt < KEY_TIME_LOG_MAX)
-    {
-      key_time_cnt++;
-    }
-  }
-}
-#else
-void usbHidMeasureRateTime(void)
-{
-  // V251009R5: 릴리스 빌드에서는 HID 폴링 계측을 수행하지 않음
-}
-#endif
-
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-bool usbHidGetRateInfo(usb_hid_rate_info_t *p_info)
-{
-  p_info->freq_hz = data_in_rate;
-  p_info->time_max = rate_time_max;
-  p_info->time_min = rate_time_min;
-  p_info->time_excess_max = rate_time_excess_max;                   // V250928R3 폴링 초과 지연 최대값 보고
-  p_info->queue_depth_max = rate_queue_depth_max;                   // V250928R3 큐 잔량 최대값 보고
-  return true;
-}
-
-bool usbHidSetTimeLog(uint16_t index, uint32_t time_us)
-{
-  key_time_raw_pre = time_us;
-  key_time_raw_req = true;
-  return true;
-}
-#else
-bool usbHidGetRateInfo(usb_hid_rate_info_t *p_info)
-{
-  p_info->freq_hz = 0;
-  p_info->time_max = 0;
-  p_info->time_min = 0;
-  p_info->time_excess_max = 0;
-  p_info->queue_depth_max = 0;
-  return false;                                                     // V251009R5: 계측 비활성 시 통계 제공 불가 안내
-}
-
-bool usbHidSetTimeLog(uint16_t index, uint32_t time_us)
-{
-  UNUSED(index);
-  UNUSED(time_us);
-  return false;                                                     // V251009R5: 릴리스 빌드에서는 키 타이밍 로그를 축적하지 않음
-}
-#endif
 
 __weak void usbHidSetStatusLed(uint8_t led_bits)
 {
@@ -1723,38 +1491,18 @@ void TIM2_IRQHandler(void)
   HAL_TIM_IRQHandler(&htim2);
 }
 
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-volatile int timer_cnt = 0;                                        // V251009R5: 계측 활성 시에만 타이머 인터럽트 카운터 유지
-volatile uint32_t timer_end = 0;
-#endif
-
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 {
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-  timer_cnt++;
-  timer_end = micros()-rate_time_sof_pre;
-
-  sof_cnt++;
-#endif
+  usbHidInstrumentationOnTimerPulse();
   if (qbufferAvailable(&report_q) > 0)
   {
     if (p_hhid->state == USBD_HID_IDLE)
     {
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
       uint32_t queued_reports = qbufferAvailable(&report_q);          // V250928R3 큐에 남은 리포트 수 기록
-#endif
 
       qbufferRead(&report_q, (uint8_t *)hid_buf, 1);
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-      key_time_req = true;
-#endif
-
       USBD_HID_SendReport((uint8_t *)hid_buf, HID_KEYBOARD_REPORT_SIZE);
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-      rate_time_req = true;
-      rate_time_pre = micros();
-      rate_queue_depth_snapshot = (queued_reports > 0U) ? (queued_reports - 1U) : 0U; // V250928R3 송신 후 잔여 큐 길이 추적
-#endif
+      usbHidInstrumentationOnReportDequeued(queued_reports);
     }
   }
 
@@ -1777,145 +1525,6 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 #ifdef _USE_HW_CLI
 void cliCmd(cli_args_t *args)
 {
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-  bool ret = false;
-
-  if (args->argc == 1 && args->isStr(0, "info") == true)
-  {
-    ret = true;
-  }
-
-  if (args->argc >= 1 && args->isStr(0, "rate") == true)
-  {
-    uint32_t pre_time;
-    uint32_t pre_time_key;
-    uint32_t key_send_cnt = 0;
-
-    memset(rate_his_buf, 0, sizeof(rate_his_buf));
-
-    pre_time = millis();
-    pre_time_key = millis();
-    while(cliKeepLoop())
-    {
-      if (millis()-pre_time_key >= 2 && key_send_cnt < 50)
-      {
-        uint8_t buf[HID_KEYBOARD_REPORT_SIZE];
-
-        memset(buf, 0, HID_KEYBOARD_REPORT_SIZE);
-
-        pre_time_key = millis();
-        usbHidSendReport(buf, HID_KEYBOARD_REPORT_SIZE);
-        key_send_cnt++;
-      }
-
-
-      if (millis()-pre_time >= 1000)
-      {
-        pre_time = millis();
-        cliPrintf("hid rate %d Hz, avg %4d us, max %4d us, min %d us, excess %4d us, queued %d, %d, %d\n", // V250928R3 진단 카운터 표시
-          data_in_rate,
-          rate_time_avg,
-          rate_time_max,
-          rate_time_min,
-          rate_time_excess_max,
-          rate_queue_depth_max,
-          rate_time_sof,
-          timer_end
-          );
-
-        for (int i=0; i<10; i++)
-        {
-          cliPrintf("%d us\n",key_time_log[i]);
-        }
-
-        cliPrintf("sof/tim cnt : %d/%d\n", sof_cnt, timer_cnt);
-        timer_cnt = 0;
-        key_send_cnt = 0;
-        sof_cnt=0;
-      }
-    }
-
-    if (args->argc == 2 && args->isStr(1, "his"))
-    {
-      for (int i=0; i<100; i++)
-      {
-        cliPrintf("%d %d\n", i, rate_his_buf[i]);
-      }
-    }
-    ret = true;
-  }
-
-  if (args->argc == 2 && args->isStr(0, "log") && args->isStr(1, "clear"))
-  {
-    key_time_idx = 0;
-    key_time_cnt = 0;
-    ret = true;
-  }
-
-  if (args->argc == 1 && args->isStr(0, "log") == true)
-  {
-    uint16_t index;
-    uint16_t time_max[3] = {0, 0, 0};
-    uint16_t time_min[3] = {0xFFFF, 0xFFFF, 0xFFFF};
-    uint16_t time_sum[3] = {0, 0, 0};
-
-
-    for (int i = 0; i < key_time_cnt; i++)
-    {
-      if (key_time_cnt == KEY_TIME_LOG_MAX)
-        index = (key_time_idx + i) % KEY_TIME_LOG_MAX;
-      else
-        index = i;
-
-      cliPrintf("%2d: %3d us, raw : %3d us, %d\n",
-                i,
-                key_time_log[index],
-                key_time_raw_log[index],
-                key_time_pre_log[index]);
-
-      for (int j=0; j<3; j++)
-      {
-        uint16_t data;
-
-        if (j == 0)
-          data = key_time_log[index];
-        else if (j == 1)
-          data = key_time_raw_log[index];
-        else
-          data = key_time_pre_log[index];
-
-        time_sum[j] += data;
-        if (data > time_max[j])
-          time_max[j] = data;
-        if (data < time_min[j])
-          time_min[j] = data;
-      }
-    }
-
-    cliPrintf("\n");
-    if (key_time_cnt > 0)
-    {
-      cliPrintf("avg : %3d us %3d us %3d us\n",
-                time_sum[0] / key_time_cnt,
-                time_sum[1] / key_time_cnt,
-                time_sum[2] / key_time_cnt);
-      cliPrintf("max : %3d us %3d us %3d us\n", time_max[0], time_max[1], time_max[2]);
-      cliPrintf("min : %3d us %3d us %3d us\n", time_min[0], time_min[1], time_min[2]);
-    }
-    ret = true;
-  }
-
-  if (ret == false)
-  {
-    cliPrintf("usbhid info\n");
-    cliPrintf("usbhid rate\n");
-    cliPrintf("usbhid rate his\n");
-    cliPrintf("usbhid log\n");
-    cliPrintf("usbhid log clear\n");
-  }
-#else
-  UNUSED(args);
-  cliPrintf("usbhid 계측이 비활성화되었습니다 (_DEF_ENABLE_USB_HID_TIMING_PROBE=0). USB 불안정성 감지는 계속 동작합니다.\n"); // V251009R5: 릴리스 빌드 안내 메시지
-#endif
+  usbHidInstrumentationHandleCli(args);
 }
 #endif
