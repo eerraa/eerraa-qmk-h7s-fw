@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251009R6"  // V251009R6: USB 모니터 매크로 분리 및 계측 선택지 완전 분리
+#define _DEF_FIRMWATRE_VERSION      "V251009R7"  // V251009R7: 비활성 계측 경로에서 불필요한 타이머 접근 제거
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

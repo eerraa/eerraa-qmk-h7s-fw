@@ -1145,6 +1145,7 @@ static uint8_t *USBD_HID_GetDeviceQualifierDesc(uint16_t *length)
 }
 #endif /* USE_USBD_COMPOSITE  */
 
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
 static uint32_t usbHidExpectedPollIntervalUs(void)
 {
   if (usbBootModeIsFullSpeed())
@@ -1163,6 +1164,7 @@ static uint32_t usbHidExpectedPollIntervalUs(void)
 
   return microframes * 125U;                                         // V250928R3 1 마이크로프레임 = 125us
 }
+#endif
 
 bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev)
 {
@@ -1253,7 +1255,9 @@ bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length)
 
 void usbHidMeasurePollRate(void)
 {
-  uint32_t now_us = micros();
+#if _USE_USB_MONITOR || _DEF_ENABLE_USB_HID_TIMING_PROBE
+  uint32_t now_us = micros();                                     // V251009R7: 관련 계측이 활성화된 경우에만 타이머를 읽음
+#endif
 
 #if _USE_USB_MONITOR
   usbHidMonitorSof(now_us);                                       // V250924R2 SOF 간격 모니터링
@@ -1281,9 +1285,6 @@ void usbHidMeasurePollRate(void)
     rate_queue_depth_max_check = 0;
   }
   cnt++;
-#endif
-#if (!_USE_USB_MONITOR) && (!_DEF_ENABLE_USB_HID_TIMING_PROBE)
-  UNUSED(now_us);                                                 // V251009R6: 모든 계측 비활성 시 경고 억제
 #endif
 }
 
