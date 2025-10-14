@@ -6,8 +6,12 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251009R3"  // V251009R3: QMK 매트릭스 폴백 블록 제거로 DMA 전용 경로 확정
+#define _DEF_FIRMWATRE_VERSION      "V251009R5"  // V251009R5: HID 계측과 USB 불안정성 감지 분리, 릴리스 빌드 계측 제거
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
+
+
+#define _DEF_ENABLE_MATRIX_TIMING_PROBE   0  // V251009R4: matrix_scan() 계측 기본 비활성화, 개발 환경에서만 1로 재정의
+#define _DEF_ENABLE_USB_HID_TIMING_PROBE  0  // V251009R5: usbd_hid 계측 기본 비활성화, 필요 시 빌드 옵션으로만 활성화
 
 
 #define _USE_HW_CACHE
