@@ -52,6 +52,8 @@ static uint32_t usbHidExpectedPollIntervalUs(void);
 
 #endif
 
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+
 uint32_t usbHidInstrumentationNow(void)
 {
 #if _USE_USB_MONITOR || _DEF_ENABLE_USB_HID_TIMING_PROBE
@@ -63,7 +65,6 @@ uint32_t usbHidInstrumentationNow(void)
 
 void usbHidInstrumentationOnSof(uint32_t now_us)
 {
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
   static uint32_t sample_cnt = 0;
   uint32_t        sample_window = usbBootModeIsFullSpeed() ? 1000U : 8000U; // V251009R9: USB 속도에 맞춰 윈도우 계산 유지
 
@@ -86,61 +87,43 @@ void usbHidInstrumentationOnSof(uint32_t now_us)
     rate_queue_depth_max_check = 0;
   }
   sample_cnt++;
-#else
-  (void)now_us;
-#endif
 }
 
 void usbHidInstrumentationOnTimerPulse(void)
 {
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
   timer_cnt++;
   timer_end = micros()-rate_time_sof_pre;
   sof_cnt++;
-#endif
 }
 
 void usbHidInstrumentationOnDataIn(void)
 {
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
   data_in_cnt++;
-#endif
 }
 
 void usbHidInstrumentationOnReportDequeued(uint32_t queued_reports)
 {
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
   key_time_req = true;
   rate_time_req = true;
   rate_time_pre = micros();
   rate_queue_depth_snapshot = (queued_reports > 0U) ? (queued_reports - 1U) : 0U;
-#else
-  (void)queued_reports;
-#endif
 }
 
 void usbHidInstrumentationOnImmediateSendSuccess(uint32_t queued_reports)
 {
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
   key_time_req = true;
   rate_time_req = true;
   rate_time_pre = micros();
   rate_queue_depth_snapshot = queued_reports;
-#else
-  (void)queued_reports;
-#endif
 }
 
 void usbHidInstrumentationMarkReportStart(void)
 {
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
   key_time_pre = micros();
-#endif
 }
 
 void usbHidMeasureRateTime(void)
 {
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
   rate_time_sof = micros() - rate_time_sof_pre;
 
   if (rate_time_req)
@@ -208,10 +191,9 @@ void usbHidMeasureRateTime(void)
       key_time_cnt++;
     }
   }
-#else
-  // V251009R9: 릴리스 빌드에서는 HID 폴링 계측을 수행하지 않음
-#endif
 }
+
+#endif  // V251010R1: 계측 비활성 시 인라인 스텁 사용을 위해 함수 정의를 조건부로 제한
 
 bool usbHidGetRateInfo(usb_hid_rate_info_t *p_info)
 {

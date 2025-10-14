@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251009R9"  // V251009R9: 계측 모듈 분리 및 조건부 컴파일 구조 단순화
+#define _DEF_FIRMWATRE_VERSION      "V251010R1"  // V251010R1: USB HID 계측 스텁 인라인 최적화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
