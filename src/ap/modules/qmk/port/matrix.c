@@ -18,6 +18,40 @@ static bool         is_info_enable = false;
 static uint32_t     key_scan_time  = 0;
 #endif
 
+static inline uint32_t matrixInstrumentationCaptureStart(void)
+{
+#if _DEF_ENABLE_MATRIX_TIMING_PROBE || _DEF_ENABLE_USB_HID_TIMING_PROBE
+  return micros();  // V251009R8: 활성 계측이 존재할 때만 타이머 접근
+#else
+  return 0U;
+#endif
+}
+
+static inline void matrixInstrumentationLogScan(uint32_t pre_time)
+{
+#if _DEF_ENABLE_MATRIX_TIMING_PROBE
+  if (is_info_enable)
+  {
+    key_scan_time = micros() - pre_time;  // V251009R8: 매트릭스 계측 활성 시에만 스캔 소요 시간 계산
+  }
+#else
+  (void)pre_time;
+#endif
+}
+
+static inline void matrixInstrumentationPropagate(bool changed, uint32_t pre_time)
+{
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+  if (changed)
+  {
+    usbHidSetTimeLog(0, pre_time);  // V251009R8: HID 계측 활성 시에만 타임스탬프 전달
+  }
+#else
+  (void)changed;
+  (void)pre_time;
+#endif
+}
+
 static void cliCmd(cli_args_t *args);
 static void matrix_info(void);
 
@@ -52,11 +86,7 @@ matrix_row_t matrix_get_row(uint8_t row)
 uint8_t matrix_scan(void)
 {
   bool         changed = false;
-#if _DEF_ENABLE_MATRIX_TIMING_PROBE || _DEF_ENABLE_USB_HID_TIMING_PROBE
-  uint32_t     pre_time;
-
-  pre_time = micros();  // V251009R7: 활성 계측이 없을 때 불필요한 타이머 접근을 건너뜀
-#endif
+  uint32_t     pre_time = matrixInstrumentationCaptureStart();
 
   _Static_assert(sizeof(matrix_row_t) == sizeof(uint16_t),
                  "matrix_row_t must match keysReadColsBuf element size");
@@ -75,20 +105,10 @@ uint8_t matrix_scan(void)
     }
   }
 
-#if _DEF_ENABLE_MATRIX_TIMING_PROBE
-  if (is_info_enable)
-  {
-    key_scan_time = micros() - pre_time;  // V251009R4: 런타임 플래그가 활성화된 경우에만 스캔 계측 실행
-  }
-#endif
+  matrixInstrumentationLogScan(pre_time);
 
   changed = debounce(raw_matrix, matrix, MATRIX_ROWS, changed);
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-  if (changed)
-  {
-    usbHidSetTimeLog(0, pre_time);  // V251009R7: HID 계측 활성 시에만 타임스탬프를 전달
-  }
-#endif
+  matrixInstrumentationPropagate(changed, pre_time);
   matrix_info();
 
   return (uint8_t)changed;

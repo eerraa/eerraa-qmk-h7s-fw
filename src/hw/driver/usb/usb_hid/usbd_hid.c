@@ -74,7 +74,9 @@ static uint8_t USBD_HID_DataIn(USBD_HandleTypeDef *pdev, uint8_t epnum);
 static uint8_t USBD_HID_DataOut(USBD_HandleTypeDef *pdev, uint8_t epnum);
 static uint8_t USBD_HID_EP0_RxReady(USBD_HandleTypeDef *pdev);
 static uint8_t USBD_HID_SOF(USBD_HandleTypeDef *pdev);
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
 static uint32_t usbHidExpectedPollIntervalUs(void);                  // V250928R3 HID 폴링 간격 계산
+#endif
 
 #ifndef USE_USBD_COMPOSITE
 static uint8_t *USBD_HID_GetFSCfgDesc(uint16_t *length);
@@ -1058,6 +1060,45 @@ static uint32_t key_time_raw_log[KEY_TIME_LOG_MAX];
 static uint32_t key_time_pre_log[KEY_TIME_LOG_MAX];
 #endif
 
+static inline uint32_t usbHidInstrumentationNow(void)
+{
+#if _USE_USB_MONITOR || _DEF_ENABLE_USB_HID_TIMING_PROBE
+  return micros();  // V251009R8: 활성화된 계측/모니터가 있을 때만 타이머 접근
+#else
+  return 0U;
+#endif
+}
+
+static inline void usbHidInstrumentationOnSof(uint32_t now_us)
+{
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+  static uint32_t sample_cnt = 0;
+  uint32_t        sample_window = usbBootModeIsFullSpeed() ? 1000U : 8000U; // V251009R8: USB 속도에 맞춰 윈도우 계산 유지
+
+  rate_time_sof_pre = now_us;
+  if (sample_cnt >= sample_window)
+  {
+    sample_cnt = 0;
+    data_in_rate = data_in_cnt;
+    rate_time_min = rate_time_min_check;
+    rate_time_max = rate_time_max_check;
+    rate_time_avg = rate_time_sum / (data_in_cnt + 1);
+    rate_time_excess_max = rate_time_excess_max_check;               // V251009R8: 폴링 초과 지연을 윈도우 경계에서 라치
+    rate_queue_depth_max = rate_queue_depth_max_check;
+    data_in_cnt = 0;
+
+    rate_time_min_check = 0xFFFF;
+    rate_time_max_check = 0;
+    rate_time_sum = 0;
+    rate_time_excess_max_check = 0;
+    rate_queue_depth_max_check = 0;
+  }
+  sample_cnt++;
+#else
+  (void)now_us;
+#endif
+}
+
 /**
   * @brief  USBD_HID_DataIn
   *         handle data IN Stage
@@ -1255,37 +1296,12 @@ bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length)
 
 void usbHidMeasurePollRate(void)
 {
-#if _USE_USB_MONITOR || _DEF_ENABLE_USB_HID_TIMING_PROBE
-  uint32_t now_us = micros();                                     // V251009R7: 관련 계측이 활성화된 경우에만 타이머를 읽음
-#endif
+  uint32_t now_us = usbHidInstrumentationNow();
 
 #if _USE_USB_MONITOR
   usbHidMonitorSof(now_us);                                       // V250924R2 SOF 간격 모니터링
 #endif
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-  static uint32_t cnt = 0;
-  uint32_t        sample_window = usbBootModeIsFullSpeed() ? 1000U : 8000U; // V250924R1 Align poll window with active USB speed
-
-  rate_time_sof_pre = now_us;
-  if (cnt >= sample_window)
-  {
-    cnt = 0;
-    data_in_rate = data_in_cnt;
-    rate_time_min = rate_time_min_check;
-    rate_time_max = rate_time_max_check;
-    rate_time_avg = rate_time_sum / (data_in_cnt + 1);
-    rate_time_excess_max = rate_time_excess_max_check;               // V250928R3 초과 지연 최대값 라치
-    rate_queue_depth_max = rate_queue_depth_max_check;               // V250928R3 큐 잔량 최대값 라치
-    data_in_cnt = 0;
-
-    rate_time_min_check = 0xFFFF;
-    rate_time_max_check = 0;
-    rate_time_sum = 0;
-    rate_time_excess_max_check = 0;
-    rate_queue_depth_max_check = 0;
-  }
-  cnt++;
-#endif
+  usbHidInstrumentationOnSof(now_us);
 }
 
 static UsbBootMode_t usbHidResolveDowngradeTarget(void)            // V250924R2 현재 모드 대비 하위 폴링 모드 계산
