@@ -14,7 +14,9 @@
 static matrix_row_t raw_matrix[MATRIX_ROWS]; // raw values
 static matrix_row_t matrix[MATRIX_ROWS];     // debounced values
 static bool         is_info_enable = false;
+#if _DEF_ENABLE_MATRIX_TIMING_PROBE
 static uint32_t     key_scan_time  = 0;
+#endif
 
 static void cliCmd(cli_args_t *args);
 static void matrix_info(void);
@@ -72,7 +74,12 @@ uint8_t matrix_scan(void)
     }
   }
 
-  key_scan_time = micros() - pre_time;
+#if _DEF_ENABLE_MATRIX_TIMING_PROBE
+  if (is_info_enable)
+  {
+    key_scan_time = micros() - pre_time;  // V251009R4: 런타임 플래그가 활성화된 경우에만 스캔 계측 실행
+  }
+#endif
 
   changed = debounce(raw_matrix, matrix, MATRIX_ROWS, changed);
   if (changed)
@@ -97,7 +104,7 @@ void matrix_info(void)
       usb_hid_rate_info_t hid_info;
 
       usbHidGetRateInfo(&hid_info);
-      
+
       logPrintf("Scan Rate : %d.%d KHz\n", get_matrix_scan_rate()/1000, get_matrix_scan_rate()%1000);
       logPrintf("Poll Rate : %d Hz, %d us(max), %d us(min), %d us(excess), %d queued(max)\n", // V250928R3 HID 진단 지표 노출
                 hid_info.freq_hz,
@@ -105,7 +112,11 @@ void matrix_info(void)
                 hid_info.time_min,
                 hid_info.time_excess_max,
                 hid_info.queue_depth_max);
+#if _DEF_ENABLE_MATRIX_TIMING_PROBE
       logPrintf("Scan Time : %d us\n", key_scan_time);
+#else
+      logPrintf("Scan Time : disabled\n");  // V251009R4: 계측 가드 비활성화 시 안내
+#endif
     }
   }
 #endif
@@ -122,7 +133,7 @@ void cliCmd(cli_args_t *args)
     usb_hid_rate_info_t hid_info;
 
     usbHidGetRateInfo(&hid_info);
-    
+
     logPrintf("Scan Rate : %d.%d KHz\n", get_matrix_scan_rate()/1000, get_matrix_scan_rate()%1000);
     logPrintf("Poll Rate : %d Hz, %d us(max), %d us(min), %d us(excess), %d queued(max)\n", // V250928R3 HID 진단 지표 노출
               hid_info.freq_hz,
@@ -130,7 +141,11 @@ void cliCmd(cli_args_t *args)
               hid_info.time_min,
               hid_info.time_excess_max,
               hid_info.queue_depth_max);
+#if _DEF_ENABLE_MATRIX_TIMING_PROBE
     logPrintf("Scan Time : %d us\n", key_scan_time);
+#else
+    logPrintf("Scan Time : disabled\n");  // V251009R4: 빌드 타임으로 계측이 제외되었음을 안내
+#endif
 
     ret = true;
   }
@@ -157,6 +172,9 @@ void cliCmd(cli_args_t *args)
     if (args->isStr(1, "off"))
     {
       is_info_enable = false;
+#if _DEF_ENABLE_MATRIX_TIMING_PROBE
+      key_scan_time  = 0;  // V251009R4: 플래그 비활성화 시 마지막 계측값 초기화
+#endif
     }
     ret = true;
   }
