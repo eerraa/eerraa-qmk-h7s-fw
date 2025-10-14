@@ -8,49 +8,13 @@
 #include "cli.h"
 #include "usb.h"
 #include "keys.h"
+#include "matrix_instrumentation.h"  // V251009R9: 매트릭스 계측 경로를 독립 모듈로 이관
 
 
 /* matrix state(1:on, 0:off) */
 static matrix_row_t raw_matrix[MATRIX_ROWS]; // raw values
 static matrix_row_t matrix[MATRIX_ROWS];     // debounced values
 static bool         is_info_enable = false;
-#if _DEF_ENABLE_MATRIX_TIMING_PROBE
-static uint32_t     key_scan_time  = 0;
-#endif
-
-static inline uint32_t matrixInstrumentationCaptureStart(void)
-{
-#if _DEF_ENABLE_MATRIX_TIMING_PROBE || _DEF_ENABLE_USB_HID_TIMING_PROBE
-  return micros();  // V251009R8: 활성 계측이 존재할 때만 타이머 접근
-#else
-  return 0U;
-#endif
-}
-
-static inline void matrixInstrumentationLogScan(uint32_t pre_time)
-{
-#if _DEF_ENABLE_MATRIX_TIMING_PROBE
-  if (is_info_enable)
-  {
-    key_scan_time = micros() - pre_time;  // V251009R8: 매트릭스 계측 활성 시에만 스캔 소요 시간 계산
-  }
-#else
-  (void)pre_time;
-#endif
-}
-
-static inline void matrixInstrumentationPropagate(bool changed, uint32_t pre_time)
-{
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-  if (changed)
-  {
-    usbHidSetTimeLog(0, pre_time);  // V251009R8: HID 계측 활성 시에만 타임스탬프 전달
-  }
-#else
-  (void)changed;
-  (void)pre_time;
-#endif
-}
 
 static void cliCmd(cli_args_t *args);
 static void matrix_info(void);
@@ -105,7 +69,7 @@ uint8_t matrix_scan(void)
     }
   }
 
-  matrixInstrumentationLogScan(pre_time);
+  matrixInstrumentationLogScan(pre_time, is_info_enable);
 
   changed = debounce(raw_matrix, matrix, MATRIX_ROWS, changed);
   matrixInstrumentationPropagate(changed, pre_time);
@@ -135,11 +99,14 @@ void matrix_info(void)
                 hid_info.time_min,
                 hid_info.time_excess_max,
                 hid_info.queue_depth_max);
-#if _DEF_ENABLE_MATRIX_TIMING_PROBE
-      logPrintf("Scan Time : %d us\n", key_scan_time);
-#else
-      logPrintf("Scan Time : disabled\n");  // V251009R4: 계측 가드 비활성화 시 안내
-#endif
+      if (matrixInstrumentationIsCompileEnabled())
+      {
+        logPrintf("Scan Time : %d us\n", matrixInstrumentationGetScanTime());
+      }
+      else
+      {
+        logPrintf("Scan Time : disabled\n");  // V251009R4: 계측 가드 비활성화 시 안내
+      }
     }
   }
 #endif
@@ -164,11 +131,14 @@ void cliCmd(cli_args_t *args)
               hid_info.time_min,
               hid_info.time_excess_max,
               hid_info.queue_depth_max);
-#if _DEF_ENABLE_MATRIX_TIMING_PROBE
-    logPrintf("Scan Time : %d us\n", key_scan_time);
-#else
-    logPrintf("Scan Time : disabled\n");  // V251009R4: 빌드 타임으로 계측이 제외되었음을 안내
-#endif
+    if (matrixInstrumentationIsCompileEnabled())
+    {
+      logPrintf("Scan Time : %d us\n", matrixInstrumentationGetScanTime());
+    }
+    else
+    {
+      logPrintf("Scan Time : disabled\n");  // V251009R4: 빌드 타임으로 계측이 제외되었음을 안내
+    }
 
     ret = true;
   }
@@ -195,9 +165,7 @@ void cliCmd(cli_args_t *args)
     if (args->isStr(1, "off"))
     {
       is_info_enable = false;
-#if _DEF_ENABLE_MATRIX_TIMING_PROBE
-      key_scan_time  = 0;  // V251009R4: 플래그 비활성화 시 마지막 계측값 초기화
-#endif
+      matrixInstrumentationReset();  // V251009R9: 계측 모듈로 상태 초기화 이관
     }
     ret = true;
   }
