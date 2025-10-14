@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251009R7"  // V251009R7: 비활성 계측 경로에서 불필요한 타이머 접근 제거
+#define _DEF_FIRMWATRE_VERSION      "V251009R8"  // V251009R8: 계측 헬퍼 도입으로 조건부 컴파일 경로 정리
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
