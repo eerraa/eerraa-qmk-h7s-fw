@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251010R4"  // V251010R4: 스캔 계측 가드를 단일 플래그로 통합하고 재정의 여지를 허용
+#define _DEF_FIRMWATRE_VERSION      "V251010R5"  // V251010R5: USB 모니터 가드 범위 분리 재검토 결과 반영
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
