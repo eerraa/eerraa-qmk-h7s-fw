@@ -16,7 +16,7 @@
 
 ## 4. 진단 CLI 노출
 - `matrix info` CLI는 `usbHidGetRateInfo()`로 HID 계층에서 누적한 폴링 통계를 가져와 Poll Rate, 최소/최대/초과 시간, 큐 최대 사용량을 출력합니다. 계측 컴파일 플래그가 꺼져 있으면 스캔 시간 대신 `disabled` 메시지가 출력됩니다.【F:src/ap/modules/qmk/port/matrix.c†L101-L144】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L200-L224】
-- `DEBUG_MATRIX_SCAN_RATE`가 정의된 빌드에서는 1초 주기로 동일 정보를 자동 로그로 출력해 실시간 추적이 가능합니다.【F:src/ap/modules/qmk/port/matrix.c†L104-L126】
+- `_DEF_ENABLE_MATRIX_TIMING_PROBE`가 1로 설정된 빌드에서는 1초 주기로 동일 정보를 자동 로그로 출력해 실시간 추적이 가능합니다.【F:src/ap/modules/qmk/port/matrix.c†L101-L126】
 
 ## 5. 릴리스 빌드에서의 잔존 경로
 - 계측 호출 자체는 `matrix_instrumentation.h`의 인라인 스텁 덕분에 최종 바이너리에서 제거되지만, `matrix.c` → HID 계층으로 이어지는 Poll Rate 경로가 논리적으로 유지되어 빌드 플래그만 바꾸면 즉시 계측을 복구할 수 있습니다.【F:src/ap/modules/qmk/port/matrix.c†L52-L126】【F:src/ap/modules/qmk/port/matrix_instrumentation.h†L9-L51】
