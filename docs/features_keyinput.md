@@ -34,7 +34,7 @@
 ## 4. 매트릭스 태스크 & 이벤트 준비 (`quantum/keyboard.c`)
 ### 4.1 진입 조건과 진단
 1. `matrix_task()`는 `matrix_can_read()`를 확인하고, 스캔 불가 시 1kHz tick 이벤트만 생성합니다.【F:src/ap/modules/qmk/quantum/keyboard.c†L615-L633】
-2. `matrix_scan_perf_task()`는 `DEBUG_MATRIX_SCAN_RATE` 빌드에서 초당 스캔 횟수를 수집해 CLI/로그에 제공할 수 있습니다.【F:src/ap/modules/qmk/quantum/keyboard.c†L214-L235】
+2. `matrix_scan_perf_task()`는 `_DEF_ENABLE_MATRIX_TIMING_PROBE`가 1인 빌드에서 초당 스캔 횟수를 수집해 CLI/로그에 제공할 수 있습니다.【F:src/ap/modules/qmk/quantum/keyboard.c†L206-L231】
 
 ### 4.2 변화 행 탐지 & 고스트 제어
 - `matrix_scan()` 결과 또는 이전 고스트 잔재(`ghost_pending`)가 있는 경우에만 행 루프를 실행하여 빈 스캔 비용을 줄입니다.【F:src/ap/modules/qmk/quantum/keyboard.c†L642-L661】
@@ -79,7 +79,7 @@
 - 인코더·포인팅 디바이스 활동도 별도 타임스탬프를 유지하지만, `last_input_modification_time`과 최대값을 공유해 OLED 타임아웃 등 입력 기반 기능이 모든 소스에 반응하도록 합니다.【F:src/ap/modules/qmk/quantum/keyboard.c†L77-L134】
 
 ## 8. 진단 & 확장 포인트
-- `matrix_info` CLI와 `DEBUG_MATRIX_SCAN_RATE` 빌드는 스캔 주기, 폴링 주파수, 큐 잔량, 스캔 시간(us)을 실시간으로 확인하는 데 사용됩니다.【F:src/ap/modules/qmk/port/matrix.c†L101-L126】
+- `_DEF_ENABLE_MATRIX_TIMING_PROBE`가 1인 빌드에서는 `matrix_info` CLI를 통해 스캔 주기, 폴링 주파수, 큐 잔량, 스캔 시간(us)을 실시간으로 확인할 수 있습니다.【F:src/ap/modules/qmk/port/matrix.c†L101-L144】
 - `matrix_can_read()`와 `should_process_keypress()`는 저전력 모드(슬레이브 반쪽, USB 절전 등)에서 스캔/이벤트 생성을 제한하기 위한 훅입니다.【F:src/ap/modules/qmk/port/matrix.c†L41-L58】【F:src/ap/modules/qmk/quantum/keyboard.c†L410-L442】
 - `switch_events()`는 LED/RGB 매트릭스 동기화를 담당하는 확장 지점이며, 필요 시 다른 전기 이벤트 소비자를 추가할 수 있습니다.【F:src/ap/modules/qmk/quantum/keyboard.c†L527-L541】
 

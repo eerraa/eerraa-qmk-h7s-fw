@@ -80,7 +80,8 @@ uint8_t matrix_scan(void)
 
 void matrix_info(void)
 {
-#ifdef DEBUG_MATRIX_SCAN_RATE
+#if _DEF_ENABLE_MATRIX_TIMING_PROBE
+  // V251010R4: DEBUG_MATRIX_SCAN_RATE 의존성을 제거하고 단일 빌드 가드로 통합
   static uint32_t pre_time = 0;
 
   if (is_info_enable)
@@ -124,7 +125,11 @@ void cliCmd(cli_args_t *args)
 
     usbHidGetRateInfo(&hid_info);
 
+    #if _DEF_ENABLE_MATRIX_TIMING_PROBE
     logPrintf("Scan Rate : %d.%d KHz\n", get_matrix_scan_rate()/1000, get_matrix_scan_rate()%1000);
+    #else
+    logPrintf("Scan Rate : disabled\n");  // V251010R3: 빌드 타임으로 스캔 계측이 제거된 경우 안내
+    #endif
     logPrintf("Poll Rate : %d Hz, %d us(max), %d us(min), %d us(excess), %d queued(max)\n", // V250928R3 HID 진단 지표 노출
               hid_info.freq_hz,
               hid_info.time_max,
@@ -158,6 +163,7 @@ void cliCmd(cli_args_t *args)
 
   if (args->argc == 2 && args->isStr(0, "info"))
   {
+    #if _DEF_ENABLE_MATRIX_TIMING_PROBE
     if (args->isStr(1, "on"))
     {
       is_info_enable = true;
@@ -167,6 +173,9 @@ void cliCmd(cli_args_t *args)
       is_info_enable = false;
       matrixInstrumentationReset();  // V251009R9: 계측 모듈로 상태 초기화 이관
     }
+    #else
+    cliPrintf("matrix scan 계측이 비활성화되었습니다 (_DEF_ENABLE_MATRIX_TIMING_PROBE=0).\n"); // V251010R3: 릴리스 빌드 안내
+    #endif
     ret = true;
   }
 
@@ -174,8 +183,10 @@ void cliCmd(cli_args_t *args)
   {
     cliPrintf("matrix info\n");
     cliPrintf("matrix row data\n");
-    #ifdef DEBUG_MATRIX_SCAN_RATE
+    #if _DEF_ENABLE_MATRIX_TIMING_PROBE
     cliPrintf("matrix info on:off\n");
-    #endif    
+    #else
+    cliPrintf("matrix info on:off (disabled)\n");  // V251010R3: 계측 비활성화 상태 안내
+    #endif
   }
 }

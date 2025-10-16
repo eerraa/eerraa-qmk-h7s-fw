@@ -29,7 +29,7 @@
 
 
 // #define DEBUG_KEY_SEND
-#define DEBUG_MATRIX_SCAN_RATE
+// #define _DEF_ENABLE_MATRIX_TIMING_PROBE  1  // V251010R4: 스캔 계측을 개발 빌드에서 강제 활성화하려면 정의
 #define GRAVE_ESC_ENABLE
 #define KILL_SWITCH_ENABLE
 #define KKUK_ENABLE

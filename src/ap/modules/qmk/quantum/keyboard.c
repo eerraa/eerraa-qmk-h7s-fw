@@ -200,7 +200,8 @@ void set_activity_timestamps(uint32_t matrix_timestamp, uint32_t encoder_timesta
 }
 
 // Only enable this if console is enabled to print to
-#if defined(DEBUG_MATRIX_SCAN_RATE)
+#if _DEF_ENABLE_MATRIX_TIMING_PROBE
+// V251010R4: DEBUG_MATRIX_SCAN_RATE 대신 _DEF_ENABLE_MATRIX_TIMING_PROBE 단일 플래그로 스캔 계측을 제어
 static uint32_t matrix_timer           = 0;
 static uint32_t matrix_scan_count      = 0;
 static uint32_t last_matrix_scan_count = 0;
@@ -223,7 +224,15 @@ uint32_t get_matrix_scan_rate(void) {
     return last_matrix_scan_count;
 }
 #else
-#    define matrix_scan_perf_task()
+void matrix_scan_perf_task(void)
+{
+    // V251010R4: 빌드 가드 비활성화 시에도 호출 지점을 유지하기 위해 빈 함수로 남깁니다.
+}
+
+uint32_t get_matrix_scan_rate(void)
+{
+    return 0U;  // V251010R4: 계측 비활성화 상태에서는 0을 반환해 CLI에서 안내 메시지를 출력합니다.
+}
 #endif
 
 #ifdef MATRIX_HAS_GHOST
@@ -561,7 +570,8 @@ void keyboard_init(void) {
     haptic_init();
 #endif
 
-#if defined(DEBUG_MATRIX_SCAN_RATE) && defined(CONSOLE_ENABLE)
+#if _DEF_ENABLE_MATRIX_TIMING_PROBE && defined(CONSOLE_ENABLE)
+    // V251010R4: 콘솔 자동 활성화 조건을 새로운 빌드 가드에 맞춰 조정
     debug_enable = true;
 #endif
 

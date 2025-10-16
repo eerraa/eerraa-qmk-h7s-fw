@@ -6,12 +6,16 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251010R1"  // V251010R1: USB HID 계측 스텁 인라인 최적화
+#define _DEF_FIRMWATRE_VERSION      "V251010R4"  // V251010R4: 스캔 계측 가드를 단일 플래그로 통합하고 재정의 여지를 허용
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
-#define _DEF_ENABLE_MATRIX_TIMING_PROBE   0  // V251009R4: matrix_scan() 계측 기본 비활성화, 개발 환경에서만 1로 재정의
+#ifndef _DEF_ENABLE_MATRIX_TIMING_PROBE
+#define _DEF_ENABLE_MATRIX_TIMING_PROBE   0  // V251010R4: 기본값은 비활성화, 필요 시 보드/빌드에서 재정의
+#endif
+#ifndef _DEF_ENABLE_USB_HID_TIMING_PROBE
 #define _DEF_ENABLE_USB_HID_TIMING_PROBE  0  // V251009R5: usbd_hid 계측 기본 비활성화, 필요 시 빌드 옵션으로만 활성화
+#endif
 #define _USE_USB_MONITOR                  1  // V251009R6: USB 불안정성 감지를 기본 활성화, 필요 시 빌드로 선택 해제
 
 
