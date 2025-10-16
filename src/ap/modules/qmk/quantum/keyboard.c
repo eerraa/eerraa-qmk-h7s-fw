@@ -16,6 +16,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <stdint.h>
+// V251010R3: _DEF_ENABLE_MATRIX_TIMING_PROBE 매크로를 참조하기 위해 하드웨어 설정 헤더를 포함합니다.
+#include "hw_def.h"
 #include "keyboard.h"
 #include "keycode_config.h"
 #include "matrix.h"
