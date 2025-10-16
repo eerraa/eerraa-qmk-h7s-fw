@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251010R1"  // V251010R1: USB HID 계측 스텁 인라인 최적화
+#define _DEF_FIRMWATRE_VERSION      "V251010R3"  // V251010R3: 매트릭스 스캔 계측 빌드 가드 적용
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

@@ -200,7 +200,7 @@ void set_activity_timestamps(uint32_t matrix_timestamp, uint32_t encoder_timesta
 }
 
 // Only enable this if console is enabled to print to
-#if defined(DEBUG_MATRIX_SCAN_RATE)
+#if _DEF_ENABLE_MATRIX_TIMING_PROBE && defined(DEBUG_MATRIX_SCAN_RATE)
 static uint32_t matrix_timer           = 0;
 static uint32_t matrix_scan_count      = 0;
 static uint32_t last_matrix_scan_count = 0;
@@ -223,7 +223,15 @@ uint32_t get_matrix_scan_rate(void) {
     return last_matrix_scan_count;
 }
 #else
-#    define matrix_scan_perf_task()
+void matrix_scan_perf_task(void)
+{
+    // V251010R3: 매크로 비활성화 시에도 호출 지점을 유지하기 위해 빈 함수로 남깁니다.
+}
+
+uint32_t get_matrix_scan_rate(void)
+{
+    return 0U;  // V251010R3: 계측 비활성화 상태에서는 0을 반환해 CLI에서 안내 메시지를 출력합니다.
+}
 #endif
 
 #ifdef MATRIX_HAS_GHOST
