@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251010R5"  // V251010R5: USB 모니터 가드 범위 분리 재검토 결과 반영
+#define _DEF_FIRMWATRE_VERSION      "V251010R6"  // V251010R6: 계측 매크로 기본 정의 위치 정비 및 USB 모니터 재정의 허용
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
@@ -16,7 +16,9 @@
 #ifndef _DEF_ENABLE_USB_HID_TIMING_PROBE
 #define _DEF_ENABLE_USB_HID_TIMING_PROBE  0  // V251009R5: usbd_hid 계측 기본 비활성화, 필요 시 빌드 옵션으로만 활성화
 #endif
-#define _USE_USB_MONITOR                  1  // V251009R6: USB 불안정성 감지를 기본 활성화, 필요 시 빌드로 선택 해제
+#ifndef _USE_USB_MONITOR
+#define _USE_USB_MONITOR                  1  // V251010R6: 기본은 활성화, 필요 시 보드/키맵에서 재정의 가능
+#endif
 
 
 #define _USE_HW_CACHE
