@@ -536,6 +536,8 @@ static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 �
   }
 }
 
+#endif  // _USE_USB_MONITOR  // V251010R5: 모니터 전용 정의 영역을 조기 종료해 일반 HID 경로가 항상 컴파일되도록 조정
+
 
 /**
   * @brief  USBD_HID_Init
@@ -1189,6 +1191,8 @@ void usbHidMeasurePollRate(void)
   usbHidInstrumentationOnSof(now_us);
 }
 
+#if _USE_USB_MONITOR  // V251010R5: 모니터 비활성 빌드에서도 HID 본체가 유지되도록 함수 정의를 개별 가드로 분리
+
 static UsbBootMode_t usbHidResolveDowngradeTarget(void)            // V250924R2 현재 모드 대비 하위 폴링 모드 계산
 {
   UsbBootMode_t cur_mode = usbBootModeGet();
@@ -1401,7 +1405,7 @@ static void usbHidMonitorSof(uint32_t now_us)
   }
 }
 
-#endif  // _USE_USB_MONITOR
+#endif  // _USE_USB_MONITOR  // V251010R5: 모니터 전용 함수 정의 범위 분리 완료
 
 
 __weak void usbHidSetStatusLed(uint8_t led_bits)
