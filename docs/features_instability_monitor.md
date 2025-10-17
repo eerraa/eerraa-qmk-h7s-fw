@@ -28,8 +28,8 @@
   - `expected_us`, `stable_threshold_us`: 속도별 기대 간격과 허용 오차.
   - `warmup_deadline_us`, `warmup_good_frames`: 모니터링 활성화 전 워밍업 조건.
   - `holdoff_end_us`: 장치 재개 직후 일정 시간 동안 감시를 중지합니다.
-  - `decay_interval_us`: 감쇠 주기. 속도별로 2000µs(HS) 또는 8000µs(FS).
-  - `degrade_threshold`: 다운그레이드 트리거 점수(기본 3점).
+  - `decay_interval_us`: 감쇠 주기. HS는 4000µs, FS는 20000µs로 설정됩니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L486-L547】
+  - `degrade_threshold`: 다운그레이드 트리거 점수. HS는 12점, FS는 6점으로 속도별로 다르게 적용됩니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L486-L547】
   - `active_speed`: 현재 USB 속도 캐시.
 - **상태 전이 이벤트**
   1. **속도/상태 변경**: 파라미터 캐시와 타이머를 초기화합니다.
@@ -52,12 +52,13 @@
   4. 실패하거나 타임아웃이면 큐가 초기화되고 경고 로그가 출력됩니다.
 
 ## 4. 속도별 파라미터 테이블
+- `usbHidSofMonitorApplySpeedParams()`가 아래 테이블을 기반으로 파라미터를 캐싱합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L486-L547】
+
 | USB 속도 | `expected_us` | `stable_threshold_us` | `decay_interval_us` | `degrade_threshold` | 워밍업 프레임 |
 | --- | --- | --- | --- | --- | --- |
-| HS (8k/4k/2k 공통) | 125 | 250 | 2000 | 3 | 2048 |
-| FS (1k) | 1000 | 2000 | 8000 | 3 | 128 |
+| HS (8k/4k/2k 공통) | 125 | 250 | 4000 | 12 | 2048 |
+| FS (1k) | 1000 | 2000 | 20000 | 6 | 128 |
 | 비구성/정지 | 0 | 0 | 0 | - | 즉시 리셋 |
-- `usbHidSofMonitorApplySpeedParams()`가 위 테이블을 기반으로 파라미터를 캐싱합니다.
 
 ## 5. 제어 흐름
 ```
@@ -90,6 +91,10 @@ apMainLoop()
 - **V250924R2**: SOF 감시와 다운그레이드 큐의 ARM/COMMIT 상태 머신 도입.
 - **V250924R3**: 워밍업 750ms, 홀드오프, 점수 감쇠 최적화 및 큐 타임아웃 로직 추가.
 - **V250924R4**: 속도별 파라미터 캐싱 최적화, `_DEF_FIRMWATRE_VERSION`을 `V250924R4`로 갱신.
+- **V251009R6**: SOF 모니터 정의를 `_USE_USB_MONITOR` 가드로 분리해 USB 모니터를 독립 토글로 관리.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L473-L547】
+- **V251009R7**: HID 전송 계층 계측 호출을 `_DEF_ENABLE_USB_HID_TIMING_PROBE` 조건으로 감싸 불필요한 큐/타이머 접근을 제거.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1145-L1159】
+- **V251010R5**: `_USE_USB_MONITOR` 비활성 빌드에서도 HID 본체가 유지되도록 모니터 전용 블록을 조기 종료.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L486-L546】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1198-L1412】
+- **V251010R6**: `_USE_USB_MONITOR` 기본값을 1로 고정해 릴리스 빌드에서 모니터를 상시 활성화.【F:src/hw/hw_def.h†L9-L21】
 
 ## 8. Codex 작업 체크리스트
 1. SOF 모니터 파라미터를 수정하면 `USB_BOOT_MONITOR_CONFIRM_DELAY_MS` 및 `USB_SOF_MONITOR_*` 상수와의 관계를 재검토합니다.
@@ -97,3 +102,14 @@ apMainLoop()
 3. `usbProcess()`는 IDLE 단계에서 즉시 반환하도록 설계되어 있으므로, 신규 로직을 추가할 때 조기 반환 조건을 유지합니다.
 4. CLI 확장 시 `log_pending` 플래그가 중복 로그를 막는지 확인하고, 필요하면 새로운 상태 플래그를 추가합니다.
 5. 모니터가 리셋을 유발하므로, 추가 로그는 리셋 직전에 출력되도록 순서를 조정합니다.
+
+## 9. 조건부 컴파일 & 계측 상호작용
+- `_USE_USB_MONITOR`는 `hw_def.h`에서 기본 1로 정의되어 있으며, 키보드 `config.h`에서 재정의하지 않는 한 릴리스 빌드에서도 SOF 모니터와 다운그레이드 큐가 항상 활성화됩니다.【F:src/hw/hw_def.h†L9-L21】
+- HID 계측 매크로 `_DEF_ENABLE_USB_HID_TIMING_PROBE`가 0이면 `usbHidInstrumentation*` 함수가 인라인 스텁으로 대체되어 큐 깊이·타이머 접근이 제거됩니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.h†L11-L68】
+- `_USE_USB_MONITOR`가 1인 경우, 계측이 꺼져 있어도 `usbHidInstrumentationNow()`가 `micros()`를 호출하여 SOF 모니터가 필요한 타임스탬프를 유지합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.h†L26-L33】
+- 매트릭스 계층의 계측 매크로가 꺼져 있더라도 모니터는 HID 내부 타임스탬프만으로 작동하므로, Poll Rate 계측 활성 여부와 독립적으로 안정성 감시가 유지됩니다.【F:src/ap/modules/qmk/port/matrix_instrumentation.h†L13-L45】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1198-L1412】
+
+## 10. 대표 빌드 시나리오
+- **릴리스 기본(S1)**: `_DEF_ENABLE_MATRIX_TIMING_PROBE=0`, `_DEF_ENABLE_USB_HID_TIMING_PROBE=0`, `_USE_USB_MONITOR=1`. SOF 모니터만 활성화되어 프레임마다 `micros()`를 1회 호출하며 다운그레이드 상태 머신만 실행합니다.【F:src/hw/hw_def.h†L9-L21】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1198-L1412】
+- **HID 진단 활성(S4)**: `_DEF_ENABLE_USB_HID_TIMING_PROBE=1`로 전환하면 큐 깊이 스냅샷·폴링 초과 측정을 수행하지만, 모니터와 타임스탬프 소스를 공유하여 중복 `micros()` 호출을 피합니다.【F:src/hw/hw_def.h†L9-L18】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.h†L11-L68】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1145-L1188】
+- **풀 계측(S5)**: `_DEF_ENABLE_MATRIX_TIMING_PROBE=1`과 `_DEF_ENABLE_USB_HID_TIMING_PROBE=1`을 동시에 활성화하면 매트릭스 스캔 타임스탬프가 HID 계층으로 전달되어 Poll Rate 분석과 연결되며, SOF 모니터는 동일 타임스탬프를 사용해 다운그레이드를 판단합니다.【F:src/ap/modules/qmk/port/matrix_instrumentation.h†L13-L45】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1198-L1412】

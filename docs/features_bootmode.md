@@ -28,6 +28,8 @@
   - 로드 시 값이 범위 밖이면 기본값 `USB_BOOT_MODE_HS_8K`로 복구합니다.
 - **CLI 헬퍼**
   - `usbBootModeLabel(mode)`는 `HS 8K`, `HS 4K`, `HS 2K`, `FS 1K` 문자열을 제공합니다.
+- **다운그레이드 큐 지연**
+  - 모니터가 다운그레이드를 예약하면 `USB_BOOT_MONITOR_CONFIRM_DELAY_MS`(2초) 동안 검증 대기 상태에 머무르고, 동일 시간만큼 타임아웃을 부여해 반복 리셋을 방지합니다.【F:src/hw/driver/usb/usb.h†L61-L88】【F:src/hw/driver/usb/usb.c†L177-L266】
 
 ## 4. 제어 흐름
 ```
@@ -72,3 +74,8 @@ cliBoot "set <mode>"
 2. CLI 확장 시 `usbBootModeSaveAndReset()`이 즉시 리셋을 수행하므로 사용자 메시지를 리셋 전에 모두 출력합니다.
 3. EEPROM 슬롯 변경이 필요하면 `port.h`와 `usbBootModeLoad()` 기본값을 함께 수정합니다.
 4. HS/FS 파라미터를 조정하면 `usbd_conf.c`, HID/Composite 엔드포인트, CLI 도움말 문자열을 동일하게 업데이트합니다.
+
+## 9. 조건부 컴파일 & 모니터 연동
+- `_USE_USB_MONITOR` 기본값은 `hw_def.h`에서 1로 정의되어 있어, 펌웨어 릴리스 구성에서도 USB 불안정성 모니터가 항상 BootMode 큐를 구동할 수 있습니다.【F:src/hw/hw_def.h†L9-L21】
+- `usbd_hid.c`는 SOF 모니터 전용 정의를 `_USE_USB_MONITOR` 가드로 감싸되, 가드를 조기에 종료하여 HID 본체와 BootMode 엔드포인트 구성 코드는 항상 컴파일되도록 재구성되었습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L486-L546】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1198-L1412】
+- 모니터가 비활성화된 빌드에서는 `usbHidResolveDowngradeTarget()`과 `usbHidMonitorSof()`가 제외되어 자동 다운그레이드가 발생하지 않으며, CLI를 통한 수동 `boot set`만으로 모드를 변경합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1198-L1412】
