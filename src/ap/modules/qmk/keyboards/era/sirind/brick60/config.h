@@ -9,6 +9,8 @@
 
 // hw_def.h
 //
+#define _DEF_ENABLE_MATRIX_TIMING_PROBE   1
+#define _DEF_ENABLE_USB_HID_TIMING_PROBE  1
 // #define _USE_HW_VCOM
 #define _USE_HW_WS2812
 #define     HW_WS2812_MAX_CH        30
