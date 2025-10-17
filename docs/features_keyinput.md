@@ -6,7 +6,7 @@
   1. GPDMA가 열 버퍼(`col_rd_buf`)를 지속적으로 채우고, QMK 포팅층이 DMA 버퍼를 직접 참조해 매트릭스를 구성합니다.
   2. `matrix_task()`가 변화 행을 선별하고 고스트를 차단한 뒤, `action_exec()`/`send_keyboard_report()` 흐름으로 키 이벤트를 전달합니다.
   3. `host_keyboard_send()` → `usbHidSendReport()` 체인이 HID IN 엔드포인트를 전송하거나 큐잉하며, USB 시간/큐 진단값을 업데이트합니다.
-- **현재 펌웨어 버전**: `V251009R3`.
+- **현재 펌웨어 버전**: `V251009R7`.【F:src/hw/hw_def.h†L9-L20】
 
 ## 2. 파일 토폴로지 & 책임
 | 경로 | 핵심 심볼/함수 | 역할 |
@@ -80,10 +80,26 @@
 
 ## 8. 진단 & 확장 포인트
 - `_DEF_ENABLE_MATRIX_TIMING_PROBE`가 1인 빌드에서는 `matrix_info` CLI를 통해 스캔 주기, 폴링 주파수, 큐 잔량, 스캔 시간(us)을 실시간으로 확인할 수 있습니다.【F:src/ap/modules/qmk/port/matrix.c†L101-L144】
+- `matrix info on/off` 하위 명령은 주기 로그를 토글하고, 비활성화 시 `matrixInstrumentationReset()`으로 누적 데이터를 초기화합니다.【F:src/ap/modules/qmk/port/matrix.c†L115-L189】
 - `matrix_can_read()`와 `should_process_keypress()`는 저전력 모드(슬레이브 반쪽, USB 절전 등)에서 스캔/이벤트 생성을 제한하기 위한 훅입니다.【F:src/ap/modules/qmk/port/matrix.c†L41-L58】【F:src/ap/modules/qmk/quantum/keyboard.c†L410-L442】
 - `switch_events()`는 LED/RGB 매트릭스 동기화를 담당하는 확장 지점이며, 필요 시 다른 전기 이벤트 소비자를 추가할 수 있습니다.【F:src/ap/modules/qmk/quantum/keyboard.c†L527-L541】
 
-## 9. 버전 히스토리 (주요 변경)
+## 9. 계측 컴파일 매크로 & 빌드 시나리오
+- `_DEF_ENABLE_MATRIX_TIMING_PROBE`와 `_DEF_ENABLE_USB_HID_TIMING_PROBE`는 `hw_def.h`에서 기본 0으로 정의되어 릴리스 빌드에서 계측 호출이 제거됩니다.【F:src/hw/hw_def.h†L9-L18】
+- `_USE_USB_MONITOR` 기본값은 1로, 모니터 비활성화 빌드를 원할 때만 키보드 `config.h`에서 재정의하면 됩니다.【F:src/hw/hw_def.h†L9-L21】
+- `matrixInstrumentationCaptureStart()`와 `matrixInstrumentationPropagate()`는 매크로 조합이 활성화된 경우에만 `micros()` 호출과 HID 타임스탬프 전달을 수행합니다.【F:src/ap/modules/qmk/port/matrix_instrumentation.h†L13-L45】【F:src/ap/modules/qmk/port/matrix.c†L50-L78】
+- HID 계층은 `_DEF_ENABLE_USB_HID_TIMING_PROBE`가 0이면 인라인 스텁으로 축소되지만, `_USE_USB_MONITOR`가 1인 경우 `usbHidInstrumentationNow()`가 `micros()`를 유지해 SOF 모니터와 Poll Rate 계측이 같은 타임스탬프를 공유합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.h†L26-L68】
+- **릴리스 기본(S1)**: 두 계측 매크로 0, `_USE_USB_MONITOR=1` 구성으로 SOF 모니터만 실행되어 Poll Rate 통계 누적이 비활성화됩니다.【F:src/hw/hw_def.h†L9-L21】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1198-L1412】
+- **풀 계측(S5)**: 두 계측 매크로를 1로 설정하면 매트릭스 타임스탬프가 HID 계층에 전달되고, `usbHidMeasurePollRate()`가 큐 깊이와 폴링 초과 시간을 집계합니다.【F:src/ap/modules/qmk/port/matrix_instrumentation.h†L13-L45】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1145-L1210】
+
+## 10. Poll/HID 계측 연동 흐름
+1. `matrix_scan()`이 시작될 때 `matrixInstrumentationCaptureStart()`가 활성 계측 조합에 한해 `micros()`를 읽습니다.【F:src/ap/modules/qmk/port/matrix.c†L50-L78】【F:src/ap/modules/qmk/port/matrix_instrumentation.h†L13-L33】
+2. 스캔 결과가 변경되면 `matrixInstrumentationPropagate()`가 HID 계층에 타임스탬프를 전달해 Poll Rate 분석의 기준 시각을 공유합니다.【F:src/ap/modules/qmk/port/matrix.c†L72-L78】【F:src/ap/modules/qmk/port/matrix_instrumentation.h†L35-L45】
+3. `usbHidSendReport()`는 계측이 켜져 있을 때만 리포트 시작 시각과 큐 깊이 스냅샷을 저장하여 후속 통계에 활용합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1145-L1159】
+4. SOF 인터럽트마다 `usbHidMeasurePollRate()`가 폴링 간격, 초과 시간, 큐 최대치를 누적하고 필요 시 다운그레이드 로직을 호출합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1182-L1412】
+5. `matrix_info()` CLI는 `usbHidGetRateInfo()`에서 누적된 통계를 가져와 Scan/Poll Rate와 큐 최대 깊이를 출력합니다.【F:src/ap/modules/qmk/port/matrix.c†L92-L144】
+
+## 11. 버전 히스토리 (주요 변경)
 - **V250924R5**: DMA 버퍼 직접 참조(`keysPeekColsBuf()`), `volatile` 지정으로 최신 스캔 확보.【F:src/ap/modules/qmk/port/matrix.c†L55-L83】【F:src/hw/driver/keys.c†L309-L312】
 - **V250924R6**: `ghost_pending` 도입으로 고스트 해소 전까지 행 비교 유지.【F:src/ap/modules/qmk/quantum/keyboard.c†L633-L661】
 - **V250924R7**: 열 비트 스캔(`__builtin_ctz`)으로 행 변화 처리 비용 축소.【F:src/ap/modules/qmk/quantum/keyboard.c†L697-L719】
@@ -96,8 +112,11 @@
 - **V251009R1**: `keysUpdate()` API 제거 및 DMA 스냅샷 기반 경로만 유지.【F:src/common/hw/include/keys.h†L13-L19】【F:src/hw/driver/keys.c†L32-L304】【F:src/ap/modules/qmk/port/matrix.c†L55-L99】
 - **V251009R2**: DMA 자동 갱신에 중복되던 `keys` CLI 명령 제거, 진단 흐름을 QMK `matrix info`로 통합.【F:src/hw/driver/keys.c†L32-L330】【F:src/ap/modules/qmk/port/matrix.c†L101-L144】
 - **V251009R3**: `matrix.c` 폴백 블록 제거로 DMA 전용 경로를 확정하고 유지보수 범위를 축소.【F:src/ap/modules/qmk/port/matrix.c†L55-L99】
+- **V251009R7**: HID 전송 계층의 계측 진입점을 `_DEF_ENABLE_USB_HID_TIMING_PROBE` 가드로 묶어 큐 깊이 스냅샷과 타임스탬프 기록을 조건부 실행.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1145-L1159】
+- **V251009R9**: `matrix_instrumentation.h`를 도입해 매트릭스 계측 호출을 인라인 스텁으로 정리하고 컴파일 타임 제어를 일원화.【F:src/ap/modules/qmk/port/matrix_instrumentation.h†L9-L45】
+- **V251010R3/R4**: `matrix info` CLI 로그를 단일 빌드 가드로 통합하고, 계측 비활성 빌드에서는 `disabled` 안내를 출력.【F:src/ap/modules/qmk/port/matrix.c†L83-L144】
 
-## 10. Codex 작업 체크리스트
+## 12. Codex 작업 체크리스트
 1. DMA/매트릭스 계층을 수정할 때는 `keysPeekColsBuf()`가 여전히 `volatile` 포인터를 반환하고, `matrix_scan()`이 `debounce()`와 USB 시간 로그를 호출하는지 확인합니다.
 2. `matrix_task()` 변경 시 `event_time_32`와 `pending_matrix_activity_time` 공유가 유지되는지, `generate_tick_event()` 호출이 누락되지 않았는지 검증합니다.
 3. HID 리포트 구조를 확장할 경우 `host_keyboard_send()`뿐 아니라 `usbHidSendReport()` 큐 계측과 `send_6kro_report()`의 변경 감지 로직을 함께 점검합니다.
