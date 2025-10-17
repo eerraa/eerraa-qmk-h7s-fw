@@ -86,7 +86,6 @@ static uint8_t *USBD_HID_GetUsrStrDescriptor(struct _USBD_HandleTypeDef *pdev, u
 
 
 static void cliCmd(cli_args_t *args);
-static void usbHidMeasurePollRate(void);
 static bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev);
 static void usbHidInitTimer(void);
 #if _USE_USB_MONITOR
@@ -1036,9 +1035,11 @@ static uint8_t USBD_HID_DataIn(USBD_HandleTypeDef *pdev, uint8_t epnum)
     return (uint8_t)USBD_OK;
   }
   
-  usbHidInstrumentationOnDataIn();
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+  usbHidInstrumentationOnDataIn();                                    // V251009R7: HID 계측 활성 시에만 IN 완료 계수 갱신
 
-  usbHidMeasureRateTime();
+  usbHidMeasureRateTime();                                            // V251009R7: 폴링 간격 측정은 계측 옵션에 따라 컴파일
+#endif
 
   return (uint8_t)USBD_OK;
 }
@@ -1075,7 +1076,15 @@ static uint8_t USBD_HID_DataOut(USBD_HandleTypeDef *pdev, uint8_t epnum)
 
 uint8_t USBD_HID_SOF(USBD_HandleTypeDef *pdev)
 {
-  usbHidMeasurePollRate();
+#if _USE_USB_MONITOR || _DEF_ENABLE_USB_HID_TIMING_PROBE
+  uint32_t sof_now_us = usbHidInstrumentationNow();                   // V251009R7: SOF 타임스탬프는 모니터/계측 공용으로 취득
+#if _USE_USB_MONITOR
+  usbHidMonitorSof(sof_now_us);                                       // V251009R7: 모니터 활성 시 타임스탬프 전달
+#endif
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+  usbHidInstrumentationOnSof(sof_now_us);                             // V251009R7: 계측 활성 시 샘플 윈도우 갱신
+#endif
+#endif
 
   if (qbufferAvailable(&via_report_q) && (millis()-via_report_pre_time) >= via_report_time)
   {
@@ -1135,12 +1144,17 @@ bool usbHidSendReport(uint8_t *p_data, uint16_t length)
 
   if (!USBD_is_suspended())
   {
-    usbHidInstrumentationMarkReportStart();
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+    usbHidInstrumentationMarkReportStart();                            // V251009R7: 계측 시에만 리포트 시작 타임스탬프 기록
+#endif
 
     memcpy(hid_buf, p_data, length);
     if (USBD_HID_SendReport((uint8_t *)hid_buf, HID_KEYBOARD_REPORT_SIZE))
     {
-      usbHidInstrumentationOnImmediateSendSuccess(qbufferAvailable(&report_q));
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+      uint32_t queued_reports = qbufferAvailable(&report_q);           // V251009R7: 큐 깊이 스냅샷도 계측 활성 시에만 계산
+      usbHidInstrumentationOnImmediateSendSuccess(queued_reports);     // V251009R7: 즉시 전송 성공 계측 조건부 실행
+#endif
     }
     else
     {
@@ -1179,16 +1193,6 @@ bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length)
   }
   
   return true;
-}
-
-void usbHidMeasurePollRate(void)
-{
-  uint32_t now_us = usbHidInstrumentationNow();
-
-#if _USE_USB_MONITOR
-  usbHidMonitorSof(now_us);                                       // V250924R2 SOF 간격 모니터링
-#endif
-  usbHidInstrumentationOnSof(now_us);
 }
 
 #if _USE_USB_MONITOR  // V251010R5: 모니터 비활성 빌드에서도 HID 본체가 유지되도록 함수 정의를 개별 가드로 분리
@@ -1497,16 +1501,22 @@ void TIM2_IRQHandler(void)
 
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 {
-  usbHidInstrumentationOnTimerPulse();
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+  usbHidInstrumentationOnTimerPulse();                                 // V251009R7: 계측 타이머 후크를 조건부 실행
+#endif
   if (qbufferAvailable(&report_q) > 0)
   {
     if (p_hhid->state == USBD_HID_IDLE)
     {
-      uint32_t queued_reports = qbufferAvailable(&report_q);          // V250928R3 큐에 남은 리포트 수 기록
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+      uint32_t queued_reports = qbufferAvailable(&report_q);          // V250928R3 큐에 남은 리포트 수 기록 (계측 활성 시)
+#endif
 
       qbufferRead(&report_q, (uint8_t *)hid_buf, 1);
       USBD_HID_SendReport((uint8_t *)hid_buf, HID_KEYBOARD_REPORT_SIZE);
-      usbHidInstrumentationOnReportDequeued(queued_reports);
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+      usbHidInstrumentationOnReportDequeued(queued_reports);           // V251009R7: 큐 처리 계측을 조건부 실행
+#endif
     }
   }
 
