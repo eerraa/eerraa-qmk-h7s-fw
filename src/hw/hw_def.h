@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251010R6"  // V251010R6: 계측 매크로 기본 정의 위치 정비 및 USB 모니터 재정의 허용
+#define _DEF_FIRMWATRE_VERSION      "V251010R8"  // V251010R8: HID 즉시 전송 복원 및 Poll Rate 회복
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

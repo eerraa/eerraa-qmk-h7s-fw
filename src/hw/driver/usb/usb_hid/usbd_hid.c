@@ -89,6 +89,8 @@ static void cliCmd(cli_args_t *args);
 static void usbHidMeasurePollRate(void);
 static bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev);
 static void usbHidInitTimer(void);
+static void usbHidKickKeyboardTransfer(void);                    // V251010R7: 슬롯 기반 전송 시작 헬퍼
+static void usbHidKickExtraTransfer(void);                       // V251010R7: EXK 슬롯 전송 헬퍼
 #if _USE_USB_MONITOR
 static void usbHidMonitorSof(uint32_t now_us);                     // V250924R2 SOF 안정성 추적
 static UsbBootMode_t usbHidResolveDowngradeTarget(void);           // V250924R2 다운그레이드 대상 계산
@@ -101,6 +103,10 @@ static UsbBootMode_t usbHidResolveDowngradeTarget(void);           // V250924R2 
 typedef struct
 {
   uint8_t  buf[HID_KEYBOARD_REPORT_SIZE];
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+  uint16_t backlog_before;                                      // V251010R7: 전송 전 큐 잔량 스냅샷
+  uint8_t  flags;                                                // V251010R7: 계측 분기 플래그 (즉시/대기 여부)
+#endif
 } report_info_t;
 
 typedef struct
@@ -113,6 +119,58 @@ typedef struct
   uint8_t len;
   uint8_t buf[HID_EXK_EP_SIZE];
 } exk_report_info_t;
+
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+#define HID_SLOT_FLAG_INSTRUMENTED   (1U << 0)                     // V251010R7: 계측 콜백 중복 방지 플래그
+#define HID_SLOT_FLAG_QUEUED         (1U << 1)                     // V251010R7: 큐 대기 여부 플래그
+
+static inline void usbHidSlotInitProbe(report_info_t *slot, uint32_t backlog_before)
+{
+  slot->backlog_before = (uint16_t)backlog_before;                // V251010R7: 즉시 전송 판별 기준 저장
+  slot->flags = 0U;
+}
+
+static inline void usbHidSlotMarkQueued(report_info_t *slot)
+{
+  slot->flags |= HID_SLOT_FLAG_QUEUED;                            // V251010R7: 큐 대기 상태 기록
+}
+
+static inline void usbHidSlotNotifySend(report_info_t *slot, uint32_t queued_reports)
+{
+  if ((slot->flags & HID_SLOT_FLAG_INSTRUMENTED) != 0U)
+  {
+    return;
+  }
+
+  if ((slot->flags & HID_SLOT_FLAG_QUEUED) == 0U && slot->backlog_before == 0U)
+  {
+    usbHidInstrumentationOnImmediateSendSuccess(slot->backlog_before);
+  }
+  else
+  {
+    usbHidInstrumentationOnReportDequeued(queued_reports);
+  }
+
+  slot->flags |= HID_SLOT_FLAG_INSTRUMENTED;
+}
+#else
+static inline void usbHidSlotInitProbe(report_info_t *slot, uint32_t backlog_before)
+{
+  (void)slot;
+  (void)backlog_before;
+}
+
+static inline void usbHidSlotMarkQueued(report_info_t *slot)
+{
+  (void)slot;
+}
+
+static inline void usbHidSlotNotifySend(report_info_t *slot, uint32_t queued_reports)
+{
+  (void)slot;
+  (void)queued_reports;
+}
+#endif
 
 static USBD_SetupReqTypedef ep0_req;
 static uint8_t ep0_req_buf[USB_MAX_EP0_SIZE];
@@ -127,11 +185,10 @@ static void (*via_hid_receive_func)(uint8_t *data, uint8_t length) = NULL;
 
 static qbuffer_t              report_q;
 static report_info_t          report_buf[128];
-__ALIGN_BEGIN  static uint8_t hid_buf[HID_KEYBOARD_REPORT_SIZE] __ALIGN_END = {0,};
+static report_info_t          report_direct_slot;               // V251010R8: 즉시 전송 전용 슬롯
 
 static qbuffer_t              report_exk_q;
 static exk_report_info_t      report_exk_buf[128];
-__ALIGN_BEGIN  static uint8_t hid_buf_exk[HID_EXK_EP_SIZE] __ALIGN_END = {0,};
 
 
 
@@ -607,9 +664,9 @@ static uint8_t USBD_HID_Init(USBD_HandleTypeDef *pdev, uint8_t cfgidx)
   {
     is_first = false;
 
-    qbufferCreateBySize(&report_q, (uint8_t *)report_buf, sizeof(report_info_t), 128); 
-    qbufferCreateBySize(&via_report_q, (uint8_t *)via_report_q_buf, sizeof(via_report_info_t), 128); 
-    qbufferCreateBySize(&report_exk_q, (uint8_t *)report_exk_buf, sizeof(report_info_t), 128); 
+    qbufferCreateBySize(&report_q, (uint8_t *)report_buf, sizeof(report_info_t), 128);
+    qbufferCreateBySize(&via_report_q, (uint8_t *)via_report_q_buf, sizeof(via_report_info_t), 128);
+    qbufferCreateBySize(&report_exk_q, (uint8_t *)report_exk_buf, sizeof(exk_report_info_t), 128);
 
     logPrintf("[OK] USB Hid\n");
     logPrintf("     Keyboard\n");
@@ -1026,19 +1083,34 @@ static uint8_t *USBD_HID_GetOtherSpeedCfgDesc(uint16_t *length)
   */
 static uint8_t USBD_HID_DataIn(USBD_HandleTypeDef *pdev, uint8_t epnum)
 {
-  UNUSED(epnum);
+  uint8_t ep_index = epnum & 0x0FU;                               // V251010R7: 엔드포인트 구분 처리
+
   /* Ensure that the FIFO is empty before a new transfer, this condition could
   be caused by  a new transfer before the end of the previous transfer */
   ((USBD_HID_HandleTypeDef *)pdev->pClassDataCmsit[pdev->classId])->state = USBD_HID_IDLE;
 
-  if (epnum != (HID_EPIN_ADDR & 0x0F))
+  if (ep_index == (HID_EPIN_ADDR & 0x0FU))
   {
-    return (uint8_t)USBD_OK;
-  }
-  
-  usbHidInstrumentationOnDataIn();
+    usbHidInstrumentationOnDataIn();
+    usbHidMeasureRateTime();
 
-  usbHidMeasureRateTime();
+    if (qbufferAvailable(&report_q) > 0U)
+    {
+      (void)qbufferPop(&report_q);                                 // V251010R7: 전송 완료 슬롯 해제
+    }
+
+    usbHidKickKeyboardTransfer();                                  // V251010R7: 대기 슬롯 즉시 전송 시도
+    usbHidKickExtraTransfer();                                     // V251010R7: 키보드 완료 시 EXK 슬롯도 재시도
+  }
+  else if (ep_index == (HID_EXK_EP_IN & 0x0FU))
+  {
+    if (qbufferAvailable(&report_exk_q) > 0U)
+    {
+      (void)qbufferPop(&report_exk_q);                             // V251010R7: EXK 슬롯 해제
+    }
+
+    usbHidKickExtraTransfer();                                     // V251010R7: EXK 대기 슬롯 전송
+  }
 
   return (uint8_t)USBD_OK;
 }
@@ -1128,57 +1200,132 @@ bool usbHidSetViaReceiveFunc(void (*func)(uint8_t *, uint8_t))
 
 bool usbHidSendReport(uint8_t *p_data, uint16_t length)
 {
-  report_info_t report_info;
-
   if (length > HID_KEYBOARD_REPORT_SIZE)
     return false;
 
-  if (!USBD_is_suspended())
-  {
-    usbHidInstrumentationMarkReportStart();
-
-    memcpy(hid_buf, p_data, length);
-    if (USBD_HID_SendReport((uint8_t *)hid_buf, HID_KEYBOARD_REPORT_SIZE))
-    {
-      usbHidInstrumentationOnImmediateSendSuccess(qbufferAvailable(&report_q));
-    }
-    else
-    {
-      memcpy(report_info.buf, p_data, length);
-      qbufferWrite(&report_q, (uint8_t *)&report_info, 1);
-    }    
-  }
-  else
+  if (USBD_is_suspended())
   {
     usbHidUpdateWakeUp(&USBD_Device);
+    return true;
   }
-  
+
+  usbHidInstrumentationMarkReportStart();                          // V251010R7: 슬롯 전송도 기존 계측 시점 유지
+
+  uint32_t backlog_before = qbufferAvailable(&report_q);           // V251010R7: 즉시 전송 여부 판단 기준 확보
+
+  if (backlog_before == 0U && p_hhid != NULL && p_hhid->state == USBD_HID_IDLE)
+  {
+    memcpy(report_direct_slot.buf, p_data, length);                // V251010R8: 큐 비어 있을 때는 전용 슬롯으로 즉시 전송
+    usbHidSlotInitProbe(&report_direct_slot, backlog_before);      // V251010R8: 즉시 전송도 공통 계측 경로 활용
+
+    if (USBD_HID_SendReport(report_direct_slot.buf, HID_KEYBOARD_REPORT_SIZE))
+    {
+      usbHidSlotNotifySend(&report_direct_slot, backlog_before + 1U); // V251010R8: 즉시 전송 성공 시 계측 반영
+      usbHidKickExtraTransfer();                                   // V251010R8: 키보드 전송 직후 EXK 슬롯도 확인
+      return true;
+    }
+  }
+
+  uint8_t *slot_addr = NULL;
+
+  if (!qbufferAcquire(&report_q, &slot_addr))
+  {
+    return true;                                                   // V251010R7: 큐 포화 시 기존과 동일하게 드롭
+  }
+
+  report_info_t *slot = (report_info_t *)slot_addr;
+  memcpy(slot->buf, p_data, length);                               // V251010R7: 단일 복사로 슬롯 채움
+  usbHidSlotInitProbe(slot, backlog_before);                       // V251010R7: 계측 메타데이터 초기화
+
+  qbufferCommit(&report_q);                                        // V251010R7: 슬롯을 큐에 반영
+
+  usbHidKickKeyboardTransfer();                                    // V251010R7: 즉시 전송 시도
+
   return true;
 }
 
 bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length)
 {
-  exk_report_info_t report_info;
-
   if (length > HID_EXK_EP_SIZE)
     return false;
 
-  if (!USBD_is_suspended())
-  {
-    memcpy(hid_buf_exk, p_data, length);
-    if (!USBD_HID_SendReportEXK((uint8_t *)hid_buf_exk, length))
-    {
-      report_info.len = length;
-      memcpy(report_info.buf, p_data, length);
-      qbufferWrite(&report_exk_q, (uint8_t *)&report_info, 1);        
-    }    
-  }
-  else
+  if (USBD_is_suspended())
   {
     usbHidUpdateWakeUp(&USBD_Device);
+    return true;
   }
-  
+
+  uint8_t *slot_addr = NULL;
+
+  if (!qbufferAcquire(&report_exk_q, &slot_addr))
+  {
+    return true;                                                   // V251010R7: 큐 포화 시 기존 동작 유지
+  }
+
+  exk_report_info_t *slot = (exk_report_info_t *)slot_addr;
+  slot->len = length;
+  memcpy(slot->buf, p_data, length);                               // V251010R7: EXK도 단일 복사로 슬롯 채움
+
+  qbufferCommit(&report_exk_q);                                    // V251010R7: 슬롯 활성화
+
+  usbHidKickExtraTransfer();                                       // V251010R7: 즉시 전송 시도
+
   return true;
+}
+
+static void usbHidKickKeyboardTransfer(void)
+{
+  if (p_hhid == NULL)
+  {
+    return;
+  }
+
+  if (p_hhid->state != USBD_HID_IDLE)
+  {
+    return;
+  }
+
+  uint32_t queued_reports = qbufferAvailable(&report_q);
+
+  if (queued_reports == 0U)
+  {
+    return;
+  }
+
+  report_info_t *slot = (report_info_t *)qbufferPeekRead(&report_q);
+
+  if (!USBD_HID_SendReport(slot->buf, HID_KEYBOARD_REPORT_SIZE))
+  {
+    usbHidSlotMarkQueued(slot);                                     // V251010R7: 전송 대기 상태 기록
+    return;
+  }
+
+  usbHidSlotNotifySend(slot, queued_reports);                       // V251010R7: 계측 훅 호출 및 큐 길이 전달
+}
+
+static void usbHidKickExtraTransfer(void)
+{
+  if (p_hhid == NULL)
+  {
+    return;
+  }
+
+  if (p_hhid->state != USBD_HID_IDLE)
+  {
+    return;
+  }
+
+  if (qbufferAvailable(&report_exk_q) == 0U)
+  {
+    return;
+  }
+
+  exk_report_info_t *slot = (exk_report_info_t *)qbufferPeekRead(&report_exk_q);
+
+  if (!USBD_HID_SendReportEXK(slot->buf, slot->len))
+  {
+    return;
+  }
 }
 
 void usbHidMeasurePollRate(void)
@@ -1498,32 +1645,8 @@ void TIM2_IRQHandler(void)
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 {
   usbHidInstrumentationOnTimerPulse();
-  if (qbufferAvailable(&report_q) > 0)
-  {
-    if (p_hhid->state == USBD_HID_IDLE)
-    {
-      uint32_t queued_reports = qbufferAvailable(&report_q);          // V250928R3 큐에 남은 리포트 수 기록
-
-      qbufferRead(&report_q, (uint8_t *)hid_buf, 1);
-      USBD_HID_SendReport((uint8_t *)hid_buf, HID_KEYBOARD_REPORT_SIZE);
-      usbHidInstrumentationOnReportDequeued(queued_reports);
-    }
-  }
-
-  if (qbufferAvailable(&report_exk_q) > 0)
-  {
-    if (p_hhid->state == USBD_HID_IDLE)
-    {
-      exk_report_info_t report_info;
-
-      qbufferRead(&report_exk_q, (uint8_t *)&report_info, 1);
-
-      memcpy(hid_buf_exk, report_info.buf, report_info.len);
-      USBD_HID_SendReportEXK((uint8_t *)hid_buf_exk, report_info.len);
-    }
-  }
-
-  return;
+  usbHidKickKeyboardTransfer();                                      // V251010R7: 슬롯 기반 전송 재시도
+  usbHidKickExtraTransfer();                                         // V251010R7: EXK 슬롯 전송 재시도
 }
 
 #ifdef _USE_HW_CLI
