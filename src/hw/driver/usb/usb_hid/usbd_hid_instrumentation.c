@@ -29,7 +29,7 @@ static uint32_t rate_queue_depth_max = 0;                    // V250928R3 큐 �
 static uint32_t rate_queue_depth_max_check = 0;              // V250928R3 윈도우 내 큐 잔량 최대값 추적
 
 static uint32_t rate_time_sof_pre = 0;
-static uint32_t rate_time_sof = 0;
+static uint32_t rate_time_sof = 0;                         // V251010R8: 직전 SOF 간격(us)
 
 static uint16_t rate_his_buf[100];
 
@@ -44,9 +44,9 @@ static uint32_t key_time_raw_pre;
 static uint32_t key_time_raw_log[KEY_TIME_LOG_MAX];
 static uint32_t key_time_pre_log[KEY_TIME_LOG_MAX];
 
-static volatile int      timer_cnt = 0;                      // V251009R5: 계측 활성 시에만 타이머 인터럽트 카운터 유지
-static volatile uint32_t timer_end = 0;
-static uint32_t          sof_cnt = 0;
+static volatile uint32_t timer_pulse_total = 0;              // V251010R8: TIM2 펄스 누적 카운트
+static volatile uint32_t timer_sof_offset_us = 0;            // V251010R8: TIM2 펄스 시점의 SOF 기준 지연(us)
+static volatile uint32_t sof_total = 0;                      // V251010R8: SOF 누적 카운트
 
 static uint32_t usbHidExpectedPollIntervalUs(void);
 
@@ -68,14 +68,26 @@ void usbHidInstrumentationOnSof(uint32_t now_us)
   static uint32_t sample_cnt = 0;
   uint32_t        sample_window = usbBootModeIsFullSpeed() ? 1000U : 8000U; // V251009R9: USB 속도에 맞춰 윈도우 계산 유지
 
+  if (rate_time_sof_pre != 0U)
+  {
+    rate_time_sof = now_us - rate_time_sof_pre;                 // V251010R8: 연속 SOF 간격을 직접 측정해 보고
+  }
   rate_time_sof_pre = now_us;
+  sof_total++;                                                  // V251010R8: SOF 누적 카운트를 타이머와 분리 추적
   if (sample_cnt >= sample_window)
   {
     sample_cnt = 0;
     data_in_rate = data_in_cnt;
     rate_time_min = rate_time_min_check;
     rate_time_max = rate_time_max_check;
-    rate_time_avg = rate_time_sum / (data_in_cnt + 1U);
+    if (data_in_cnt > 0U)
+    {
+      rate_time_avg = rate_time_sum / data_in_cnt;              // V251010R8: 샘플 수만큼 나누어 평균 증가 편향 제거
+    }
+    else
+    {
+      rate_time_avg = 0U;
+    }
     rate_time_excess_max = rate_time_excess_max_check;               // V251009R9: 폴링 초과 지연을 윈도우 경계에서 라치
     rate_queue_depth_max = rate_queue_depth_max_check;
     data_in_cnt = 0;
@@ -91,9 +103,11 @@ void usbHidInstrumentationOnSof(uint32_t now_us)
 
 void usbHidInstrumentationOnTimerPulse(void)
 {
-  timer_cnt++;
-  timer_end = micros()-rate_time_sof_pre;
-  sof_cnt++;
+  timer_pulse_total++;                                           // V251010R8: TIM2 펄스 누적
+  if (rate_time_sof_pre != 0U)
+  {
+    timer_sof_offset_us = micros()-rate_time_sof_pre;            // V251010R8: TIM2 펄스 지연을 SOF 기준으로 추적
+  }
 }
 
 void usbHidInstrumentationOnDataIn(void)
@@ -124,8 +138,6 @@ void usbHidInstrumentationMarkReportStart(void)
 
 void usbHidMeasureRateTime(void)
 {
-  rate_time_sof = micros() - rate_time_sof_pre;
-
   if (rate_time_req)
   {
     uint32_t rate_time_cur = micros();
@@ -246,6 +258,8 @@ void usbHidInstrumentationHandleCli(cli_args_t *args)
     uint32_t key_send_cnt = 0;
 
     memset(rate_his_buf, 0, sizeof(rate_his_buf));
+    uint32_t prev_sof_total = sof_total;                               // V251010R8: CLI 시작 시점의 SOF 누적값 캡처
+    uint32_t prev_timer_total = timer_pulse_total;                      // V251010R8: TIM2 누적값도 동일하게 스냅샷
 
     while(cliKeepLoop())
     {
@@ -263,26 +277,57 @@ void usbHidInstrumentationHandleCli(cli_args_t *args)
       if (millis()-pre_time >= 1000)
       {
         pre_time = millis();
-        cliPrintf("hid rate %d Hz, avg %4d us, max %4d us, min %d us, excess %4d us, queued %d, %d, %d\n", // V250928R3 진단 카운터 표시
-          data_in_rate,
-          rate_time_avg,
-          rate_time_max,
-          rate_time_min,
-          rate_time_excess_max,
-          rate_queue_depth_max,
-          rate_time_sof,
-          timer_end
-          );
+        uint32_t cur_sof_total = sof_total;                          // V251010R8: 윈도우 내 SOF 누적 증가분 계산
+        uint32_t cur_timer_total = timer_pulse_total;                 // V251010R8: TIM2 펄스 누적 증가분 계산
+        uint32_t sof_delta = cur_sof_total - prev_sof_total;
+        uint32_t timer_delta = cur_timer_total - prev_timer_total;
+        prev_sof_total = cur_sof_total;
+        prev_timer_total = cur_timer_total;
 
-        for (int i=0; i<10; i++)
+        uint32_t expected_sof = usbBootModeIsFullSpeed() ? 1000U : 8000U;
+        int32_t  sof_diff = (int32_t)sof_delta - (int32_t)expected_sof;
+        int32_t  timer_diff = (int32_t)timer_delta - (int32_t)expected_sof;
+        uint32_t expected_interval_us = usbHidExpectedPollIntervalUs();
+
+        cliPrintf("hid rate %lu Hz (샘플 %lu)\n",
+                  (unsigned long)data_in_rate,
+                  (unsigned long)data_in_rate);
+        cliPrintf("  지연(us)      : 평균 %4lu / 최소 %4lu / 최대 %4lu\n",
+                  (unsigned long)rate_time_avg,
+                  (unsigned long)rate_time_min,
+                  (unsigned long)rate_time_max);
+        cliPrintf("  초과 지연(us) : 최대 %4lu (기대 %4lu)\n",
+                  (unsigned long)rate_time_excess_max,
+                  (unsigned long)expected_interval_us);
+        cliPrintf("  큐 잔량       : 최대 %lu / 최근 %lu\n",
+                  (unsigned long)rate_queue_depth_max,
+                  (unsigned long)rate_queue_depth_snapshot);
+        cliPrintf("  SOF/타이머    : %lu / %lu (기대 %lu, Δ %+ld / %+ld, SOF %4lu us, TIM 오프셋 %4lu us)\n",
+                  (unsigned long)sof_delta,
+                  (unsigned long)timer_delta,
+                  (unsigned long)expected_sof,
+                  (long)sof_diff,
+                  (long)timer_diff,
+                  (unsigned long)rate_time_sof,
+                  (unsigned long)timer_sof_offset_us);
+
+        uint32_t recent_count = (key_time_cnt < 10U) ? key_time_cnt : 10U;
+        if (recent_count > 0U)
         {
-          cliPrintf("%d us\n",key_time_log[i]);
+          cliPrintf("  최근 지연(us) :");
+          for (uint32_t i = 0; i < recent_count; i++)
+          {
+            uint32_t idx = (key_time_idx + KEY_TIME_LOG_MAX - recent_count + i) % KEY_TIME_LOG_MAX;
+            cliPrintf(" %3lu", (unsigned long)key_time_log[idx]);
+          }
+          cliPrintf("\n");
+        }
+        else
+        {
+          cliPrintf("  최근 지연(us) : 기록 없음\n");
         }
 
-        cliPrintf("sof/tim cnt : %d/%d\n", sof_cnt, timer_cnt);
-        timer_cnt = 0;
         key_send_cnt = 0;
-        sof_cnt=0;
       }
     }
 
