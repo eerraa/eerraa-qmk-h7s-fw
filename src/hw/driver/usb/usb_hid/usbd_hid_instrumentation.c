@@ -46,6 +46,7 @@ static uint32_t key_time_pre_log[KEY_TIME_LOG_MAX];
 
 static volatile uint32_t timer_pulse_total = 0;              // V251010R8: TIM2 펄스 누적 카운트
 static volatile uint32_t timer_sof_offset_us = 0;            // V251010R8: TIM2 펄스 시점의 SOF 기준 지연(us)
+static volatile uint16_t timer_compare_ticks = 120;          // V251010R9: 직전 펄스에 적용된 CCR1 값
 static volatile uint32_t sof_total = 0;                      // V251010R8: SOF 누적 카운트
 
 static uint32_t usbHidExpectedPollIntervalUs(void);
@@ -101,13 +102,11 @@ void usbHidInstrumentationOnSof(uint32_t now_us)
   sample_cnt++;
 }
 
-void usbHidInstrumentationOnTimerPulse(void)
+void usbHidInstrumentationOnTimerPulse(uint32_t delay_us, uint16_t compare_ticks)
 {
   timer_pulse_total++;                                           // V251010R8: TIM2 펄스 누적
-  if (rate_time_sof_pre != 0U)
-  {
-    timer_sof_offset_us = micros()-rate_time_sof_pre;            // V251010R8: TIM2 펄스 지연을 SOF 기준으로 추적
-  }
+  timer_sof_offset_us = delay_us;                                // V251010R9: 본체에서 전달한 지연(us)을 그대로 기록
+  timer_compare_ticks = compare_ticks;                           // V251010R9: 적용된 CCR1 틱 값을 계측에서도 확인
 }
 
 void usbHidInstrumentationOnDataIn(void)
@@ -310,6 +309,29 @@ void usbHidInstrumentationHandleCli(cli_args_t *args)
                   (long)timer_diff,
                   (unsigned long)rate_time_sof,
                   (unsigned long)timer_sof_offset_us);
+
+        usb_hid_timer_sync_state_t sync_state = {0};             // V251010R9: SOF 타이머 PI 상태를 CLI에 노출
+        bool sync_ready = usbHidTimerSyncGetState(&sync_state);
+        long integral_ticks = 0;
+        if (sync_state.integral_shift < 31U)
+        {
+          integral_ticks = (long)(sync_state.integral_accum >> sync_state.integral_shift);
+        }
+        cliPrintf("  타이머 CCR    : 현재 %3u (기본 %3u, 범위 %3u~%3u, 가드 %2u us, 기대 SOF %4lu us)\n",
+                  (unsigned int)timer_compare_ticks,
+                  (unsigned int)sync_state.default_ticks,
+                  (unsigned int)sync_state.min_ticks,
+                  (unsigned int)sync_state.max_ticks,
+                  (unsigned int)sync_state.guard_us,
+                  (unsigned long)sync_state.expected_interval_us);
+        cliPrintf("  보정 통계     : 오차 %+ld us / 적분 %+ld (틱 %+ld), 업데이트 %lu, 리셋 %lu, 가드 %lu, 준비 %s\n",
+                  (long)sync_state.last_error_us,
+                  (long)sync_state.integral_accum,
+                  integral_ticks,
+                  (unsigned long)sync_state.update_count,
+                  (unsigned long)sync_state.reset_count,
+                  (unsigned long)sync_state.guard_fault_count,
+                  sync_ready && sync_state.ready ? "ON" : "OFF");
 
         uint32_t recent_count = (key_time_cnt < 10U) ? key_time_cnt : 10U;
         if (recent_count > 0U)
