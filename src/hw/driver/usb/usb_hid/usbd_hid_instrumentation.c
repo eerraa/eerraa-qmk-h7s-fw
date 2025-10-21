@@ -43,9 +43,20 @@ static bool     key_time_raw_req = false;
 static uint32_t key_time_raw_pre;
 static uint32_t key_time_raw_log[KEY_TIME_LOG_MAX];
 static uint32_t key_time_pre_log[KEY_TIME_LOG_MAX];
+static uint32_t poll_prev_time = 0;                         // V251010R9: 연속 IN 완료 간격 추적
+static uint32_t poll_residual_last = 0;                     // V251010R9: 직전 폴링 잔차(us) 저장
+static uint32_t poll_residual_log[KEY_TIME_LOG_MAX];        // V251010R9: 최근 폴링 잔차 기록
+static uint32_t poll_residual_sum_check = 0;                // V251010R9: 샘플 윈도우 내 폴링 잔차 합계
+static uint32_t poll_residual_cnt_check = 0;                // V251010R9: 샘플 윈도우 내 폴링 잔차 샘플 수
+static uint32_t poll_residual_min_check = 0xFFFFFFFF;       // V251010R9: 폴링 잔차 최소값 추적
+static uint32_t poll_residual_max_check = 0;                // V251010R9: 폴링 잔차 최대값 추적
+static uint32_t poll_residual_avg = 0;                      // V251010R9: 폴링 잔차 평균(us)
+static uint32_t poll_residual_min = 0;                      // V251010R9: 폴링 잔차 최소(us)
+static uint32_t poll_residual_max = 0;                      // V251010R9: 폴링 잔차 최대(us)
 
 static volatile uint32_t timer_pulse_total = 0;              // V251010R8: TIM2 펄스 누적 카운트
 static volatile uint32_t timer_sof_offset_us = 0;            // V251010R8: TIM2 펄스 시점의 SOF 기준 지연(us)
+static volatile uint16_t timer_compare_ticks = 120;          // V251010R9: 직전 펄스에 적용된 CCR1 값
 static volatile uint32_t sof_total = 0;                      // V251010R8: SOF 누적 카운트
 
 static uint32_t usbHidExpectedPollIntervalUs(void);
@@ -97,17 +108,30 @@ void usbHidInstrumentationOnSof(uint32_t now_us)
     rate_time_sum = 0;
     rate_time_excess_max_check = 0;
     rate_queue_depth_max_check = 0;
+    if (poll_residual_cnt_check > 0U)                               // V251010R9: 폴링 잔차 통계를 샘플 경계에서 라치
+    {
+      poll_residual_avg = poll_residual_sum_check / poll_residual_cnt_check;
+      poll_residual_min = poll_residual_min_check;
+    }
+    else
+    {
+      poll_residual_avg = 0U;
+      poll_residual_min = 0U;
+    }
+    poll_residual_max = poll_residual_max_check;
+    poll_residual_sum_check = 0;
+    poll_residual_cnt_check = 0;
+    poll_residual_min_check = 0xFFFFFFFF;
+    poll_residual_max_check = 0;
   }
   sample_cnt++;
 }
 
-void usbHidInstrumentationOnTimerPulse(void)
+void usbHidInstrumentationOnTimerPulse(uint32_t delay_us, uint16_t compare_ticks)
 {
   timer_pulse_total++;                                           // V251010R8: TIM2 펄스 누적
-  if (rate_time_sof_pre != 0U)
-  {
-    timer_sof_offset_us = micros()-rate_time_sof_pre;            // V251010R8: TIM2 펄스 지연을 SOF 기준으로 추적
-  }
+  timer_sof_offset_us = delay_us;                                // V251010R9: 본체에서 전달한 지연(us)을 그대로 기록
+  timer_compare_ticks = compare_ticks;                           // V251010R9: 적용된 CCR1 틱 값을 계측에서도 확인
 }
 
 void usbHidInstrumentationOnDataIn(void)
@@ -138,11 +162,12 @@ void usbHidInstrumentationMarkReportStart(void)
 
 void usbHidMeasureRateTime(void)
 {
+  uint32_t now_us = micros();                                        // V251010R9: IN 완료 시각을 단일 캡처로 공유
+  uint32_t expected_interval_us = usbHidExpectedPollIntervalUs();    // V251010R9: 폴링 잔차 계산 기준
+
   if (rate_time_req)
   {
-    uint32_t rate_time_cur = micros();
-
-    rate_time_us  = rate_time_cur - rate_time_pre;
+    rate_time_us  = now_us - rate_time_pre;                          // V251010R9: 송신→완료 지연 계산을 공유 타임스탬프 기반으로 수행
     rate_time_sum += rate_time_us;
     if (rate_time_min_check > rate_time_us)
     {
@@ -153,11 +178,9 @@ void usbHidMeasureRateTime(void)
       rate_time_max_check = rate_time_us;
     }
 
-    uint32_t expected_interval_us = usbHidExpectedPollIntervalUs();   // V250928R3 현재 모드 기준 기대 폴링 간격
-
-    if (rate_time_us > expected_interval_us)
+    if (expected_interval_us > 0U && rate_time_us > expected_interval_us)
     {
-      uint32_t excess_us = rate_time_us - expected_interval_us;       // V250928R3 초과 지연 계산
+      uint32_t excess_us = rate_time_us - expected_interval_us;      // V250928R3 초과 지연 계산
 
       if (rate_time_excess_max_check < excess_us)
       {
@@ -181,7 +204,7 @@ void usbHidMeasureRateTime(void)
 
   if (key_time_req)
   {
-    key_time_end = micros()-key_time_pre;
+    key_time_end = now_us - key_time_pre;                            // V251010R9: 키 처리 지연도 동일 타임스탬프 기준으로 계산
     key_time_req = false;
 
     key_time_log[key_time_idx] = key_time_end;
@@ -189,7 +212,7 @@ void usbHidMeasureRateTime(void)
     if (key_time_raw_req)
     {
       key_time_raw_req = false;
-      key_time_raw_log[key_time_idx] = micros()-key_time_raw_pre;
+      key_time_raw_log[key_time_idx] = now_us - key_time_raw_pre;     // V251010R9: 추가 타임스탬프 호출 없이 잔차 계산
       key_time_pre_log[key_time_idx] = key_time_pre-key_time_raw_pre;
     }
     else
@@ -203,6 +226,31 @@ void usbHidMeasureRateTime(void)
       key_time_cnt++;
     }
   }
+
+  if (expected_interval_us > 0U && poll_prev_time != 0U)
+  {
+    uint32_t poll_interval_us = now_us - poll_prev_time;             // V251010R9: 연속 IN 완료 사이의 간격
+    uint32_t poll_residual_us = poll_interval_us % expected_interval_us;
+
+    poll_residual_last = poll_residual_us;
+    poll_residual_sum_check += poll_residual_us;
+    poll_residual_cnt_check++;
+    if (poll_residual_min_check > poll_residual_us)
+    {
+      poll_residual_min_check = poll_residual_us;
+    }
+    if (poll_residual_max_check < poll_residual_us)
+    {
+      poll_residual_max_check = poll_residual_us;
+    }
+    if (key_time_cnt > 0U)
+    {
+      uint32_t last_idx = (key_time_idx + KEY_TIME_LOG_MAX - 1U) % KEY_TIME_LOG_MAX; // V251010R9: 최근 송신 기록과 동일 인덱스에 잔차 저장
+      poll_residual_log[last_idx] = poll_residual_us;
+    }
+  }
+
+  poll_prev_time = now_us;
 }
 
 #endif  // V251010R1: 계측 비활성 시 인라인 스텁 사용을 위해 함수 정의를 조건부로 제한
@@ -258,6 +306,16 @@ void usbHidInstrumentationHandleCli(cli_args_t *args)
     uint32_t key_send_cnt = 0;
 
     memset(rate_his_buf, 0, sizeof(rate_his_buf));
+    memset(poll_residual_log, 0, sizeof(poll_residual_log));          // V251010R9: 폴링 잔차 기록 초기화
+    poll_prev_time = 0;                                               // V251010R9: CLI 진입 시 초기 상태로 재설정
+    poll_residual_last = 0;
+    poll_residual_sum_check = 0;
+    poll_residual_cnt_check = 0;
+    poll_residual_min_check = 0xFFFFFFFF;
+    poll_residual_max_check = 0;
+    poll_residual_avg = 0;
+    poll_residual_min = 0;
+    poll_residual_max = 0;
     uint32_t prev_sof_total = sof_total;                               // V251010R8: CLI 시작 시점의 SOF 누적값 캡처
     uint32_t prev_timer_total = timer_pulse_total;                      // V251010R8: TIM2 누적값도 동일하게 스냅샷
 
@@ -292,10 +350,14 @@ void usbHidInstrumentationHandleCli(cli_args_t *args)
         cliPrintf("hid rate %lu Hz (샘플 %lu)\n",
                   (unsigned long)data_in_rate,
                   (unsigned long)data_in_rate);
-        cliPrintf("  지연(us)      : 평균 %4lu / 최소 %4lu / 최대 %4lu\n",
+        cliPrintf("  전송 지연(us) : 평균 %4lu / 최소 %4lu / 최대 %4lu\n",
                   (unsigned long)rate_time_avg,
                   (unsigned long)rate_time_min,
                   (unsigned long)rate_time_max);
+        cliPrintf("  폴링 잔차(us) : 평균 %4lu / 최소 %4lu / 최대 %4lu\n",
+                  (unsigned long)poll_residual_avg,
+                  (unsigned long)poll_residual_min,
+                  (unsigned long)poll_residual_max);
         cliPrintf("  초과 지연(us) : 최대 %4lu (기대 %4lu)\n",
                   (unsigned long)rate_time_excess_max,
                   (unsigned long)expected_interval_us);
@@ -311,20 +373,52 @@ void usbHidInstrumentationHandleCli(cli_args_t *args)
                   (unsigned long)rate_time_sof,
                   (unsigned long)timer_sof_offset_us);
 
+        usb_hid_timer_sync_state_t sync_state = {0};             // V251010R9: SOF 타이머 PI 상태를 CLI에 노출
+        bool sync_ready = usbHidTimerSyncGetState(&sync_state);
+        long integral_ticks = 0;
+        if (sync_state.integral_shift < 31U)
+        {
+          integral_ticks = (long)(sync_state.integral_accum >> sync_state.integral_shift);
+        }
+        cliPrintf("  타이머 CCR    : 현재 %3u (기본 %3u, 범위 %3u~%3u, 가드 %2u us, 기대 SOF %4lu us)\n",
+                  (unsigned int)timer_compare_ticks,
+                  (unsigned int)sync_state.default_ticks,
+                  (unsigned int)sync_state.min_ticks,
+                  (unsigned int)sync_state.max_ticks,
+                  (unsigned int)sync_state.guard_us,
+                  (unsigned long)sync_state.expected_interval_us);
+        cliPrintf("  보정 통계     : 오차 %+ld us / 적분 %+ld (틱 %+ld), 업데이트 %lu, 리셋 %lu, 가드 %lu, 준비 %s\n",
+                  (long)sync_state.last_error_us,
+                  (long)sync_state.integral_accum,
+                  integral_ticks,
+                  (unsigned long)sync_state.update_count,
+                  (unsigned long)sync_state.reset_count,
+                  (unsigned long)sync_state.guard_fault_count,
+                  sync_ready && sync_state.ready ? "ON" : "OFF");
+
         uint32_t recent_count = (key_time_cnt < 10U) ? key_time_cnt : 10U;
         if (recent_count > 0U)
         {
-          cliPrintf("  최근 지연(us) :");
+          cliPrintf("  최근 전송(us) :");
           for (uint32_t i = 0; i < recent_count; i++)
           {
             uint32_t idx = (key_time_idx + KEY_TIME_LOG_MAX - recent_count + i) % KEY_TIME_LOG_MAX;
             cliPrintf(" %3lu", (unsigned long)key_time_log[idx]);
           }
           cliPrintf("\n");
+
+          cliPrintf("  폴링 잔차(us) :");                                 // V251010R9: 최근 폴링 잔차 분포도 함께 출력
+          for (uint32_t i = 0; i < recent_count; i++)
+          {
+            uint32_t idx = (key_time_idx + KEY_TIME_LOG_MAX - recent_count + i) % KEY_TIME_LOG_MAX;
+            cliPrintf(" %3lu", (unsigned long)poll_residual_log[idx]);
+          }
+          cliPrintf("\n");
         }
         else
         {
-          cliPrintf("  최근 지연(us) : 기록 없음\n");
+          cliPrintf("  최근 전송(us) : 기록 없음\n");
+          cliPrintf("  폴링 잔차(us) : 기록 없음\n");
         }
 
         key_send_cnt = 0;
