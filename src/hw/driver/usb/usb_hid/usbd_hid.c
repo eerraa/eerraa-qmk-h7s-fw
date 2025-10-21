@@ -51,6 +51,9 @@
 #include "report.h"
 #include "usbd_hid_internal.h"           // V251009R9: 계측 전용 상수를 공유
 #include "usbd_hid_instrumentation.h"    // V251009R9: HID 계측 로직을 전용 모듈로 이관
+#include "micros.h"                       // V251010R9: SOF/타이머 간 지연 측정을 직접 수행
+#include "cmsis_gcc.h"                    // V251010R9: 타이머 상태 스냅샷 시 인터럽트 마스크 보존
+#include "stm32h7rsxx_ll_tim.h"           // V251010R9: CCR 업데이트를 위한 LL 직접 접근
 
 
 #if HW_USB_LOG == 1
@@ -88,6 +91,93 @@ static uint8_t *USBD_HID_GetUsrStrDescriptor(struct _USBD_HandleTypeDef *pdev, u
 static void cliCmd(cli_args_t *args);
 static bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev);
 static void usbHidInitTimer(void);
+#define USB_HID_TIMER_SYNC_TARGET_TICKS        120U  // V251010R9: SOF 기준 목표 지연(us)
+#define USB_HID_TIMER_SYNC_HS_INTERVAL_US      125U  // V251010R9: HS 모드 마이크로프레임 간격
+#define USB_HID_TIMER_SYNC_FS_INTERVAL_US      1000U // V251010R9: FS 모드 SOF 간격
+#define USB_HID_TIMER_SYNC_HS_MIN_TICKS        96U   // V251010R9: HS 모드 최소 허용 지연(us)
+#define USB_HID_TIMER_SYNC_HS_MAX_TICKS        144U  // V251010R9: HS 모드 최대 허용 지연(us)
+#define USB_HID_TIMER_SYNC_FS_MIN_TICKS        80U   // V251010R9: FS 모드 최소 허용 지연(us)
+#define USB_HID_TIMER_SYNC_FS_MAX_TICKS        220U  // V251010R9: FS 모드 최대 허용 지연(us)
+#define USB_HID_TIMER_SYNC_HS_GUARD_US         32U   // V251010R9: HS 모드 오차 가드 한계
+#define USB_HID_TIMER_SYNC_FS_GUARD_US         80U   // V251010R9: FS 모드 오차 가드 한계
+#define USB_HID_TIMER_SYNC_HS_KP_SHIFT         4U    // V251010R9: HS 비례 제어 시프트(1/16)
+#define USB_HID_TIMER_SYNC_FS_KP_SHIFT         5U    // V251010R9: FS 비례 제어 시프트(1/32)
+#define USB_HID_TIMER_SYNC_HS_INTEGRAL_SHIFT   7U    // V251010R9: HS 적분 항 시프트(1/128)
+#define USB_HID_TIMER_SYNC_FS_INTEGRAL_SHIFT   9U    // V251010R9: FS 적분 항 시프트(1/512)
+#define USB_HID_TIMER_SYNC_HS_INTEGRAL_LIMIT   (32 << USB_HID_TIMER_SYNC_HS_INTEGRAL_SHIFT)  // V251010R9: 적분 포화(HS)
+#define USB_HID_TIMER_SYNC_FS_INTEGRAL_LIMIT   (32 << USB_HID_TIMER_SYNC_FS_INTEGRAL_SHIFT)  // V251010R9: 적분 포화(FS)
+
+typedef enum
+{
+  USB_HID_TIMER_SYNC_SPEED_NONE = 0U,  // V251010R9: 타이머 동기화 미활성 상태
+  USB_HID_TIMER_SYNC_SPEED_HS,         // V251010R9: HS 8k/4k/2k 공용 파라미터
+  USB_HID_TIMER_SYNC_SPEED_FS,         // V251010R9: FS 1k 모드 파라미터
+} usb_hid_timer_sync_speed_t;
+
+typedef struct
+{
+  uint32_t                     last_sof_us;          // V251010R9: 직전 SOF 타임스탬프(us)
+  uint32_t                     last_delay_us;        // V251011R1: 호스트 기준 직전 지연(us)
+  uint32_t                     last_local_delay_us;  // V251011R1: SOF 대비 로컬 타이머 지연(us)
+  uint32_t                     last_residual_us;     // V251011R1: 전송 후 호스트 폴링까지 잔차(us)
+  uint32_t                     last_send_us;         // V251011R1: 타이머 경로로 마지막 전송 시각(us)
+  uint32_t                     last_complete_us;     // V251011R1: 마지막 DataIn 완료 시각(us)
+  int32_t                      last_error_us;        // V251010R9: 직전 오차(us)
+  int32_t                      integral_accum;       // V251010R9: 적분 누산(오차 합)
+  int32_t                      integral_limit;       // V251010R9: 적분 포화 한계
+  uint16_t                     current_ticks;        // V251010R9: 현재 CCR1 값
+  uint16_t                     default_ticks;        // V251010R9: 목표 지연 틱(120us)
+  uint16_t                     min_ticks;            // V251010R9: 허용 최소 CCR1
+  uint16_t                     max_ticks;            // V251010R9: 허용 최대 CCR1
+  uint16_t                     guard_us;             // V251010R9: 오차 가드(us)
+  uint32_t                     expected_interval_us; // V251010R9: 현재 속도 SOF 간격(us)
+  uint32_t                     target_residual_us;   // V251011R1: 기대 호스트 잔차(us)
+  uint8_t                      kp_shift;             // V251010R9: 비례 항 시프트
+  uint8_t                      integral_shift;       // V251010R9: 적분 항 시프트
+  usb_hid_timer_sync_speed_t   speed;                // V251010R9: 현재 적용 중인 속도
+  bool                         ready;                // V251010R9: SOF 타임스탬프 확보 여부
+  bool                         pending_timer_report; // V251011R1: 타이머 경로 전송 후 응답 대기 여부
+  uint32_t                     update_count;         // V251010R9: 보정 적용 횟수
+  uint32_t                     guard_fault_count;    // V251010R9: 가드 초과로 리셋된 횟수
+  uint32_t                     reset_count;          // V251010R9: 초기화 횟수(모드 변경 포함)
+} usb_hid_timer_sync_t;
+
+static volatile usb_hid_timer_sync_t timer_sync =
+{
+  .last_sof_us = 0U,
+  .last_delay_us = 0U,
+  .last_local_delay_us = 0U,
+  .last_residual_us = 0U,
+  .last_send_us = 0U,
+  .last_complete_us = 0U,
+  .last_error_us = 0,
+  .integral_accum = 0,
+  .integral_limit = USB_HID_TIMER_SYNC_HS_INTEGRAL_LIMIT,
+  .current_ticks = USB_HID_TIMER_SYNC_TARGET_TICKS,
+  .default_ticks = USB_HID_TIMER_SYNC_TARGET_TICKS,
+  .min_ticks = USB_HID_TIMER_SYNC_HS_MIN_TICKS,
+  .max_ticks = USB_HID_TIMER_SYNC_HS_MAX_TICKS,
+  .guard_us = USB_HID_TIMER_SYNC_HS_GUARD_US,
+  .expected_interval_us = 0U,
+  .target_residual_us = USB_HID_TIMER_SYNC_HS_INTERVAL_US - USB_HID_TIMER_SYNC_TARGET_TICKS,
+  .kp_shift = USB_HID_TIMER_SYNC_HS_KP_SHIFT,
+  .integral_shift = USB_HID_TIMER_SYNC_HS_INTEGRAL_SHIFT,
+  .speed = USB_HID_TIMER_SYNC_SPEED_NONE,
+  .ready = false,
+  .pending_timer_report = false,
+  .update_count = 0U,
+  .guard_fault_count = 0U,
+  .reset_count = 0U,
+};
+
+static void usbHidTimerSyncInit(void);                                           // V251010R9: TIM2 비교기 PI 초기화
+static void usbHidTimerSyncOnSof(USBD_HandleTypeDef *pdev, uint32_t now_us);     // V251010R9: SOF 진입 시 보정 상태 갱신
+static void usbHidTimerSyncOnPulse(uint32_t pulse_us);                           // V251010R9: TIM2 펄스 시 오차 계산 및 CCR 조정
+static void usbHidTimerSyncOnTimerReport(uint32_t send_us);                      // V251011R1: 타이머 경로 전송 시각 추적
+static void usbHidTimerSyncOnDataIn(uint32_t complete_us);                       // V251011R1: 호스트 잔차 기반 보정 업데이트
+static void usbHidTimerSyncApplySpeed(usb_hid_timer_sync_speed_t speed);         // V251010R9: 속도별 파라미터 적용
+static void usbHidTimerSyncForceDefault(bool count_reset);                      // V251010R9: CCR/적분 리셋
+static inline int32_t usbHidTimerSyncAbs(int32_t value);                         // V251010R9: 부호 없는 절댓값 헬퍼
 #if _USE_USB_MONITOR
 static void usbHidMonitorSof(uint32_t now_us);                     // V250924R2 SOF 안정성 추적
 static UsbBootMode_t usbHidResolveDowngradeTarget(void);           // V250924R2 다운그레이드 대상 계산
@@ -1041,6 +1131,8 @@ static uint8_t USBD_HID_DataIn(USBD_HandleTypeDef *pdev, uint8_t epnum)
   usbHidMeasureRateTime();                                            // V251009R7: 폴링 간격 측정은 계측 옵션에 따라 컴파일
 #endif
 
+  usbHidTimerSyncOnDataIn(micros());                                  // V251011R1: 호스트 잔차 기반 타이머 보정 업데이트
+
   return (uint8_t)USBD_OK;
 }
 
@@ -1076,15 +1168,14 @@ static uint8_t USBD_HID_DataOut(USBD_HandleTypeDef *pdev, uint8_t epnum)
 
 uint8_t USBD_HID_SOF(USBD_HandleTypeDef *pdev)
 {
-#if _USE_USB_MONITOR || _DEF_ENABLE_USB_HID_TIMING_PROBE
-  uint32_t sof_now_us = usbHidInstrumentationNow();                   // V251009R7: SOF 타임스탬프는 모니터/계측 공용으로 취득
+  uint32_t sof_now_us = micros();                                     // V251010R9: 타이머 보정을 위해 SOF 타임스탬프 항상 확보
 #if _USE_USB_MONITOR
   usbHidMonitorSof(sof_now_us);                                       // V251009R7: 모니터 활성 시 타임스탬프 전달
 #endif
 #if _DEF_ENABLE_USB_HID_TIMING_PROBE
   usbHidInstrumentationOnSof(sof_now_us);                             // V251009R7: 계측 활성 시 샘플 윈도우 갱신
 #endif
-#endif
+  usbHidTimerSyncOnSof(pdev, sof_now_us);                             // V251010R9: SOF 동기화 상태 갱신
 
   if (qbufferAvailable(&via_report_q) && (millis()-via_report_pre_time) >= via_report_time)
   {
@@ -1417,6 +1508,320 @@ __weak void usbHidSetStatusLed(uint8_t led_bits)
 
 }
 
+static inline int32_t usbHidTimerSyncAbs(int32_t value)
+{
+  return (value < 0) ? -value : value;                               // V251010R9: 부호 없는 절댓값 계산
+}
+
+static void usbHidTimerSyncForceDefault(bool count_reset)
+{
+  timer_sync.integral_accum = 0;
+  timer_sync.current_ticks = timer_sync.default_ticks;
+  timer_sync.last_sof_us = 0U;
+  timer_sync.last_delay_us = 0U;
+  timer_sync.last_local_delay_us = 0U;                                      // V251011R1: 로컬 지연도 초기화
+  timer_sync.last_residual_us = 0U;                                         // V251011R1: 잔차 초기화
+  timer_sync.last_send_us = 0U;                                             // V251011R1: 대기 중인 전송 타임스탬프 제거
+  timer_sync.last_complete_us = 0U;                                         // V251011R1: 직전 완료 시각도 리셋
+  timer_sync.last_error_us = 0;
+  timer_sync.ready = false;
+  timer_sync.pending_timer_report = false;                                  // V251011R1: 응답 대기 상태 해제
+  LL_TIM_OC_SetCompareCH1(TIM2, timer_sync.current_ticks);           // V251010R9: 다음 프레임부터 기본 지연 적용
+  if (count_reset)
+  {
+    timer_sync.reset_count++;
+  }
+}
+
+static void usbHidTimerSyncInit(void)
+{
+  timer_sync.default_ticks = USB_HID_TIMER_SYNC_TARGET_TICKS;        // V251010R9: 기본 타겟 지연 120us 고정
+  timer_sync.current_ticks = USB_HID_TIMER_SYNC_TARGET_TICKS;
+  timer_sync.min_ticks = USB_HID_TIMER_SYNC_HS_MIN_TICKS;
+  timer_sync.max_ticks = USB_HID_TIMER_SYNC_HS_MAX_TICKS;
+  timer_sync.guard_us = USB_HID_TIMER_SYNC_HS_GUARD_US;
+  timer_sync.kp_shift = USB_HID_TIMER_SYNC_HS_KP_SHIFT;
+  timer_sync.integral_shift = USB_HID_TIMER_SYNC_HS_INTEGRAL_SHIFT;
+  timer_sync.integral_limit = USB_HID_TIMER_SYNC_HS_INTEGRAL_LIMIT;
+  timer_sync.expected_interval_us = 0U;
+  timer_sync.target_residual_us = USB_HID_TIMER_SYNC_HS_INTERVAL_US - USB_HID_TIMER_SYNC_TARGET_TICKS; // V251011R1: 기본 잔차 5us
+  timer_sync.speed = USB_HID_TIMER_SYNC_SPEED_NONE;
+  timer_sync.last_sof_us = 0U;
+  timer_sync.last_delay_us = 0U;
+  timer_sync.last_local_delay_us = 0U;                                // V251011R1: 로컬 지연 초기화
+  timer_sync.last_residual_us = 0U;                                   // V251011R1: 잔차 초기화
+  timer_sync.last_send_us = 0U;                                       // V251011R1: 전송 타임스탬프 초기화
+  timer_sync.last_complete_us = 0U;                                   // V251011R1: 완료 타임스탬프 초기화
+  timer_sync.last_error_us = 0;
+  timer_sync.integral_accum = 0;
+  timer_sync.update_count = 0U;
+  timer_sync.guard_fault_count = 0U;
+  timer_sync.reset_count = 0U;
+  timer_sync.ready = false;
+  timer_sync.pending_timer_report = false;                            // V251011R1: 응답 대기 상태 초기화
+  LL_TIM_OC_SetCompareCH1(TIM2, timer_sync.current_ticks);           // V251010R9: 초기 CCR1 설정
+}
+
+static void usbHidTimerSyncApplySpeed(usb_hid_timer_sync_speed_t speed)
+{
+  timer_sync.speed = speed;
+
+  if (speed == USB_HID_TIMER_SYNC_SPEED_HS)
+  {
+    timer_sync.min_ticks = USB_HID_TIMER_SYNC_HS_MIN_TICKS;
+    timer_sync.max_ticks = USB_HID_TIMER_SYNC_HS_MAX_TICKS;
+    timer_sync.guard_us = USB_HID_TIMER_SYNC_HS_GUARD_US;
+    timer_sync.kp_shift = USB_HID_TIMER_SYNC_HS_KP_SHIFT;
+    timer_sync.integral_shift = USB_HID_TIMER_SYNC_HS_INTEGRAL_SHIFT;
+    timer_sync.integral_limit = USB_HID_TIMER_SYNC_HS_INTEGRAL_LIMIT;
+    timer_sync.expected_interval_us = USB_HID_TIMER_SYNC_HS_INTERVAL_US;
+    timer_sync.target_residual_us = USB_HID_TIMER_SYNC_HS_INTERVAL_US - timer_sync.default_ticks; // V251011R1: HS 잔차 목표 5us
+  }
+  else if (speed == USB_HID_TIMER_SYNC_SPEED_FS)
+  {
+    timer_sync.min_ticks = USB_HID_TIMER_SYNC_FS_MIN_TICKS;
+    timer_sync.max_ticks = USB_HID_TIMER_SYNC_FS_MAX_TICKS;
+    timer_sync.guard_us = USB_HID_TIMER_SYNC_FS_GUARD_US;
+    timer_sync.kp_shift = USB_HID_TIMER_SYNC_FS_KP_SHIFT;
+    timer_sync.integral_shift = USB_HID_TIMER_SYNC_FS_INTEGRAL_SHIFT;
+    timer_sync.integral_limit = USB_HID_TIMER_SYNC_FS_INTEGRAL_LIMIT;
+    timer_sync.expected_interval_us = USB_HID_TIMER_SYNC_FS_INTERVAL_US;
+    timer_sync.target_residual_us = USB_HID_TIMER_SYNC_FS_INTERVAL_US - timer_sync.default_ticks; // V251011R1: FS 잔차 목표 880us
+  }
+  else
+  {
+    timer_sync.min_ticks = USB_HID_TIMER_SYNC_HS_MIN_TICKS;
+    timer_sync.max_ticks = USB_HID_TIMER_SYNC_HS_MAX_TICKS;
+    timer_sync.guard_us = USB_HID_TIMER_SYNC_HS_GUARD_US;
+    timer_sync.kp_shift = USB_HID_TIMER_SYNC_HS_KP_SHIFT;
+    timer_sync.integral_shift = USB_HID_TIMER_SYNC_HS_INTEGRAL_SHIFT;
+    timer_sync.integral_limit = USB_HID_TIMER_SYNC_HS_INTEGRAL_LIMIT;
+    timer_sync.expected_interval_us = 0U;
+    timer_sync.target_residual_us = USB_HID_TIMER_SYNC_HS_INTERVAL_US - timer_sync.default_ticks; // V251011R1: 비활성 시 기본 잔차 유지
+  }
+
+  usbHidTimerSyncForceDefault(true);                                 // V251010R9: 모드 변경 시 보정 상태 초기화
+}
+
+static void usbHidTimerSyncOnSof(USBD_HandleTypeDef *pdev, uint32_t now_us)
+{
+  usb_hid_timer_sync_speed_t next_speed = USB_HID_TIMER_SYNC_SPEED_NONE;
+
+  if (pdev->dev_state == USBD_STATE_CONFIGURED)
+  {
+    if (pdev->dev_speed == USBD_SPEED_HIGH)
+    {
+      next_speed = USB_HID_TIMER_SYNC_SPEED_HS;
+    }
+    else if (pdev->dev_speed == USBD_SPEED_FULL)
+    {
+      next_speed = USB_HID_TIMER_SYNC_SPEED_FS;
+    }
+  }
+
+  if (next_speed != timer_sync.speed)
+  {
+    usbHidTimerSyncApplySpeed(next_speed);                            // V251010R9: 속도 변경 시 파라미터 재설정
+  }
+
+  timer_sync.last_sof_us = now_us;
+  timer_sync.ready = (next_speed != USB_HID_TIMER_SYNC_SPEED_NONE);   // V251010R9: SOF 캡처 후 보정 활성화
+}
+
+static void usbHidTimerSyncOnPulse(uint32_t pulse_us)
+{
+  uint32_t delay_us = 0U;
+
+  if (timer_sync.ready && timer_sync.last_sof_us != 0U)
+  {
+    delay_us = pulse_us - timer_sync.last_sof_us;                     // V251010R9: SOF 대비 로컬 타이머 지연 측정
+    timer_sync.last_local_delay_us = delay_us;                        // V251011R1: 로컬 지연 기록
+  }
+  else
+  {
+    timer_sync.last_local_delay_us = 0U;                              // V251011R1: 준비되지 않은 상태에서는 0으로 유지
+  }
+
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+  usbHidInstrumentationOnTimerPulse(delay_us, timer_sync.current_ticks);
+#else
+  (void)delay_us;
+#endif
+}
+
+static void usbHidTimerSyncOnTimerReport(uint32_t send_us)
+{
+  if (!timer_sync.ready)
+  {
+    timer_sync.pending_timer_report = false;                          // V251011R1: SOF 미동기 상태에서는 대기 상태 제거
+    return;
+  }
+
+  timer_sync.last_send_us = send_us;                                  // V251011R1: 전송 타임스탬프 보관
+  timer_sync.pending_timer_report = true;                             // V251011R1: 다음 DataIn에서 잔차 계산 예정
+}
+
+static void usbHidTimerSyncOnDataIn(uint32_t complete_us)
+{
+  timer_sync.last_complete_us = complete_us;                          // V251011R1: DataIn 완료 시각 기록
+
+  if (!timer_sync.ready || timer_sync.expected_interval_us == 0U)
+  {
+    timer_sync.pending_timer_report = false;                          // V251011R1: 동기화 미준비 상태에서는 잔차 업데이트 없음
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+    usbHidInstrumentationOnTimerResidual(0U, timer_sync.last_delay_us); // V251011R1: 계측에 기본값 전달
+#endif
+    return;
+  }
+
+  if (!timer_sync.pending_timer_report)
+  {
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+    usbHidInstrumentationOnTimerResidual(0U, timer_sync.last_delay_us); // V251011R1: 타이머 경로가 아닌 완료는 보고만 유지
+#endif
+    return;
+  }
+
+  timer_sync.pending_timer_report = false;
+
+  uint32_t interval_us = timer_sync.expected_interval_us;
+  uint32_t residual_us = complete_us - timer_sync.last_send_us;       // V251011R1: 전송→호스트 폴링 지연 측정
+
+  if (interval_us == 0U)
+  {
+    timer_sync.last_residual_us = 0U;
+    timer_sync.last_delay_us = timer_sync.default_ticks;
+    timer_sync.last_error_us = 0;
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+    usbHidInstrumentationOnTimerResidual(0U, timer_sync.last_delay_us);
+#endif
+    return;
+  }
+
+  if (residual_us >= (interval_us * 4U))                                // V251011R1: 비정상적으로 큰 잔차는 무시
+  {
+    timer_sync.last_residual_us = 0U;
+    timer_sync.last_delay_us = timer_sync.default_ticks;
+    timer_sync.last_error_us = 0;
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+    usbHidInstrumentationOnTimerResidual(0U, timer_sync.last_delay_us);
+#endif
+    return;
+  }
+
+  residual_us %= interval_us;                                          // V251011R1: 잔차 범위를 한 프레임 이내로 정규화
+  timer_sync.last_residual_us = residual_us;
+
+  uint32_t actual_delay_us = interval_us - residual_us;                // V251011R1: 호스트 기준 타이머 지연
+  if (actual_delay_us >= interval_us)
+  {
+    actual_delay_us = 0U;                                             // V251011R1: wrap 보정
+  }
+  timer_sync.last_delay_us = actual_delay_us;
+
+  int32_t target_residual = (int32_t)timer_sync.target_residual_us;
+  int32_t error_us = (int32_t)residual_us - target_residual;           // V251011R1: 잔차 편차 계산
+  int32_t half_interval = (int32_t)interval_us / 2;
+
+  if (error_us > half_interval)
+  {
+    error_us -= (int32_t)interval_us;                                  // V251011R1: 0/interval 경계에서 최소 오차로 환산
+  }
+  else if (error_us < -half_interval)
+  {
+    error_us += (int32_t)interval_us;
+  }
+
+  timer_sync.last_error_us = error_us;
+
+  if ((uint32_t)usbHidTimerSyncAbs(error_us) > (uint32_t)timer_sync.guard_us)
+  {
+    timer_sync.guard_fault_count++;                                   // V251011R1: 잔차가 허용 범위를 벗어나면 리셋
+    usbHidTimerSyncForceDefault(true);
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+    usbHidInstrumentationOnTimerResidual(residual_us, actual_delay_us);
+#endif
+    return;
+  }
+
+  timer_sync.integral_accum += error_us;                               // V251011R1: 호스트 잔차 기반 적분 업데이트
+  if (timer_sync.integral_accum > timer_sync.integral_limit)
+  {
+    timer_sync.integral_accum = timer_sync.integral_limit;
+  }
+  else if (timer_sync.integral_accum < -timer_sync.integral_limit)
+  {
+    timer_sync.integral_accum = -timer_sync.integral_limit;
+  }
+
+  int32_t proportional_term = error_us >> timer_sync.kp_shift;
+  int32_t integral_term = timer_sync.integral_accum >> timer_sync.integral_shift;
+  int32_t target_ticks = (int32_t)timer_sync.default_ticks + proportional_term + integral_term;
+
+  if (target_ticks > (int32_t)timer_sync.current_ticks + 1)
+  {
+    target_ticks = (int32_t)timer_sync.current_ticks + 1;              // V251011R1: ±1틱 제한으로 노이즈 억제
+  }
+  else if (target_ticks < (int32_t)timer_sync.current_ticks - 1)
+  {
+    target_ticks = (int32_t)timer_sync.current_ticks - 1;
+  }
+
+  if (target_ticks < (int32_t)timer_sync.min_ticks)
+  {
+    target_ticks = (int32_t)timer_sync.min_ticks;
+  }
+  else if (target_ticks > (int32_t)timer_sync.max_ticks)
+  {
+    target_ticks = (int32_t)timer_sync.max_ticks;
+  }
+
+  timer_sync.current_ticks = (uint16_t)target_ticks;
+  LL_TIM_OC_SetCompareCH1(TIM2, timer_sync.current_ticks);             // V251011R1: 다음 펄스 지연 갱신
+  timer_sync.update_count++;
+
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+  usbHidInstrumentationOnTimerResidual(residual_us, actual_delay_us);  // V251011R1: 계측에 잔차와 실제 지연 보고
+#endif
+}
+
+bool usbHidTimerSyncGetState(usb_hid_timer_sync_state_t *p_state)
+{
+  if (p_state == NULL)
+  {
+    return false;
+  }
+
+  usb_hid_timer_sync_state_t state;
+
+  __disable_irq();                                                   // V251010R9: ISR 업데이트와 경합을 피하기 위해 보호
+  state.current_ticks = timer_sync.current_ticks;
+  state.default_ticks = timer_sync.default_ticks;
+  state.min_ticks = timer_sync.min_ticks;
+  state.max_ticks = timer_sync.max_ticks;
+  state.guard_us = timer_sync.guard_us;
+  state.last_delay_us = timer_sync.last_delay_us;
+  state.last_local_delay_us = timer_sync.last_local_delay_us;         // V251011R1: 로컬 지연 측정 전달
+  state.last_residual_us = timer_sync.last_residual_us;               // V251011R1: 호스트 잔차 전달
+  state.last_error_us = timer_sync.last_error_us;
+  state.integral_accum = timer_sync.integral_accum;
+  state.integral_limit = timer_sync.integral_limit;
+  state.expected_interval_us = timer_sync.expected_interval_us;
+  state.target_delay_us = timer_sync.default_ticks;
+  state.target_residual_us = timer_sync.target_residual_us;           // V251011R1: 잔차 목표 보고
+  state.update_count = timer_sync.update_count;
+  state.guard_fault_count = timer_sync.guard_fault_count;
+  state.reset_count = timer_sync.reset_count;
+  state.kp_shift = timer_sync.kp_shift;
+  state.integral_shift = timer_sync.integral_shift;
+  state.speed = (uint8_t)timer_sync.speed;
+  state.ready = timer_sync.ready;
+  __enable_irq();
+
+  *p_state = state;
+  return (timer_sync.speed != USB_HID_TIMER_SYNC_SPEED_NONE);
+}
+
 void usbHidInitTimer(void)
 {
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
@@ -1465,6 +1870,7 @@ void usbHidInitTimer(void)
   }
 
   HAL_TIM_OC_Start_IT(&htim2, TIM_CHANNEL_1);
+  usbHidTimerSyncInit();                                             // V251010R9: TIM2 비교기 보정 상태 초기화
 }
 
 void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* tim_baseHandle)
@@ -1501,9 +1907,13 @@ void TIM2_IRQHandler(void)
 
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 {
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-  usbHidInstrumentationOnTimerPulse();                                 // V251009R7: 계측 타이머 후크를 조건부 실행
-#endif
+  if (htim->Instance != TIM2)
+  {
+    return;                                                            // V251010R9: HID 백업 타이머 외에는 처리 불필요
+  }
+
+  uint32_t pulse_now_us = micros();                                    // V251010R9: TIM2 펄스 시각을 캡처
+  usbHidTimerSyncOnPulse(pulse_now_us);                                // V251010R9: SOF 기반 PI 보정 수행
   if (qbufferAvailable(&report_q) > 0)
   {
     if (p_hhid->state == USBD_HID_IDLE)
@@ -1514,6 +1924,7 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 
       qbufferRead(&report_q, (uint8_t *)hid_buf, 1);
       USBD_HID_SendReport((uint8_t *)hid_buf, HID_KEYBOARD_REPORT_SIZE);
+      usbHidTimerSyncOnTimerReport(pulse_now_us);                     // V251011R1: 타이머 경로 전송 시각을 보정기로 전달
 #if _DEF_ENABLE_USB_HID_TIMING_PROBE
       usbHidInstrumentationOnReportDequeued(queued_reports);           // V251009R7: 큐 처리 계측을 조건부 실행
 #endif
