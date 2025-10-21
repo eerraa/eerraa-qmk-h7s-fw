@@ -57,6 +57,7 @@ static uint32_t poll_residual_max = 0;                      // V251010R9: 폴링
 static volatile uint32_t timer_pulse_total = 0;              // V251010R8: TIM2 펄스 누적 카운트
 static volatile uint32_t timer_sof_offset_us = 0;            // V251010R8: TIM2 펄스 시점의 SOF 기준 지연(us)
 static volatile uint16_t timer_compare_ticks = 120;          // V251010R9: 직전 펄스에 적용된 CCR1 값
+static volatile uint32_t timer_residual_us = 0;              // V251011R1: 타이머→호스트 폴링 잔차(us)
 static volatile uint32_t sof_total = 0;                      // V251010R8: SOF 누적 카운트
 
 static uint32_t usbHidExpectedPollIntervalUs(void);
@@ -132,6 +133,12 @@ void usbHidInstrumentationOnTimerPulse(uint32_t delay_us, uint16_t compare_ticks
   timer_pulse_total++;                                           // V251010R8: TIM2 펄스 누적
   timer_sof_offset_us = delay_us;                                // V251010R9: 본체에서 전달한 지연(us)을 그대로 기록
   timer_compare_ticks = compare_ticks;                           // V251010R9: 적용된 CCR1 틱 값을 계측에서도 확인
+}
+
+void usbHidInstrumentationOnTimerResidual(uint32_t residual_us, uint32_t delay_us)
+{
+  timer_residual_us = residual_us;                               // V251011R1: 호스트 잔차 기록
+  (void)delay_us;                                                // V251011R1: 호스트 지연은 상태 스냅샷에서 조회
 }
 
 void usbHidInstrumentationOnDataIn(void)
@@ -364,7 +371,7 @@ void usbHidInstrumentationHandleCli(cli_args_t *args)
         cliPrintf("  큐 잔량       : 최대 %lu / 최근 %lu\n",
                   (unsigned long)rate_queue_depth_max,
                   (unsigned long)rate_queue_depth_snapshot);
-        cliPrintf("  SOF/타이머    : %lu / %lu (기대 %lu, Δ %+ld / %+ld, SOF %4lu us, TIM 오프셋 %4lu us)\n",
+        cliPrintf("  SOF/타이머    : %lu / %lu (기대 %lu, Δ %+ld / %+ld, SOF %4lu us, 로컬 %4lu us)\n",
                   (unsigned long)sof_delta,
                   (unsigned long)timer_delta,
                   (unsigned long)expected_sof,
@@ -387,6 +394,11 @@ void usbHidInstrumentationHandleCli(cli_args_t *args)
                   (unsigned int)sync_state.max_ticks,
                   (unsigned int)sync_state.guard_us,
                   (unsigned long)sync_state.expected_interval_us);
+        cliPrintf("  타이머 위상   : 로컬 %3lu us / 호스트 %3lu us / 잔차 %3lu us (목표 잔차 %3lu us)\n",
+                  (unsigned long)timer_sof_offset_us,
+                  (unsigned long)sync_state.last_delay_us,
+                  (unsigned long)timer_residual_us,
+                  (unsigned long)sync_state.target_residual_us);
         cliPrintf("  보정 통계     : 오차 %+ld us / 적분 %+ld (틱 %+ld), 업데이트 %lu, 리셋 %lu, 가드 %lu, 준비 %s\n",
                   (long)sync_state.last_error_us,
                   (long)sync_state.integral_accum,

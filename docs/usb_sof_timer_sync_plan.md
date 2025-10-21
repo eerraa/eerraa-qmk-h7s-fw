@@ -71,3 +71,9 @@
 - **계측 출력 확장**: `usbhid rate` CLI에 CCR, 오차, 적분 누산, 리셋/가드 카운트를 노출해 튜닝 및 검증 시 필요한 통계를 한 번에 확인할 수 있게 했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L92-L129】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L252-L279】
 - **폴링 잔차 계측**: `usbhid rate` 출력이 송신 시각과 호스트 폴링 위상 차이로 누적 증가하는 문제를 해결하기 위해 IN 완료 간격을 기대 폴링 주기 기준으로 정규화한 잔차 통계를 추가했습니다. 전송 지연과 별도로 폴링 잔차가 보고돼 실제 지연 누적 여부를 즉시 판별할 수 있습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L32-L44】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L88-L120】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L319-L370】
 - **상태 조회 API**: `usbHidTimerSyncGetState()`를 통해 ISR 내부 상태를 안전하게 스냅샷 하도록 구현해, CLI와 향후 모니터링 기능이 동일 데이터를 공유합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_internal.h†L11-L33】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1634-L1661】
+
+## 10. 재평가 및 V251011R1 개선
+- **오차 누적 원인 재분석**: 사용자 로그에서는 `전송 지연`이 30 µs대에서 120 µs 직전까지 선형 상승 후 0에 가깝게 떨어지는 톱니파 패턴이 반복되었습니다. 이는 TIM2와 `micros()`가 동일 내부 오실레이터에 종속돼 있어 PI 루프가 실제 호스트 위상 오차를 감지하지 못한 채, 로컬 기준 120 µs만 유지한 결과입니다. SOF 대비 로컬 지연은 항상 120 µs로 기록되지만, 호스트 IN 폴링과의 위상은 그대로 표류했습니다.
+- **호스트 잔차 기반 제어**: V251011R1에서는 타이머 트리거 직후 `USBD_HID_DataIn` 완료까지 대기한 시간을 잔차로 정의해 오차 신호로 사용합니다. 잔차가 목표(HS 5 µs, FS 880 µs)에서 벗어나면 wrap을 고려한 최소 오차로 환산해 PI 루프에 공급하고, ±1틱 제한 및 가드 로직은 유지하되 잔차 기반으로 동작하도록 재구성했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1550-L1682】
+- **상태/계측 확장**: 타이머 상태 구조체와 CLI 출력에 로컬 지연, 호스트 지연, 잔차, 목표 잔차를 추가해 교정 경향을 즉시 확인할 수 있습니다. `SOF/타이머` 행은 로컬 지연을, `타이머 위상` 행은 호스트 지연과 잔차를 분리해 보여 주도록 갱신했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_internal.h†L13-L24】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L33-L44】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L276-L300】
+- **버전 관리**: 펌웨어 버전 문자열을 `V251011R1`로 갱신하고, 보정 초기화 경로가 잔차 상태를 함께 리셋하도록 정비해 비정상 상황 발생 시 빠르게 기본 상태로 복귀하도록 했습니다.【F:src/hw/hw_def.h†L9】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1500-L1520】

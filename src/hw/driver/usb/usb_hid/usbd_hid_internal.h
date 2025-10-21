@@ -15,12 +15,15 @@ typedef struct
   uint16_t min_ticks;           // V251010R9: 허용되는 최소 타겟 틱
   uint16_t max_ticks;           // V251010R9: 허용되는 최대 타겟 틱
   uint16_t guard_us;            // V251010R9: 보정 허용 오차(us)
-  uint32_t last_delay_us;       // V251010R9: 직전 펄스 지연 측정(us)
+  uint32_t last_delay_us;       // V251010R9: 직전 호스트 기준 타이머 지연(us)
+  uint32_t last_local_delay_us; // V251011R1: SOF 대비 로컬 타이머 지연(us)
+  uint32_t last_residual_us;    // V251011R1: 타이머 트리거 이후 호스트 폴링까지 잔차(us)
   int32_t  last_error_us;       // V251010R9: 직전 오차(us)
   int32_t  integral_accum;      // V251010R9: 적분 누산 값(오차 합)
   int32_t  integral_limit;      // V251010R9: 적분 포화 한계
   uint32_t expected_interval_us;// V251010R9: 현재 속도에서 기대되는 SOF 간격(us)
   uint32_t target_delay_us;     // V251010R9: 목표 지연(us)
+  uint32_t target_residual_us;  // V251011R1: 기대하는 호스트 잔차(us)
   uint32_t update_count;        // V251010R9: 성공적인 보정 적용 횟수
   uint32_t guard_fault_count;   // V251010R9: 가드 초과로 리셋된 횟수
   uint32_t reset_count;         // V251010R9: 모드 변경 포함 전체 초기화 횟수

@@ -13,6 +13,7 @@
 uint32_t usbHidInstrumentationNow(void);
 void     usbHidInstrumentationOnSof(uint32_t now_us);
 void     usbHidInstrumentationOnTimerPulse(uint32_t delay_us, uint16_t compare_ticks);
+void     usbHidInstrumentationOnTimerResidual(uint32_t residual_us, uint32_t delay_us);
 void     usbHidInstrumentationOnDataIn(void);
 void     usbHidInstrumentationOnReportDequeued(uint32_t queued_reports);
 void     usbHidInstrumentationOnImmediateSendSuccess(uint32_t queued_reports);
@@ -41,6 +42,12 @@ static inline void usbHidInstrumentationOnTimerPulse(uint32_t delay_us, uint16_t
 {
   (void)delay_us;    // V251010R9: 릴리스 빌드에서 타이머 보정 정보 전달을 무효화
   (void)compare_ticks;
+}
+
+static inline void usbHidInstrumentationOnTimerResidual(uint32_t residual_us, uint32_t delay_us)
+{
+  (void)residual_us; // V251011R1: 릴리스 빌드에서는 잔차 계측 미사용
+  (void)delay_us;
 }
 
 static inline void usbHidInstrumentationOnDataIn(void)
