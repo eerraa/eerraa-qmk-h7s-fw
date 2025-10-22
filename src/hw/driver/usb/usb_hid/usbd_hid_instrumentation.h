@@ -17,7 +17,7 @@ void     usbHidInstrumentationOnTimerResidual(uint32_t residual_us, uint32_t del
 void     usbHidInstrumentationOnDataIn(void);
 void     usbHidInstrumentationOnReportDequeued(uint32_t queued_reports);
 void     usbHidInstrumentationOnImmediateSendSuccess(uint32_t queued_reports);
-void     usbHidInstrumentationMarkReportStart(void);
+void     usbHidInstrumentationMarkReportStart(uint32_t start_us);  // V251011R2: 즉시 전송 타임스탬프를 공유
 void     usbHidMeasureRateTime(void);
 
 #else
@@ -65,9 +65,9 @@ static inline void usbHidInstrumentationOnImmediateSendSuccess(uint32_t queued_r
   (void)queued_reports;  // V251010R1: 릴리스 빌드에서 즉시 전송 계측 무효화
 }
 
-static inline void usbHidInstrumentationMarkReportStart(void)
+static inline void usbHidInstrumentationMarkReportStart(uint32_t start_us)
 {
-  // V251010R1: 릴리스 빌드에서 시작 타임스탬프 제거
+  (void)start_us;  // V251011R2: 릴리스 빌드에서는 타임스탬프 전달 불필요
 }
 
 static inline void usbHidMeasureRateTime(void)

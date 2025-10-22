@@ -158,13 +158,13 @@ void usbHidInstrumentationOnImmediateSendSuccess(uint32_t queued_reports)
 {
   key_time_req = true;
   rate_time_req = true;
-  rate_time_pre = micros();
+  rate_time_pre = key_time_pre;                                    // V251011R2: 시작 타이밍과 동일한 기준 사용
   rate_queue_depth_snapshot = queued_reports;
 }
 
-void usbHidInstrumentationMarkReportStart(void)
+void usbHidInstrumentationMarkReportStart(uint32_t start_us)
 {
-  key_time_pre = micros();
+  key_time_pre = start_us;                                         // V251011R2: 호출 측 타임스탬프를 보존
 }
 
 void usbHidMeasureRateTime(void)

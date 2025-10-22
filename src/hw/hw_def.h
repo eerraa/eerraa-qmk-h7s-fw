@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251011R1"  // V251011R1: 타이머 보정 오차 원인 재분석 및 호스트 잔차 기반 동기화
+#define _DEF_FIRMWATRE_VERSION      "V251011R2"  // V251011R2: 즉시 전송 경로 잔차 보정 연동 및 계측 정합성 확보
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

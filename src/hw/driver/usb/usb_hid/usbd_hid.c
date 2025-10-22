@@ -1235,10 +1235,10 @@ bool usbHidSendReport(uint8_t *p_data, uint16_t length)
 
   if (!USBD_is_suspended())
   {
+    uint32_t send_us = micros();                                       // V251011R2: 즉시 전송 타임스탬프 확보
 #if _DEF_ENABLE_USB_HID_TIMING_PROBE
-    usbHidInstrumentationMarkReportStart();                            // V251009R7: 계측 시에만 리포트 시작 타임스탬프 기록
+    usbHidInstrumentationMarkReportStart(send_us);                     // V251011R2: 계측과 보정이 동일 기준을 사용하도록 전달
 #endif
-
     memcpy(hid_buf, p_data, length);
     if (USBD_HID_SendReport((uint8_t *)hid_buf, HID_KEYBOARD_REPORT_SIZE))
     {
@@ -1246,6 +1246,7 @@ bool usbHidSendReport(uint8_t *p_data, uint16_t length)
       uint32_t queued_reports = qbufferAvailable(&report_q);           // V251009R7: 큐 깊이 스냅샷도 계측 활성 시에만 계산
       usbHidInstrumentationOnImmediateSendSuccess(queued_reports);     // V251009R7: 즉시 전송 성공 계측 조건부 실행
 #endif
+      usbHidTimerSyncOnTimerReport(send_us);                           // V251011R2: 즉시 전송도 잔차 기반 보정에 포함
     }
     else
     {
