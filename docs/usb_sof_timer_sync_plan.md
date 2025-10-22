@@ -90,3 +90,9 @@
 - **UART 출력 딜레이 검토**: CLI 출력은 `cliPrintf()`→`uartWrite()`→`HAL_UART_Transmit()` 경로를 통해 송신되며, 인터럽트를 비활성화하지 않으므로 USB SOF·TIM2 인터럽트는 즉시 처리됩니다. 따라서 UART 대역폭은 잔차 상승의 직접 원인이 아니고, guard 리셋으로 측정이 반영되지 않은 것이 핵심 문제였습니다.【F:src/common/hw/src/cli.c†L597-L612】【F:src/hw/driver/uart.c†L240-L258】
 - **coarse step 기반 guard 보정**: guard를 초과한 잔차에 대해 적분을 초기화하고 `error_us / guard_us` 비율에 비례한 coarse step(최대 ±4틱)을 즉시 적용해 수렴 속도를 높이도록 `usbHidTimerSyncOnDataIn()`을 수정했습니다. guard 카운트는 유지하지만 `timer_sync.ready`를 해제하지 않아 연속 측정이 끊기지 않습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1709-L1758】
 - **버전 관리**: 펌웨어 버전 문자열을 `V251011R3`로 갱신하고, 문서에도 guard coarse step 도입 배경을 반영했습니다.【F:src/hw/hw_def.h†L5】【F:docs/usb_sof_timer_sync_plan.md†L94-L96】
+
+## 13. 재평가 및 V251011R4 보완
+- **오차 누적 재발 원인**: V251011R3 이후에도 CLI가 2 ms 간격으로 즉시 `usbHidSendReport()`를 호출하는 동안 잔차가 70 µs 이상까지 상승해 guard가 누적되었습니다. 즉시 전송은 타이머 펄스와 무관하게 발화하므로, `usbHidTimerSyncOnDataIn()`이 해당 잔차를 PI 루프에 반영하면 CCR이 최솟값/최댓값으로 치우쳐도 위상이 교정되지 않았습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L333-L358】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1236-L1260】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1672-L1704】
+- **경로 분리 전략**: 전송 경로를 `타이머 스케줄`과 `즉시 전송`으로 구분하는 `usb_hid_timer_sync_report_source_t` 열거형을 추가하고, 즉시 전송은 잔차·지연 통계만 업데이트한 뒤 PI 보정과 guard 누산에서는 제외했습니다. 타이머 경로에서만 적분/비례 제어를 수행하도록 조정해, CLI 테스트처럼 즉시 전송만 반복될 때도 CCR이 기본 120틱 근처에서 안정적으로 유지됩니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L100-L177】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1657-L1719】
+- **상태 초기화 정비**: `usbHidTimerSyncInit()`과 `usbHidTimerSyncForceDefault()`가 새 경로 상태를 함께 초기화하도록 수정해, 속도 전환이나 guard 재진입 시 즉시 전송 잔여 상태가 남지 않도록 했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1513-L1561】
+- **버전 관리**: 펌웨어 버전 문자열을 `V251011R4`로 갱신해 즉시 전송 분리 내역을 명시했습니다.【F:src/hw/hw_def.h†L5】
