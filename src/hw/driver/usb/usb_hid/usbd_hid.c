@@ -1735,10 +1735,41 @@ static void usbHidTimerSyncOnDataIn(uint32_t complete_us)
 
   timer_sync.last_error_us = error_us;
 
-  if ((uint32_t)usbHidTimerSyncAbs(error_us) > (uint32_t)timer_sync.guard_us)
+  uint32_t abs_error_us = (uint32_t)usbHidTimerSyncAbs(error_us);       // V251011R3: guard 판정에 재사용
+
+  if (abs_error_us > (uint32_t)timer_sync.guard_us)
   {
-    timer_sync.guard_fault_count++;                                   // V251011R1: 잔차가 허용 범위를 벗어나면 리셋
-    usbHidTimerSyncForceDefault(true);
+    timer_sync.guard_fault_count++;                                   // V251011R3: guard 초과는 coarse step으로 수렴 가속
+    timer_sync.integral_accum = 0;                                     // V251011R3: 과도한 잔차 발생 시 적분은 초기화
+
+    int32_t coarse_step = (int32_t)(error_us / (int32_t)timer_sync.guard_us);
+    if (coarse_step == 0)
+    {
+      coarse_step = (error_us > 0) ? 1 : -1;                           // V251011R3: guard 대비 작은 초과도 최소 1틱 조정
+    }
+
+    if (coarse_step > 4)
+    {
+      coarse_step = 4;                                                 // V251011R3: 급격한 변동은 ±4틱 이내로 제한
+    }
+    else if (coarse_step < -4)
+    {
+      coarse_step = -4;
+    }
+
+    int32_t coarse_target = (int32_t)timer_sync.current_ticks + coarse_step;
+    if (coarse_target < (int32_t)timer_sync.min_ticks)
+    {
+      coarse_target = (int32_t)timer_sync.min_ticks;
+    }
+    else if (coarse_target > (int32_t)timer_sync.max_ticks)
+    {
+      coarse_target = (int32_t)timer_sync.max_ticks;
+    }
+
+    timer_sync.current_ticks = (uint16_t)coarse_target;
+    LL_TIM_OC_SetCompareCH1(TIM2, timer_sync.current_ticks);           // V251011R3: guard 초과 시에도 즉시 보정값 적용
+    timer_sync.update_count++;
 #if _DEF_ENABLE_USB_HID_TIMING_PROBE
     usbHidInstrumentationOnTimerResidual(residual_us, actual_delay_us);
 #endif

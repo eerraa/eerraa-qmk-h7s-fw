@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251011R2"  // V251011R2: 즉시 전송 경로 잔차 보정 연동 및 계측 정합성 확보
+#define _DEF_FIRMWATRE_VERSION      "V251011R3"  // V251011R3: guard 초과 시 coarse step 보정으로 잔차 수렴 가속
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
