@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251011R4"  // V251011R4: 즉시 전송 분리로 SOF 타이머 보정 안정화
+#define _DEF_FIRMWATRE_VERSION      "V251011R5"  // V251011R5: 복제 타이머 전송으로 잔차 보정 경로 유지
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

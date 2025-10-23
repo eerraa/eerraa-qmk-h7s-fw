@@ -96,3 +96,9 @@
 - **경로 분리 전략**: 전송 경로를 `타이머 스케줄`과 `즉시 전송`으로 구분하는 `usb_hid_timer_sync_report_source_t` 열거형을 추가하고, 즉시 전송은 잔차·지연 통계만 업데이트한 뒤 PI 보정과 guard 누산에서는 제외했습니다. 타이머 경로에서만 적분/비례 제어를 수행하도록 조정해, CLI 테스트처럼 즉시 전송만 반복될 때도 CCR이 기본 120틱 근처에서 안정적으로 유지됩니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L100-L177】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1657-L1719】
 - **상태 초기화 정비**: `usbHidTimerSyncInit()`과 `usbHidTimerSyncForceDefault()`가 새 경로 상태를 함께 초기화하도록 수정해, 속도 전환이나 guard 재진입 시 즉시 전송 잔여 상태가 남지 않도록 했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1513-L1561】
 - **버전 관리**: 펌웨어 버전 문자열을 `V251011R4`로 갱신해 즉시 전송 분리 내역을 명시했습니다.【F:src/hw/hw_def.h†L5】
+
+## 14. 재평가 및 V251011R5 조정
+- **지속된 잔차 누적 원인**: 즉시 전송을 PI 보정에서 제외한 뒤에도 CLI 테스트는 50회 샘플을 모두 `usbHidSendReport()` 즉시 경로로 제출해 타이머 큐가 한 번도 사용되지 않았습니다. `usbHidTimerSyncOnTimerReport()`가 타이머 경로만 카운트하므로 `update_count`가 0에 머물고, `타이머 위상`은 80 µs 이상으로 계속 표류했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1236-L1260】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1645-L1708】 즉시 전송만 반복되면 보정기가 참조할 샘플이 사라지는 구조적 한계가 확인되었습니다.
+- **복제 타이머 전송 도입**: 즉시 전송이 성공하면 동일한 리포트를 `timer_sync.shadow_report_buf`에 저장한 뒤, 다음 TIM2 펄스에서 큐가 비어 있어도 한 차례 추가 전송을 수행하도록 `HAL_TIM_PWM_PulseFinishedCallback()`을 확장했습니다. 이 복제 전송은 타이머 기준으로 발생하므로 `usbHidTimerSyncOnTimerReport()`가 정상 호출되고 잔차 기반 PI 루프가 연속적으로 수렴합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L134-L176】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1248-L1259】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1937-L2034】
+- **계측 일관성 유지**: 복제 전송은 큐를 거치지 않으므로 계측 함수에는 큐 길이 0으로 보고하고, 초기화 경로에서 `shadow_report_pending`을 함께 리셋해 속도 전환이나 guard 복귀 시 잔여 전송이 남지 않도록 했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1529-L1542】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1986-L2004】
+- **버전 관리**: 펌웨어 버전 문자열을 `V251011R5`로 갱신했습니다.【F:src/hw/hw_def.h†L5】

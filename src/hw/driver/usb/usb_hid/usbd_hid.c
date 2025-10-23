@@ -144,6 +144,8 @@ typedef struct
   usb_hid_timer_sync_speed_t   speed;                // V251010R9: 현재 적용 중인 속도
   bool                         ready;                // V251010R9: SOF 타임스탬프 확보 여부
   usb_hid_timer_sync_report_source_t pending_report_source; // V251011R4: 응답 대기 중 전송 경로 구분
+  bool                         shadow_report_pending; // V251011R5: 즉시 전송 후 타이머 추적용 복제 전송 대기
+  uint8_t                      shadow_report_buf[HID_KEYBOARD_REPORT_SIZE]; // V251011R5: 복제 전송 데이터 스냅샷
   uint32_t                     update_count;         // V251010R9: 보정 적용 횟수
   uint32_t                     guard_fault_count;    // V251010R9: 가드 초과로 리셋된 횟수
   uint32_t                     reset_count;          // V251010R9: 초기화 횟수(모드 변경 포함)
@@ -172,6 +174,8 @@ static volatile usb_hid_timer_sync_t timer_sync =
   .speed = USB_HID_TIMER_SYNC_SPEED_NONE,
   .ready = false,
   .pending_report_source = USB_HID_TIMER_SYNC_REPORT_NONE,
+  .shadow_report_pending = false,
+  .shadow_report_buf = {0,},
   .update_count = 0U,
   .guard_fault_count = 0U,
   .reset_count = 0U,
@@ -1254,6 +1258,11 @@ bool usbHidSendReport(uint8_t *p_data, uint16_t length)
       uint32_t queued_reports = qbufferAvailable(&report_q);           // V251009R7: 큐 깊이 스냅샷도 계측 활성 시에만 계산
       usbHidInstrumentationOnImmediateSendSuccess(queued_reports);     // V251009R7: 즉시 전송 성공 계측 조건부 실행
 #endif
+      for (uint32_t i = 0U; i < HID_KEYBOARD_REPORT_SIZE; i++)         // V251011R5: 타이머 보정용 복제 데이터 준비
+      {
+        timer_sync.shadow_report_buf[i] = hid_buf[i];
+      }
+      timer_sync.shadow_report_pending = true;                         // V251011R5: 다음 타이머 펄스에서 복제 전송 예약
       usbHidTimerSyncOnTimerReport(send_us,
                                    USB_HID_TIMER_SYNC_REPORT_IMMEDIATE); // V251011R4: 즉시 전송은 경로 구분만 수행
     }
@@ -1536,6 +1545,7 @@ static void usbHidTimerSyncForceDefault(bool count_reset)
   timer_sync.last_error_us = 0;
   timer_sync.ready = false;
   timer_sync.pending_report_source = USB_HID_TIMER_SYNC_REPORT_NONE;        // V251011R4: 응답 대기 상태 해제
+  timer_sync.shadow_report_pending = false;                                // V251011R5: 복제 전송 대기 리셋
   LL_TIM_OC_SetCompareCH1(TIM2, timer_sync.current_ticks);           // V251010R9: 다음 프레임부터 기본 지연 적용
   if (count_reset)
   {
@@ -1569,6 +1579,7 @@ static void usbHidTimerSyncInit(void)
   timer_sync.reset_count = 0U;
   timer_sync.ready = false;
   timer_sync.pending_report_source = USB_HID_TIMER_SYNC_REPORT_NONE;  // V251011R4: 응답 대기 상태 초기화
+  timer_sync.shadow_report_pending = false;                          // V251011R5: 복제 전송 대기 초기화
   LL_TIM_OC_SetCompareCH1(TIM2, timer_sync.current_ticks);           // V251010R9: 초기 CCR1 설정
 }
 
@@ -1964,6 +1975,7 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 
   uint32_t pulse_now_us = micros();                                    // V251010R9: TIM2 펄스 시각을 캡처
   usbHidTimerSyncOnPulse(pulse_now_us);                                // V251010R9: SOF 기반 PI 보정 수행
+  bool timer_report_sent = false;                                      // V251011R5: 복제 전송과 큐 전송을 구분해 처리
   if (qbufferAvailable(&report_q) > 0)
   {
     if (p_hhid->state == USBD_HID_IDLE)
@@ -1979,6 +1991,29 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 #if _DEF_ENABLE_USB_HID_TIMING_PROBE
       usbHidInstrumentationOnReportDequeued(queued_reports);           // V251009R7: 큐 처리 계측을 조건부 실행
 #endif
+      timer_report_sent = true;                                        // V251011R5: 복제 전송 여부 판정에 사용
+    }
+  }
+
+  if (!timer_report_sent && timer_sync.shadow_report_pending)
+  {
+    if (p_hhid->state == USBD_HID_IDLE)
+    {
+      for (uint32_t i = 0U; i < HID_KEYBOARD_REPORT_SIZE; i++)         // V251011R5: 즉시 전송 복제 데이터를 타이머 경로로 송신
+      {
+        hid_buf[i] = timer_sync.shadow_report_buf[i];
+      }
+
+      if (USBD_HID_SendReport((uint8_t *)hid_buf, HID_KEYBOARD_REPORT_SIZE))
+      {
+        usbHidTimerSyncOnTimerReport(pulse_now_us,
+                                     USB_HID_TIMER_SYNC_REPORT_TIMER); // V251011R5: 복제 전송도 타이머 보정에 활용
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+        usbHidInstrumentationOnReportDequeued(0U);                     // V251011R5: 큐 없는 복제 전송 계측
+#endif
+        timer_sync.shadow_report_pending = false;                      // V251011R5: 복제 전송 완료
+        timer_report_sent = true;
+      }
     }
   }
 
