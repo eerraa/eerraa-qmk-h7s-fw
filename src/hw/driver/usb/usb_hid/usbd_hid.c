@@ -1147,6 +1147,8 @@ static uint8_t USBD_HID_DataIn(USBD_HandleTypeDef *pdev, uint8_t epnum)
   usbHidMeasureRateTime();                                            // V251009R7: 폴링 간격 측정은 계측 옵션에 따라 컴파일
 #endif
 
+  usbHidTimerSyncOnDataIn(micros());                                  // V251011R1: 호스트 잔차 기반 타이머 보정 업데이트
+
   return (uint8_t)USBD_OK;
 }
 
