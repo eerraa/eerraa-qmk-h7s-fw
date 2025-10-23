@@ -53,6 +53,7 @@ static uint32_t poll_residual_max_check = 0;                // V251010R9: 폴링
 static uint32_t poll_residual_avg = 0;                      // V251010R9: 폴링 잔차 평균(us)
 static uint32_t poll_residual_min = 0;                      // V251010R9: 폴링 잔차 최소(us)
 static uint32_t poll_residual_max = 0;                      // V251010R9: 폴링 잔차 최대(us)
+static bool     poll_from_timer = false;                    // V251011R6: DataIn 출처를 타이머 경로로 한정
 
 static volatile uint32_t timer_pulse_total = 0;              // V251010R8: TIM2 펄스 누적 카운트
 static volatile uint32_t timer_sof_offset_us = 0;            // V251010R8: TIM2 펄스 시점의 SOF 기준 지연(us)
@@ -146,6 +147,11 @@ void usbHidInstrumentationOnDataIn(void)
   data_in_cnt++;
 }
 
+void usbHidInstrumentationOnDataInSource(bool from_timer)
+{
+  poll_from_timer = from_timer;                             // V251011R6: 폴링 잔차 계산 시 타이머 전송만 반영
+}
+
 void usbHidInstrumentationOnReportDequeued(uint32_t queued_reports)
 {
   key_time_req = true;
@@ -171,6 +177,9 @@ void usbHidMeasureRateTime(void)
 {
   uint32_t now_us = micros();                                        // V251010R9: IN 완료 시각을 단일 캡처로 공유
   uint32_t expected_interval_us = usbHidExpectedPollIntervalUs();    // V251010R9: 폴링 잔차 계산 기준
+  bool     from_timer = poll_from_timer;                             // V251011R6: 직전 DataIn 경로 스냅샷
+
+  poll_from_timer = false;                                           // V251011R6: 다음 이벤트까지 플래그 초기화
 
   if (rate_time_req)
   {
@@ -234,30 +243,33 @@ void usbHidMeasureRateTime(void)
     }
   }
 
-  if (expected_interval_us > 0U && poll_prev_time != 0U)
+  if (from_timer)
   {
-    uint32_t poll_interval_us = now_us - poll_prev_time;             // V251010R9: 연속 IN 완료 사이의 간격
-    uint32_t poll_residual_us = poll_interval_us % expected_interval_us;
+    if (expected_interval_us > 0U && poll_prev_time != 0U)
+    {
+      uint32_t poll_interval_us = now_us - poll_prev_time;           // V251010R9: 연속 IN 완료 사이의 간격
+      uint32_t poll_residual_us = poll_interval_us % expected_interval_us;
 
-    poll_residual_last = poll_residual_us;
-    poll_residual_sum_check += poll_residual_us;
-    poll_residual_cnt_check++;
-    if (poll_residual_min_check > poll_residual_us)
-    {
-      poll_residual_min_check = poll_residual_us;
+      poll_residual_last = poll_residual_us;
+      poll_residual_sum_check += poll_residual_us;
+      poll_residual_cnt_check++;
+      if (poll_residual_min_check > poll_residual_us)
+      {
+        poll_residual_min_check = poll_residual_us;
+      }
+      if (poll_residual_max_check < poll_residual_us)
+      {
+        poll_residual_max_check = poll_residual_us;
+      }
+      if (key_time_cnt > 0U)
+      {
+        uint32_t last_idx = (key_time_idx + KEY_TIME_LOG_MAX - 1U) % KEY_TIME_LOG_MAX; // V251010R9: 최근 송신 기록과 동일 인덱스에 잔차 저장
+        poll_residual_log[last_idx] = poll_residual_us;
+      }
     }
-    if (poll_residual_max_check < poll_residual_us)
-    {
-      poll_residual_max_check = poll_residual_us;
-    }
-    if (key_time_cnt > 0U)
-    {
-      uint32_t last_idx = (key_time_idx + KEY_TIME_LOG_MAX - 1U) % KEY_TIME_LOG_MAX; // V251010R9: 최근 송신 기록과 동일 인덱스에 잔차 저장
-      poll_residual_log[last_idx] = poll_residual_us;
-    }
+
+    poll_prev_time = now_us;                                         // V251011R6: 타이머 경로 완료 시점만 기준으로 유지
   }
-
-  poll_prev_time = now_us;
 }
 
 #endif  // V251010R1: 계측 비활성 시 인라인 스텁 사용을 위해 함수 정의를 조건부로 제한

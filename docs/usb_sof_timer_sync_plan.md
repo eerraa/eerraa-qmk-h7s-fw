@@ -102,3 +102,8 @@
 - **복제 타이머 전송 도입**: 즉시 전송이 성공하면 동일한 리포트를 `timer_sync.shadow_report_buf`에 저장한 뒤, 다음 TIM2 펄스에서 큐가 비어 있어도 한 차례 추가 전송을 수행하도록 `HAL_TIM_PWM_PulseFinishedCallback()`을 확장했습니다. 이 복제 전송은 타이머 기준으로 발생하므로 `usbHidTimerSyncOnTimerReport()`가 정상 호출되고 잔차 기반 PI 루프가 연속적으로 수렴합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L134-L176】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1248-L1259】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1937-L2034】
 - **계측 일관성 유지**: 복제 전송은 큐를 거치지 않으므로 계측 함수에는 큐 길이 0으로 보고하고, 초기화 경로에서 `shadow_report_pending`을 함께 리셋해 속도 전환이나 guard 복귀 시 잔여 전송이 남지 않도록 했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1529-L1542】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1986-L2004】
 - **버전 관리**: 펌웨어 버전 문자열을 `V251011R5`로 갱신했습니다.【F:src/hw/hw_def.h†L5】
+
+## 15. 재평가 및 V251011R6 조정
+- **잔차 통계 왜곡 원인**: V251011R5 이후에도 `usbhid rate` CLI는 폴링 잔차 평균이 60 µs 이상으로 급상승했다가 0에 근접하는 톱니파를 반복 보고했습니다. 조사 결과 `usbHidTimerSyncOnDataIn()`이 즉시 전송 완료에서도 `last_residual_us`와 계측 훅을 갱신해, 타이머 기반 전송이 아닌 값이 보정 상태와 CLI 출력에 덮어써졌습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1668-L1728】
+- **타이머 전용 계측 분리**: DataIn 처리가 반환한 전송 경로를 `usbHidInstrumentationOnDataInSource()`로 전달하고, `usbHidMeasureRateTime()`이 타이머 전송일 때만 폴링 잔차 히스토리를 갱신하도록 수정했습니다. 동시에 `usbHidTimerSyncOnDataIn()`은 타이머 경로에서만 잔차·오차를 라치해 PI 루프와 CLI가 동일 기준을 바라보도록 정비했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1703-L1755】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L29-L42】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L144-L175】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L217-L256】
+- **버전 관리**: 펌웨어 버전 문자열을 `V251011R6`으로 갱신했습니다.【F:src/hw/hw_def.h†L5】

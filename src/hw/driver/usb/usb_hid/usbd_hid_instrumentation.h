@@ -15,6 +15,7 @@ void     usbHidInstrumentationOnSof(uint32_t now_us);
 void     usbHidInstrumentationOnTimerPulse(uint32_t delay_us, uint16_t compare_ticks);
 void     usbHidInstrumentationOnTimerResidual(uint32_t residual_us, uint32_t delay_us);
 void     usbHidInstrumentationOnDataIn(void);
+void     usbHidInstrumentationOnDataInSource(bool from_timer);        // V251011R6: 폴링 잔차를 타이머 전송 기준으로 구분
 void     usbHidInstrumentationOnReportDequeued(uint32_t queued_reports);
 void     usbHidInstrumentationOnImmediateSendSuccess(uint32_t queued_reports);
 void     usbHidInstrumentationMarkReportStart(uint32_t start_us);  // V251011R2: 즉시 전송 타임스탬프를 공유
@@ -53,6 +54,11 @@ static inline void usbHidInstrumentationOnTimerResidual(uint32_t residual_us, ui
 static inline void usbHidInstrumentationOnDataIn(void)
 {
   // V251010R1: 릴리스 빌드에서 데이터 계측 무효화
+}
+
+static inline void usbHidInstrumentationOnDataInSource(bool from_timer)
+{
+  (void)from_timer;  // V251011R6: 릴리스 빌드에서는 경로 구분 정보 사용 안 함
 }
 
 static inline void usbHidInstrumentationOnReportDequeued(uint32_t queued_reports)

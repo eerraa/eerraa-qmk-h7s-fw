@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251011R5"  // V251011R5: 복제 타이머 전송으로 잔차 보정 경로 유지
+#define _DEF_FIRMWATRE_VERSION      "V251011R6"  // V251011R6: 타이머 전용 잔차 계측 분리 및 통계 정합성 보완
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
