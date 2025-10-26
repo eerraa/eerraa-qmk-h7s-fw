@@ -107,3 +107,9 @@
 - **잔차 통계 왜곡 원인**: V251011R5 이후에도 `usbhid rate` CLI는 폴링 잔차 평균이 60 µs 이상으로 급상승했다가 0에 근접하는 톱니파를 반복 보고했습니다. 조사 결과 `usbHidTimerSyncOnDataIn()`이 즉시 전송 완료에서도 `last_residual_us`와 계측 훅을 갱신해, 타이머 기반 전송이 아닌 값이 보정 상태와 CLI 출력에 덮어써졌습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1668-L1728】
 - **타이머 전용 계측 분리**: DataIn 처리가 반환한 전송 경로를 `usbHidInstrumentationOnDataInSource()`로 전달하고, `usbHidMeasureRateTime()`이 타이머 전송일 때만 폴링 잔차 히스토리를 갱신하도록 수정했습니다. 동시에 `usbHidTimerSyncOnDataIn()`은 타이머 경로에서만 잔차·오차를 라치해 PI 루프와 CLI가 동일 기준을 바라보도록 정비했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1703-L1755】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L29-L42】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L144-L175】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L217-L256】
 - **버전 관리**: 펌웨어 버전 문자열을 `V251011R6`으로 갱신했습니다.【F:src/hw/hw_def.h†L5】
+
+## 16. 재평가 및 V251011R7 조정
+- **잔차 샘플 손실 원인**: V251011R6에서도 디버그 로그에는 `타이머 위상`이 80 µs 이상까지 치솟은 뒤 급격히 0으로 떨어지는 패턴이 남았습니다. `usbHidTimerSyncOnTimerReport()`가 단일 슬롯(`pending_report_source`)에만 경로 정보를 보관한 탓에, 즉시 전송이 연속해서 성공하면 타이머 복제 전송이 완료되기 전에 슬롯이 덮어써져 DataIn이 항상 `IMMEDIATE`로 분류되었습니다. 그 결과 타이머 경로 잔차가 갱신되지 않아 PI 루프가 120틱 부근에서 정체되는 현상이 반복되었습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1760-L1791】
+- **대기열 기반 매핑 도입**: 전송 경로·송신 시각을 함께 저장하는 고정 길이 대기열을 추가해 각 DataIn 완료가 정확한 송신 이벤트와 짝지어지도록 했습니다. `usbHidTimerSyncOnTimerReport()`는 준비되지 않은 경우 대기열을 즉시 비우고, 정상 상황에서는 push만 수행합니다. `usbHidTimerSyncOnDataIn()`은 pop된 항목으로 잔차를 계산해 즉시 전송과 복제 전송이 얽혀도 잔차 샘플이 누락되지 않습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L99-L188】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1543-L1606】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1760-L1806】
+- **상태 초기화 정비**: 대기열은 `usbHidTimerSyncInit()`과 `usbHidTimerSyncForceDefault()`에서 함께 초기화해 속도 전환·guard 복귀 시 잔여 항목이 남지 않도록 했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1513-L1561】
+- **버전 관리**: 펌웨어 버전 문자열을 `V251011R7`로 갱신했습니다.【F:src/hw/hw_def.h†L5】

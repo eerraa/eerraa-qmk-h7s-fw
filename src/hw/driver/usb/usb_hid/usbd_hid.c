@@ -106,6 +106,7 @@ static void usbHidInitTimer(void);
 #define USB_HID_TIMER_SYNC_FS_INTEGRAL_SHIFT   9U    // V251010R9: FS 적분 항 시프트(1/512)
 #define USB_HID_TIMER_SYNC_HS_INTEGRAL_LIMIT   (32 << USB_HID_TIMER_SYNC_HS_INTEGRAL_SHIFT)  // V251010R9: 적분 포화(HS)
 #define USB_HID_TIMER_SYNC_FS_INTEGRAL_LIMIT   (32 << USB_HID_TIMER_SYNC_FS_INTEGRAL_SHIFT)  // V251010R9: 적분 포화(FS)
+#define USB_HID_TIMER_SYNC_PENDING_QUEUE_DEPTH 4U    // V251011R7: 전송 경로 대기열 깊이
 
 typedef enum
 {
@@ -143,7 +144,10 @@ typedef struct
   uint8_t                      integral_shift;       // V251010R9: 적분 항 시프트
   usb_hid_timer_sync_speed_t   speed;                // V251010R9: 현재 적용 중인 속도
   bool                         ready;                // V251010R9: SOF 타임스탬프 확보 여부
-  usb_hid_timer_sync_report_source_t pending_report_source; // V251011R4: 응답 대기 중 전송 경로 구분
+  usb_hid_timer_sync_report_source_t pending_sources[USB_HID_TIMER_SYNC_PENDING_QUEUE_DEPTH]; // V251011R7: 전송 완료 대기열
+  uint32_t                     pending_send_us[USB_HID_TIMER_SYNC_PENDING_QUEUE_DEPTH];      // V251011R7: 대기열별 송신 시각
+  uint8_t                      pending_head;             // V251011R7: 대기열 읽기 인덱스
+  uint8_t                      pending_tail;             // V251011R7: 대기열 쓰기 인덱스
   bool                         shadow_report_pending; // V251011R5: 즉시 전송 후 타이머 추적용 복제 전송 대기
   uint8_t                      shadow_report_buf[HID_KEYBOARD_REPORT_SIZE]; // V251011R5: 복제 전송 데이터 스냅샷
   uint32_t                     update_count;         // V251010R9: 보정 적용 횟수
@@ -173,7 +177,11 @@ static volatile usb_hid_timer_sync_t timer_sync =
   .integral_shift = USB_HID_TIMER_SYNC_HS_INTEGRAL_SHIFT,
   .speed = USB_HID_TIMER_SYNC_SPEED_NONE,
   .ready = false,
-  .pending_report_source = USB_HID_TIMER_SYNC_REPORT_NONE,
+  .pending_sources = { USB_HID_TIMER_SYNC_REPORT_NONE, USB_HID_TIMER_SYNC_REPORT_NONE,
+                       USB_HID_TIMER_SYNC_REPORT_NONE, USB_HID_TIMER_SYNC_REPORT_NONE },
+  .pending_send_us = { 0U, 0U, 0U, 0U },
+  .pending_head = 0U,
+  .pending_tail = 0U,
   .shadow_report_pending = false,
   .shadow_report_buf = {0,},
   .update_count = 0U,
@@ -1536,6 +1544,90 @@ static inline int32_t usbHidTimerSyncAbs(int32_t value)
   return (value < 0) ? -value : value;                               // V251010R9: 부호 없는 절댓값 계산
 }
 
+static void usbHidTimerSyncPendingReset(void)
+{                                                                     // V251011R7: 전송 대기열을 초기화
+  uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+
+  timer_sync.pending_head = 0U;
+  timer_sync.pending_tail = 0U;
+
+  for (uint32_t i = 0U; i < USB_HID_TIMER_SYNC_PENDING_QUEUE_DEPTH; i++)
+  {
+    timer_sync.pending_sources[i] = USB_HID_TIMER_SYNC_REPORT_NONE;
+    timer_sync.pending_send_us[i] = 0U;
+  }
+
+  if (primask == 0U)
+  {
+    __enable_irq();
+  }
+}
+
+static void usbHidTimerSyncPendingPush(usb_hid_timer_sync_report_source_t source,
+                                       uint32_t send_us)
+{                                                                     // V251011R7: 전송 경로/시각을 대기열에 저장
+  uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+
+  uint8_t next_tail = (uint8_t)((timer_sync.pending_tail + 1U) % USB_HID_TIMER_SYNC_PENDING_QUEUE_DEPTH);
+
+  if (next_tail == timer_sync.pending_head)
+  {
+    timer_sync.pending_head = (uint8_t)((timer_sync.pending_head + 1U) % USB_HID_TIMER_SYNC_PENDING_QUEUE_DEPTH);
+  }
+
+  timer_sync.pending_sources[timer_sync.pending_tail] = source;
+  timer_sync.pending_send_us[timer_sync.pending_tail] = send_us;
+  timer_sync.pending_tail = next_tail;
+
+  if (primask == 0U)
+  {
+    __enable_irq();
+  }
+}
+
+static bool usbHidTimerSyncPendingPop(usb_hid_timer_sync_report_source_t *p_source,
+                                      uint32_t *p_send_us)
+{                                                                     // V251011R7: DataIn 시 대응 항목 추출
+  uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+
+  if (timer_sync.pending_head == timer_sync.pending_tail)
+  {
+    if (primask == 0U)
+    {
+      __enable_irq();
+    }
+    return false;
+  }
+
+  uint8_t index = timer_sync.pending_head;
+  timer_sync.pending_head = (uint8_t)((timer_sync.pending_head + 1U) % USB_HID_TIMER_SYNC_PENDING_QUEUE_DEPTH);
+
+  usb_hid_timer_sync_report_source_t source = timer_sync.pending_sources[index];
+  uint32_t send_us = timer_sync.pending_send_us[index];
+  timer_sync.pending_sources[index] = USB_HID_TIMER_SYNC_REPORT_NONE;
+  timer_sync.pending_send_us[index] = 0U;
+
+  if (primask == 0U)
+  {
+    __enable_irq();
+  }
+
+  if (p_source != NULL)
+  {
+    *p_source = source;
+  }
+
+  if (p_send_us != NULL)
+  {
+    *p_send_us = send_us;
+  }
+
+  return true;
+}
+
 static void usbHidTimerSyncForceDefault(bool count_reset)
 {
   timer_sync.integral_accum = 0;
@@ -1548,7 +1640,7 @@ static void usbHidTimerSyncForceDefault(bool count_reset)
   timer_sync.last_complete_us = 0U;                                         // V251011R1: 직전 완료 시각도 리셋
   timer_sync.last_error_us = 0;
   timer_sync.ready = false;
-  timer_sync.pending_report_source = USB_HID_TIMER_SYNC_REPORT_NONE;        // V251011R4: 응답 대기 상태 해제
+  usbHidTimerSyncPendingReset();                                            // V251011R7: 전송 대기열 초기화
   timer_sync.shadow_report_pending = false;                                // V251011R5: 복제 전송 대기 리셋
   LL_TIM_OC_SetCompareCH1(TIM2, timer_sync.current_ticks);           // V251010R9: 다음 프레임부터 기본 지연 적용
   if (count_reset)
@@ -1582,7 +1674,7 @@ static void usbHidTimerSyncInit(void)
   timer_sync.guard_fault_count = 0U;
   timer_sync.reset_count = 0U;
   timer_sync.ready = false;
-  timer_sync.pending_report_source = USB_HID_TIMER_SYNC_REPORT_NONE;  // V251011R4: 응답 대기 상태 초기화
+  usbHidTimerSyncPendingReset();                                      // V251011R7: 전송 대기열 초기화
   timer_sync.shadow_report_pending = false;                          // V251011R5: 복제 전송 대기 초기화
   LL_TIM_OC_SetCompareCH1(TIM2, timer_sync.current_ticks);           // V251010R9: 초기 CCR1 설정
 }
@@ -1679,20 +1771,25 @@ static void usbHidTimerSyncOnTimerReport(uint32_t send_us,
 {
   if (!timer_sync.ready)
   {
-    timer_sync.pending_report_source = USB_HID_TIMER_SYNC_REPORT_NONE; // V251011R4: 동기화 미준비 시 대기 해제
+    usbHidTimerSyncPendingReset();                                     // V251011R7: 준비되지 않은 상태에서는 대기열을 비움
     return;
   }
 
   timer_sync.last_send_us = send_us;                                  // V251011R1: 전송 타임스탬프 보관
-  timer_sync.pending_report_source = source;                          // V251011R4: 다음 DataIn에서 전송 경로 식별
+  usbHidTimerSyncPendingPush(source, send_us);                        // V251011R7: DataIn 시점에 전송 경로/시각 조회
 }
 
 static usb_hid_timer_sync_report_source_t usbHidTimerSyncOnDataIn(uint32_t complete_us)
 {
   timer_sync.last_complete_us = complete_us;                          // V251011R1: DataIn 완료 시각 기록
 
-  usb_hid_timer_sync_report_source_t pending_source = timer_sync.pending_report_source; // V251011R4: 응답 대기 전송 경로 스냅샷
-  timer_sync.pending_report_source = USB_HID_TIMER_SYNC_REPORT_NONE;  // V251011R4: DataIn 처리 후 대기 상태 해제
+  usb_hid_timer_sync_report_source_t pending_source = USB_HID_TIMER_SYNC_REPORT_NONE;
+  uint32_t pending_send_us = 0U;
+
+  if (usbHidTimerSyncPendingPop(&pending_source, &pending_send_us))    // V251011R7: 완료된 전송 매핑
+  {
+    timer_sync.last_send_us = pending_send_us;
+  }
 
   if (!timer_sync.ready || timer_sync.expected_interval_us == 0U)
   {
@@ -1711,7 +1808,7 @@ static usb_hid_timer_sync_report_source_t usbHidTimerSyncOnDataIn(uint32_t compl
   }
 
   uint32_t interval_us = timer_sync.expected_interval_us;
-  uint32_t residual_us = complete_us - timer_sync.last_send_us;       // V251011R1: 전송→호스트 폴링 지연 측정
+  uint32_t residual_us = complete_us - pending_send_us;               // V251011R7: 전송→호스트 폴링 지연 측정
 
   if (interval_us == 0U || residual_us >= (interval_us * 4U))         // V251011R6: 비정상 잔차는 즉시 초기화
   {
