@@ -1,7 +1,7 @@
 # USB SOF 타이머 동기화 개선 구상
 
 ## 1. 현상 요약
-- 백업 전송용 TIM2는 USB OTG HS의 내부 트리거(ITR13)로 매 마이크로프레임마다 리셋되고 120카운트 시점에 비교 일치를 발생시키도록 구성되어 있습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1420-L1468】
+- 백업 전송용 TIM2는 USB OTG HS의 내부 트리거(ITR13)로 매 마이크로프레임마다 리셋되고 120카운트 시점에 비교 일치를 발생시키도록 구성되어 있습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1987-L2035】
 - 계측 경로에서는 TIM2 펄스가 SOF 이후 얼마만큼 지연되어 발생했는지 `micros()` 기반으로 기록하고 있는데, 동일 창 안에서 80→129 µs처럼 점진적으로 증가한 뒤 0 µs 근처로 재설정되는 패턴이 반복됩니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L96-L110】
 - `micros()` 함수는 TIM5를 1 MHz로 설정해 절대 시간을 측정하므로, 위 드리프트는 TIM2 타이머 틱과 USB SOF 기준 사이의 주파수/위상 차이가 누적된 결과입니다.【F:src/hw/driver/micros.c†L13-L42】
 
@@ -12,7 +12,7 @@
 
 ## 3. 제안된 보정 아키텍처
 ### 3.1 타이머 클럭 비율 측정
-- SOF 인터럽트 시점(`USBD_HID_SOF` 루틴)에서 `micros()` 값을 캡처하고, TIM2 비교 인터럽트(`HAL_TIM_PWM_PulseFinishedCallback`)에서 다시 읽어 차이를 계산합니다. 기존 계측 훅이 동일한 정보를 수집하므로, 이를 보정기에서 재사용할 수 있게 공용 헬퍼를 추가합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1502-L1536】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L96-L110】
+- SOF 인터럽트 시점(`USBD_HID_SOF` 루틴)에서 `micros()` 값을 캡처하고, TIM2 비교 인터럽트(`HAL_TIM_PWM_PulseFinishedCallback`)에서 다시 읽어 차이를 계산합니다. 기존 계측 훅이 동일한 정보를 수집하므로, 이를 보정기에서 재사용할 수 있게 공용 헬퍼를 추가합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1191-L1208】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L2070-L2118】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L96-L110】
 - 캡처 주기는 HS 8 kHz, FS 1 kHz로 매우 짧아 누적 평균을 구하더라도 CPU 부담이 작습니다.
 
 ### 3.2 PI 보정 루프
@@ -35,7 +35,7 @@
 - 계측 매크로가 꺼져 있어도 동일한 경로에서 오차를 계산해야 하므로, 보정용 최소 캡처 변수(최근 SOF 타임스탬프 등)는 항상 유지하지만, 히스토그램 등 디버그용 대용량 버퍼는 그대로 조건부 유지됩니다.
 
 ## 6. 구현 단계 요약
-1. `usb_hid.c`에 SOF/비교 인터럽트 공용으로 사용할 보정 상태 구조체와 초기화 코드를 추가합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1420-L1500】
+1. `usb_hid.c`에 SOF/비교 인터럽트 공용으로 사용할 보정 상태 구조체와 초기화 코드를 추가합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L125-L190】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1668-L1697】
 2. SOF 핸들러에서 타임스탬프와 USB 속도 정보를 보정기로 전달하는 헬퍼를 호출하도록 변경합니다.
 3. TIM2 비교 인터럽트에서 실제 지연 측정 후 PI 계산을 수행하고, 결과를 `CCR1`에 반영합니다.
 4. 보정기가 추적 중인 오차, PI 상태, 최근 지연 등을 CLI 통계에 노출해 검증합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L90-L139】
@@ -62,3 +62,59 @@
 - PI 파라미터는 펌웨어 버전별로 문서화하고, 실측된 수렴 속도·오버슈트 자료를 함께 기록해 향후 유지보수 시 참고합니다.
 - ISR 연산이 늘어나는 만큼, USB/타이머 인터럽트 우선순위를 재검토하고, 필요 시 `LL` 기반 레지스터 접근으로 코스트를 최소화합니다. 여기서 "LL"은 STM32Cube HAL보다 얇은 저수준 드라이버 계층(stm32h7xx_ll_*.h)과 직접 레지스터 접근을 활용해 함수 호출 오버헤드를 줄이는 방식을 의미합니다.
 - 보정기가 허용 범위를 벗어나는 경우 기본값(120 µs)으로 되돌리는 페일세이프를 구현해, 측정 신뢰성이 떨어지는 환경에서 과도한 보정을 방지합니다.
+
+## 9. 구현 결과 (V251010R9)
+- **PI 파라미터 확정**: HS 모드는 `Kp=1/16`, `Ki=1/128`(integral shift 7)로 설정해 프레임당 ±1틱만 조정되도록 제한했습니다. FS 모드는 `Kp=1/32`, `Ki=1/512`(integral shift 9)로 보수적으로 동작하며, 적분 포화 한계를 ±32틱 범위로 묶어 장기 드리프트를 흡수합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L95-L109】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1703-L1738】
+- **가드 및 리셋 로직**: HS/FS 각각 ±32 µs, ±80 µs 가드를 두고 초과 시 적분을 초기화한 뒤 기본값(120틱) 기준으로 복귀합니다. V251011R3에서는 guard 초과를 coarse step(최대 ±4틱)으로 처리해 즉시 전송 경로에서도 수렴이 지연되지 않도록 조정했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L100-L107】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1875-L1944】
+- **공용 타임스탬프 경로**: SOF와 TIM2 인터럽트에서 `micros()`를 직접 호출해 계측 비활성 빌드에서도 보정이 항상 동작합니다. 기존 `usbHidInstrumentationNow()` 의존성을 제거해 경로를 단일화했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1193-L1200】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L2077-L2089】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1768-L1787】
+- **LL 기반 CCR 갱신**: HAL 호출 오버헤드를 줄이기 위해 `LL_TIM_OC_SetCompareCH1`로 비교값을 직접 기록하며, PI 루프 결과를 즉시 다음 프레임에 적용합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1661-L1696】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1905-L1944】
+- **계측 출력 확장**: `usbhid rate` CLI에 CCR, 오차, 적분 누산, 리셋/가드 카운트를 노출해 튜닝 및 검증 시 필요한 통계를 한 번에 확인할 수 있게 했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L92-L129】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L252-L279】
+- **폴링 잔차 계측**: `usbhid rate` 출력이 송신 시각과 호스트 폴링 위상 차이로 누적 증가하는 문제를 해결하기 위해 IN 완료 간격을 기대 폴링 주기 기준으로 정규화한 잔차 통계를 추가했습니다. 전송 지연과 별도로 폴링 잔차가 보고돼 실제 지연 누적 여부를 즉시 판별할 수 있습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L32-L44】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L88-L120】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L319-L370】
+- **상태 조회 API**: `usbHidTimerSyncGetState()`를 통해 ISR 내부 상태를 안전하게 스냅샷 하도록 구현해, CLI와 향후 모니터링 기능이 동일 데이터를 공유합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_internal.h†L11-L33】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1950-L1984】
+
+## 10. 재평가 및 V251011R1 개선
+- **오차 누적 원인 재분석**: 사용자 로그에서는 `전송 지연`이 30 µs대에서 120 µs 직전까지 선형 상승 후 0에 가깝게 떨어지는 톱니파 패턴이 반복되었습니다. 이는 TIM2와 `micros()`가 동일 내부 오실레이터에 종속돼 있어 PI 루프가 실제 호스트 위상 오차를 감지하지 못한 채, 로컬 기준 120 µs만 유지한 결과입니다. SOF 대비 로컬 지연은 항상 120 µs로 기록되지만, 호스트 IN 폴링과의 위상은 그대로 표류했습니다.
+- **호스트 잔차 기반 제어**: V251011R1에서는 타이머 트리거 직후 `USBD_HID_DataIn` 완료까지 대기한 시간을 잔차로 정의해 오차 신호로 사용합니다. 잔차가 목표(HS 5 µs, FS 880 µs)에서 벗어나면 wrap을 고려한 최소 오차로 환산해 PI 루프에 공급하고, ±1틱 제한 및 가드 로직은 유지하되 잔차 기반으로 동작하도록 재구성했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1802-L1947】
+- **상태/계측 확장**: 타이머 상태 구조체와 CLI 출력에 로컬 지연, 호스트 지연, 잔차, 목표 잔차를 추가해 교정 경향을 즉시 확인할 수 있습니다. `SOF/타이머` 행은 로컬 지연을, `타이머 위상` 행은 호스트 지연과 잔차를 분리해 보여 주도록 갱신했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_internal.h†L13-L24】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L33-L44】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L276-L300】
+- **버전 관리**: 펌웨어 버전 문자열을 `V251011R1`로 갱신하고, 보정 초기화 경로가 잔차 상태를 함께 리셋하도록 정비해 비정상 상황 발생 시 빠르게 기본 상태로 복귀하도록 했습니다.【F:src/hw/hw_def.h†L9】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1647-L1696】
+
+## 11. 재평가 및 V251011R2 보완
+- **즉시 전송 경로의 누락된 잔차 갱신**: V251011R1 적용 후 `usbhid rate` 로그에서는 타이머 상태가 `준비 ON`이지만 업데이트 카운트와 잔차가 모두 0으로 유지됐습니다. CLI는 2 ms 간격으로 총 50개의 리포트를 `usbHidSendReport()`에 직접 전달하는데,【F:src/hw/driver/usb/usb_hid_instrumentation.c†L333-L352】 해당 경로는 큐를 거치지 않고 즉시 `USBD_HID_SendReport()`를 제출하기 때문에 타이머 콜백(`HAL_TIM_PWM_PulseFinishedCallback`)이 개입하지 않습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L2070-L2118】 그 결과 `usbHidTimerSyncOnTimerReport()`가 호출되지 않아 잔차 기반 PI 루프가 한 번도 갱신되지 않았습니다.
+- **CLI 출력 지연 영향 검토**: UART `cliPrintf()`는 1초 주기로 통계를 출력하며, 루프 내부에서 `cliKeepLoop()`를 매회 확인해 USB/타이머 인터럽트가 계속 동작하도록 허용합니다.【F:src/hw/driver/usb/usb_hid_instrumentation.c†L333-L378】 출력 자체는 DMA 없이 폴링되더라도 인터럽트를 마스킹하지 않으므로, 잔차 미갱신 문제는 전송 경로 조건부 호출 누락에서 기인하며 UART 속도와 무관함을 확인했습니다.
+- **즉시 전송 잔차 연동**: 모든 성공적인 HID IN 제출이 동일 타임스탬프를 공유하도록 `usbHidSendReport()`에서 `micros()`를 캡처한 뒤, 계측 시작과 타이머 보정기에 동시에 전달합니다. 즉시 전송이 성공하면 곧바로 `usbHidTimerSyncOnTimerReport()`를 호출해 잔차 측정 대기 상태를 설정하고, DataIn 완료 시 PI 루프가 정상적으로 수렴합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1251-L1278】
+- **계측 타임라인 정합성 유지**: 새로 확보한 타임스탬프를 `usbHidInstrumentationMarkReportStart()`에 주입하고, 완료 계측이 동일 기준으로 경과 시간을 계산하도록 `usbHidInstrumentationOnImmediateSendSuccess()`가 기존 `micros()` 호출 대신 저장된 값을 재사용하게 조정했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.h†L17-L38】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L141-L170】
+- **버전 관리**: 펌웨어 버전 문자열을 `V251011R2`로 갱신해 즉시 전송 경로 보완 내역을 명시했습니다.【F:src/hw/hw_def.h†L9】
+
+## 12. 재평가 및 V251011R3 보완
+- **오차 누적 재발 원인**: V251011R2에서도 `usbHidTimerSyncOnDataIn()`이 guard 초과 시 `usbHidTimerSyncForceDefault()`를 호출하면서 `ready=false`로 초기화되고, 다음 SOF까지 `pending_timer_report`가 유지되지 않아 잔차 업데이트가 반복적으로 무효화되었습니다. 그 결과 로컬 타이머는 119~120 µs를 유지한 반면, 호스트 잔차는 70 µs 이상까지 상승한 뒤 리셋되는 톱니파가 다시 관측됐습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1814-L1835】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1647-L1696】
+- **UART 출력 딜레이 검토**: CLI 출력은 `cliPrintf()`→`uartWrite()`→`HAL_UART_Transmit()` 경로를 통해 송신되며, 인터럽트를 비활성화하지 않으므로 USB SOF·TIM2 인터럽트는 즉시 처리됩니다. 따라서 UART 대역폭은 잔차 상승의 직접 원인이 아니고, guard 리셋으로 측정이 반영되지 않은 것이 핵심 문제였습니다.【F:src/common/hw/src/cli.c†L597-L612】【F:src/hw/driver/uart.c†L240-L258】
+- **coarse step 기반 guard 보정**: guard를 초과한 잔차에 대해 적분을 초기화하고 `error_us / guard_us` 비율에 비례한 coarse step(최대 ±4틱)을 즉시 적용해 수렴 속도를 높이도록 `usbHidTimerSyncOnDataIn()`을 수정했습니다. guard 카운트는 유지하지만 `timer_sync.ready`를 해제하지 않아 연속 측정이 끊기지 않습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1875-L1944】
+- **버전 관리**: 펌웨어 버전 문자열을 `V251011R3`로 갱신하고, 문서에도 guard coarse step 도입 배경을 반영했습니다.【F:src/hw/hw_def.h†L5】【F:docs/usb_sof_timer_sync_plan.md†L94-L96】
+
+## 13. 재평가 및 V251011R4 보완
+- **오차 누적 재발 원인**: V251011R3 이후에도 CLI가 2 ms 간격으로 즉시 `usbHidSendReport()`를 호출하는 동안 잔차가 70 µs 이상까지 상승해 guard가 누적되었습니다. 즉시 전송은 타이머 펄스와 무관하게 발화하므로, `usbHidTimerSyncOnDataIn()`이 해당 잔차를 PI 루프에 반영하면 CCR이 최솟값/최댓값으로 치우쳐도 위상이 교정되지 않았습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L333-L358】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1251-L1278】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1672-L1704】
+- **경로 분리 전략**: 전송 경로를 `타이머 스케줄`과 `즉시 전송`으로 구분하는 `usb_hid_timer_sync_report_source_t` 열거형을 추가하고, 즉시 전송은 잔차·지연 통계만 업데이트한 뒤 PI 보정과 guard 누산에서는 제외했습니다. 타이머 경로에서만 적분/비례 제어를 수행하도록 조정해, CLI 테스트처럼 즉시 전송만 반복될 때도 CCR이 기본 120틱 근처에서 안정적으로 유지됩니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L100-L177】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1668-L1738】
+- **상태 초기화 정비**: `usbHidTimerSyncInit()`과 `usbHidTimerSyncForceDefault()`가 새 경로 상태를 함께 초기화하도록 수정해, 속도 전환이나 guard 재진입 시 즉시 전송 잔여 상태가 남지 않도록 했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1647-L1697】
+- **버전 관리**: 펌웨어 버전 문자열을 `V251011R4`로 갱신해 즉시 전송 분리 내역을 명시했습니다.【F:src/hw/hw_def.h†L5】
+
+## 14. 재평가 및 V251011R5 조정
+- **지속된 잔차 누적 원인**: 즉시 전송을 PI 보정에서 제외한 뒤에도 CLI 테스트는 50회 샘플을 모두 `usbHidSendReport()` 즉시 경로로 제출해 타이머 큐가 한 번도 사용되지 않았습니다. `usbHidTimerSyncOnTimerReport()`가 타이머 경로만 카운트하므로 `update_count`가 0에 머물고, `타이머 위상`은 80 µs 이상으로 계속 표류했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1251-L1278】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1668-L1738】 즉시 전송만 반복되면 보정기가 참조할 샘플이 사라지는 구조적 한계가 확인되었습니다.
+- **복제 타이머 전송 도입**: 즉시 전송이 성공하면 동일한 리포트를 `timer_sync.shadow_report_buf`에 저장한 뒤, 다음 TIM2 펄스에서 큐가 비어 있어도 한 차례 추가 전송을 수행하도록 `HAL_TIM_PWM_PulseFinishedCallback()`을 확장했습니다. 이 복제 전송은 타이머 기준으로 발생하므로 `usbHidTimerSyncOnTimerReport()`가 정상 호출되고 잔차 기반 PI 루프가 연속적으로 수렴합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L95-L190】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1261-L1276】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1987-L2118】
+- **계측 일관성 유지**: 복제 전송은 큐를 거치지 않으므로 계측 함수에는 큐 길이 0으로 보고하고, 초기화 경로에서 `shadow_report_pending`을 함께 리셋해 속도 전환이나 guard 복귀 시 잔여 전송이 남지 않도록 했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1563-L1581】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1987-L2035】
+- **버전 관리**: 펌웨어 버전 문자열을 `V251011R5`로 갱신했습니다.【F:src/hw/hw_def.h†L5】
+
+## 15. 재평가 및 V251011R6 조정
+- **잔차 통계 왜곡 원인**: V251011R5 이후에도 `usbhid rate` CLI는 폴링 잔차 평균이 60 µs 이상으로 급상승했다가 0에 근접하는 톱니파를 반복 보고했습니다. 조사 결과 `usbHidTimerSyncOnDataIn()`이 즉시 전송 완료에서도 `last_residual_us`와 계측 훅을 갱신해, 타이머 기반 전송이 아닌 값이 보정 상태와 CLI 출력에 덮어써졌습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1802-L1888】
+- **타이머 전용 계측 분리**: DataIn 처리가 반환한 전송 경로를 `usbHidInstrumentationOnDataInSource()`로 전달하고, `usbHidMeasureRateTime()`이 타이머 전송일 때만 폴링 잔차 히스토리를 갱신하도록 수정했습니다. 동시에 `usbHidTimerSyncOnDataIn()`은 타이머 경로에서만 잔차·오차를 라치해 PI 루프와 CLI가 동일 기준을 바라보도록 정비했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1802-L1944】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L29-L42】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L144-L175】【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L217-L256】
+- **버전 관리**: 펌웨어 버전 문자열을 `V251011R6`으로 갱신했습니다.【F:src/hw/hw_def.h†L5】
+
+## 16. 재평가 및 V251011R7 조정
+- **잔차 샘플 손실 원인**: V251011R6에서도 디버그 로그에는 `타이머 위상`이 80 µs 이상까지 치솟은 뒤 급격히 0으로 떨어지는 패턴이 남았습니다. `usbHidTimerSyncOnTimerReport()`가 단일 슬롯(`pending_report_source`)에만 경로 정보를 보관한 탓에, 즉시 전송이 연속해서 성공하면 타이머 복제 전송이 완료되기 전에 슬롯이 덮어써져 DataIn이 항상 `IMMEDIATE`로 분류되었습니다. 그 결과 타이머 경로 잔차가 갱신되지 않아 PI 루프가 120틱 부근에서 정체되는 현상이 반복되었습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1789-L1827】
+- **대기열 기반 매핑 도입**: 전송 경로·송신 시각을 함께 저장하는 고정 길이 대기열을 추가해 각 DataIn 완료가 정확한 송신 이벤트와 짝지어지도록 했습니다. `usbHidTimerSyncOnTimerReport()`는 준비되지 않은 경우 대기열을 즉시 비우고, 정상 상황에서는 push만 수행합니다. `usbHidTimerSyncOnDataIn()`은 pop된 항목으로 잔차를 계산해 즉시 전송과 복제 전송이 얽혀도 잔차 샘플이 누락되지 않습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L99-L188】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1540-L1604】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1789-L1842】
+- **상태 초기화 정비**: 대기열은 `usbHidTimerSyncInit()`과 `usbHidTimerSyncForceDefault()`에서 함께 초기화해 속도 전환·guard 복귀 시 잔여 항목이 남지 않도록 했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1647-L1697】
+- **버전 관리**: 펌웨어 버전 문자열을 `V251011R7`로 갱신했습니다.【F:src/hw/hw_def.h†L5】
+
+## 17. 재평가 및 V251011R8 조정
+- **비교 이벤트 누락 원인**: V251011R7 로그에서는 `SOF/타이머` 카운트가 8 000 대신 2 000대까지 떨어지며 타이머 업데이트가 중단되는 구간이 재현되었습니다. HS 모드에서 CCR 상한을 144us로 두면 TIM2가 SOF마다 리셋되는 구조상 비교 값이 125us 이상이 되는 순간 다음 마이크로프레임 전에 비교 일치가 발생하지 않아 인터럽트가 사라집니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L143-L151】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L2070-L2118】 그 결과 잔차 큐가 갱신되지 않고 PI 루프가 더 이상 보정하지 못한 채 드리프트가 누적되었습니다.
+- **SOF 간격 기반 상한 재설정**: HS 상한을 124us로 낮추고, 각 속도에서 기대 SOF 간격보다 1us 작은 값으로 자동 보정하는 헬퍼를 추가해 비교 이벤트가 항상 SOF 전에 발생하도록 강제했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L102-L111】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1556-L1581】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1666-L1719】 이를 통해 `SOF/타이머` 카운트가 다시 8 000/8 000으로 유지되고 잔차가 지속적으로 수집되도록 했습니다.
+- **버전 관리**: 펌웨어 버전 문자열을 `V251011R8`로 갱신했습니다.【F:src/hw/hw_def.h†L5】
