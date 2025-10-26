@@ -95,7 +95,7 @@ static void usbHidInitTimer(void);
 #define USB_HID_TIMER_SYNC_HS_INTERVAL_US      125U  // V251010R9: HS 모드 마이크로프레임 간격
 #define USB_HID_TIMER_SYNC_FS_INTERVAL_US      1000U // V251010R9: FS 모드 SOF 간격
 #define USB_HID_TIMER_SYNC_HS_MIN_TICKS        96U   // V251010R9: HS 모드 최소 허용 지연(us)
-#define USB_HID_TIMER_SYNC_HS_MAX_TICKS        144U  // V251010R9: HS 모드 최대 허용 지연(us)
+#define USB_HID_TIMER_SYNC_HS_MAX_TICKS        124U  // V251011R8: SOF 리셋 전에 비교가 일어나도록 상한 124us로 제한
 #define USB_HID_TIMER_SYNC_FS_MIN_TICKS        80U   // V251010R9: FS 모드 최소 허용 지연(us)
 #define USB_HID_TIMER_SYNC_FS_MAX_TICKS        220U  // V251010R9: FS 모드 최대 허용 지연(us)
 #define USB_HID_TIMER_SYNC_HS_GUARD_US         32U   // V251010R9: HS 모드 오차 가드 한계
@@ -1544,6 +1544,24 @@ static inline int32_t usbHidTimerSyncAbs(int32_t value)
   return (value < 0) ? -value : value;                               // V251010R9: 부호 없는 절댓값 계산
 }
 
+static uint16_t usbHidTimerSyncClampMaxTicks(uint32_t interval_us,
+                                             uint16_t configured_max)
+{                                                                     // V251011R8: SOF 재설정보다 늦은 비교를 방지
+  if (interval_us == 0U)
+  {
+    return configured_max;
+  }
+
+  uint32_t limit_ticks = interval_us - 1U;
+
+  if ((uint32_t)configured_max > limit_ticks)
+  {
+    return (uint16_t)limit_ticks;
+  }
+
+  return configured_max;
+}
+
 static void usbHidTimerSyncPendingReset(void)
 {                                                                     // V251011R7: 전송 대기열을 초기화
   uint32_t primask = __get_PRIMASK();
@@ -1654,7 +1672,8 @@ static void usbHidTimerSyncInit(void)
   timer_sync.default_ticks = USB_HID_TIMER_SYNC_TARGET_TICKS;        // V251010R9: 기본 타겟 지연 120us 고정
   timer_sync.current_ticks = USB_HID_TIMER_SYNC_TARGET_TICKS;
   timer_sync.min_ticks = USB_HID_TIMER_SYNC_HS_MIN_TICKS;
-  timer_sync.max_ticks = USB_HID_TIMER_SYNC_HS_MAX_TICKS;
+  timer_sync.max_ticks = usbHidTimerSyncClampMaxTicks(USB_HID_TIMER_SYNC_HS_INTERVAL_US,
+                                                     USB_HID_TIMER_SYNC_HS_MAX_TICKS); // V251011R8: HS 비교 상한을 SOF 간격 직전으로 제한
   timer_sync.guard_us = USB_HID_TIMER_SYNC_HS_GUARD_US;
   timer_sync.kp_shift = USB_HID_TIMER_SYNC_HS_KP_SHIFT;
   timer_sync.integral_shift = USB_HID_TIMER_SYNC_HS_INTEGRAL_SHIFT;
@@ -1686,7 +1705,8 @@ static void usbHidTimerSyncApplySpeed(usb_hid_timer_sync_speed_t speed)
   if (speed == USB_HID_TIMER_SYNC_SPEED_HS)
   {
     timer_sync.min_ticks = USB_HID_TIMER_SYNC_HS_MIN_TICKS;
-    timer_sync.max_ticks = USB_HID_TIMER_SYNC_HS_MAX_TICKS;
+    timer_sync.max_ticks = usbHidTimerSyncClampMaxTicks(USB_HID_TIMER_SYNC_HS_INTERVAL_US,
+                                                       USB_HID_TIMER_SYNC_HS_MAX_TICKS); // V251011R8: HS 상한은 SOF 간격보다 작게 유지
     timer_sync.guard_us = USB_HID_TIMER_SYNC_HS_GUARD_US;
     timer_sync.kp_shift = USB_HID_TIMER_SYNC_HS_KP_SHIFT;
     timer_sync.integral_shift = USB_HID_TIMER_SYNC_HS_INTEGRAL_SHIFT;
@@ -1697,7 +1717,8 @@ static void usbHidTimerSyncApplySpeed(usb_hid_timer_sync_speed_t speed)
   else if (speed == USB_HID_TIMER_SYNC_SPEED_FS)
   {
     timer_sync.min_ticks = USB_HID_TIMER_SYNC_FS_MIN_TICKS;
-    timer_sync.max_ticks = USB_HID_TIMER_SYNC_FS_MAX_TICKS;
+    timer_sync.max_ticks = usbHidTimerSyncClampMaxTicks(USB_HID_TIMER_SYNC_FS_INTERVAL_US,
+                                                       USB_HID_TIMER_SYNC_FS_MAX_TICKS); // V251011R8: FS 상한도 SOF 간격 직전으로 제한
     timer_sync.guard_us = USB_HID_TIMER_SYNC_FS_GUARD_US;
     timer_sync.kp_shift = USB_HID_TIMER_SYNC_FS_KP_SHIFT;
     timer_sync.integral_shift = USB_HID_TIMER_SYNC_FS_INTEGRAL_SHIFT;
@@ -1708,7 +1729,8 @@ static void usbHidTimerSyncApplySpeed(usb_hid_timer_sync_speed_t speed)
   else
   {
     timer_sync.min_ticks = USB_HID_TIMER_SYNC_HS_MIN_TICKS;
-    timer_sync.max_ticks = USB_HID_TIMER_SYNC_HS_MAX_TICKS;
+    timer_sync.max_ticks = usbHidTimerSyncClampMaxTicks(USB_HID_TIMER_SYNC_HS_INTERVAL_US,
+                                                       USB_HID_TIMER_SYNC_HS_MAX_TICKS); // V251011R8: 비활성 시에도 HS 상한을 안전하게 유지
     timer_sync.guard_us = USB_HID_TIMER_SYNC_HS_GUARD_US;
     timer_sync.kp_shift = USB_HID_TIMER_SYNC_HS_KP_SHIFT;
     timer_sync.integral_shift = USB_HID_TIMER_SYNC_HS_INTEGRAL_SHIFT;

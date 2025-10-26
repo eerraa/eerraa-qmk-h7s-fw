@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251011R7"  // V251011R7: 전송 대기열 도입으로 잔차 샘플 매핑 안정화
+#define _DEF_FIRMWATRE_VERSION      "V251011R8"  // V251011R8: HS 비교 상한을 SOF 간격 직전으로 제한해 타이머 이벤트 누락 방지
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
