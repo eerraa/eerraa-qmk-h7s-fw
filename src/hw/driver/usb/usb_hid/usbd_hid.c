@@ -1545,21 +1545,36 @@ static inline int32_t usbHidTimerSyncAbs(int32_t value)
 }
 
 static uint16_t usbHidTimerSyncClampMaxTicks(uint32_t interval_us,
-                                             uint16_t configured_max)
-{                                                                     // V251011R8: SOF 재설정보다 늦은 비교를 방지
+                                             uint16_t configured_max,
+                                             uint16_t default_ticks,
+                                             uint32_t target_residual_us)
+{                                                                     // V251011R9: 목표 잔차를 만족할 수 있도록 상한 재조정
   if (interval_us == 0U)
   {
     return configured_max;
   }
 
-  uint32_t limit_ticks = interval_us - 1U;
+  uint32_t hard_limit_ticks = interval_us - 1U;                       // V251011R9: SOF 리셋 직전까지만 허용
+  uint32_t effective_max = configured_max;
 
-  if ((uint32_t)configured_max > limit_ticks)
+  if (effective_max > hard_limit_ticks)
   {
-    return (uint16_t)limit_ticks;
+    effective_max = hard_limit_ticks;
   }
 
-  return configured_max;
+  uint32_t required_ticks = (uint32_t)default_ticks + target_residual_us;
+
+  if (required_ticks <= hard_limit_ticks && effective_max < required_ticks)
+  {
+    effective_max = required_ticks;                                   // V251011R9: 목표 잔차만큼의 여유를 확보
+  }
+
+  if (effective_max > hard_limit_ticks)
+  {
+    effective_max = hard_limit_ticks;                                 // V251011R9: 하드 상한 초과 시에는 SOF 이전까지만 유지
+  }
+
+  return (uint16_t)effective_max;
 }
 
 static void usbHidTimerSyncPendingReset(void)
@@ -1672,14 +1687,21 @@ static void usbHidTimerSyncInit(void)
   timer_sync.default_ticks = USB_HID_TIMER_SYNC_TARGET_TICKS;        // V251010R9: 기본 타겟 지연 120us 고정
   timer_sync.current_ticks = USB_HID_TIMER_SYNC_TARGET_TICKS;
   timer_sync.min_ticks = USB_HID_TIMER_SYNC_HS_MIN_TICKS;
-  timer_sync.max_ticks = usbHidTimerSyncClampMaxTicks(USB_HID_TIMER_SYNC_HS_INTERVAL_US,
-                                                     USB_HID_TIMER_SYNC_HS_MAX_TICKS); // V251011R8: HS 비교 상한을 SOF 간격 직전으로 제한
   timer_sync.guard_us = USB_HID_TIMER_SYNC_HS_GUARD_US;
   timer_sync.kp_shift = USB_HID_TIMER_SYNC_HS_KP_SHIFT;
   timer_sync.integral_shift = USB_HID_TIMER_SYNC_HS_INTEGRAL_SHIFT;
   timer_sync.integral_limit = USB_HID_TIMER_SYNC_HS_INTEGRAL_LIMIT;
   timer_sync.expected_interval_us = 0U;
   timer_sync.target_residual_us = USB_HID_TIMER_SYNC_HS_INTERVAL_US - USB_HID_TIMER_SYNC_TARGET_TICKS; // V251011R1: 기본 잔차 5us
+  timer_sync.max_ticks = usbHidTimerSyncClampMaxTicks(USB_HID_TIMER_SYNC_HS_INTERVAL_US,
+                                                     USB_HID_TIMER_SYNC_HS_MAX_TICKS,
+                                                     timer_sync.default_ticks,
+                                                     timer_sync.target_residual_us);      // V251011R9: 초기 상태에서도 목표 잔차를 고려한 상한 적용
+  uint32_t achievable_residual = USB_HID_TIMER_SYNC_HS_INTERVAL_US - (uint32_t)timer_sync.max_ticks;
+  if (achievable_residual < timer_sync.target_residual_us)
+  {
+    timer_sync.target_residual_us = achievable_residual;             // V251011R9: 초기화 시 달성 가능한 잔차로 목표 갱신
+  }
   timer_sync.speed = USB_HID_TIMER_SYNC_SPEED_NONE;
   timer_sync.last_sof_us = 0U;
   timer_sync.last_delay_us = 0U;
@@ -1705,38 +1727,53 @@ static void usbHidTimerSyncApplySpeed(usb_hid_timer_sync_speed_t speed)
   if (speed == USB_HID_TIMER_SYNC_SPEED_HS)
   {
     timer_sync.min_ticks = USB_HID_TIMER_SYNC_HS_MIN_TICKS;
-    timer_sync.max_ticks = usbHidTimerSyncClampMaxTicks(USB_HID_TIMER_SYNC_HS_INTERVAL_US,
-                                                       USB_HID_TIMER_SYNC_HS_MAX_TICKS); // V251011R8: HS 상한은 SOF 간격보다 작게 유지
     timer_sync.guard_us = USB_HID_TIMER_SYNC_HS_GUARD_US;
     timer_sync.kp_shift = USB_HID_TIMER_SYNC_HS_KP_SHIFT;
     timer_sync.integral_shift = USB_HID_TIMER_SYNC_HS_INTEGRAL_SHIFT;
     timer_sync.integral_limit = USB_HID_TIMER_SYNC_HS_INTEGRAL_LIMIT;
     timer_sync.expected_interval_us = USB_HID_TIMER_SYNC_HS_INTERVAL_US;
     timer_sync.target_residual_us = USB_HID_TIMER_SYNC_HS_INTERVAL_US - timer_sync.default_ticks; // V251011R1: HS 잔차 목표 5us
+    timer_sync.max_ticks = usbHidTimerSyncClampMaxTicks(timer_sync.expected_interval_us,
+                                                       USB_HID_TIMER_SYNC_HS_MAX_TICKS,
+                                                       timer_sync.default_ticks,
+                                                       timer_sync.target_residual_us);    // V251011R9: 목표 잔차를 보장하는 상한 계산
   }
   else if (speed == USB_HID_TIMER_SYNC_SPEED_FS)
   {
     timer_sync.min_ticks = USB_HID_TIMER_SYNC_FS_MIN_TICKS;
-    timer_sync.max_ticks = usbHidTimerSyncClampMaxTicks(USB_HID_TIMER_SYNC_FS_INTERVAL_US,
-                                                       USB_HID_TIMER_SYNC_FS_MAX_TICKS); // V251011R8: FS 상한도 SOF 간격 직전으로 제한
     timer_sync.guard_us = USB_HID_TIMER_SYNC_FS_GUARD_US;
     timer_sync.kp_shift = USB_HID_TIMER_SYNC_FS_KP_SHIFT;
     timer_sync.integral_shift = USB_HID_TIMER_SYNC_FS_INTEGRAL_SHIFT;
     timer_sync.integral_limit = USB_HID_TIMER_SYNC_FS_INTEGRAL_LIMIT;
     timer_sync.expected_interval_us = USB_HID_TIMER_SYNC_FS_INTERVAL_US;
     timer_sync.target_residual_us = USB_HID_TIMER_SYNC_FS_INTERVAL_US - timer_sync.default_ticks; // V251011R1: FS 잔차 목표 880us
+    timer_sync.max_ticks = usbHidTimerSyncClampMaxTicks(timer_sync.expected_interval_us,
+                                                       USB_HID_TIMER_SYNC_FS_MAX_TICKS,
+                                                       timer_sync.default_ticks,
+                                                       timer_sync.target_residual_us);    // V251011R9: FS에서도 잔차 달성을 위한 상한 확보
   }
   else
   {
     timer_sync.min_ticks = USB_HID_TIMER_SYNC_HS_MIN_TICKS;
-    timer_sync.max_ticks = usbHidTimerSyncClampMaxTicks(USB_HID_TIMER_SYNC_HS_INTERVAL_US,
-                                                       USB_HID_TIMER_SYNC_HS_MAX_TICKS); // V251011R8: 비활성 시에도 HS 상한을 안전하게 유지
     timer_sync.guard_us = USB_HID_TIMER_SYNC_HS_GUARD_US;
     timer_sync.kp_shift = USB_HID_TIMER_SYNC_HS_KP_SHIFT;
     timer_sync.integral_shift = USB_HID_TIMER_SYNC_HS_INTEGRAL_SHIFT;
     timer_sync.integral_limit = USB_HID_TIMER_SYNC_HS_INTEGRAL_LIMIT;
     timer_sync.expected_interval_us = 0U;
     timer_sync.target_residual_us = USB_HID_TIMER_SYNC_HS_INTERVAL_US - timer_sync.default_ticks; // V251011R1: 비활성 시 기본 잔차 유지
+    timer_sync.max_ticks = usbHidTimerSyncClampMaxTicks(USB_HID_TIMER_SYNC_HS_INTERVAL_US,
+                                                       USB_HID_TIMER_SYNC_HS_MAX_TICKS,
+                                                       timer_sync.default_ticks,
+                                                       timer_sync.target_residual_us);    // V251011R9: 비활성 상태에서도 안전한 상한 유지
+  }
+
+  if (timer_sync.expected_interval_us > 0U)
+  {
+    uint32_t achievable_residual = timer_sync.expected_interval_us - (uint32_t)timer_sync.max_ticks;
+    if (achievable_residual < timer_sync.target_residual_us)
+    {
+      timer_sync.target_residual_us = achievable_residual;             // V251011R9: 상한으로 달성 가능한 잔차로 목표 보정
+    }
   }
 
   usbHidTimerSyncForceDefault(true);                                 // V251010R9: 모드 변경 시 보정 상태 초기화
@@ -1910,19 +1947,23 @@ static usb_hid_timer_sync_report_source_t usbHidTimerSyncOnDataIn(uint32_t compl
     return pending_source;
   }
 
-  timer_sync.integral_accum += error_us;                               // V251011R1: 호스트 잔차 기반 적분 업데이트
-  if (timer_sync.integral_accum > timer_sync.integral_limit)
+  int32_t prev_integral = timer_sync.integral_accum;                    // V251011R9: anti-windup을 위해 이전 적분을 보존
+  int32_t next_integral = prev_integral + error_us;                     // V251011R1: 호스트 잔차 기반 적분 후보 계산
+
+  if (next_integral > timer_sync.integral_limit)
   {
-    timer_sync.integral_accum = timer_sync.integral_limit;
+    next_integral = timer_sync.integral_limit;
   }
-  else if (timer_sync.integral_accum < -timer_sync.integral_limit)
+  else if (next_integral < -timer_sync.integral_limit)
   {
-    timer_sync.integral_accum = -timer_sync.integral_limit;
+    next_integral = -timer_sync.integral_limit;
   }
 
   int32_t proportional_term = error_us >> timer_sync.kp_shift;
-  int32_t integral_term = timer_sync.integral_accum >> timer_sync.integral_shift;
-  int32_t target_ticks = (int32_t)timer_sync.default_ticks + proportional_term + integral_term;
+  int32_t integral_term = next_integral >> timer_sync.integral_shift;
+  int32_t unclamped_ticks = (int32_t)timer_sync.default_ticks + proportional_term + integral_term;
+
+  int32_t target_ticks = unclamped_ticks;
 
   if (target_ticks > (int32_t)timer_sync.current_ticks + 1)
   {
@@ -1933,18 +1974,48 @@ static usb_hid_timer_sync_report_source_t usbHidTimerSyncOnDataIn(uint32_t compl
     target_ticks = (int32_t)timer_sync.current_ticks - 1;
   }
 
+  bool hit_min = false;
+  bool hit_max = false;
+
   if (target_ticks < (int32_t)timer_sync.min_ticks)
   {
     target_ticks = (int32_t)timer_sync.min_ticks;
+    hit_min = true;
   }
   else if (target_ticks > (int32_t)timer_sync.max_ticks)
   {
     target_ticks = (int32_t)timer_sync.max_ticks;
+    hit_max = true;
   }
 
-  timer_sync.current_ticks = (uint16_t)target_ticks;
-  LL_TIM_OC_SetCompareCH1(TIM2, timer_sync.current_ticks);             // V251011R1: 다음 펄스 지연 갱신
-  timer_sync.update_count++;
+  bool output_changed = (target_ticks != (int32_t)timer_sync.current_ticks);
+  bool block_integral = (!output_changed && (next_integral != prev_integral));
+
+  if (!block_integral)
+  {
+    if (hit_max && error_us > 0)
+    {
+      block_integral = true;                                           // V251011R9: 상한 포화 시 적분 증가 차단
+    }
+    else if (hit_min && error_us < 0)
+    {
+      block_integral = true;                                           // V251011R9: 하한 포화 시 적분 감소 차단
+    }
+  }
+
+  if (block_integral)
+  {
+    next_integral = prev_integral;                                     // V251011R9: anti-windup - 적분을 원상복구
+  }
+
+  timer_sync.integral_accum = next_integral;
+
+  if (output_changed)
+  {
+    timer_sync.current_ticks = (uint16_t)target_ticks;
+    LL_TIM_OC_SetCompareCH1(TIM2, timer_sync.current_ticks);           // V251011R9: 실제 변경이 있을 때만 비교기 갱신
+    timer_sync.update_count++;
+  }
 
   return pending_source;
 }

@@ -118,3 +118,10 @@
 - **비교 이벤트 누락 원인**: V251011R7 로그에서는 `SOF/타이머` 카운트가 8 000 대신 2 000대까지 떨어지며 타이머 업데이트가 중단되는 구간이 재현되었습니다. HS 모드에서 CCR 상한을 144us로 두면 TIM2가 SOF마다 리셋되는 구조상 비교 값이 125us 이상이 되는 순간 다음 마이크로프레임 전에 비교 일치가 발생하지 않아 인터럽트가 사라집니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L143-L151】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L2070-L2118】 그 결과 잔차 큐가 갱신되지 않고 PI 루프가 더 이상 보정하지 못한 채 드리프트가 누적되었습니다.
 - **SOF 간격 기반 상한 재설정**: HS 상한을 124us로 낮추고, 각 속도에서 기대 SOF 간격보다 1us 작은 값으로 자동 보정하는 헬퍼를 추가해 비교 이벤트가 항상 SOF 전에 발생하도록 강제했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L102-L111】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1556-L1581】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1666-L1719】 이를 통해 `SOF/타이머` 카운트가 다시 8 000/8 000으로 유지되고 잔차가 지속적으로 수집되도록 했습니다.
 - **버전 관리**: 펌웨어 버전 문자열을 `V251011R8`로 갱신했습니다.【F:src/hw/hw_def.h†L5】
+
+## 18. 재평가 및 V251011R9 보완
+- **목표 잔차 미달 원인**: `usbhid rate` 로그에서는 `타이머 CCR`이 124us 상한에 고정된 상태로 `보정 통계`의 적분 항이 +4096까지 포화되고, 송신 지연이 30→120 µs까지 반복 상승했습니다. 상한 계산이 `interval_us-1`에만 묶여 있어 목표 잔차(HS 5 µs, FS 880 µs)를 만족시킬 여유가 부족할 때 PI 루프가 목표에 도달하지 못한 채 적분만 누적된 것이 원인이었습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1547-L1578】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1695-L1776】
+- **상한 및 목표 잔차 재정의**: `usbHidTimerSyncClampMaxTicks()`가 기본 지연(`default_ticks`)과 목표 잔차를 합산한 최소 필요치 이상으로 상한을 끌어올리고, 속도 전환/초기화 시 실제 달성 가능한 잔차로 목표를 자동 조정하도록 보완했습니다. 이로써 SOF 직전까지 허용되는 범위 내에서 PI 루프가 목표 잔차를 유지할 여유를 확보했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1547-L1578】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1695-L1776】
+- **PI 루프 anti-windup**: `usbHidTimerSyncOnDataIn()`에서 포화 여부와 실제 출력 변화 여부를 확인한 뒤, CCR이 변하지 않거나 상·하한에 붙은 상태에서 오차 방향이 같은 경우 적분 누산을 원래 값으로 되돌려 더 이상 증가하지 않도록 했습니다. 포화 해제 시에만 CCR/적분이 함께 갱신되어 HS 100 Hz 테스트에서도 잔차와 `타이머 CCR`이 120±1 틱 범위에 안정적으로 유지됩니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1893-L2018】
+- **계측 타임라인 교정**: 큐 전송 경로에서도 `usbHidInstrumentationOnReportDequeued()`가 `key_time_pre`를 즉시 초기화해 `최근 전송(us)` 통계가 즉시 전송 경로와 동일한 기준으로 기록되도록 수정했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L155-L170】
+- **버전 관리**: 펌웨어 버전 문자열을 `V251011R9`로 갱신했습니다.【F:src/hw/hw_def.h†L5】
