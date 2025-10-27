@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251010R8"  // V251010R8: usbhid rate 출력 재정비 및 통계 보정
+#define _DEF_FIRMWATRE_VERSION      "V251012R1"  // V251012R1: FS 백업 전송 타이머 지연 재배치
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

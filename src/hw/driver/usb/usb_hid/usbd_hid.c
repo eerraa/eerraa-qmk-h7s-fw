@@ -88,6 +88,7 @@ static uint8_t *USBD_HID_GetUsrStrDescriptor(struct _USBD_HandleTypeDef *pdev, u
 static void cliCmd(cli_args_t *args);
 static bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev);
 static void usbHidInitTimer(void);
+static uint32_t usbHidBackupTimerOffsetUs(void);                       // V251012R1 FS 백업 전송 지연 재조정
 #if _USE_USB_MONITOR
 static void usbHidMonitorSof(uint32_t now_us);                     // V250924R2 SOF 안정성 추적
 static UsbBootMode_t usbHidResolveDowngradeTarget(void);           // V250924R2 다운그레이드 대상 계산
@@ -1417,6 +1418,16 @@ __weak void usbHidSetStatusLed(uint8_t led_bits)
 
 }
 
+static uint32_t usbHidBackupTimerOffsetUs(void)
+{
+  if (usbBootModeIsFullSpeed())
+  {
+    return 975U;                                                   // V251012R1 FS 프레임 종료 직전 백업 전송 예약
+  }
+
+  return 120U;                                                     // V251012R1 HS/uSOF 환경은 기존 120us 유지
+}
+
 void usbHidInitTimer(void)
 {
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
@@ -1456,7 +1467,7 @@ void usbHidInitTimer(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_TIMING;
-  sConfigOC.Pulse = 120;
+  sConfigOC.Pulse = usbHidBackupTimerOffsetUs();                    // V251012R1 속도별 백업 타이머 오프셋 적용
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_OC_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
