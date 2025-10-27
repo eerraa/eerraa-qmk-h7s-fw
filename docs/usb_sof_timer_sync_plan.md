@@ -125,3 +125,8 @@
 - **PI 루프 anti-windup**: `usbHidTimerSyncOnDataIn()`에서 포화 여부와 실제 출력 변화 여부를 확인한 뒤, CCR이 변하지 않거나 상·하한에 붙은 상태에서 오차 방향이 같은 경우 적분 누산을 원래 값으로 되돌려 더 이상 증가하지 않도록 했습니다. 포화 해제 시에만 CCR/적분이 함께 갱신되어 HS 100 Hz 테스트에서도 잔차와 `타이머 CCR`이 120±1 틱 범위에 안정적으로 유지됩니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1893-L2018】
 - **계측 타임라인 교정**: 큐 전송 경로에서도 `usbHidInstrumentationOnReportDequeued()`가 `key_time_pre`를 즉시 초기화해 `최근 전송(us)` 통계가 즉시 전송 경로와 동일한 기준으로 기록되도록 수정했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c†L155-L170】
 - **버전 관리**: 펌웨어 버전 문자열을 `V251011R9`로 갱신했습니다.【F:src/hw/hw_def.h†L5】
+
+## 19. 재평가 및 V251012R1 보완
+- **적분 누산 정지 원인**: V251011R9 anti-windup 이후에도 `usbHidTimerSyncOnDataIn()`이 출력이 변하지 않았다는 이유만으로 적분 후보를 항상 폐기해, CCR이 움직이지 않는 동안 적분 항이 성장하지 못했습니다. 그 결과 타이머 위상이 다시 8 µs 간격으로 핑퐁하며 누적 지연이 증가했습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1987-L2053】
+- **제한 원인 기반 anti-windup 재구성**: ±1틱 제한이나 상·하한 가드 때문에 출력이 막힌 경우에만 적분을 복원하고, 자연스럽게 목표값과 일치해 변화가 없을 때는 적분을 유지하도록 조건을 재구성했습니다. 이를 위해 step/guard 제한 여부를 별도로 추적해 실제 제약이 있었을 때만 적분 복원을 수행합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1987-L2053】
+- **버전 관리**: 펌웨어 버전 문자열을 `V251012R1`로 갱신했습니다.【F:src/hw/hw_def.h†L5】

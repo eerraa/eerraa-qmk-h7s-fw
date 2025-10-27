@@ -1964,32 +1964,39 @@ static usb_hid_timer_sync_report_source_t usbHidTimerSyncOnDataIn(uint32_t compl
   int32_t unclamped_ticks = (int32_t)timer_sync.default_ticks + proportional_term + integral_term;
 
   int32_t target_ticks = unclamped_ticks;
+  bool step_limited = false;                                          // V251012R1: ±1틱 제한 적용 여부 기록
 
   if (target_ticks > (int32_t)timer_sync.current_ticks + 1)
   {
     target_ticks = (int32_t)timer_sync.current_ticks + 1;              // V251011R1: ±1틱 제한으로 노이즈 억제
+    step_limited = true;                                               // V251012R1: 출력 미변경 원인 추적
   }
   else if (target_ticks < (int32_t)timer_sync.current_ticks - 1)
   {
     target_ticks = (int32_t)timer_sync.current_ticks - 1;
+    step_limited = true;                                               // V251012R1: 출력 미변경 원인 추적
   }
 
   bool hit_min = false;
   bool hit_max = false;
+  bool bound_limited = false;                                         // V251012R1: 가드 포화 여부 기록
 
   if (target_ticks < (int32_t)timer_sync.min_ticks)
   {
     target_ticks = (int32_t)timer_sync.min_ticks;
     hit_min = true;
+    bound_limited = true;                                              // V251012R1: 최소 한계에 의한 제한
   }
   else if (target_ticks > (int32_t)timer_sync.max_ticks)
   {
     target_ticks = (int32_t)timer_sync.max_ticks;
     hit_max = true;
+    bound_limited = true;                                              // V251012R1: 최대 한계에 의한 제한
   }
 
   bool output_changed = (target_ticks != (int32_t)timer_sync.current_ticks);
-  bool block_integral = (!output_changed && (next_integral != prev_integral));
+  bool prevented_change = (!output_changed && (step_limited || bound_limited)); // V251012R1: 제한으로 인한 미변경 감지
+  bool block_integral = prevented_change && (next_integral != prev_integral);   // V251012R1: 제한에 의한 경우만 적분 복원
 
   if (!block_integral)
   {

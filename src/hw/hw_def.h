@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251011R9"  // V251011R9: 타이머 상한 재조정 및 anti-windup으로 HS 전송 지연 누적 해결
+#define _DEF_FIRMWATRE_VERSION      "V251012R1"  // V251012R1: anti-windup 조건 수정으로 타이머 적분 누산 정상화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
