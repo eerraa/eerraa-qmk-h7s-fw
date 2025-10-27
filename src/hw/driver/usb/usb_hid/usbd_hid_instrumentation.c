@@ -156,7 +156,9 @@ void usbHidInstrumentationOnReportDequeued(uint32_t queued_reports)
 {
   key_time_req = true;
   rate_time_req = true;
-  rate_time_pre = micros();
+  uint32_t start_us = micros();
+  key_time_pre = start_us;                                      // V251011R9: 큐 전송 경로도 자체 시작 시각을 기록
+  rate_time_pre = start_us;
   rate_queue_depth_snapshot = (queued_reports > 0U) ? (queued_reports - 1U) : 0U;
 }
 
