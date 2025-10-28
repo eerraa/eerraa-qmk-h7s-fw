@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251012R2"  // V251012R2: Brick60 rgblight 인디케이터 파이프라인 통합
+#define _DEF_FIRMWATRE_VERSION      "V251012R3"  // V251012R3: Brick60 rgblight 인디케이터 파이프라인 리팩토링
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

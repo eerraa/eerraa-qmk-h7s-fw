@@ -6,22 +6,11 @@
 #include "port.h"
 #include "rgblight.h"
 
-// V251012R2: Brick60 RGB 인디케이터 구성은 4바이트 슬롯을 사용한다.
-typedef union
-{
-  uint32_t raw;
-  struct PACKED
-  {
-    uint8_t target;
-    uint8_t val;
-    uint8_t hue;
-    uint8_t sat;
-  };
-} indicator_slot_t;
+// V251012R3: rgblight 내부 정의를 그대로 사용해 구성 슬롯 중복 정의를 제거한다.
+static rgblight_indicator_config_t indicator_config = {.raw = 0};
 
-_Static_assert(sizeof(indicator_slot_t) == sizeof(uint32_t), "EECONFIG out of spec.");
-
-static indicator_slot_t indicator_config = {.raw = 0};
+_Static_assert(sizeof(rgblight_indicator_config_t) == sizeof(uint32_t),
+               "EECONFIG out of spec.");  // V251012R3: 슬롯 크기 검증 유지
 
 static void indicator_via_get_value(uint8_t *data);
 static void indicator_via_set_value(uint8_t *data);
@@ -31,8 +20,7 @@ EECONFIG_DEBOUNCE_HELPER(indicator, EECONFIG_USER_LED_CAPS, indicator_config);
 
 static void indicator_apply_config(void)
 {
-  rgblight_indicator_config_t runtime_config = {.raw = indicator_config.raw};
-  rgblight_indicator_update_config(runtime_config);
+  rgblight_indicator_update_config(indicator_config);  // V251012R3: 슬롯 값을 직접 전달
 }
 
 static void indicator_apply_defaults(void)
