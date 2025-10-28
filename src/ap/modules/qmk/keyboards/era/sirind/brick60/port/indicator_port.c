@@ -2,6 +2,7 @@
 
 #include "color.h"
 #include "eeconfig.h"
+#include "led.h"
 #include "port.h"
 #include "rgblight.h"
 
@@ -41,6 +42,12 @@ static void indicator_apply_defaults(void)
   indicator_config.val    = default_hsv.v;
   indicator_config.hue    = default_hsv.h;  // V251012R2: HSV_GREEN 기본값 적용
   indicator_config.sat    = default_hsv.s;
+}
+
+// V251012R2: USB HID 호스트 LED 이벤트를 QMK LED 파이프라인으로 전달한다.
+void usbHidSetStatusLed(uint8_t led_bits)
+{
+  led_set(led_bits);
 }
 
 void led_init_ports(void)
