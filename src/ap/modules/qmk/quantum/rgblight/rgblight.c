@@ -24,7 +24,6 @@
 #include "util.h"
 #include "led_tables.h"
 #include <lib/lib8tion/lib8tion.h>
-#include "override.h" // 전역 오버라이드 플래그
 #ifdef EEPROM_ENABLE
 #    include "eeprom.h"
 #endif
@@ -128,6 +127,135 @@ static bool deferred_set_layer_state = false;
 #endif
 
 rgblight_ranges_t rgblight_ranges = {0, RGBLIGHT_LED_COUNT, 0, RGBLIGHT_LED_COUNT, RGBLIGHT_LED_COUNT};
+
+// V251012R2: Brick60 인디케이터 상태를 rgblight 내부에서 추적하기 위한 구조체
+typedef struct {
+    rgblight_indicator_config_t config;
+    led_t                       host_state;
+    bool                        active;
+    bool                        needs_render;
+} rgblight_indicator_state_t;
+
+static rgblight_indicator_state_t rgblight_indicator_state = {
+    .config = {.raw = 0},
+    .host_state = {.raw = 0},
+    .active = false,
+    .needs_render = false,
+};
+
+// V251012R2: 인디케이터 대상과 호스트 LED 상태를 비교하여 활성화 여부를 반환
+static bool rgblight_indicator_target_active(uint8_t target, led_t host_state)
+{
+    switch (target) {
+        case RGBLIGHT_INDICATOR_TARGET_CAPS:
+            return host_state.caps_lock;
+        case RGBLIGHT_INDICATOR_TARGET_SCROLL:
+            return host_state.scroll_lock;
+        case RGBLIGHT_INDICATOR_TARGET_NUM:
+            return host_state.num_lock;
+        default:
+            return false;
+    }
+}
+
+// V251012R2: 인디케이터 출력 시 사용할 LED 버퍼를 채우는 헬퍼
+static bool rgblight_indicator_prepare_buffer(void)
+{
+    if (!rgblight_indicator_state.active) {
+        return false;
+    }
+
+    for (uint8_t i = 0; i < RGBLIGHT_LED_COUNT; i++) {
+        setrgb(0, 0, 0, &led[i]);
+    }
+
+    HSV hsv = {
+        .h = rgblight_indicator_state.config.hue,
+        .s = rgblight_indicator_state.config.sat,
+        .v = rgblight_indicator_state.config.val,
+    };
+
+    for (uint8_t i = rgblight_ranges.effect_start_pos; i < rgblight_ranges.effect_end_pos; i++) {
+        sethsv(hsv.h, hsv.s, hsv.v, &led[i]);
+    }
+
+    rgblight_indicator_state.needs_render = false;
+    return true;
+}
+
+rgblight_indicator_config_t rgblight_indicator_get_config(void)
+{
+    return rgblight_indicator_state.config;
+}
+
+// V251012R2: VIA 및 포트 계층에서 전달된 구성 변경을 반영
+void rgblight_indicator_update_config(rgblight_indicator_config_t config)
+{
+    rgblight_indicator_state.config = config;
+
+    bool should_enable = rgblight_indicator_target_active(config.target, rgblight_indicator_state.host_state);
+
+    if (!is_rgblight_initialized) {
+        rgblight_indicator_state.active       = should_enable;
+        rgblight_indicator_state.needs_render = should_enable;
+        return;
+    }
+
+    if (should_enable != rgblight_indicator_state.active) {
+        rgblight_indicator_state.active       = should_enable;
+        rgblight_indicator_state.needs_render = should_enable;
+
+        if (rgblight_indicator_state.active) {
+            rgblight_set();
+        } else {
+            if (rgblight_config.enable) {
+                rgblight_mode_noeeprom(rgblight_config.mode);
+            } else {
+                rgblight_set();
+            }
+        }
+    } else if (rgblight_indicator_state.active) {
+        rgblight_indicator_state.needs_render = true;
+        rgblight_set();
+    }
+}
+
+// V251012R2: 호스트 LED 상태 변화를 rgblight 인디케이터 파이프라인으로 전달
+void rgblight_indicator_apply_host_led(led_t host_led_state)
+{
+    rgblight_indicator_state.host_state = host_led_state;
+
+    bool should_enable = rgblight_indicator_target_active(rgblight_indicator_state.config.target, host_led_state);
+
+    if (!is_rgblight_initialized) {
+        rgblight_indicator_state.active       = should_enable;
+        rgblight_indicator_state.needs_render = should_enable;
+        return;
+    }
+
+    if (should_enable != rgblight_indicator_state.active) {
+        rgblight_indicator_state.active       = should_enable;
+        rgblight_indicator_state.needs_render = should_enable;
+
+        if (rgblight_indicator_state.active) {
+            rgblight_set();
+        } else {
+            if (rgblight_config.enable) {
+                rgblight_mode_noeeprom(rgblight_config.mode);
+            } else {
+                rgblight_set();
+            }
+        }
+    } else if (rgblight_indicator_state.active && rgblight_indicator_state.needs_render) {
+        rgblight_set();
+    }
+}
+
+// V251012R2: 초기화 이후 보류 중이던 인디케이터 상태를 재평가
+void rgblight_indicator_sync_state(void)
+{
+    rgblight_indicator_apply_host_led(rgblight_indicator_state.host_state);
+}
 
 void rgblight_set_clipping_range(uint8_t start_pos, uint8_t num_leds) {
     rgblight_ranges.clipping_start_pos = start_pos;
@@ -249,6 +377,7 @@ void rgblight_init(void) {
     }
 
     is_rgblight_initialized = true;
+    rgblight_indicator_sync_state(); // V251012R2: 초기화 이후 인디케이터 상태 복원
 }
 
 void rgblight_reload_from_eeprom(void) {
@@ -896,35 +1025,34 @@ void rgblight_wakeup(void) {
 #endif
 
 void rgblight_set(void) {
-    if (rgblight_override_enable) {
-        return;
-    }
-    
     rgb_led_t *start_led;
-    uint8_t    num_leds = rgblight_ranges.clipping_num_leds;
+    uint8_t    num_leds            = rgblight_ranges.clipping_num_leds;
+    bool       indicator_overrides = rgblight_indicator_prepare_buffer(); // V251012R2: 인디케이터 우선 렌더링
 
-    if (!rgblight_config.enable) {
-        for (uint8_t i = rgblight_ranges.effect_start_pos; i < rgblight_ranges.effect_end_pos; i++) {
-            led[i].r = 0;
-            led[i].g = 0;
-            led[i].b = 0;
+    if (!indicator_overrides) {
+        if (!rgblight_config.enable) {
+            for (uint8_t i = rgblight_ranges.effect_start_pos; i < rgblight_ranges.effect_end_pos; i++) {
+                led[i].r = 0;
+                led[i].g = 0;
+                led[i].b = 0;
 #ifdef RGBW
-            led[i].w = 0;
+                led[i].w = 0;
 #endif
+            }
         }
-    }
 
 #ifdef RGBLIGHT_LAYERS
-    if (rgblight_layers != NULL
+        if (rgblight_layers != NULL
 #    if !defined(RGBLIGHT_LAYERS_OVERRIDE_RGB_OFF)
-        && rgblight_config.enable
+            && rgblight_config.enable
 #    elif defined(RGBLIGHT_SLEEP)
-        && !is_suspended
+            && !is_suspended
 #    endif
-    ) {
-        rgblight_layers_write();
-    }
+        ) {
+            rgblight_layers_write();
+        }
 #endif
+    }
 
 #ifdef RGBLIGHT_LED_MAP
     rgb_led_t led0[RGBLIGHT_LED_COUNT];
@@ -1045,7 +1173,10 @@ static void rgblight_effect_dummy(animation_status_t *anim) {
 }
 
 void rgblight_timer_task(void) {
-    if (rgblight_override_enable) {
+    if (rgblight_indicator_state.active) { // V251012R2: 인디케이터 활성 시 애니메이션 루프를 우회
+        if (rgblight_indicator_state.needs_render && is_rgblight_initialized) {
+            rgblight_set();
+        }
         return;
     }
     if (rgblight_status.timer_enabled) {

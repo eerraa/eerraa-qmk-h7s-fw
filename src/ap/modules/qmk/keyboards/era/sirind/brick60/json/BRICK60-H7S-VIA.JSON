@@ -14,30 +14,7 @@
       "label": "Lighting",
       "content": [
         {
-          "label": "INDICATORS",
-          "content": [
-            {
-              "label": "Caps ROW Enable",
-              "type": "toggle",
-              "content": ["id_qmk_led_caps_enable", 6, 1]
-            },            
-            {
-              "showIf": "{id_qmk_led_caps_enable} == 1",
-              "label": "Caps ROW Brightness",
-              "type": "range",
-              "options": [0, 255],
-              "content": ["id_qmk_led_caps_brightness", 6, 2]
-            },
-            {
-              "showIf": "{id_qmk_led_caps_enable} == 1",
-              "label": "Caps ROW Color",
-              "type": "color",
-              "content": ["id_qmk_led_caps_color", 6, 3]
-            }
-          ]
-        },
-        {
-          "label": "Underglow",
+          "label": "RGB ROW",
           "content": [
             {
               "label": "Brightness",
@@ -107,6 +84,30 @@
               "label": "Color",
               "type": "color",
               "content": ["id_qmk_rgblight_color", 2, 4]
+            },
+            {
+              "label": "Indicator",
+              "type": "dropdown",
+              "content": ["id_qmk_custom_ind_selec", 0, 1],
+              "options": [
+                ["Off", 0],
+                ["Caps Lock", 1],
+                ["Scroll Lock", 2],
+                ["Num Lock", 3]
+              ]
+            },            
+            {
+              "showIf": "{id_qmk_custom_ind_selec} != 0",
+              "label": "Indicator Brightness",
+              "type": "range",
+              "options": [0, 255],
+              "content": ["id_qmk_custom_ind_brightness", 0, 2]
+            },
+            {
+              "showIf": "{id_qmk_custom_ind_selec} != 0",
+              "label": "Indicator Color",
+              "type": "color",
+              "content": ["id_qmk_custom_ind_color", 0, 3]
             }
           ]
         }       

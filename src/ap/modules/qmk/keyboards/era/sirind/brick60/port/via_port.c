@@ -1,4 +1,4 @@
-#include "led_port.h"
+#include "indicator_port.h"
 #include "ver_port.h"
 #include "sys_port.h"
 
@@ -10,9 +10,9 @@ void via_custom_value_command_kb(uint8_t *data, uint8_t length)
   uint8_t *channel_id = &(data[1]);
 
 
-  if (*channel_id == id_qmk_led_caps_channel)
+  if (*channel_id == id_custom_channel)
   {
-    via_qmk_led_command(0, data, length);
+    indicator_port_via_command(data, length);  // V251012R2: 커스텀 인디케이터 채널 처리
     return;
   }
 
