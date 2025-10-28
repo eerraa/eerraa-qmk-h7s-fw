@@ -171,6 +171,30 @@ enum RGBLIGHT_EFFECT_MODE {
 #include "eeconfig.h"
 #include "ws2812.h"
 #include "color.h"
+#include "led.h"  // V251012R2: 인디케이터 대상 판별을 위해 led_t 참조
+
+// V251012R2: Brick60 RGB 인디케이터 구성을 rgblight 내부로 이관하기 위한 구조체 및 상수 정의
+enum rgblight_indicator_target {
+    RGBLIGHT_INDICATOR_TARGET_OFF    = 0,
+    RGBLIGHT_INDICATOR_TARGET_CAPS   = 1,
+    RGBLIGHT_INDICATOR_TARGET_SCROLL = 2,
+    RGBLIGHT_INDICATOR_TARGET_NUM    = 3,
+};
+
+typedef union {
+    uint32_t raw;
+    struct PACKED {
+        uint8_t target;
+        uint8_t val;
+        uint8_t hue;
+        uint8_t sat;
+    };
+} rgblight_indicator_config_t;
+
+void rgblight_indicator_update_config(rgblight_indicator_config_t config);
+rgblight_indicator_config_t rgblight_indicator_get_config(void);
+void rgblight_indicator_apply_host_led(led_t host_led_state);
+void rgblight_indicator_sync_state(void);
 
 #ifdef RGBLIGHT_LAYERS
 typedef struct {

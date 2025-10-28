@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251012R1"  // V251012R1: FS 백업 전송 타이머 지연 재배치
+#define _DEF_FIRMWATRE_VERSION      "V251012R2"  // V251012R2: Brick60 rgblight 인디케이터 파이프라인 통합
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

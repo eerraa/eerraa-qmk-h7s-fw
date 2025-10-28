@@ -13,7 +13,7 @@
 #define QMK_BUILDDATE   "2025-06-27-17:35:30"
 
 
-#define EECONFIG_USER_LED_CAPS        ((void *)((uint32_t)EECONFIG_USER_DATABLOCK +  0)) // 4B
+#define EECONFIG_USER_LED_CAPS        ((void *)((uint32_t)EECONFIG_USER_DATABLOCK +  0)) // 4B  // V251012R2: Brick60 커스텀 인디케이터 슬롯
 #define EECONFIG_USER_LED_SCROLL      ((void *)((uint32_t)EECONFIG_USER_DATABLOCK +  4)) // 4B
 #define EECONFIG_USER_KILL_SWITCH_LR  ((void *)((uint32_t)EECONFIG_USER_DATABLOCK +  8)) // 8B
 #define EECONFIG_USER_KILL_SWITCH_UD  ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 16)) // 8B
