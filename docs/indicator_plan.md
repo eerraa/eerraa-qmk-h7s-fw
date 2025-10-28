@@ -39,13 +39,14 @@
 ### 3.3 VIA 프로토콜 및 JSON 연동
 1. `via.h`에서 `id_qmk_led_caps_channel`·`id_qmk_led_scroll_channel`을 제거하고, 인디케이터 값 ID를 새 enum(`id_qmk_custom_ind_selec` 등)으로 정의합니다. 기존 채널 번호 충돌이 없도록 `id_custom_channel`을 그대로 사용합니다.【F:src/ap/modules/qmk/quantum/via.h†L107-L133】
 2. `via_custom_value_command_kb()`는 채널 0 수신 시 인디케이터 처리기로 위임하도록 갱신하고, 기타 기능(버전, 시스템, SOCD 등)은 기존 분기 구조를 유지합니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/port/via_port.c†L6-L53】
-3. 구형 VIA JSON과의 호환성이 필요하다면(예: 채널 6 기반 사용자) 임시 호환 분기를 제공하고, 이후 릴리스 노트에서 구형 JSON 폐기를 안내합니다.
+3. 구형 VIA JSON과의 호환성이 필요하지 않기 때문에 기존 분기는 제거합니다. (예: 채널 6 기반 사용자)
 4. 신규 JSON(`BRICK60-H7S-VIA-NEW.JSON`)을 기본 배포본으로 교체하고, 문서/릴리스 노트에 인디케이터 선택·밝기·색상 옵션 추가 사실을 명시합니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/json/BRICK60-H7S-VIA-NEW.JSON†L17-L111】
 
 ### 3.4 버전 관리 및 부가 조정
 1. `_DEF_FIRMWATRE_VERSION`을 이번 작업에 맞춰 `V251012R2`(가칭) 등 새로운 식별자로 올리고, 모든 수정 파일 최상단 또는 주요 변경 지점에 동일 버전의 변경 이력 주석을 남깁니다.【F:src/hw/hw_def.h†L1-L20】
 2. 인디케이터 관련 문서가 필요하다면 `docs/`에 간단한 사용 가이드(예: VIA 설정법)를 추가해 사용자 혼선을 줄입니다.
 3. 코드 스타일 규칙(2칸 들여쓰기, 중괄호 개행 등)과 기존 주석 컨벤션을 유지하며, 불필요한 `#include` 정리와 정적 분석 경고 확인을 병행합니다.
+4. PR 작성시 AGENTS.md에 따라 작성합니다.
 
 ## 4. 테스트 및 검증 계획
 1. **기능 점검**: Caps/Scroll/Num Lock을 각각 토글하여 인디케이터가 선택된 잠금 키에만 반응하는지, 해제 즉시 원래 RGB 효과가 복구되는지 확인합니다.
