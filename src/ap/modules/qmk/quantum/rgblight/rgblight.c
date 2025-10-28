@@ -159,14 +159,21 @@ static bool rgblight_indicator_target_active(uint8_t target, led_t host_state)
 }
 
 // V251012R2: 인디케이터 출력 시 사용할 LED 버퍼를 채우는 헬퍼
+// V251012R3: LED 버퍼 초기화와 채우기 경로를 간소화해 불필요한 반복 연산을 제거
 static bool rgblight_indicator_prepare_buffer(void)
 {
     if (!rgblight_indicator_state.active) {
         return false;
     }
 
-    for (uint8_t i = 0; i < RGBLIGHT_LED_COUNT; i++) {
-        setrgb(0, 0, 0, &led[i]);
+    memset(led, 0, sizeof(led));
+
+    uint8_t start = rgblight_ranges.effect_start_pos;
+    uint8_t count = rgblight_ranges.effect_num_leds;
+
+    if (count == 0) {
+        rgblight_indicator_state.needs_render = false;
+        return true;
     }
 
     HSV hsv = {
@@ -175,12 +182,51 @@ static bool rgblight_indicator_prepare_buffer(void)
         .v = rgblight_indicator_state.config.val,
     };
 
-    for (uint8_t i = rgblight_ranges.effect_start_pos; i < rgblight_ranges.effect_end_pos; i++) {
-        sethsv(hsv.h, hsv.s, hsv.v, &led[i]);
+    if (hsv.v > 0) {
+        HSV sanitized = {
+            .h = hsv.h,
+            .s = hsv.s,
+            .v = hsv.v > RGBLIGHT_LIMIT_VAL ? RGBLIGHT_LIMIT_VAL : hsv.v,
+        };
+        RGB rgb = rgblight_hsv_to_rgb(sanitized);
+
+        for (uint8_t i = 0; i < count; i++) {
+            setrgb(rgb.r, rgb.g, rgb.b, &led[start + i]);
+        }
     }
 
     rgblight_indicator_state.needs_render = false;
     return true;
+}
+
+// V251012R3: 인디케이터 상태 전이를 공통화해 중복 로직과 불필요한 rgblight_set 호출을 축소
+static void rgblight_indicator_commit_state(bool should_enable, bool request_render)
+{
+    bool was_active  = rgblight_indicator_state.active;
+    bool was_pending = rgblight_indicator_state.needs_render;
+    bool needs_render = should_enable && (request_render || !was_active || was_pending);
+
+    rgblight_indicator_state.active       = should_enable;
+    rgblight_indicator_state.needs_render = needs_render;
+
+    if (!is_rgblight_initialized) {
+        return;
+    }
+
+    if (should_enable) {
+        if (!was_active || needs_render) {
+            rgblight_set();
+        }
+        return;
+    }
+
+    if (was_active) {
+        if (rgblight_config.enable) {
+            rgblight_mode_noeeprom(rgblight_config.mode);
+        } else {
+            rgblight_set();
+        }
+    }
 }
 
 rgblight_indicator_config_t rgblight_indicator_get_config(void)
@@ -195,29 +241,7 @@ void rgblight_indicator_update_config(rgblight_indicator_config_t config)
 
     bool should_enable = rgblight_indicator_target_active(config.target, rgblight_indicator_state.host_state);
 
-    if (!is_rgblight_initialized) {
-        rgblight_indicator_state.active       = should_enable;
-        rgblight_indicator_state.needs_render = should_enable;
-        return;
-    }
-
-    if (should_enable != rgblight_indicator_state.active) {
-        rgblight_indicator_state.active       = should_enable;
-        rgblight_indicator_state.needs_render = should_enable;
-
-        if (rgblight_indicator_state.active) {
-            rgblight_set();
-        } else {
-            if (rgblight_config.enable) {
-                rgblight_mode_noeeprom(rgblight_config.mode);
-            } else {
-                rgblight_set();
-            }
-        }
-    } else if (rgblight_indicator_state.active) {
-        rgblight_indicator_state.needs_render = true;
-        rgblight_set();
-    }
+    rgblight_indicator_commit_state(should_enable, true);  // V251012R3: 구성 변경 시 즉시 재렌더링
 }
 
 // V251012R2: 호스트 LED 상태 변화를 rgblight 인디케이터 파이프라인으로 전달
@@ -227,28 +251,7 @@ void rgblight_indicator_apply_host_led(led_t host_led_state)
 
     bool should_enable = rgblight_indicator_target_active(rgblight_indicator_state.config.target, host_led_state);
 
-    if (!is_rgblight_initialized) {
-        rgblight_indicator_state.active       = should_enable;
-        rgblight_indicator_state.needs_render = should_enable;
-        return;
-    }
-
-    if (should_enable != rgblight_indicator_state.active) {
-        rgblight_indicator_state.active       = should_enable;
-        rgblight_indicator_state.needs_render = should_enable;
-
-        if (rgblight_indicator_state.active) {
-            rgblight_set();
-        } else {
-            if (rgblight_config.enable) {
-                rgblight_mode_noeeprom(rgblight_config.mode);
-            } else {
-                rgblight_set();
-            }
-        }
-    } else if (rgblight_indicator_state.active && rgblight_indicator_state.needs_render) {
-        rgblight_set();
-    }
+    rgblight_indicator_commit_state(should_enable, false);  // V251012R3: 호스트 이벤트는 전이 감지만 수행
 }
 
 // V251012R2: 초기화 이후 보류 중이던 인디케이터 상태를 재평가

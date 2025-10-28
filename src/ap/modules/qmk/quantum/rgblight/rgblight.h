@@ -174,6 +174,7 @@ enum RGBLIGHT_EFFECT_MODE {
 #include "led.h"  // V251012R2: 인디케이터 대상 판별을 위해 led_t 참조
 
 // V251012R2: Brick60 RGB 인디케이터 구성을 rgblight 내부로 이관하기 위한 구조체 및 상수 정의
+// V251012R3: 포트 계층이 동일한 구조체를 공유할 수 있도록 공개 인터페이스 유지
 enum rgblight_indicator_target {
     RGBLIGHT_INDICATOR_TARGET_OFF    = 0,
     RGBLIGHT_INDICATOR_TARGET_CAPS   = 1,
