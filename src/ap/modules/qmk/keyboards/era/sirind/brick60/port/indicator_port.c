@@ -18,11 +18,6 @@ static void indicator_via_save(void);
 
 EECONFIG_DEBOUNCE_HELPER(indicator, EECONFIG_USER_LED_CAPS, indicator_config);
 
-static void indicator_apply_config(void)
-{
-  rgblight_indicator_update_config(indicator_config);  // V251012R3: 슬롯 값을 직접 전달
-}
-
 static void indicator_apply_defaults(void)
 {
   indicator_config.target = RGBLIGHT_INDICATOR_TARGET_CAPS;
@@ -48,7 +43,7 @@ void led_init_ports(void)
     eeconfig_flush_indicator(true);
   }
 
-  indicator_apply_config();
+  rgblight_indicator_update_config(indicator_config);  // V251012R4: 기본 구성 및 저장된 구성을 즉시 반영
   rgblight_indicator_sync_state();
 }
 
@@ -147,7 +142,7 @@ static void indicator_via_set_value(uint8_t *data)
     }
   }
 
-  indicator_apply_config();
+  rgblight_indicator_update_config(indicator_config);  // V251012R4: VIA 변경 사항을 즉시 rgblight에 전달
 }
 
 static void indicator_via_save(void)
