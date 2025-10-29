@@ -199,29 +199,38 @@ static bool rgblight_indicator_prepare_buffer(void)
         return false;
     }
 
+    rgblight_indicator_config_t config = rgblight_indicator_state.config;  // V251013R2: 구성 값을 지역 변수로 캐시해 분기별 상태 조회를 줄임
+
     uint8_t clip_start = rgblight_ranges.clipping_start_pos;
     uint8_t clip_count = rgblight_ranges.clipping_num_leds;
     uint8_t start      = rgblight_ranges.effect_start_pos;
     uint8_t count      = rgblight_ranges.effect_num_leds;
 
-    bool fills_clip_range = (rgblight_indicator_state.config.val > 0) && (count > 0) &&
-                            (clip_start == start) && (clip_count == count);
+    bool has_brightness = config.val > 0;
+    bool has_effect     = count > 0;
 
-    if (clip_count > 0 && !fills_clip_range) {
-        memset(&led[clip_start], 0, clip_count * sizeof(rgb_led_t));  // V251013R1: 부분 덮기 또는 소등 시에만 클리핑 범위를 초기화해 불필요한 메모리 클리어를 추가로 제거
+    if (clip_count > 0) {
+        bool fills_clip_range = has_brightness && has_effect && (clip_start == start) && (clip_count == count);
+
+        if (!fills_clip_range) {
+            memset(&led[clip_start], 0, clip_count * sizeof(rgb_led_t));  // V251013R1: 부분 덮기 또는 소등 시에만 클리핑 범위를 초기화해 불필요한 메모리 클리어를 추가로 제거
+        }
     }
 
-    if (count == 0) {
+    if (!has_brightness || !has_effect) {
+        if (!has_brightness && has_effect && clip_count < count) {
+            memset(&led[start], 0, count * sizeof(rgb_led_t));  // V251013R2: 클리핑 범위가 비활성인 경우에도 효과 영역을 초기화해 잔여 데이터를 제거
+        }
+
         rgblight_indicator_state.needs_render = false;
         return true;
     }
 
-    if (rgblight_indicator_state.config.val > 0) {
-        rgb_led_t cached = rgblight_indicator_state.color;  // V251012R4: 캐시된 색상을 그대로 복사
+    rgb_led_t cached       = rgblight_indicator_state.color;  // V251012R4: 캐시된 색상을 그대로 복사
+    rgb_led_t *target_led   = &led[start];
 
-        for (uint8_t i = 0; i < count; i++) {
-            led[start + i] = cached;
-        }
+    for (uint8_t i = 0; i < count; i++) {
+        target_led[i] = cached;
     }
 
     rgblight_indicator_state.needs_render = false;

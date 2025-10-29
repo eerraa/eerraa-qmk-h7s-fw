@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251013R1"  // V251013R1: 인디케이터 버퍼 초기화 조건 최적화
+#define _DEF_FIRMWATRE_VERSION      "V251013R2"  // V251013R2: 인디케이터 버퍼 초기화 분기 최적화 및 소등 범위 정리
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
