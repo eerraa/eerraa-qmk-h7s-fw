@@ -214,11 +214,13 @@ static bool rgblight_indicator_prepare_buffer(void)
     uint16_t effect_end = (uint16_t)start + count;
     bool     clip_covers_effect = (clip_count > 0) && has_effect &&
                                   (start >= clip_start) && (effect_end <= clip_end);  // V251013R3: 클리핑 범위가 효과 범위를 완전히 덮는지 여부 계산
+    bool clip_matches_effect = clip_covers_effect && (clip_start == start) &&
+                               (clip_count == count);  // V251013R4: 클리핑과 효과 범위가 완전히 일치할 때만 잔여 영역 초기화를 생략
 
     if (clip_count > 0) {
         if (!should_fill) {
             memset(&led[clip_start], 0, clip_count * sizeof(rgb_led_t));  // V251013R3: 소등 또는 효과 없음 시 전체 클리핑 범위를 초기화
-        } else if (!clip_covers_effect) {
+        } else if (!clip_matches_effect) {
             if (start > clip_start) {
                 uint16_t front_count = start - clip_start;
                 if (front_count > clip_count) {
