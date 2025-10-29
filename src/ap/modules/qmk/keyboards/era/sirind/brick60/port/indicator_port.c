@@ -113,6 +113,7 @@ static void indicator_via_set_value(uint8_t *data)
 {
   uint8_t *value_id   = &(data[0]);
   uint8_t *value_data = &(data[1]);
+  uint32_t prev_raw   = indicator_config.raw;  // V251013R5: 중복 갱신 여부 확인
 
   switch (*value_id)
   {
@@ -140,6 +141,11 @@ static void indicator_via_set_value(uint8_t *data)
     {
       return;
     }
+  }
+
+  if (indicator_config.raw == prev_raw)
+  {
+    return;  // V251013R5: 동일 값 반복 전달 시 rgblight 경로 호출 생략
   }
 
   rgblight_indicator_update_config(indicator_config);  // V251012R4: VIA 변경 사항을 즉시 rgblight에 전달
