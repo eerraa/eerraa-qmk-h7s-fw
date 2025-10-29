@@ -208,26 +208,47 @@ static bool rgblight_indicator_prepare_buffer(void)
 
     bool has_brightness = config.val > 0;
     bool has_effect     = count > 0;
+    bool should_fill    = has_brightness && has_effect;            // V251013R3: 분기 공통 조건을 계산해 반복 검사를 줄임
+
+    uint16_t clip_end   = (uint16_t)clip_start + clip_count;      // V251013R3: 합산 시 오버플로우를 피하기 위해 16비트로 계산
+    uint16_t effect_end = (uint16_t)start + count;
+    bool     clip_covers_effect = (clip_count > 0) && has_effect &&
+                                  (start >= clip_start) && (effect_end <= clip_end);  // V251013R3: 클리핑 범위가 효과 범위를 완전히 덮는지 여부 계산
 
     if (clip_count > 0) {
-        bool fills_clip_range = has_brightness && has_effect && (clip_start == start) && (clip_count == count);
+        if (!should_fill) {
+            memset(&led[clip_start], 0, clip_count * sizeof(rgb_led_t));  // V251013R3: 소등 또는 효과 없음 시 전체 클리핑 범위를 초기화
+        } else if (!clip_covers_effect) {
+            if (start > clip_start) {
+                uint16_t front_count = start - clip_start;
+                if (front_count > clip_count) {
+                    front_count = clip_count;
+                }
+                memset(&led[clip_start], 0, front_count * sizeof(rgb_led_t));  // V251013R3: 효과 범위 앞단 잔여 영역만 초기화
+            }
 
-        if (!fills_clip_range) {
-            memset(&led[clip_start], 0, clip_count * sizeof(rgb_led_t));  // V251013R1: 부분 덮기 또는 소등 시에만 클리핑 범위를 초기화해 불필요한 메모리 클리어를 추가로 제거
+            if (clip_end > effect_end) {
+                uint16_t tail_start = effect_end > clip_start ? effect_end : clip_start;
+                uint16_t tail_count = clip_end - tail_start;
+
+                if (tail_count > 0) {
+                    memset(&led[tail_start], 0, tail_count * sizeof(rgb_led_t));  // V251013R3: 효과 범위 이후 남은 영역만 초기화
+                }
+            }
         }
     }
 
-    if (!has_brightness || !has_effect) {
-        if (!has_brightness && has_effect && clip_count < count) {
-            memset(&led[start], 0, count * sizeof(rgb_led_t));  // V251013R2: 클리핑 범위가 비활성인 경우에도 효과 영역을 초기화해 잔여 데이터를 제거
+    if (!should_fill) {
+        if (has_effect && !clip_covers_effect) {
+            memset(&led[start], 0, count * sizeof(rgb_led_t));  // V251013R3: 클리핑 범위가 덮지 못한 효과 영역을 초기화해 잔여 데이터를 제거
         }
 
         rgblight_indicator_state.needs_render = false;
         return true;
     }
 
-    rgb_led_t cached       = rgblight_indicator_state.color;  // V251012R4: 캐시된 색상을 그대로 복사
-    rgb_led_t *target_led   = &led[start];
+    rgb_led_t cached      = rgblight_indicator_state.color;  // V251012R4: 캐시된 색상을 그대로 복사
+    rgb_led_t *target_led = &led[start];
 
     for (uint8_t i = 0; i < count; i++) {
         target_led[i] = cached;
