@@ -1,21 +1,21 @@
-# V251013R2 RGB 인디케이터 추가 리팩토링 검토
+# V251013R3 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
-- 대상: V251012R2~R9에서 정비한 Brick60 RGB 인디케이터 파이프라인.
-- 목표: 클리핑 범위 초기화 분기와 버퍼 갱신 경로를 재검토해 잔여 오버헤드 및 비활성 구간 잔류 데이터를 제거.
+- 대상: V251012R2~V251013R2에서 정비한 Brick60 RGB 인디케이터 파이프라인.
+- 목표: 클리핑 범위 초기화 경로를 다시 분해해 중복 `memset()` 호출을 제거하고, 효과 범위 외곽만 최소한으로 초기화하도록 조정.
 
 ## 불필요 코드 / 사용 종료된 요소 정리
 - 추가로 제거할 공개 API나 래퍼는 확인되지 않음.
 
 ## 성능 및 오버헤드 검토
-- `rgblight_indicator_prepare_buffer()`가 구성 값과 범위 데이터를 지역 변수로 캐시하고, 밝기 0이더라도 효과 범위를 확실히 초기화하도록 분기 재정리. 클리핑 범위가 비활성화된 구성에서도 잔여 LED 데이터를 남기지 않아 재렌더 시 안전성이 향상됨.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L198-L235】
-- 인디케이터 색상 캐시와 전환 플래그 구조는 유지되어, 타이머 우회 및 인터럽트 부하 최적화에 변화 없음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L198-L239】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1067-L1216】
+- `rgblight_indicator_prepare_buffer()`가 효과 범위와 클리핑 범위의 포함 관계를 계산해, 실제로 남는 전단/후단 구간만 `memset()`으로 초기화하도록 조정. 소등 시에는 전체 클리핑 범위를 한 번만 정리하고, 부분 점등 시에는 잔여 영역만 정리해 버퍼 재작성 횟수를 줄임.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L205-L244】
+- 클리핑 범위가 효과 범위를 완전히 덮는 경우에는 추가 초기화를 건너뛰어 불필요한 메모리 접근을 제거. 기존 캐시 구조와 애니메이션 우회 조건은 그대로 유지되어 타이머 경로에 영향 없음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L205-L244】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1078-L1224】
 
 ## 제어 흐름 간소화
-- 버퍼 초기화 경로를 조정해 소등/부분 점등 시 처리 흐름이 명확해졌으며, 상태 머신 및 렌더링 트리거 조건은 그대로 유지.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L198-L239】
+- 공통 분기 조건을 `should_fill`로 집약하고, 클리핑-효과 범위의 포함 여부(`clip_covers_effect`)를 명시적으로 계산해 판단 경로를 단순화. 밝기 0 또는 효과 없음 조건에서도 동일한 흐름으로 조기 종료가 가능해졌으며, 상태 머신 및 렌더링 트리거 조건은 그대로 유지됨.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L205-L244】
 
 ## 수정 적용 여부 판단
-- 밝기 0 처리 및 범위 캐시 최적화로 안전성과 일관성이 개선되어 보수적 관점에서도 적용 이득이 명확함.
+- 중복 `memset()` 제거와 조건 계산 단순화로 캐시를 유지하면서도 버퍼 초기화 비용을 줄일 수 있어, 보수적 관점에서도 적용 이득이 명확함.
 
 **결론: 수정 적용.**
 
