@@ -174,6 +174,7 @@ enum RGBLIGHT_EFFECT_MODE {
 #include "led.h"  // V251012R2: 인디케이터 대상 판별을 위해 led_t 참조
 
 // V251012R2: Brick60 RGB 인디케이터 구성을 rgblight 내부로 이관하기 위한 구조체 및 상수 정의
+// V251012R3: 포트 계층이 동일한 구조체를 공유할 수 있도록 공개 인터페이스 유지
 enum rgblight_indicator_target {
     RGBLIGHT_INDICATOR_TARGET_OFF    = 0,
     RGBLIGHT_INDICATOR_TARGET_CAPS   = 1,
@@ -195,6 +196,8 @@ void rgblight_indicator_update_config(rgblight_indicator_config_t config);
 rgblight_indicator_config_t rgblight_indicator_get_config(void);
 void rgblight_indicator_apply_host_led(led_t host_led_state);
 void rgblight_indicator_sync_state(void);
+// V251012R3: HSV → RGB 변환 헬퍼를 외부에서도 재사용할 수 있도록 선언
+RGB rgblight_hsv_to_rgb(HSV hsv);
 
 #ifdef RGBLIGHT_LAYERS
 typedef struct {
