@@ -84,9 +84,14 @@
               "label": "Color",
               "type": "color",
               "content": ["id_qmk_rgblight_color", 2, 4]
-            },
+            }
+          ]
+        },
+        {
+          "label": "INDICATOR",
+          "content": [
             {
-              "label": "Indicator",
+              "label": "Indicator Select",
               "type": "dropdown",
               "content": ["id_qmk_custom_ind_selec", 0, 1],
               "options": [
@@ -110,7 +115,7 @@
               "content": ["id_qmk_custom_ind_color", 0, 3]
             }
           ]
-        }       
+        }
       ]
     },
     {
