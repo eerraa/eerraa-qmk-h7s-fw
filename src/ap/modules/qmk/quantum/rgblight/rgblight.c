@@ -282,9 +282,15 @@ void rgblight_indicator_apply_host_led(led_t host_led_state)
 }
 
 // V251012R2: 초기화 이후 보류 중이던 인디케이터 상태를 재평가
+// V251012R7: 대기 중인 렌더링을 즉시 재요청해 초기화 직후 지연을 제거
+// V251012R8: keyboard_init() 경로(led_init_ports() → rgblight_init())에서의 호출 목적을 명시
 void rgblight_indicator_sync_state(void)
 {
-    rgblight_indicator_apply_host_led(rgblight_indicator_state.host_state);
+    bool should_enable =
+        rgblight_indicator_target_active(rgblight_indicator_state.config.target,
+                                         rgblight_indicator_state.host_state);
+
+    rgblight_indicator_commit_state(should_enable, true);
 }
 
 void rgblight_set_clipping_range(uint8_t start_pos, uint8_t num_leds) {

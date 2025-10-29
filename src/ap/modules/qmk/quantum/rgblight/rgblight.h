@@ -194,7 +194,7 @@ typedef union {
 
 void rgblight_indicator_update_config(rgblight_indicator_config_t config);
 void rgblight_indicator_apply_host_led(led_t host_led_state);
-void rgblight_indicator_sync_state(void);  // V251012R6: 사용되지 않는 구성 조회 API 제거
+void rgblight_indicator_sync_state(void);  // V251012R7: 초기화 직후 렌더 재요청 유지, V251012R8: 호출 경로 재평가
 // V251012R3: HSV → RGB 변환 헬퍼를 외부에서도 재사용할 수 있도록 선언
 RGB rgblight_hsv_to_rgb(HSV hsv);
 
