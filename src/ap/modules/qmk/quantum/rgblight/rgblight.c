@@ -145,6 +145,16 @@ static rgblight_indicator_state_t rgblight_indicator_state = {
     .needs_render = false,
 };
 
+// V251013R5: 인디케이터 버퍼 초기화를 공통화해 0 길이 memset 호출을 방지
+static inline void rgblight_indicator_clear_range(uint8_t start, uint16_t count)
+{
+    if (count == 0) {
+        return;
+    }
+
+    memset(&led[start], 0, count * sizeof(rgb_led_t));
+}
+
 // V251012R2: 인디케이터 대상과 호스트 LED 상태를 비교하여 활성화 여부를 반환
 static bool rgblight_indicator_target_active(uint8_t target, led_t host_state)
 {
@@ -219,30 +229,28 @@ static bool rgblight_indicator_prepare_buffer(void)
 
     if (clip_count > 0) {
         if (!should_fill) {
-            memset(&led[clip_start], 0, clip_count * sizeof(rgb_led_t));  // V251013R3: 소등 또는 효과 없음 시 전체 클리핑 범위를 초기화
+            rgblight_indicator_clear_range(clip_start, clip_count);  // V251013R5: 공통 초기화 헬퍼로 0 길이 호출 제거
         } else if (!clip_matches_effect) {
             if (start > clip_start) {
                 uint16_t front_count = start - clip_start;
                 if (front_count > clip_count) {
                     front_count = clip_count;
                 }
-                memset(&led[clip_start], 0, front_count * sizeof(rgb_led_t));  // V251013R3: 효과 범위 앞단 잔여 영역만 초기화
+                rgblight_indicator_clear_range(clip_start, front_count);  // V251013R5: 공통 초기화 경로 사용
             }
 
             if (clip_end > effect_end) {
                 uint16_t tail_start = effect_end > clip_start ? effect_end : clip_start;
                 uint16_t tail_count = clip_end - tail_start;
 
-                if (tail_count > 0) {
-                    memset(&led[tail_start], 0, tail_count * sizeof(rgb_led_t));  // V251013R3: 효과 범위 이후 남은 영역만 초기화
-                }
+                rgblight_indicator_clear_range(tail_start, tail_count);  // V251013R5: 공통 초기화 경로 사용
             }
         }
     }
 
     if (!should_fill) {
         if (has_effect && !clip_covers_effect) {
-            memset(&led[start], 0, count * sizeof(rgb_led_t));  // V251013R3: 클리핑 범위가 덮지 못한 효과 영역을 초기화해 잔여 데이터를 제거
+            rgblight_indicator_clear_range(start, count);  // V251013R5: 공통 초기화 경로 사용
         }
 
         rgblight_indicator_state.needs_render = false;

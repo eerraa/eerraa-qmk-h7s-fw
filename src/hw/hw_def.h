@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251013R4"  // V251013R4: 인디케이터 클리핑-효과 범위 불일치 시 잔여 영역 초기화 보강
+#define _DEF_FIRMWATRE_VERSION      "V251013R5"  // V251013R5: 인디케이터 초기화 헬퍼와 VIA 중복 갱신 차단 정비
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

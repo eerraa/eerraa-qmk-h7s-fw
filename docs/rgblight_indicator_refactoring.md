@@ -1,21 +1,23 @@
-# V251013R4 RGB 인디케이터 추가 리팩토링 검토
+# V251013R5 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
-- 대상: V251012R2~V251013R3에서 정비한 Brick60 RGB 인디케이터 파이프라인.
-- 목표: 클리핑 범위가 효과 범위보다 넓은 경우 잔여 영역이 초기화되지 않고 남는 경로를 점검하고 보완.
+- 대상: V251012R2~V251013R4에서 정비한 Brick60 RGB 인디케이터 파이프라인.
+- 목표: 반복 호출되는 초기화 경로 및 VIA 구성 전달 경로를 재점검해 잔여 오버헤드를 제거할 수 있는지 확인.
 
 ## 불필요 코드 / 사용 종료된 요소 정리
 - 추가로 제거할 공개 API나 래퍼는 확인되지 않음.
 
 ## 성능 및 오버헤드 검토
-- `rgblight_indicator_prepare_buffer()`가 클리핑과 효과 범위가 정확히 일치하는 경우에만 초기화를 생략하도록 수정해, 부분 점등 시에도 잔여 구간을 확실히 0으로 정리한다. 이미 계산된 포함 여부를 재활용하므로 조건 계산 비용 증가는 없으며, 남은 LED 버퍼를 그대로 두어 재점등되는 문제를 방지한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L205-L244】
-- 기존 색상 캐시 및 애니메이션 우회 조건은 유지되어 렌더링 요청 수나 인터럽트 경로에는 변화 없음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L205-L244】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1078-L1224】
+- `rgblight_indicator_prepare_buffer()` 내부에 초기화 전용 헬퍼(`rgblight_indicator_clear_range()`)를 두어, 0 길이 `memset()` 호출과 동일 포인터 계산을 반복하지 않도록 정리했다. 클리핑/효과 경계 계산은 그대로 재활용해 안전하게 필요한 범위만 초기화한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L150-L244】
+- VIA에서 동일 구성을 반복 전달하는 경우 `indicator_via_set_value()`가 `rgblight_indicator_update_config()` 호출을 건너뛰도록 가드해, 인터럽트 컨텍스트에서 불필요한 상태 비교와 함수 호출이 다시 발생하지 않도록 했다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/port/indicator_port.c†L58-L104】
+- 기존 색상 캐시 및 애니메이션 우회 조건은 유지되어 렌더링 요청 수나 인터럽트 경로에는 변화 없음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L150-L244】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1078-L1224】
 
 ## 제어 흐름 간소화
-- 포함 관계 위에 `clip_matches_effect` 분기를 추가해 잔여 영역 초기화 필요 여부를 명확히 분리함으로써 조건문 가독성을 유지했다. 기존 `clip_covers_effect` 계산을 재사용하므로 연산 수 증가 없이 로직만 보강됐다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L205-L244】
+- 초기화 헬퍼 도입으로 잔여 영역 정리 로직을 한 곳에 모아, 분기마다 동일한 `memset()` 호출을 반복하지 않고도 가독성을 유지할 수 있다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L150-L244】
+- VIA 구성 가드는 switch 종료 후 단일 비교로 구현되어 기존 분기 구조를 건드리지 않으면서 조기 반환만 추가한다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/port/indicator_port.c†L58-L104】
 
 ## 수정 적용 여부 판단
-- 인디케이터가 부분 영역만 점등하는 경우에도 잔여 버퍼를 확실히 초기화할 필요가 있으므로 보수적 관점에서도 수정 이득이 확실함.
+- 0 길이 초기화 제거와 중복 VIA 호출 생략 모두 기존 거동을 유지한 채 오버헤드만 줄여 주므로, 보수적 관점에서도 반영 가치가 충분함.
 
 **결론: 수정 적용.**
 
