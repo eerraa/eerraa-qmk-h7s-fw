@@ -44,7 +44,7 @@ void led_init_ports(void)
   }
 
   rgblight_indicator_update_config(indicator_config);  // V251012R4: 기본 구성 및 저장된 구성을 즉시 반영
-  rgblight_indicator_sync_state();
+  // V251012R7: rgblight 초기화 직후 재평가가 진행되므로 이 시점에서 동기화 호출은 생략
 }
 
 void led_update_ports(led_t led_state)

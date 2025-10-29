@@ -31,7 +31,7 @@
 ### 3.2 키보드 포트 계층 리팩토링
 1. `led_port.c/.h`를 `indicator_port.c/.h`로 리네이밍하고, 파일 내부를 인디케이터 로직·VIA 로직·EEPROM 관리 함수로 분리합니다. 필요 시 VIA 처리를 별도 `indicator_via.c`로 분할해 유지보수를 용이하게 합니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/port/led_port.c†L1-L198】
 2. EEPROM 헬퍼 매크로(`EECONFIG_DEBOUNCE_HELPER`)를 새 구조체에 맞게 갱신하고, 초기화 시 기본 HSV/잠금 키 선택을 캡슐화합니다. Scroll Lock 슬롯은 예비용으로 유지하거나 새로운 설정 필드 확장에 대비합니다.【F:src/ap/modules/qmk/port/port.h†L13-L20】
-3. `led_init_ports()`에서는 EEPROM 값을 읽어 rgblight 인디케이터 구성 API로 전달하고, 기본 효과 복원을 보장하기 위해 초기화 직후 `rgblight_indicator_sync_state()` 호출을 추가합니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/port/led_port.c†L51-L61】
+3. `led_init_ports()`에서는 EEPROM 값을 읽어 rgblight 인디케이터 구성 API로 전달하며, 실제 렌더 동기화는 `keyboard_init()` 후반부에서 호출되는 `rgblight_init()`이 담당합니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/port/indicator_port.c†L44-L63】【F:src/ap/modules/qmk/quantum/keyboard.c†L548-L577】
 4. `led_update_ports()`는 더 이상 WS2812 드라이버를 직접 호출하지 않고, 호스트 LED 상태를 새로운 rgblight 인디케이터 API로 전달하여 출력 경로를 일원화합니다. 상태 변화 감시 및 모드 복원은 rgblight 측에서 수행하므로, 포트 계층에는 상태 비교·EEPROM 갱신만 남깁니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/port/led_port.c†L63-L106】
 5. VIA 요청 처리 함수는 `indicator_port_via_command()` 등으로 명명하고, 값 ID 해석(선택/밝기/색상)과 EEPROM 업데이트 후 즉시 rgblight 구성에 반영하는 경로를 유지합니다. Flush 동작은 기존 디바운스 헬퍼를 활용해 주기적으로 수행합니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/port/led_port.c†L108-L198】
 6. 리팩토링에 따라 새 파일이 빌드 대상에 포함되는지 확인하고, 필요하면 해당 키보드 전용 CMake/빌드 스크립트를 갱신합니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/config.cmake†L1-L10】
