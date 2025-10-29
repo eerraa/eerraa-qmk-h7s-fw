@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251012R7"  // V251012R7: rgblight 인디케이터 동기화 즉시 반영 개선
+#define _DEF_FIRMWATRE_VERSION      "V251012R8"  // V251012R8: rgblight 인디케이터 초기화 경로 동기화 래퍼 정리
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
