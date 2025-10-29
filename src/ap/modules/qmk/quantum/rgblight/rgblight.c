@@ -201,13 +201,15 @@ static bool rgblight_indicator_prepare_buffer(void)
 
     uint8_t clip_start = rgblight_ranges.clipping_start_pos;
     uint8_t clip_count = rgblight_ranges.clipping_num_leds;
+    uint8_t start      = rgblight_ranges.effect_start_pos;
+    uint8_t count      = rgblight_ranges.effect_num_leds;
 
-    if (clip_count > 0) {
-        memset(&led[clip_start], 0, clip_count * sizeof(rgb_led_t));  // V251012R9: 전송 대상 LED만 초기화해 메모리 클리어 오버헤드 축소
+    bool fills_clip_range = (rgblight_indicator_state.config.val > 0) && (count > 0) &&
+                            (clip_start == start) && (clip_count == count);
+
+    if (clip_count > 0 && !fills_clip_range) {
+        memset(&led[clip_start], 0, clip_count * sizeof(rgb_led_t));  // V251013R1: 부분 덮기 또는 소등 시에만 클리핑 범위를 초기화해 불필요한 메모리 클리어를 추가로 제거
     }
-
-    uint8_t start = rgblight_ranges.effect_start_pos;
-    uint8_t count = rgblight_ranges.effect_num_leds;
 
     if (count == 0) {
         rgblight_indicator_state.needs_render = false;
