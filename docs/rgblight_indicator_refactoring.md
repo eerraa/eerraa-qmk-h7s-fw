@@ -1,23 +1,31 @@
-# V251012R9 RGB 인디케이터 추가 리팩토링 검토
+# V251013R1 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
-- 대상: V251012R2~R8에서 정비한 Brick60 RGB 인디케이터 파이프라인.
-- 목표: 인디케이터 우선 렌더링 시 LED 버퍼 초기화 오버헤드를 추가로 점검.
+- 대상: V251012R2~R9에서 정비한 Brick60 RGB 인디케이터 파이프라인.
+- 목표: 클리핑 범위 초기화 경로를 추가 점검해 잔여 오버헤드를 제거할 수 있는지 확인.
 
 ## 불필요 코드 / 사용 종료된 요소 정리
 - 추가로 제거할 공개 API나 래퍼는 확인되지 않음.
 
 ## 성능 및 오버헤드 검토
-- `rgblight_indicator_prepare_buffer()`가 항상 전체 LED 배열을 `memset()`하던 경로를, 실제 전송 범위(`clipping_start_pos`, `clipping_num_leds`)에 한정해 초기화하도록 조정해 필요 없는 메모리 클리어를 제거.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L199-L216】
+- 인디케이터가 클리핑 범위를 전부 덮으면서 점등하는 경우, 초기화가 중복되어 버려지는 것을 방지하도록 `rgblight_indicator_prepare_buffer()`가 조건적으로 `memset()`을 수행하게 조정함. 부분 점등 또는 소등(밝기 0) 시에는 기존과 동일하게 클리핑 범위를 초기화해 안전성을 유지.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L202-L225】
 - 인디케이터 색상 캐시와 전환 플래그 구조는 유지되어, 타이머 우회 및 인터럽트 부하 최적화에 변화 없음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L200-L239】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1065-L1214】
 
 ## 제어 흐름 간소화
-- 버퍼 초기화 범위만 조정하고 상태 머신 흐름은 변경하지 않아, 기존 전이 조건 및 즉시 렌더링 보장은 그대로 유지.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L200-L239】
+- 버퍼 초기화 조건만 조정해 상태 머신 흐름은 변경하지 않았으며, 기존 전이 조건 및 즉시 렌더링 보장은 그대로 유지.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L202-L239】
 
 ## 수정 적용 여부 판단
-- 동일한 렌더링 결과를 유지하면서도 메모리 초기화 범위를 줄일 수 있어, 보수적 관점에서도 이득이 확실함.
+- 동일한 렌더링 결과를 유지하면서 메모리 초기화를 한 번 더 줄일 수 있어, 보수적 관점에서도 이득이 확실함.
 
 **결론: 수정 적용.**
+
+---
+
+## 이전 기록 (V251012R9)
+
+- `rgblight_indicator_prepare_buffer()`가 항상 전체 LED 배열을 `memset()`하던 경로를, 실제 전송 범위(`clipping_start_pos`, `clipping_num_leds`)에 한정해 초기화하도록 조정해 필요 없는 메모리 클리어를 제거.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L202-L225】
+- 인디케이터 색상 캐시와 전환 플래그 구조는 유지되어, 타이머 우회 및 인터럽트 부하 최적화에 변화 없음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L200-L239】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1065-L1214】
+- 버퍼 초기화 범위만 조정하고 상태 머신 흐름은 변경하지 않아, 기존 전이 조건 및 즉시 렌더링 보장은 그대로 유지.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L202-L239】
 
 ---
 
