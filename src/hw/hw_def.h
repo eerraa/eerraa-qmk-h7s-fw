@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251013R3"  // V251013R3: 인디케이터 클리핑 초기화 범위를 세분화해 중복 연산 제거
+#define _DEF_FIRMWATRE_VERSION      "V251013R4"  // V251013R4: 인디케이터 클리핑-효과 범위 불일치 시 잔여 영역 초기화 보강
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

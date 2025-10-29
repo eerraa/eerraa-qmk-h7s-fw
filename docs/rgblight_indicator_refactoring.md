@@ -1,23 +1,30 @@
-# V251013R3 RGB 인디케이터 추가 리팩토링 검토
+# V251013R4 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
-- 대상: V251012R2~V251013R2에서 정비한 Brick60 RGB 인디케이터 파이프라인.
-- 목표: 클리핑 범위 초기화 경로를 다시 분해해 중복 `memset()` 호출을 제거하고, 효과 범위 외곽만 최소한으로 초기화하도록 조정.
+- 대상: V251012R2~V251013R3에서 정비한 Brick60 RGB 인디케이터 파이프라인.
+- 목표: 클리핑 범위가 효과 범위보다 넓은 경우 잔여 영역이 초기화되지 않고 남는 경로를 점검하고 보완.
 
 ## 불필요 코드 / 사용 종료된 요소 정리
 - 추가로 제거할 공개 API나 래퍼는 확인되지 않음.
 
 ## 성능 및 오버헤드 검토
-- `rgblight_indicator_prepare_buffer()`가 효과 범위와 클리핑 범위의 포함 관계를 계산해, 실제로 남는 전단/후단 구간만 `memset()`으로 초기화하도록 조정. 소등 시에는 전체 클리핑 범위를 한 번만 정리하고, 부분 점등 시에는 잔여 영역만 정리해 버퍼 재작성 횟수를 줄임.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L205-L244】
-- 클리핑 범위가 효과 범위를 완전히 덮는 경우에는 추가 초기화를 건너뛰어 불필요한 메모리 접근을 제거. 기존 캐시 구조와 애니메이션 우회 조건은 그대로 유지되어 타이머 경로에 영향 없음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L205-L244】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1078-L1224】
+- `rgblight_indicator_prepare_buffer()`가 클리핑과 효과 범위가 정확히 일치하는 경우에만 초기화를 생략하도록 수정해, 부분 점등 시에도 잔여 구간을 확실히 0으로 정리한다. 이미 계산된 포함 여부를 재활용하므로 조건 계산 비용 증가는 없으며, 남은 LED 버퍼를 그대로 두어 재점등되는 문제를 방지한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L205-L244】
+- 기존 색상 캐시 및 애니메이션 우회 조건은 유지되어 렌더링 요청 수나 인터럽트 경로에는 변화 없음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L205-L244】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1078-L1224】
 
 ## 제어 흐름 간소화
-- 공통 분기 조건을 `should_fill`로 집약하고, 클리핑-효과 범위의 포함 여부(`clip_covers_effect`)를 명시적으로 계산해 판단 경로를 단순화. 밝기 0 또는 효과 없음 조건에서도 동일한 흐름으로 조기 종료가 가능해졌으며, 상태 머신 및 렌더링 트리거 조건은 그대로 유지됨.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L205-L244】
+- 포함 관계 위에 `clip_matches_effect` 분기를 추가해 잔여 영역 초기화 필요 여부를 명확히 분리함으로써 조건문 가독성을 유지했다. 기존 `clip_covers_effect` 계산을 재사용하므로 연산 수 증가 없이 로직만 보강됐다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L205-L244】
 
 ## 수정 적용 여부 판단
-- 중복 `memset()` 제거와 조건 계산 단순화로 캐시를 유지하면서도 버퍼 초기화 비용을 줄일 수 있어, 보수적 관점에서도 적용 이득이 명확함.
+- 인디케이터가 부분 영역만 점등하는 경우에도 잔여 버퍼를 확실히 초기화할 필요가 있으므로 보수적 관점에서도 수정 이득이 확실함.
 
 **결론: 수정 적용.**
+
+---
+
+## 이전 기록 (V251013R3)
+
+- `rgblight_indicator_prepare_buffer()`가 효과 범위와 클리핑 범위의 포함 관계를 계산해, 실제로 남는 전단/후단 구간만 `memset()`으로 초기화하도록 조정. 소등 시에는 전체 클리핑 범위를 한 번만 정리하고, 부분 점등 시에는 잔여 영역만 정리해 버퍼 재작성 횟수를 줄임.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L205-L244】
+- 클리핑 범위가 효과 범위를 완전히 덮는 경우에는 추가 초기화를 건너뛰어 불필요한 메모리 접근을 제거. 기존 캐시 구조와 애니메이션 우회 조건은 그대로 유지되어 타이머 경로에 영향 없음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L205-L244】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1078-L1224】
 
 ---
 
