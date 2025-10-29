@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251012R5"  // V251012R5: rgblight 인디케이터 중복 연산 방지 최적화
+#define _DEF_FIRMWATRE_VERSION      "V251012R6"  // V251012R6: rgblight 인디케이터 구성 조회 API 정리
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

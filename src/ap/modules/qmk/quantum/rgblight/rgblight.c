@@ -251,12 +251,8 @@ static void rgblight_indicator_commit_state(bool should_enable, bool request_ren
     }
 }
 
-rgblight_indicator_config_t rgblight_indicator_get_config(void)
-{
-    return rgblight_indicator_state.config;
-}
-
 // V251012R2: VIA 및 포트 계층에서 전달된 구성 변경을 반영
+// V251012R6: 내부 상태만 사용하도록 구성 조회 API 정리
 void rgblight_indicator_update_config(rgblight_indicator_config_t config)
 {
     if (rgblight_indicator_state.config.raw == config.raw) {
