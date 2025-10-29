@@ -132,6 +132,7 @@ rgblight_ranges_t rgblight_ranges = {0, RGBLIGHT_LED_COUNT, 0, RGBLIGHT_LED_COUN
 typedef struct {
     rgblight_indicator_config_t config;
     led_t                       host_state;
+    rgb_led_t                   color;        // V251012R4: HSV 변환 결과를 캐시해 재계산을 피한다
     bool                        active;
     bool                        needs_render;
 } rgblight_indicator_state_t;
@@ -139,6 +140,7 @@ typedef struct {
 static rgblight_indicator_state_t rgblight_indicator_state = {
     .config = {.raw = 0},
     .host_state = {.raw = 0},
+    .color = {0},
     .active = false,
     .needs_render = false,
 };
@@ -158,8 +160,39 @@ static bool rgblight_indicator_target_active(uint8_t target, led_t host_state)
     }
 }
 
+// V251012R4: 구성 변경 시 한 번만 HSV→RGB 변환을 수행해 캐시한다
+static rgb_led_t rgblight_indicator_compute_color(rgblight_indicator_config_t config)
+{
+    rgb_led_t color = {0};
+
+    if (config.val == 0) {
+        return color;
+    }
+
+    uint8_t clamped_val = config.val > RGBLIGHT_LIMIT_VAL ? RGBLIGHT_LIMIT_VAL : config.val;
+
+    HSV hsv = {
+        .h = config.hue,
+        .s = config.sat,
+        .v = clamped_val,
+    };
+
+    RGB rgb = rgblight_hsv_to_rgb(hsv);
+
+    color.r = rgb.r;
+    color.g = rgb.g;
+    color.b = rgb.b;
+
+#ifdef RGBW
+    color.w = 0;
+#endif
+
+    return color;
+}
+
 // V251012R2: 인디케이터 출력 시 사용할 LED 버퍼를 채우는 헬퍼
 // V251012R3: LED 버퍼 초기화와 채우기 경로를 간소화해 불필요한 반복 연산을 제거
+// V251012R4: HSV→RGB 변환 결과를 캐시한 색상을 복사하도록 수정
 static bool rgblight_indicator_prepare_buffer(void)
 {
     if (!rgblight_indicator_state.active) {
@@ -176,22 +209,11 @@ static bool rgblight_indicator_prepare_buffer(void)
         return true;
     }
 
-    HSV hsv = {
-        .h = rgblight_indicator_state.config.hue,
-        .s = rgblight_indicator_state.config.sat,
-        .v = rgblight_indicator_state.config.val,
-    };
-
-    if (hsv.v > 0) {
-        HSV sanitized = {
-            .h = hsv.h,
-            .s = hsv.s,
-            .v = hsv.v > RGBLIGHT_LIMIT_VAL ? RGBLIGHT_LIMIT_VAL : hsv.v,
-        };
-        RGB rgb = rgblight_hsv_to_rgb(sanitized);
+    if (rgblight_indicator_state.config.val > 0) {
+        rgb_led_t cached = rgblight_indicator_state.color;  // V251012R4: 캐시된 색상을 그대로 복사
 
         for (uint8_t i = 0; i < count; i++) {
-            setrgb(rgb.r, rgb.g, rgb.b, &led[start + i]);
+            led[start + i] = cached;
         }
     }
 
@@ -238,6 +260,7 @@ rgblight_indicator_config_t rgblight_indicator_get_config(void)
 void rgblight_indicator_update_config(rgblight_indicator_config_t config)
 {
     rgblight_indicator_state.config = config;
+    rgblight_indicator_state.color  = rgblight_indicator_compute_color(config);  // V251012R4: 렌더링 시 재사용할 색상 캐시
 
     bool should_enable = rgblight_indicator_target_active(config.target, rgblight_indicator_state.host_state);
 
