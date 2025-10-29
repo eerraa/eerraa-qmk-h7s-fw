@@ -259,6 +259,10 @@ rgblight_indicator_config_t rgblight_indicator_get_config(void)
 // V251012R2: VIA 및 포트 계층에서 전달된 구성 변경을 반영
 void rgblight_indicator_update_config(rgblight_indicator_config_t config)
 {
+    if (rgblight_indicator_state.config.raw == config.raw) {
+        return;  // V251012R5: 동일 구성 반복 시 재계산과 재렌더를 생략
+    }
+
     rgblight_indicator_state.config = config;
     rgblight_indicator_state.color  = rgblight_indicator_compute_color(config);  // V251012R4: 렌더링 시 재사용할 색상 캐시
 
@@ -270,6 +274,10 @@ void rgblight_indicator_update_config(rgblight_indicator_config_t config)
 // V251012R2: 호스트 LED 상태 변화를 rgblight 인디케이터 파이프라인으로 전달
 void rgblight_indicator_apply_host_led(led_t host_led_state)
 {
+    if (rgblight_indicator_state.host_state.raw == host_led_state.raw) {
+        return;  // V251012R5: 동일 상태 재전달 시 전이 검사를 건너뛰어 인터럽트 부하를 완화
+    }
+
     rgblight_indicator_state.host_state = host_led_state;
 
     bool should_enable = rgblight_indicator_target_active(rgblight_indicator_state.config.target, host_led_state);
