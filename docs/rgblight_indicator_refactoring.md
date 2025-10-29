@@ -1,28 +1,33 @@
-# V251012R7 RGB 인디케이터 추가 리팩토링 검토
+# V251012R8 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
-- 대상: V251012R2~R6에서 정비한 Brick60 RGB 인디케이터 파이프라인.
-- 목표: 초기화 직후 인디케이터 렌더링 지연을 제거하고, 남은 보조 API의 필요성을 보수적으로 재평가.
+- 대상: V251012R2~R7에서 정비한 Brick60 RGB 인디케이터 파이프라인.
+- 목표: 초기화 경로에 남아 있는 보조 API의 필요성을 재검토하고, 불필요한 호출 오버헤드를 제거.
 
 ## 불필요 코드 / 사용 종료된 요소 정리
-- `rgblight_indicator_sync_state()`가 내부적으로 `rgblight_indicator_apply_host_led()`를 재호출하면서 동일 상태 비교에 막혀 사실상 동작하지 않던 것을 확인.
-- 실제 호출 지점은 `keyboard_init()`의 끝에서 실행되는 `rgblight_init()`이며,【F:src/ap/modules/qmk/quantum/keyboard.c†L548-L577】 초기화가 끝나기 전(`led_init_ports()`)에 수행된 호출은 `is_rgblight_initialized` 가드로 인해 실효성이 없었음.
-- 초기화가 완료된 뒤 단 한 번만 동기화가 필요하므로, 포트 계층(`led_init_ports()`)에서의 중복 호출을 제거해 부작용 위험을 줄이고 유지비를 낮춤.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/port/indicator_port.c†L44-L63】
+- `rgblight_indicator_sync_state()`가 `rgblight_init()` 내부에서만 사용되고 외부 호출자가 존재하지 않아, 공개 API로 유지할 이유가 없음을 확인.
+- 초기화 단계에서 `rgblight_indicator_commit_state()`를 직접 호출하도록 변경하여, 헤더 선언과 간접 호출을 함께 제거.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L403-L410】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.h†L192-L197】
 
 ## 성능 및 오버헤드 검토
-- 초기화 시점(`rgblight_init()`, `led_init_ports()`)에서 동기화 함수가 효과를 내지 못해, 캡스락 LED가 이미 켜져 있는 경우 첫 렌더가 타이머 주기를 한 번 기다리는 지연이 발생.
-- 동기화 함수에서 전이 여부를 다시 계산하고 `rgblight_indicator_commit_state()`에 즉시 렌더 요청을 전달하도록 수정하여, 초기화 직후 바로 `rgblight_set()`이 실행되도록 함.
-- 기존 early-return 최적화(V251012R5)는 그대로 유지되어 불필요한 인터럽트 발생은 증가하지 않음.
+- 래퍼 제거로 초기화 시 함수 호출이 한 번 줄어들어, 마이크로컨트롤러 초기화 구간의 오버헤드를 더 이상 발생시키지 않음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L403-L410】
+- `rgblight_indicator_commit_state()`는 기존과 동일하게 상태 캐시와 early-return 최적화를 사용하므로, 인터럽트 및 타이머 경로의 부하 변화 없음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L200-L239】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1065-L1214】
 
 ## 제어 흐름 간소화
-- 동기화 함수가 실제로 렌더 요청만 재발행하도록 단일 책임으로 축소되어, 초기화 루틴(`rgblight_init()`)에서의 호출 의도와 구현이 일치.
-- `rgblight_indicator_state` 내부 캐시는 유지하여 HSV→RGB 캐싱 효과(R4)와 동일한 흐름을 보존.
+- 초기화 경로가 상태 머신 내부 헬퍼만 사용하게 되어, 외부 API와 내부 구현의 간극을 제거.
+- 인디케이터 상태 캐시/타이머 우회 로직은 유지되어 R4~R6 단계에서 도입한 개선 사항과 충돌하지 않음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L200-L239】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1065-L1214】
 
 ## 수정 적용 여부 판단
-- 초기화 직후 렌더 지연이 제거되며, 추가적인 부작용이 발생하지 않는 것을 확인.
-- 동기화 함수는 여전히 필요하지만 구현을 정비함으로써 유지보수 비용이 줄어듦.
+- 공개 API 축소와 호출 경로 단일화로 유지보수 위험이 더 낮아짐.
+- 동작 변경은 없으며, 초기화 경로에 한정된 보수적 수정을 통해 회귀 위험을 최소화.
 
 **결론: 수정 적용.**
+
+---
+
+## 이전 기록 (V251012R7)
+
+- 초기화 직후 인디케이터 렌더링 지연을 제거하고, 포트 계층에서의 중복 호출을 정리.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/port/indicator_port.c†L44-L63】【F:src/ap/modules/qmk/quantum/keyboard.c†L548-L577】
+- 상태 전이와 렌더 요청을 분리해 early-return 최적화를 유지하면서도 즉시 렌더를 보장.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L200-L239】
 
 ---
 

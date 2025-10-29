@@ -281,17 +281,6 @@ void rgblight_indicator_apply_host_led(led_t host_led_state)
     rgblight_indicator_commit_state(should_enable, false);  // V251012R3: 호스트 이벤트는 전이 감지만 수행
 }
 
-// V251012R2: 초기화 이후 보류 중이던 인디케이터 상태를 재평가
-// V251012R7: 대기 중인 렌더링을 즉시 재요청해 초기화 직후 지연을 제거
-void rgblight_indicator_sync_state(void)
-{
-    bool should_enable =
-        rgblight_indicator_target_active(rgblight_indicator_state.config.target,
-                                         rgblight_indicator_state.host_state);
-
-    rgblight_indicator_commit_state(should_enable, true);
-}
-
 void rgblight_set_clipping_range(uint8_t start_pos, uint8_t num_leds) {
     rgblight_ranges.clipping_start_pos = start_pos;
     rgblight_ranges.clipping_num_leds  = num_leds;
@@ -412,7 +401,13 @@ void rgblight_init(void) {
     }
 
     is_rgblight_initialized = true;
-    rgblight_indicator_sync_state(); // V251012R2: 초기화 이후 인디케이터 상태 복원
+
+    bool indicator_should_enable =
+        rgblight_indicator_target_active(rgblight_indicator_state.config.target,
+                                         rgblight_indicator_state.host_state);
+
+    rgblight_indicator_commit_state(indicator_should_enable,
+                                    true); // V251012R8: 초기화 시점에서 직접 전이를 재평가해 즉시 렌더 요청
 }
 
 void rgblight_reload_from_eeprom(void) {
