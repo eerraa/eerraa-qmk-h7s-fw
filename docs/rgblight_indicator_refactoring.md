@@ -1,28 +1,32 @@
-# V251012R8 RGB 인디케이터 추가 리팩토링 검토
+# V251012R9 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
-- 대상: V251012R2~R7에서 정비한 Brick60 RGB 인디케이터 파이프라인.
-- 목표: 초기화 경로에 남아 있는 보조 API의 필요성을 재검토하고, 불필요한 호출 오버헤드를 제거.
+- 대상: V251012R2~R8에서 정비한 Brick60 RGB 인디케이터 파이프라인.
+- 목표: 인디케이터 우선 렌더링 시 LED 버퍼 초기화 오버헤드를 추가로 점검.
 
 ## 불필요 코드 / 사용 종료된 요소 정리
-- `rgblight_indicator_sync_state()`가 `rgblight_init()` 내부에서만 사용되고 외부 호출자가 존재하지 않아, 공개 API로 유지할 이유가 없음을 확인.
-- 초기화 단계에서 `rgblight_indicator_commit_state()`를 직접 호출하도록 변경하여, 헤더 선언과 간접 호출을 함께 제거.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L403-L410】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.h†L192-L197】
+- 추가로 제거할 공개 API나 래퍼는 확인되지 않음.
 
 ## 성능 및 오버헤드 검토
-- 래퍼 제거로 초기화 시 함수 호출이 한 번 줄어들어, 마이크로컨트롤러 초기화 구간의 오버헤드를 더 이상 발생시키지 않음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L403-L410】
-- `rgblight_indicator_commit_state()`는 기존과 동일하게 상태 캐시와 early-return 최적화를 사용하므로, 인터럽트 및 타이머 경로의 부하 변화 없음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L200-L239】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1065-L1214】
+- `rgblight_indicator_prepare_buffer()`가 항상 전체 LED 배열을 `memset()`하던 경로를, 실제 전송 범위(`clipping_start_pos`, `clipping_num_leds`)에 한정해 초기화하도록 조정해 필요 없는 메모리 클리어를 제거.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L199-L216】
+- 인디케이터 색상 캐시와 전환 플래그 구조는 유지되어, 타이머 우회 및 인터럽트 부하 최적화에 변화 없음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L200-L239】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1065-L1214】
 
 ## 제어 흐름 간소화
-- 초기화 경로가 상태 머신 내부 헬퍼만 사용하게 되어, 외부 API와 내부 구현의 간극을 제거.
-- 인디케이터 상태 캐시/타이머 우회 로직은 유지되어 R4~R6 단계에서 도입한 개선 사항과 충돌하지 않음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L200-L239】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1065-L1214】
+- 버퍼 초기화 범위만 조정하고 상태 머신 흐름은 변경하지 않아, 기존 전이 조건 및 즉시 렌더링 보장은 그대로 유지.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L200-L239】
 
 ## 수정 적용 여부 판단
-- 공개 API 축소와 호출 경로 단일화로 유지보수 위험이 더 낮아짐.
-- 동작 변경은 없으며, 초기화 경로에 한정된 보수적 수정을 통해 회귀 위험을 최소화.
+- 동일한 렌더링 결과를 유지하면서도 메모리 초기화 범위를 줄일 수 있어, 보수적 관점에서도 이득이 확실함.
 
 **결론: 수정 적용.**
 
 ---
+
+## 이전 기록 (V251012R8)
+
+- `rgblight_indicator_sync_state()`가 `rgblight_init()` 내부에서만 사용되고 외부 호출자가 존재하지 않아, 공개 API로 유지할 이유가 없음을 확인.
+- 초기화 단계에서 `rgblight_indicator_commit_state()`를 직접 호출하도록 변경하여, 헤더 선언과 간접 호출을 함께 제거.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L403-L410】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.h†L192-L197】
+- 래퍼 제거로 초기화 시 함수 호출이 한 번 줄어들어, 마이크로컨트롤러 초기화 구간의 오버헤드를 더 이상 발생시키지 않음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L403-L410】
+- `rgblight_indicator_commit_state()`는 기존과 동일하게 상태 캐시와 early-return 최적화를 사용하므로, 인터럽트 및 타이머 경로의 부하 변화 없음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L200-L239】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1065-L1214】
 
 ## 이전 기록 (V251012R7)
 
