@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251013R5"  // V251013R5: 인디케이터 초기화 헬퍼와 VIA 중복 갱신 차단 정비
+#define _DEF_FIRMWATRE_VERSION      "V251013R6"  // V251013R6: 인디케이터 재렌더 조건 및 범위 변경 플래그 정비
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

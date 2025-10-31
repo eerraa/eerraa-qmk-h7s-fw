@@ -1,25 +1,32 @@
-# V251013R5 RGB 인디케이터 추가 리팩토링 검토
+# V251013R6 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
-- 대상: V251012R2~V251013R4에서 정비한 Brick60 RGB 인디케이터 파이프라인.
-- 목표: 반복 호출되는 초기화 경로 및 VIA 구성 전달 경로를 재점검해 잔여 오버헤드를 제거할 수 있는지 확인.
+- 대상: V251012R2~V251013R5에서 정비한 Brick60 RGB 인디케이터 파이프라인.
+- 목표: 타이머 루프와 효과 범위 변경 시 불필요하게 반복되는 버퍼 작업이 남아 있는지 점검하고, 추가 오버헤드를 보수적으로 제거.
 
 ## 불필요 코드 / 사용 종료된 요소 정리
 - 추가로 제거할 공개 API나 래퍼는 확인되지 않음.
 
 ## 성능 및 오버헤드 검토
-- `rgblight_indicator_prepare_buffer()` 내부에 초기화 전용 헬퍼(`rgblight_indicator_clear_range()`)를 두어, 0 길이 `memset()` 호출과 동일 포인터 계산을 반복하지 않도록 정리했다. 클리핑/효과 경계 계산은 그대로 재활용해 안전하게 필요한 범위만 초기화한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L150-L244】
-- VIA에서 동일 구성을 반복 전달하는 경우 `indicator_via_set_value()`가 `rgblight_indicator_update_config()` 호출을 건너뛰도록 가드해, 인터럽트 컨텍스트에서 불필요한 상태 비교와 함수 호출이 다시 발생하지 않도록 했다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/port/indicator_port.c†L58-L104】
-- 기존 색상 캐시 및 애니메이션 우회 조건은 유지되어 렌더링 요청 수나 인터럽트 경로에는 변화 없음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L150-L244】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1078-L1224】
+- 인디케이터가 활성화된 상태에서 추가 렌더 요청이 없으면 `rgblight_indicator_prepare_buffer()`가 즉시 반환하도록 early-return을 추가해, 타이머가 주기적으로 `rgblight_set()`를 깨우더라도 메모리 초기화 및 색상 복사를 반복하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L206-L271】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1238-L1263】
+- 클리핑/효과 범위가 변경되면 인디케이터 버퍼를 다시 적용하도록 `rgblight_set_clipping_range()`와 `rgblight_set_effect_range()`가 재렌더 플래그를 세팅해, 위 early-return이 활성화돼도 새로운 범위가 즉시 반영된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L260-L272】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1238-L1263】
 
 ## 제어 흐름 간소화
-- 초기화 헬퍼 도입으로 잔여 영역 정리 로직을 한 곳에 모아, 분기마다 동일한 `memset()` 호출을 반복하지 않고도 가독성을 유지할 수 있다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L150-L244】
-- VIA 구성 가드는 switch 종료 후 단일 비교로 구현되어 기존 분기 구조를 건드리지 않으면서 조기 반환만 추가한다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/port/indicator_port.c†L58-L104】
+- 필요 시에만 렌더링 함수를 실행하도록 early-return을 추가해 상태 머신 외부에서 불필요한 분기 검사가 발생하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L206-L271】
+- 범위 변경 시 재렌더 플래그만 세팅하므로, 기존 호출부를 수정하지 않고도 인디케이터 전용 상태 머신이 스스로 업데이트를 예약한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L260-L272】
 
 ## 수정 적용 여부 판단
-- 0 길이 초기화 제거와 중복 VIA 호출 생략 모두 기존 거동을 유지한 채 오버헤드만 줄여 주므로, 보수적 관점에서도 반영 가치가 충분함.
+- 타이머 루프에서 재렌더링이 필요하지 않은 경우 버퍼 작업을 생략하면서도 범위 변경 시에는 즉시 재적용하도록 플래그를 보강해, 기존 거동을 유지한 채 오버헤드만 줄이므로 보수적 관점에서도 반영 가치가 충분함.
 
 **결론: 수정 적용.**
+
+---
+
+## 이전 기록 (V251013R5)
+
+- `rgblight_indicator_prepare_buffer()` 내부에 초기화 전용 헬퍼(`rgblight_indicator_clear_range()`)를 두어, 0 길이 `memset()` 호출과 동일 포인터 계산을 반복하지 않도록 정리했다. 클리핑/효과 경계 계산은 그대로 재활용해 안전하게 필요한 범위만 초기화한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L206-L271】
+- VIA에서 동일 구성을 반복 전달하는 경우 `indicator_via_set_value()`가 `rgblight_indicator_update_config()` 호출을 건너뛰도록 가드해, 인터럽트 컨텍스트에서 불필요한 상태 비교와 함수 호출이 다시 발생하지 않도록 했다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/port/indicator_port.c†L58-L104】
+- 기존 색상 캐시 및 애니메이션 우회 조건은 유지되어 렌더링 요청 수나 인터럽트 경로에는 변화 없음.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L206-L271】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1078-L1224】
 
 ---
 

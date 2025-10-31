@@ -209,6 +209,10 @@ static bool rgblight_indicator_prepare_buffer(void)
         return false;
     }
 
+    if (!rgblight_indicator_state.needs_render) {
+        return true;  // V251013R6: 이미 렌더링이 완료된 경우 버퍼 재계산을 생략
+    }
+
     rgblight_indicator_config_t config = rgblight_indicator_state.config;  // V251013R2: 구성 값을 지역 변수로 캐시해 분기별 상태 조회를 줄임
 
     uint8_t clip_start = rgblight_ranges.clipping_start_pos;
@@ -331,6 +335,10 @@ void rgblight_indicator_apply_host_led(led_t host_led_state)
 void rgblight_set_clipping_range(uint8_t start_pos, uint8_t num_leds) {
     rgblight_ranges.clipping_start_pos = start_pos;
     rgblight_ranges.clipping_num_leds  = num_leds;
+
+    if (rgblight_indicator_state.active) {
+        rgblight_indicator_state.needs_render = true;  // V251013R6: 범위 변경 시 인디케이터 버퍼 재적용 예약
+    }
 }
 
 void rgblight_set_effect_range(uint8_t start_pos, uint8_t num_leds) {
@@ -339,6 +347,10 @@ void rgblight_set_effect_range(uint8_t start_pos, uint8_t num_leds) {
     rgblight_ranges.effect_start_pos = start_pos;
     rgblight_ranges.effect_end_pos   = start_pos + num_leds;
     rgblight_ranges.effect_num_leds  = num_leds;
+
+    if (rgblight_indicator_state.active) {
+        rgblight_indicator_state.needs_render = true;  // V251013R6: 효과 범위 갱신 시 재렌더링 플래그 설정
+    }
 }
 
 __attribute__((weak)) RGB rgblight_hsv_to_rgb(HSV hsv) {
