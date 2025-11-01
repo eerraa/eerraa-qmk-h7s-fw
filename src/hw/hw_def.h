@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251014R8"  // V251014R8: 클리핑/효과 조기 반환으로 인디케이터 초기화 오버헤드 감소
+#define _DEF_FIRMWATRE_VERSION      "V251014R9"  // V251014R9: 밝기 0 경로 중복 초기화 제거로 인디케이터 버퍼 정리 간소화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

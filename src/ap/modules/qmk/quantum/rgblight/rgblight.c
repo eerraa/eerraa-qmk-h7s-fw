@@ -260,8 +260,14 @@ static bool rgblight_indicator_prepare_buffer(void)
     uint16_t fill_end   = (effect_end < clip_end) ? effect_end : clip_end;  // V251014R5: 교집합 종료 위치를 공통 계산해 후속 계산 재사용
 
     if (!has_brightness || fill_end <= fill_begin) {
+        bool clip_covers_effect =
+            (start >= clip_start) && (effect_end <= clip_end);  // V251014R9: 클리핑이 효과 범위를 완전히 덮으면 중복 초기화를 생략
+
         rgblight_indicator_clear_range(clip_start, clip_count);  // V251014R8: 밝기 0 또는 교집합이 없으면 전체 클리핑 범위를 정리
-        rgblight_indicator_clear_range(start, count);            // V251014R8: 효과 범위 역시 동시에 초기화
+
+        if (!clip_covers_effect) {
+            rgblight_indicator_clear_range(start, count);  // V251014R9: 클리핑 밖 효과 구간만 추가로 정리
+        }
 
         rgblight_indicator_state.needs_render = false;
         return true;

@@ -1,3 +1,31 @@
+# V251014R9 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: V251012R2~V251014R8 누적 변경 이후 남은 Brick60 RGB 인디케이터 밝기 0/무교집합 경로.
+- 목표: 효과 범위가 클리핑 범위를 완전히 덮는 시나리오에서 중복 `memset()`이 계속 실행되는지 확인하고, 필요 시 제거해도 DMA 버퍼 계약을 유지하는지 보수적으로 판단.
+
+## 시나리오별 점검
+1. **밝기 0 + 효과 범위 = 클리핑 범위**: `clip_covers_effect`가 true일 때 효과 범위 초기화를 건너뛰어, 동일 범위를 두 번 지우는 `memset()` 호출을 제거해도 `clipping` 구간이 이미 정리되어 잔류 색상이 남지 않음을 확인했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L241-L273】
+2. **밝기 0 + 효과 범위 > 클리핑**: 효과 범위가 클리핑 밖으로 확장된 경우 `clip_covers_effect`가 false가 되어 추가 초기화가 유지되므로, Split 반대편 등 DMA에 실리지 않는 구간도 기존과 동일하게 정리됨을 검증했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L262-L270】
+3. **무교집합 + 범위 토글 반복**: 교집합이 사라진 상태에서 밝기 토글과 범위 변경을 반복해도, 클리핑 정리 후 `clip_covers_effect` 검사로 효과 범위 전부를 계속 초기화해 DMA 외 구간의 잔류 색상을 방지함을 확인했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L262-L274】
+4. **동적 토글 + 렌더 플래그 재활용**: `needs_render`를 false로 내린 뒤 즉시 반환하므로, 타이머가 동일 프레임을 다시 호출해도 중복 초기화가 발생하지 않고 기존 조기 반환 흐름이 유지된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L266-L274】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1331-L1336】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- 밝기 0·무교집합 경로에서 클리핑과 동일 범위를 다시 초기화하던 호출을 제거해, 실효성 없는 `memset()`을 없앴다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L262-L270】
+
+## 성능 및 오버헤드 검토
+- 효과 범위가 클리핑 범위와 동일한 경우 추가 `memset()`이 사라져, 밝기 0 토글이 반복되는 타이머 경로에서 메모리 정리 오버헤드가 줄었다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L262-L274】
+- `clip_covers_effect` 검사는 단일 비교로 종료되어 기존 분기 수를 유지하면서도 중복 연산을 막아, 인터럽트 컨텍스트에서의 부담을 최소화했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L262-L270】
+
+## 제어 흐름 간소화
+- `clip_covers_effect` 조건을 명시해 클리핑 범위가 효과 범위를 완전히 덮는 경우와 아닌 경우를 분리해, 호출부가 언제 추가 초기화를 실행하는지 쉽게 추적할 수 있게 됐다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L262-L270】
+
+## 수정 적용 여부 판단
+- 중복 초기화를 건너뛰는 조건이 클리핑 범위를 완전히 덮는 경우로 한정되어, DMA에 전달되지 않는 구간이 남더라도 기존과 동일하게 정리되어 안전성이 유지된다고 판단했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L262-L270】
+- 기존 조기 반환 경로와 `needs_render` 관리가 변하지 않아, 인디케이터 비활성·타이머 경로의 보수적 동작이 유지된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L266-L274】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1331-L1336】
+
+**결: 수정 적용.**
+
 # V251014R8 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
