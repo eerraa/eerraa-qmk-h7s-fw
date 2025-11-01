@@ -1,3 +1,28 @@
+# V251016R2 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: `rgblight_indicator_clear_range()`가 8비트 시작 인덱스로 고정돼 교집합 계산 결과가 256 이상이 될 수 있는 보드에서 래핑될 위험이 남아 있던 경로.
+- 목표: tail/front 보정 시 16비트 값으로 계산되는 시작 지점을 그대로 전달해 반복 호출마다 캐스팅을 제거하고, 실제 동작 시나리오에서 경계 보정이 안정적으로 수행되는지 보수적으로 확인.
+
+## 시나리오별 점검
+1. **정적 효과 + 클리핑 축소 반복**: CAPS 인디케이터를 켠 상태에서 클리핑 범위를 LED 끝까지 넓힌 뒤, tail 쪽 LED를 하나씩 줄이면 `tail_start`가 16비트로 증가해도 헬퍼가 그대로 잘라내고, 교집합 이후 영역이 정확히 초기화돼 기존 컬러가 잔류하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L152-L173】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L291-L309】
+2. **동적 효과 + 효과 범위 확장/축소**: 효과 범위를 클리핑보다 크게 만들었다가 즉시 줄이는 과정을 반복해도 front/tail 정리가 모두 16비트 경로로 처리돼, 조기 종료 분기와 교집합 분기 모두에서 남은 범위를 정확히 초기화한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L281-L298】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L321-L333】
+3. **호스트 LED Off 복귀**: 호스트 락 LED를 끈 뒤 기본 RGB 루프로 복귀할 때도 새 헬퍼가 clip/tail 정리 결과를 보존해 `has_visible_output`이 즉시 내려가고, 이후 타이머 주기에서 기본 효과가 그대로 재개된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L243-L337】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- `rgblight_indicator_clear_range()`가 16비트 시작 인덱스를 직접 받아 더 이상 호출 지점에서 `(uint8_t)` 캐스팅을 반복하지 않아도 되며, 래핑 가능성도 제거됐다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L152-L173】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L291-L329】
+
+## 성능 및 오버헤드 검토
+- tail/front 정리 단계에서 추가 캐스팅이 사라져 루프마다 불필요한 마스킹이 줄었고, 16비트 값을 그대로 사용해도 `memset()` 호출은 한 번만 발생해 캐시 접근 수는 변하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L152-L173】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L301-L333】
+
+## 제어 흐름 간소화
+- 교집합 계산 결과를 그대로 넘겨도 헬퍼가 경계를 보정하므로, tail/front 경로에서 별도의 캐스팅 분기를 둘 필요가 없어졌다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L152-L173】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L291-L329】
+
+## 수정 적용 여부 판단
+- 시나리오별로 경계 보정이 안정적으로 동작하고 기존 플래그/타이머 흐름도 변하지 않음을 확인해 보수적으로 변경을 확정했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L243-L337】
+
+**결: 수정 적용.**
+
 # V251016R1 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요

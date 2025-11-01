@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251016R1"  // V251016R1: 인디케이터 렌더 플래그 후처리를 단일 경로로 통합
+#define _DEF_FIRMWATRE_VERSION      "V251016R2"  // V251016R2: 인디케이터 클리어 범위 헬퍼의 시작 인덱스를 16비트로 확장
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

@@ -149,7 +149,8 @@ static rgblight_indicator_state_t rgblight_indicator_state = {
 
 // V251013R5: 인디케이터 버퍼 초기화를 공통화해 0 길이 memset 호출을 방지
 // V251013R7: 범위가 LED 배열을 벗어나는 경우를 방지하도록 길이를 보정
-static inline void rgblight_indicator_clear_range(uint8_t start, uint16_t count)
+// V251016R2: 시작 인덱스를 16비트로 승격해 래핑 없이 경계 보정을 수행
+static inline void rgblight_indicator_clear_range(uint16_t start, uint16_t count)
 {
     if (count == 0) {
         return;
@@ -291,7 +292,7 @@ static bool rgblight_indicator_prepare_buffer(void)
             uint16_t effect_tail_clear = rgblight_indicator_saturating_sub(effect_end, tail_start);  // V251015R3: 교집합 이후 남은 효과 길이만 계산
 
             if (effect_tail_clear > 0) {
-                rgblight_indicator_clear_range((uint8_t)tail_start, effect_tail_clear);  // V251015R3: 클리핑 이후 실제 효과 범위만 정리
+                rgblight_indicator_clear_range(tail_start, effect_tail_clear);  // V251015R3: 클리핑 이후 실제 효과 범위만 정리
             }
 
             break;
@@ -304,7 +305,7 @@ static bool rgblight_indicator_prepare_buffer(void)
 
         uint16_t tail_count = clip_end - fill_end;  // V251014R7: 교집합 이후 길이를 재사용하기 위해 선행 계산
         if (tail_count > 0) {
-            rgblight_indicator_clear_range((uint8_t)fill_end, tail_count);  // V251014R7: 후단 정리 길이도 재사용
+            rgblight_indicator_clear_range(fill_end, tail_count);  // V251014R7: 후단 정리 길이도 재사용
         }
 
         rgb_led_t cached = rgblight_indicator_state.color;  // V251012R4: 캐시된 색상을 그대로 복사
@@ -325,7 +326,7 @@ static bool rgblight_indicator_prepare_buffer(void)
         }
 
         if (effect_tail_clear > 0) {
-            rgblight_indicator_clear_range((uint8_t)fill_end, effect_tail_clear);  // V251014R6: 교집합 이후 구간을 단일 계산으로 정리
+            rgblight_indicator_clear_range(fill_end, effect_tail_clear);  // V251014R6: 교집합 이후 구간을 단일 계산으로 정리
         }
 
         has_visible_output = true;  // V251015R9: 교집합이 존재할 때만 출력 플래그를 세팅
