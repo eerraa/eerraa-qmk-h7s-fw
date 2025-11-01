@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251013R8"  // V251013R8: 클리핑 범위 유효성 검사를 추가해 오버런 방지
+#define _DEF_FIRMWATRE_VERSION      "V251013R9"  // V251013R9: 효과 범위 빈 구간 허용으로 인디케이터 초기화 보완
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

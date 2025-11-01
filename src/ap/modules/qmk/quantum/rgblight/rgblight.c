@@ -372,7 +372,9 @@ void rgblight_set_clipping_range(uint8_t start_pos, uint8_t num_leds) {
 }
 
 void rgblight_set_effect_range(uint8_t start_pos, uint8_t num_leds) {
-    if (start_pos >= RGBLIGHT_LED_COUNT) return;
+    if (start_pos > RGBLIGHT_LED_COUNT) {
+        return;  // V251013R9: 전체 LED 개수와 같은 시작 인덱스를 허용해 빈 범위 설정을 지원
+    }
 
     uint16_t end = (uint16_t)start_pos + num_leds;
     if (end > RGBLIGHT_LED_COUNT) return;
