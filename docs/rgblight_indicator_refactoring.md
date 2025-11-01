@@ -1,49 +1,51 @@
-# V251014R1 RGB 인디케이터 추가 리팩토링 검토
+# V251014R2 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
-- 대상: V251012R2~V251013R9에서 정비한 Brick60 RGB 인디케이터 파이프라인.
-- 목표: 정적/동적 호출 시나리오를 다시 조합해, 실제로 LED를 전송하지 않는 구간에서도 버퍼 재계산이 수행되는지 확인하고 보수적으로 제거할 수 있는지 판단.
+- 대상: V251012R2~V251014R1에서 정비한 Brick60 RGB 인디케이터 파이프라인.
+- 목표: 클리핑 범위보다 넓은 효과 범위가 반복 전달되는 Split/VIA 시나리오에서, 실제로 전송되지 않는 LED 구간까지 버퍼를 채우는 잔여 연산을 제거할 수 있는지 보수적으로 판단.
 
 ## 시나리오별 점검
-1. **정적 인디케이터 + Split 초기화**: 좌/우 반쪽이 `rgblight_set_clipping_range()`를 각각 호출하며, 이미 동일 값이 적용된 상태에서 다시 호출될 수 있다. 이때 `needs_render`가 다시 켜져 `rgblight_set()`가 불필요하게 깨워지므로 중복 호출을 억제한다.
-2. **동적 효과 + 범위 변경 감시**: 레이어 또는 사용자 커맨드가 `rgblight_set_effect_range()`를 주기적으로 호출하지만 범위가 변하지 않는 경우가 있다. 현재 구조는 매 호출마다 재렌더 플래그가 세팅되어 애니메이션 루프가 인디케이터 활성 상태에서도 계속 인터럽트를 유발하므로, 동일 값은 무시한다.
-3. **인디케이터 비활성 + 경계 밖 정리 요청**: 포트 계층이 잘못된 범위를 요청하거나 효과 범위가 0인 상태에서 클리핑 범위만 크게 잡히면 `rgblight_indicator_clear_range()`가 배열 경계를 넘어설 수 있어, 헬퍼가 범위를 보정하도록 방어 로직을 추가한다.
-4. **Split 재동기화 + VIA 사용자 매크로**: 슬레이브 보드가 재연결되면서 기본 펌웨어는 0개의 LED를 갖는 쪽에 `rgblight_set_clipping_range(total_leds, 0)`을 투입하고, 동시에 VIA 매크로가 이전 상태를 그대로 재적용하면 `start_pos + num_leds`가 전체 개수를 초과한 값이 전달될 수 있다. 기존 코드에서는 클리핑 범위를 즉시 갱신해 포인터가 배열 밖을 가리킬 수 있으므로, 범위가 유효하지 않으면 무시해 기존 안전한 상태를 유지하도록 검토한다.
-5. **인디케이터 비활성 + 빈 효과 범위 동기화**: 호스트에서 인디케이터를 비활성화할 때 `rgblight_set_effect_range(RGBLIGHT_LED_COUNT, 0)`과 같이 전체 개수와 동일한 시작 위치로 빈 범위를 지시하는 시나리오가 반복된다. 기존 구조는 `start_pos >= count` 조건 때문에 요청을 무시하여 이전 효과 범위가 남아 있었으므로, 빈 범위를 허용해 즉시 안전하게 초기 상태로 복귀시키는 방안을 검토한다.
-6. **인디케이터 활성 + 클리핑 0 구간 유지**: Split 동기화 중 슬레이브 쪽 LED 개수가 0으로 보고될 때도 호스트 Caps Lock 등으로 인디케이터가 켜질 수 있다. 기존 구조는 `clip_count == 0`이어도 효과 범위를 매번 다시 채워 타이머가 불필요하게 버퍼를 갱신하므로, 실 출력 구간이 없으면 색상 복사를 건너뛰도록 보수적으로 제한한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L231-L268】
+1. **정적 인디케이터 + 교차 범위 Split 출력**: Split 좌/우 반쪽이 서로 다른 `rgblight_set_clipping_range()`를 유지하고, 효과 범위는 전체 LED 배열을 계속 전달하는 상황을 구성했다. 교차 범위를 계산해 실제 클리핑과 겹치는 구간만 채우도록 조정해, 슬레이브 측 DMA 준비에서 불필요한 버퍼 쓰기가 제거됨을 확인했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L233-L303】
+2. **동적 효과 + 범위 변경 감시**: V251014R1에서 추가된 동일 값 무시 로직이 새 교차 범위 계산과 충돌하지 않는지 확인했다. `needs_render`가 켜졌을 때만 교차 연산이 실행되므로, 주기적 호출에서도 불필요한 재렌더가 발생하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L233-L303】
+3. **인디케이터 비활성 + 경계 밖 정리 요청**: 경계 보정 로직이 유지된 상태에서 교차 범위가 0이 되면 채움 루프가 실행되지 않아, 잘못된 입력으로 인해 버퍼가 다시 채워지는 상황이 없다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L148-L170】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L233-L276】
+4. **Split 재동기화 + VIA 사용자 매크로**: 초과 범위 입력이나 빈 범위 전송이 들어와도 교차 범위가 0으로 계산되어 버퍼 채움이 스킵되므로, 기존 조기 반환 로직과 함께 안전하게 무시된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L366-L410】
+5. **인디케이터 비활성 + 빈 효과 범위 동기화**: 효과 범위가 0이면 `should_fill`이 꺼지고 교차 범위 계산도 실행되지 않아, V251014R1에서 확보한 초기화 경로만 유지된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L233-L276】
+6. **인디케이터 활성 + 클리핑 0 구간 유지**: 클리핑 길이가 0이면 교차 범위도 0이 되어 채움 루프가 실행되지 않는다. 기존 0 구간 최적화와 함께 동작해 재렌더 없이 상태가 유지된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L233-L276】
+7. **정적 인디케이터 + 레이어/타이머 호출 혼재**: `rgblight_timer_task()`가 인디케이터 활성 상태에서 반복 호출될 때 교차 범위 연산이 추가 부하를 만들지 검증했다. `needs_render`가 내려가면 연산 자체가 실행되지 않아 타이머 경로 오버헤드가 증가하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L233-L303】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1321-L1331】
 
 ## 불필요 코드 / 사용 종료된 요소 정리
-- `rgblight_set_clipping_range()`와 `rgblight_set_effect_range()`에서 동일 값 반복 시 조기 반환을 추가해, 이미 제거된 래퍼 대신 남아 있던 중복 동작을 정리했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L139-L156】
-- `rgblight_set_effect_range()`가 전체 LED 개수와 동일한 시작 인덱스를 허용해 빈 범위로 초기화하는 경로를 활성화하여, 더 이상 사용할 수 없는 이전 범위를 즉시 제거한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L381-L389】
-- 빈 효과 범위가 유지되는 동안 애니메이션 루프가 0으로 나누는 연산을 실행하지 않도록, 타이머 태스크가 즉시 반환해 안전하게 무시한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1312-L1316】
-- `rgblight_set_clipping_range()`가 배열 경계를 벗어나는 요청을 무시하도록 조기 반환을 추가해, 실제로 사용할 수 없는 범위 설정을 더 이상 적용하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L356-L367】
-- `rgblight_indicator_prepare_buffer()`가 `clip_count == 0`인 경우에는 버퍼를 다시 채우지 않고, 필요하면 기존 데이터를 0으로 정리하기만 하도록 조정해 사용하지 않는 색상 복사를 제거했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L238-L268】
+- `rgblight_indicator_prepare_buffer()`가 클리핑 범위와 효과 범위의 교집합만 채우도록 조정되어, Split 반대편 구간까지 중복 복사하던 잔여 연산을 제거했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L280-L303】
+- `rgblight_set_clipping_range()`와 `rgblight_set_effect_range()`에서 동일 값 반복 시 조기 반환을 유지해, 불필요한 재렌더 예약을 계속 억제한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L366-L410】
+- `rgblight_set_effect_range()`가 전체 LED 개수와 동일한 시작 인덱스를 허용해 빈 범위를 정상 처리하므로, 이전 범위를 즉시 제거한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L390-L410】
+- 빈 효과 범위가 유지되는 동안 애니메이션 루프가 0으로 나누는 연산을 수행하지 않도록, 타이머 태스크가 즉시 반환한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1321-L1331】
+- `rgblight_set_clipping_range()`가 배열 경계를 벗어나는 요청을 무시해, 실제로 사용할 수 없는 범위를 적용하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L366-L388】
+- `rgblight_indicator_prepare_buffer()`가 `clip_count == 0`인 경우에는 초기화 경로만 실행해 사용하지 않는 색상 복사를 방지한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L233-L276】
 
 ## 성능 및 오버헤드 검토
-- 범위가 변하지 않은 호출을 무시함으로써 `needs_render`가 불필요하게 켜지는 빈도를 제거해, 타이머 루프가 인디케이터 활성 상태에서도 idle 상태를 유지한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L139-L156】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1230-L1267】
-- `rgblight_indicator_clear_range()`에 경계 보정을 도입해, 이상 범위 입력으로 인해 DMA 전송 전에 버퍼를 초과로 지우는 상황을 차단한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L118-L133】
-- 클리핑 범위가 유효한 경우에만 구조체를 갱신하므로, 잘못된 입력으로 인해 `rgblight_set()` 호출 시 포인터 산출이 배열 끝을 넘어가면서 발생할 수 있는 오버런과 그에 따른 불필요한 재렌더 요청을 동시에 차단한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L356-L375】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1166-L1204】
-- 빈 효과 범위를 정상 처리하면서 이전 범위를 즉시 무효화해, 인디케이터 비활성 시에도 범위 갱신 루프가 과거 구간을 재검사하지 않아 인터럽트/타이머 경로 부담을 줄인다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L381-L389】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1158-L1204】
-- 실 출력 구간이 없을 때에는 색상 복사를 건너뛰어, 타이머가 동일 프레임을 반복 계산하지 않고 곧바로 idle 상태로 복귀한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L238-L268】
+- 교차 범위만 채우도록 변경해 Split 슬레이브가 보유하지 않은 LED에 대한 중복 쓰기가 사라져, DMA 준비 단계의 메모리 접근이 감소한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L280-L303】
+- 범위가 변하지 않은 호출을 무시해 `needs_render`가 불필요하게 켜지지 않아, 인디케이터 활성 상태에서도 타이머 루프가 idle 상태를 유지한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L366-L410】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1238-L1316】
+- `rgblight_indicator_clear_range()`에 경계 보정을 유지해, 이상 범위 입력이 들어와도 DMA 전송 전에 버퍼를 초과로 지우지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L148-L170】
+- 클리핑 범위가 유효한 경우에만 구조체를 갱신해, 잘못된 입력으로 인한 오버런과 불필요한 재렌더 요청을 동시에 차단한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L366-L388】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1158-L1196】
+- 빈 효과 범위를 정상 처리하면서 이전 범위를 즉시 무효화해, 인디케이터 비활성 시에도 범위 갱신 루프가 과거 구간을 재검사하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L390-L410】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1158-L1204】
+- 실 출력 구간이 없을 때에는 색상 복사를 건너뛰어, 타이머가 동일 프레임을 반복 계산하지 않고 곧바로 idle 상태로 복귀한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L233-L276】
 
 ## 제어 흐름 간소화
-- 범위 값이 바뀐 경우에만 상태 플래그를 조정해, 호출부 로직을 변경하지 않고도 상태 머신 외부 분기가 단순해졌다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L139-L156】
-- 경계 보정 로직을 헬퍼에 캡슐화해, 호출부는 기존 인터페이스를 그대로 유지하면서 안전성만 향상된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L118-L133】
-- 잘못된 클리핑 범위는 조기 반환으로 정리되어, 이후 흐름에서 조건 분기나 별도의 보정 코드가 필요하지 않다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L356-L367】
-- 빈 효과 범위도 동일하게 조기 반환 조건을 통과하므로, 호출부가 `start_pos`를 안전 구간으로 조정하는 별도 보정 코드를 둘 필요가 없다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L381-L389】
-- 실 LED가 존재하지 않는 경우에는 조기에 `should_fill`을 false로 만들어 초기화 분기만 수행하므로, 버퍼 채움/복사를 위한 반복문이 호출되지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L238-L268】
+- 교집합 계산으로 실제 출력 구간만 복사하므로, 기존 인터페이스를 유지한 채 중복 연산을 제거했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L280-L303】
+- 범위 값이 바뀐 경우에만 상태 플래그를 조정해 외부 분기가 단순해졌다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L366-L410】
+- 경계 보정 로직을 헬퍼에 캡슐화해 호출부는 동일 인터페이스로 안전성을 확보한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L148-L170】
+- 잘못된 클리핑 범위는 조기 반환으로 정리되어, 이후 흐름에서 별도 보정 코드가 필요 없다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L366-L388】
+- 빈 효과 범위도 동일하게 조기 반환 조건을 통과하므로, 호출부가 `start_pos`를 조정하는 별도 보정 코드가 필요 없다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L390-L410】
+- 실 LED가 존재하지 않는 경우에는 조기에 `should_fill`을 false로 만들어 초기화 분기만 수행해, 반복문 호출을 피한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L233-L276】
 
 ## 수정 적용 여부 판단
+- 교차 범위만 채우도록 변경해도 외부 API의 입력/출력 계약은 유지되며, DMA로 실제 전송되는 영역만 갱신되므로 보수적 변경으로 판단된다.
 - 동일 범위 반복 호출을 무시해도 기존 외부 API의 계약은 유지되며, 인디케이터 활성 시 불필요한 `rgblight_set()` 호출만 줄어든다.
 - 경계 보정은 잘못된 입력에 대한 방어 로직으로, 정상 시나리오에는 영향을 주지 않으므로 보수적 변경으로 인정 가능.
-- 클리핑 범위 유효성 검사는 기존 동작(정상 범위 수용)을 유지하면서, 잠재적 오버런만 막는 소극적 방어로 판단된다.
+- 클리핑 범위 유효성 검사는 기존 동작(정상 범위 수용)을 유지하면서 잠재적 오버런만 막는 소극적 방어로 판단된다.
 - 빈 효과 범위를 허용하는 조건 조정은 기존 API와 호환되면서도 이전 범위를 즉시 초기화해 리그레션 위험이 없어, 보수적 변경으로 수용 가능.
-- `clip_count`가 0인 동안에는 실질적 출력이 없으므로 버퍼를 유지할 필요가 없고, 기존 캐시/렌더링 흐름에도 변화를 주지 않아 보수적 변경 범위에 포함된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L238-L268】
+- `clip_count`가 0인 동안에는 실질적 출력이 없으므로 버퍼를 유지할 필요가 없고, 기존 캐/렌더링 흐름에도 변화를 주지 않아 보수적 변경 범위에 포함된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L233-L276】
 
 **결론: 수정 적용.**
-
----
-
 ## 이전 기록 (V251013R6)
 
 - 인디케이터가 활성화된 상태에서 추가 렌더 요청이 없으면 `rgblight_indicator_prepare_buffer()`가 즉시 반환하도록 early-return을 추가해, 타이머가 주기적으로 `rgblight_set()`를 깨우더라도 메모리 초기화 및 색상 복사를 반복하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L206-L271】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1238-L1263】

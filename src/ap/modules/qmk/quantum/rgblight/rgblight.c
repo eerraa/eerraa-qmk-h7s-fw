@@ -277,11 +277,26 @@ static bool rgblight_indicator_prepare_buffer(void)
         return true;
     }
 
-    rgb_led_t cached      = rgblight_indicator_state.color;  // V251012R4: 캐시된 색상을 그대로 복사
-    rgb_led_t *target_led = &led[start];
+    rgb_led_t cached = rgblight_indicator_state.color;  // V251012R4: 캐시된 색상을 그대로 복사
 
-    for (uint8_t i = 0; i < count; i++) {
-        target_led[i] = cached;
+    uint16_t fill_begin = start;
+    if (fill_begin < clip_start) {
+        fill_begin = clip_start;
+    }
+
+    uint16_t fill_end = effect_end;
+    if (fill_end > clip_end) {
+        fill_end = clip_end;
+    }
+
+    if (fill_end > fill_begin) {
+        // V251014R2: 클리핑 범위와 실제로 겹치는 구간만 채워 불필요한 버퍼 쓰기를 제거
+        uint16_t    fill_count = fill_end - fill_begin;
+        rgb_led_t * target_led = &led[fill_begin];
+
+        for (uint16_t i = 0; i < fill_count; i++) {
+            target_led[i] = cached;
+        }
     }
 
     rgblight_indicator_state.needs_render = false;
