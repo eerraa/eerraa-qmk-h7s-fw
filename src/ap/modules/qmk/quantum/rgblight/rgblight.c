@@ -240,8 +240,12 @@ static bool rgblight_indicator_prepare_buffer(void)
         return false;
     }
 
+    bool indicator_has_output =
+        (rgblight_ranges.clipping_num_leds > 0) &&
+        (rgblight_ranges.effect_num_leds > 0);  // V251015R8: 출력 범위가 없으면 기본 파이프라인을 유지
+
     if (!rgblight_indicator_state.needs_render) {
-        return true;  // V251013R6: 이미 렌더링이 완료된 경우 버퍼 재계산을 생략
+        return indicator_has_output;  // V251015R8: 인디케이터 출력이 없으면 애니메이션 루프를 계속 실행
     }
 
     uint8_t clip_start = rgblight_ranges.clipping_start_pos;
