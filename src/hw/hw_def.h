@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251014R3"  // V251014R3: 교집합 외 인디케이터 영역 초기화 보강
+#define _DEF_FIRMWATRE_VERSION      "V251014R4"  // V251014R4: clip_matches_effect 분기 제거로 버퍼 정리 경로 단순화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
