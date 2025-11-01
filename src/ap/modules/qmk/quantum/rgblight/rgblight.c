@@ -279,15 +279,8 @@ static bool rgblight_indicator_prepare_buffer(void)
 
     rgb_led_t cached = rgblight_indicator_state.color;  // V251012R4: 캐시된 색상을 그대로 복사
 
-    uint16_t fill_begin = start;
-    if (fill_begin < clip_start) {
-        fill_begin = clip_start;
-    }
-
-    uint16_t fill_end = effect_end;
-    if (fill_end > clip_end) {
-        fill_end = clip_end;
-    }
+    uint16_t fill_begin = start > clip_start ? start : clip_start;
+    uint16_t fill_end   = effect_end < clip_end ? effect_end : clip_end;
 
     if (fill_end > fill_begin) {
         // V251014R2: 클리핑 범위와 실제로 겹치는 구간만 채워 불필요한 버퍼 쓰기를 제거
@@ -296,6 +289,24 @@ static bool rgblight_indicator_prepare_buffer(void)
 
         for (uint16_t i = 0; i < fill_count; i++) {
             target_led[i] = cached;
+        }
+    } else {
+        fill_end = fill_begin;  // V251014R3: 교집합이 없으면 이후 초기화 계산을 단순화
+    }
+
+    if (has_effect) {
+        uint16_t front_end = fill_begin;
+        if (front_end > effect_end) {
+            front_end = effect_end;
+        }
+
+        if (front_end > start) {
+            rgblight_indicator_clear_range(start, front_end - start);  // V251014R3: 교집합 앞단을 초기화해 잔여 점등을 제거
+        }
+
+        uint16_t tail_start = fill_end < start ? start : fill_end;
+        if (tail_start < effect_end) {
+            rgblight_indicator_clear_range(tail_start, effect_end - tail_start);  // V251014R3: 교집합 이후 구간을 초기화해 범위 축소 시 잔류 색상을 방지
         }
     }
 

@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251014R2"  // V251014R2: 인디케이터 출력 범위를 클리핑 교집합으로 제한
+#define _DEF_FIRMWATRE_VERSION      "V251014R3"  // V251014R3: 교집합 외 인디케이터 영역 초기화 보강
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
