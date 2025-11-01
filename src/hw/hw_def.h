@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251015R2"  // V251015R2: 밝기 0 경로에서 효과 잔여 구간만 정리하도록 범위 보정
+#define _DEF_FIRMWATRE_VERSION      "V251015R4"  // V251015R4: 밝기 0 구성 시 인디케이터를 비활성화해 애니메이션 계산을 생략
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

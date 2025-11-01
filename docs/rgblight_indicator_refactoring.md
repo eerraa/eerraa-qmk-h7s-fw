@@ -1,3 +1,58 @@
+# V251015R4 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: 밝기 0으로 설정된 인디케이터 구성에서도 효과 렌더링을 예약하던 `should_enable` 판단.
+- 목표: 밝기 0을 인디케이터 비활성 조건으로 간주해 애니메이션 계산과 `rgblight_set()` 호출을 보수적으로 줄일 수 있는지 확인.
+
+## 시나리오별 점검
+1. **밝기 0 + 호스트 토글 유지**: 밝기가 0인 상태에서 캡스락 등 호스트 LED가 반복 토글돼도 `rgblight_indicator_should_enable()`이 false를 반환해 `needs_render`가 다시 올라가지 않고, 인디케이터가 비활성 상태로 유지된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L187-L205】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L361-L368】
+2. **밝기 0 → 밝기 상승 전환**: 밝기를 0에서 유효 값으로 올리는 순간에만 `should_enable`이 true로 변해, 기존 버퍼를 다시 채우고 효과를 복원하는 흐름이 유지됨을 확인했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L187-L205】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L325-L343】
+3. **초기화 재호출 + 밝기 0 구성**: `rgblight_init()`이 재호출되어도 새 보조 헬퍼가 초기 활성 여부를 false로 반환해, 초기화 시점에 불필요한 렌더 예약을 하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L187-L205】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L520-L535】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- 각 호출부에서 직접 대상 활성만 검사하던 로직을 보조 헬퍼로 치환해, 밝기 0 구성을 자동으로 비활성 처리하도록 정리했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L187-L205】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L365-L368】
+
+## 성능 및 오버헤드 검토
+- 밝기 0 구성은 즉시 비활성으로 처리돼 애니메이션 타이머가 `rgblight_set()`을 다시 호출하지 않으므로, 인터럽트 경로에서 불필요한 DMA 준비와 버퍼 초기화를 줄였다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L325-L343】
+
+## 제어 흐름 간소화
+- `rgblight_indicator_should_enable()`이 활성 조건을 단일 함수로 묶어, 구성·호스트 상태 변경·초기화 모두 동일 기준으로 평가하게 되어 추적이 쉬워졌다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L187-L205】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L520-L535】
+
+## 수정 적용 여부 판단
+- 밝기 0을 비활성으로 간주해도 기존 구성 전환 흐름이 유지되고, 필요 시 밝기 상승 시점에만 효과가 복원됨을 확인해 보수적 변경으로 판단했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L325-L343】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L361-L368】
+
+**결: 수정 적용.**
+
+# V251015R3 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: V251015R2까지 정리된 밝기 0·무교집합 경로에서 남은 `clip_covers_effect` 보조 분기.
+- 목표: 포화 감산 헬퍼를 도입해 앞·뒤 잔여 길이를 단일 계산으로 구하고, 불필요한 분기를 제거해도 실제 잔여 효과 구간만 보수적으로 초기화되는지 확인.
+
+## 시나리오별 점검
+1. **밝기 0 + 효과 범위 = 클리핑 범위**: 포화 감산으로 앞·뒤 길이가 0으로 계산돼 추가 초기화가 생략되며, 기존과 동일하게 클리핑 구간만 정리된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L268-L283】
+2. **밝기 0 + 효과 범위가 클리핑 앞쪽에만 위치**: `front_end`가 효과 끝과 클리핑 시작 중 작은 값을 취해 전체 효과 범위를 한 번에 정리하고, DMA 전송 전에 잔류 색상이 남지 않음을 확인했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L271-L276】
+3. **밝기 0 + 효과 범위가 클리핑 뒤쪽에만 위치**: `tail_start`가 효과 시작과 클리핑 끝 중 큰 값을 사용해 실제 남은 효과 길이만 계산되고, Split 반대편 등 후단 잔여 구간도 누락 없이 초기화된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L278-L283】
+4. **효과 이동 + 조기 렌더 종료 반복**: 포화 감산 헬퍼가 언더플로를 방지해 시나리오 전환마다 잔여 길이를 안전하게 재계산하므로, `needs_render`를 내린 뒤 반복 호출에서도 추가 초기화가 발생하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L268-L286】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L320-L321】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- `clip_covers_effect` 분기와 관련 비교를 제거하고, 앞·뒤 잔여 구간을 포화 감산으로 직접 계산해 더 이상 쓰이지 않는 보조 조건을 정리했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L268-L283】
+- 잔여 길이 계산에 포화 감산 헬퍼를 도입해, 이전 단계에서만 사용되던 조건부 감산 코드를 제거했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L173-L177】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L268-L283】
+
+## 성능 및 오버헤드 검토
+- 밝기 0 경로에서 분기 수가 줄어들어 인터럽트 타이머 재호출 시 분기 예측 실패 가능성을 낮추고, 잔여 길이 계산이 비교/감산 한 번으로 정리돼 연산량이 감소했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L268-L283】
+- 포화 감산은 인라인 함수로 처리돼 기존 조건 분기 대비 동일 수준의 명령 수를 유지하면서도 코드 경로가 단순화됐다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L173-L177】
+
+## 제어 흐름 간소화
+- 앞·뒤 잔여 길이를 공통 계산으로 묶어, 효과 범위 위치에 따라 달라지던 중첩 분기를 제거했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L268-L283】
+- 조기 반환 이후 경로와 채움 경로가 동일한 `needs_render` 관리를 사용해, 렌더 여부 판단이 기존과 동일하게 유지되면서도 추적이 쉬워졌다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L268-L286】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L320-L321】
+
+## 수정 적용 여부 판단
+- 포화 감산으로 길이를 계산해도 `rgblight_indicator_clear_range()`의 경계 보정이 그대로 적용돼 DMA 버퍼 안전성이 유지된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L150-L177】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L268-L283】
+- 밝기 0 시나리오 전반에서 잔여 효과 구간만 보수적으로 정리됨을 재확인해, 변경 적용을 확정했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L268-L286】
+
+**결: 수정 적용.**
+
 # V251015R2 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
