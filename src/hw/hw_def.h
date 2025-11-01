@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251016R2"  // V251016R2: 인디케이터 클리어 범위 헬퍼의 시작 인덱스를 16비트로 확장
+#define _DEF_FIRMWATRE_VERSION      "V251016R3"  // V251016R3: 인디케이터 버퍼 채우기 루프의 포인터 연산 최적화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

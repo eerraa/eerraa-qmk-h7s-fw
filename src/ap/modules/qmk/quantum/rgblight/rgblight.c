@@ -249,10 +249,10 @@ static bool rgblight_indicator_prepare_buffer(void)
         return rgblight_indicator_state.has_visible_output;  // V251015R9: 직전 렌더링 결과를 재사용
     }
 
-    uint8_t clip_start = rgblight_ranges.clipping_start_pos;
-    uint8_t clip_count = rgblight_ranges.clipping_num_leds;
-    uint8_t start      = rgblight_ranges.effect_start_pos;
-    uint8_t count      = rgblight_ranges.effect_num_leds;
+    uint16_t clip_start = rgblight_ranges.clipping_start_pos;   // V251016R3: 16비트 로컬 복사로 반복 캐스팅을 제거
+    uint16_t clip_count = rgblight_ranges.clipping_num_leds;
+    uint16_t start      = rgblight_ranges.effect_start_pos;
+    uint16_t count      = rgblight_ranges.effect_num_leds;
 
     bool has_effect         = count > 0;
     bool has_visible_output = false;  // V251016R1: 출력 여부와 렌더 완료 처리를 단일 지점에서 갱신하도록 정리
@@ -273,8 +273,8 @@ static bool rgblight_indicator_prepare_buffer(void)
             break;  // V251015R6: 효과가 비어 있으면 인디케이터 오버라이드를 중단
         }
 
-        uint16_t clip_end   = (uint16_t)clip_start + clip_count;      // V251013R3: 합산 시 오버플로우를 피하기 위해 16비트로 계산
-        uint16_t effect_end = (uint16_t)start + count;
+        uint16_t clip_end   = clip_start + clip_count;      // V251013R3: 합산 시 오버플로우를 피하기 위해 16비트로 계산
+        uint16_t effect_end = start + count;
         uint16_t fill_begin = (start > clip_start) ? start : clip_start;   // V251014R5: 교집합 시작 위치를 공통 계산해 분기 수를 줄임
         uint16_t fill_end   = (effect_end < clip_end) ? effect_end : clip_end;  // V251014R5: 교집합 종료 위치를 공통 계산해 후속 계산 재사용
 
@@ -312,10 +312,12 @@ static bool rgblight_indicator_prepare_buffer(void)
 
         uint16_t    fill_count = fill_end - fill_begin;  // V251014R7: 교집합 길이를 재사용해 루프 조건을 단순화
         rgb_led_t * target_led = &led[fill_begin];
+        rgb_led_t * target_end = target_led + fill_count;
 
         // V251014R2: 클리핑 범위와 실제로 겹치는 구간만 채워 불필요한 버퍼 쓰기를 제거
-        for (uint16_t i = 0; i < fill_count; i++) {
-            target_led[i] = cached;
+        // V251016R3: 포인터 증감으로 인덱스 연산을 제거해 루프 오버헤드를 축소
+        while (target_led < target_end) {
+            *target_led++ = cached;
         }
 
         uint16_t effect_front_clear = fill_begin - start;     // V251014R7: 효과 범위 선행 구간 길이를 재사용
