@@ -1,3 +1,28 @@
+# V251015R9 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: V251015R8 이후에도 `indicator_has_output` 판정이 호출 지점마다 달라 빈 교집합에서도 타이머가 멈추던 경로.
+- 목표: 실제로 LED를 덮어쓰는 경우에만 기본 애니메이션을 차단하도록 출력 여부를 공통 상태로 승격하고, 교집합이 사라진 시나리오에서도 기본 파이프라인이 즉시 복귀하는지 보수적으로 확인.
+
+## 시나리오별 점검
+1. **정적 효과 + 교집합 0**: CAPS 토글 후 클리핑/효과 범위를 어긋나게 만들면 새 `has_visible_output` 플래그가 false로 내려가 버퍼만 정리하고 false를 반환해, 같은 프레임에서 기본 정적 효과가 다시 실행된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L239-L301】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1358-L1368】
+2. **동적 효과 + 교집합 유지**: 효과 범위가 클리핑과 겹치는 동안에는 플래그가 true로 유지되어 버퍼를 채우고, 타이머에서도 동일 플래그를 확인해 애니메이션 루프가 계속 우회한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L314-L337】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1358-L1368】
+3. **호스트 LED Off 복귀**: 호스트 락 LED를 끄면 상태 전이에서 출력 플래그가 즉시 초기화되고, 다음 타이머 주기부터 기본 루프가 그대로 동작한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L341-L360】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1358-L1368】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- `rgblight_indicator_prepare_buffer()`와 `rgblight_timer_task()`가 각각 계산하던 출력 여부를 단일 상태 필드로 통합해, 더 이상 사용되지 않는 이중 판별 로직을 제거했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L132-L148】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L239-L337】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1358-L1368】
+
+## 성능 및 오버헤드 검토
+- 출력이 없는 프레임은 곧바로 false를 반환해 기본 루프가 재실행되고, 타이머에서도 동일 플래그를 재사용해 중복 범위 계산과 불필요한 `rgblight_set()` 호출을 줄였다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L239-L337】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1358-L1368】
+
+## 제어 흐름 간소화
+- 출력 여부를 구조체 필드로 승격해 활성/렌더 플래그와 동일 위치에서 관리하므로, 상태 전이가 어디서든 일관된 기준을 따르게 되었다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L132-L360】
+
+## 수정 적용 여부 판단
+- 빈 교집합, 정상 교집합, 호스트 비활성 전환 시 모두 보수적으로 기존 동작을 유지하거나 기본 루프를 복구함을 확인해 변경을 확정했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L239-L360】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1358-L1368】
+
+**결: 수정 적용.**
+
 # V251015R8 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요

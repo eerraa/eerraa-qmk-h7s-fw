@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251015R8"  // V251015R8: 출력 범위가 없는 인디케이터는 기본 파이프라인을 유지
+#define _DEF_FIRMWATRE_VERSION      "V251015R9"  // V251015R9: 인디케이터 출력 플래그로 타이머 우회 조건 정비
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
