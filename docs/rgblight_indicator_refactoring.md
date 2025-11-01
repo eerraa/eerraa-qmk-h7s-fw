@@ -1,4 +1,4 @@
-# V251013R9 RGB 인디케이터 추가 리팩토링 검토
+# V251013R10 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
 - 대상: V251012R2~V251013R8에서 정비한 Brick60 RGB 인디케이터 파이프라인.
@@ -10,10 +10,12 @@
 3. **인디케이터 비활성 + 경계 밖 정리 요청**: 포트 계층이 잘못된 범위를 요청하거나 효과 범위가 0인 상태에서 클리핑 범위만 크게 잡히면 `rgblight_indicator_clear_range()`가 배열 경계를 넘어설 수 있어, 헬퍼가 범위를 보정하도록 방어 로직을 추가한다.
 4. **Split 재동기화 + VIA 사용자 매크로**: 슬레이브 보드가 재연결되면서 기본 펌웨어는 0개의 LED를 갖는 쪽에 `rgblight_set_clipping_range(total_leds, 0)`을 투입하고, 동시에 VIA 매크로가 이전 상태를 그대로 재적용하면 `start_pos + num_leds`가 전체 개수를 초과한 값이 전달될 수 있다. 기존 코드에서는 클리핑 범위를 즉시 갱신해 포인터가 배열 밖을 가리킬 수 있으므로, 범위가 유효하지 않으면 무시해 기존 안전한 상태를 유지하도록 검토한다.
 5. **인디케이터 비활성 + 빈 효과 범위 동기화**: 호스트에서 인디케이터를 비활성화할 때 `rgblight_set_effect_range(RGBLIGHT_LED_COUNT, 0)`과 같이 전체 개수와 동일한 시작 위치로 빈 범위를 지시하는 시나리오가 반복된다. 기존 구조는 `start_pos >= count` 조건 때문에 요청을 무시하여 이전 효과 범위가 남아 있었으므로, 빈 범위를 허용해 즉시 안전하게 초기 상태로 복귀시키는 방안을 검토한다.
+6. **애니메이션 모드 + 빈 효과 범위 유지**: 빈 효과 범위를 허용한 이후 애니메이션 모드가 그대로 실행되면 내부 계산(`% rgblight_ranges.effect_num_leds`)에서 0으로 나누는 예외가 발생할 수 있다. 빈 범위가 적용된 동안에는 타이머 루프에서 애니메이션 함수 호출을 건너뛰어 하드폴트를 예방해야 한다.
 
 ## 불필요 코드 / 사용 종료된 요소 정리
 - `rgblight_set_clipping_range()`와 `rgblight_set_effect_range()`에서 동일 값 반복 시 조기 반환을 추가해, 이미 제거된 래퍼 대신 남아 있던 중복 동작을 정리했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L139-L156】
 - `rgblight_set_effect_range()`가 전체 LED 개수와 동일한 시작 인덱스를 허용해 빈 범위로 초기화하는 경로를 활성화하여, 더 이상 사용할 수 없는 이전 범위를 즉시 제거한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L381-L389】
+- 빈 효과 범위가 유지되는 동안 애니메이션 루프가 0으로 나누는 연산을 실행하지 않도록, 타이머 태스크가 즉시 반환해 안전하게 무시한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1312-L1316】
 - `rgblight_set_clipping_range()`가 배열 경계를 벗어나는 요청을 무시하도록 조기 반환을 추가해, 실제로 사용할 수 없는 범위 설정을 더 이상 적용하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L356-L367】
 
 ## 성능 및 오버헤드 검토
@@ -21,6 +23,7 @@
 - `rgblight_indicator_clear_range()`에 경계 보정을 도입해, 이상 범위 입력으로 인해 DMA 전송 전에 버퍼를 초과로 지우는 상황을 차단한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L118-L133】
 - 클리핑 범위가 유효한 경우에만 구조체를 갱신하므로, 잘못된 입력으로 인해 `rgblight_set()` 호출 시 포인터 산출이 배열 끝을 넘어가면서 발생할 수 있는 오버런과 그에 따른 불필요한 재렌더 요청을 동시에 차단한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L356-L375】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1166-L1204】
 - 빈 효과 범위를 정상 처리하면서 이전 범위를 즉시 무효화해, 인디케이터 비활성 시에도 범위 갱신 루프가 과거 구간을 재검사하지 않아 인터럽트/타이머 경로 부담을 줄인다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L381-L389】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1158-L1204】
+- 빈 효과 범위 적용 시 애니메이션을 조기 종료하도록 하여, 인터럽트 컨텍스트에서 modulo 연산이 0으로 나누기를 일으키는 것을 방지한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1312-L1316】
 
 ## 제어 흐름 간소화
 - 범위 값이 바뀐 경우에만 상태 플래그를 조정해, 호출부 로직을 변경하지 않고도 상태 머신 외부 분기가 단순해졌다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L139-L156】

@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251013R9"  // V251013R9: 효과 범위 빈 구간 허용으로 인디케이터 초기화 보완
+#define _DEF_FIRMWATRE_VERSION      "V251013R10"  // V251013R10: 빈 효과 범위 시 애니메이션 루프를 우회해 0 나눗셈을 차단
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
