@@ -244,15 +244,13 @@ static bool rgblight_indicator_prepare_buffer(void)
         return true;  // V251013R6: 이미 렌더링이 완료된 경우 버퍼 재계산을 생략
     }
 
-    rgblight_indicator_config_t config = rgblight_indicator_state.config;  // V251013R2: 구성 값을 지역 변수로 캐시해 분기별 상태 조회를 줄임
-
     uint8_t clip_start = rgblight_ranges.clipping_start_pos;
     uint8_t clip_count = rgblight_ranges.clipping_num_leds;
     uint8_t start      = rgblight_ranges.effect_start_pos;
     uint8_t count      = rgblight_ranges.effect_num_leds;
 
-    bool has_effect     = count > 0;
-    bool has_brightness = config.val > 0;
+    bool has_effect = count > 0;
+    // V251015R5: 밝기 0 구성은 should_enable 단계에서 걸러져 활성 경로로 진입하지 않는다
 
     if (clip_count == 0) {
         if (has_effect) {
@@ -275,8 +273,8 @@ static bool rgblight_indicator_prepare_buffer(void)
     uint16_t fill_begin = (start > clip_start) ? start : clip_start;   // V251014R5: 교집합 시작 위치를 공통 계산해 분기 수를 줄임
     uint16_t fill_end   = (effect_end < clip_end) ? effect_end : clip_end;  // V251014R5: 교집합 종료 위치를 공통 계산해 후속 계산 재사용
 
-    if (!has_brightness || fill_end <= fill_begin) {
-        rgblight_indicator_clear_range(clip_start, clip_count);  // V251014R8: 밝기 0 또는 교집합이 없으면 전체 클리핑 범위를 정리
+    if (fill_end <= fill_begin) {
+        rgblight_indicator_clear_range(clip_start, clip_count);  // V251015R5: 교집합이 없을 때만 전체 클리핑 범위를 정리
 
         uint16_t front_end          = (clip_start < effect_end) ? clip_start : effect_end;  // V251015R3: 효과 앞단 잔여 길이를 단일 계산으로 보정
         uint16_t effect_front_clear = rgblight_indicator_saturating_sub(front_end, start);   // V251015R3: 포화 감산으로 실제 남은 길이만 사용

@@ -1,3 +1,28 @@
+# V251015R5 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: 밝기 0 구성에서 이미 비활성화된 인디케이터 경로에 남아 있던 추가 가드.
+- 목표: `should_enable` 단계에서 걸러진 밝기 0 구성이 버퍼 준비 루틴에 진입하지 않는지 시나리오별로 확인하고, 중복 정리 호출을 제거해도 안전한지 검토.
+
+## 시나리오별 점검
+1. **밝기 0 + 호스트 토글 반복**: `rgblight_indicator_should_enable()`이 밝기 0 구성에서 false를 반환해 상태 전이가 즉시 비활성화로 내려가므로, 버퍼 준비 루틴이 호출되지 않고 잔여 가드를 제거해도 안전하다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L194-L202】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L333-L362】
+2. **교집합 부재 + 효과 범위 유지**: 클리핑과 효과가 분리된 상태에서 새 분기가 전체 클리핑 범위를 정리한 뒤 앞·뒤 잔여 구간만 초기화해, 기존과 동일한 범위를 보수적으로 청소한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L271-L295】
+3. **교집합 존재 + 재렌더 반복**: 교집합이 유지되는 시나리오에서는 기존 계산 경로가 그대로 유지되어, 색상 채움과 전후단 정리가 변하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L297-L329】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- 밝기 0 가드를 제거해 `rgblight_indicator_prepare_buffer()`가 교집합 여부만 검사하도록 정리했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L252-L278】
+
+## 성능 및 오버헤드 검토
+- 중복된 밝기 검사 분기가 사라져 인터럽트 경로에서 조건 비교가 줄고, 실제 교집합 계산에만 집중하게 됐다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L252-L278】
+
+## 제어 흐름 간소화
+- 밝기 0 구성이 활성 경로로 진입하지 않음을 주석으로 명시해, 버퍼 준비 루틴이 교집합 여부 중심으로 읽히도록 정리했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L252-L280】
+
+## 수정 적용 여부 판단
+- 밝기 0 구성이 상태 전이 단계에서 차단되어 버퍼 경로가 동일하게 유지됨을 재확인해, 가드 제거를 보수적으로 적용하기로 했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L194-L202】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L255-L295】
+
+**결: 수정 적용.**
+
 # V251015R4 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
