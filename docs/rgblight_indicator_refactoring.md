@@ -1,3 +1,33 @@
+# V251014R5 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: V251012R2~V251014R4 누적 변경으로 정리한 Brick60 RGB 인디케이터 버퍼 준비 루틴.
+- 목표: 클리핑/효과 범위를 공통 교집합 계산으로 통합한 뒤에도 밝기 0, 무교집합, 부분 교차 등 실제 호출 시나리오에서 초기화가 중복되거나 누락되지 않는지 점검하고, 추가 분기 제거가 안전한지 보수적으로 판단.
+
+## 시나리오별 점검
+1. **밝기 0 + 교차 범위 유지**: `has_intersection`은 유지되지만 `has_brightness`가 꺼진 상태에서 `should_fill`이 false가 되어 전체 클리핑 구간을 한 번만 초기화하고, 효과 범위의 초과 구간만 별도 정리함을 확인했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L238-L278】
+2. **효과 범위가 전부 클리핑 밖**: 교집합이 없으면 `has_intersection`이 false가 되어 즉시 초기화 경로로 빠지고, 클리핑/효과 양쪽 잔여 구간을 각각 정리해 이전 프레임 색상이 남지 않음을 검증했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L243-L278】
+3. **클리핑 길이 0 유지 + 효과 범위 잔존**: `clip_count`가 0이어도 효과 범위 앞/뒤 계산이 그대로 작동해 전체 효과 구간을 초기화하고, 새 교집합 계산이 잘못된 시작점을 만들지 않음을 확인했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L243-L273】
+4. **동적 효과 + 부분 교차**: 교집합이 존재하는 경우에만 `should_fill`이 true가 되어 동일한 `fill_begin/fill_end`를 이용해 선행/후행 클리핑 및 효과 구간을 정리하고, DMA 전송 전에 겹치는 영역만 채워지는지 재확인했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L243-L307】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- `clip_covers_effect` 보조 비교를 제거하고, 공통 교집합 결과를 재사용해 선행/후행 초기화 범위를 계산하도록 정리했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L243-L307】
+- 동일 교집합 값을 클리핑/효과 양쪽에 재사용해 조건별로 별도 보정 분기를 유지할 필요가 없어졌다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L243-L307】
+
+## 성능 및 오버헤드 검토
+- 교집합 유무를 한 번만 계산해 `should_fill`과 초기화 경로를 동시에 결정해, 호출마다 추가 분기 판단과 비교 연산을 줄였다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L243-L278】
+- 밝기 0 또는 무교집합 시에도 동일 경로에서 초기화를 처리해, 루프 진입 전에 바로 반환되어 타이머 반복 호출 시 오버헤드를 최소화한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L248-L278】
+
+## 제어 흐름 간소화
+- `fill_begin/fill_end`를 단일 계산으로 공유해, 클리핑과 효과 범위 정리 순서를 한 경로에서 추적할 수 있게 됐다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L243-L307】
+- `should_fill` false 경로가 모든 초기화 작업을 담당하도록 통합되어, 별도 보조 플래그 없이도 흐름을 이해하기 쉬워졌다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L245-L278】
+
+## 수정 적용 여부 판단
+- 교집합을 공통 계산해도 기존 `rgblight_indicator_clear_range()` 경계 보정이 그대로 유지되어 DMA 전송 범위 계약을 깨지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L243-L307】
+- 밝기/교집합 여부에 따라 조기 반환이 일관되게 실행되어, 이전 변경에서 확보한 타이머/인터럽트 오버헤드 완화 효과가 유지된다고 판단했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L248-L309】
+
+**결론: 수정 적용.**
+
 # V251014R4 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
