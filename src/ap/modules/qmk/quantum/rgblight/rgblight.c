@@ -235,45 +235,51 @@ static bool rgblight_indicator_prepare_buffer(void)
     uint8_t start      = rgblight_ranges.effect_start_pos;
     uint8_t count      = rgblight_ranges.effect_num_leds;
 
-    bool has_brightness = config.val > 0;
     bool has_effect     = count > 0;
+    bool has_brightness = config.val > 0;
 
-    uint16_t clip_end   = (uint16_t)clip_start + clip_count;      // V251013R3: 합산 시 오버플로우를 피하기 위해 16비트로 계산
-    uint16_t effect_end = (uint16_t)start + count;
-    uint16_t fill_begin = (start > clip_start) ? start : clip_start;   // V251014R5: 교집합 시작 위치를 공통 계산해 분기 수를 줄임
-    uint16_t fill_end   = (effect_end < clip_end) ? effect_end : clip_end;  // V251014R5: 교집합 종료 위치를 공통 계산해 후속 계산 재사용
-    bool     has_intersection = (clip_count > 0) && has_effect && (fill_end > fill_begin);  // V251014R5: 실제 교집합 여부를 미리 산출해 분기 단순화
-    bool     should_fill      = has_brightness && has_intersection;  // V251014R5: 밝기와 교집합이 모두 존재할 때만 채움 경로 실행
-
-    if (clip_count > 0) {
-        uint16_t front_count = fill_begin - clip_start;  // V251014R7: 교집합 앞단 길이를 재사용하기 위해 선행 계산
-        uint16_t tail_count  = clip_end - fill_end;       // V251014R7: 교집합 이후 길이를 재사용하기 위해 선행 계산
-
-        if (!should_fill) {
-            rgblight_indicator_clear_range(clip_start, clip_count);  // V251013R5: 공통 초기화 헬퍼로 0 길이 호출 제거
-        } else {
-            if (front_count > 0) {
-                rgblight_indicator_clear_range(clip_start, front_count);  // V251014R7: 계산된 길이를 재사용해 분기 수 감소
-            }
-
-            if (tail_count > 0) {
-                rgblight_indicator_clear_range((uint8_t)fill_end, tail_count);  // V251014R7: 후단 정리 길이도 재사용
-            }
-        }
-    }
-
-    if (!should_fill) {
+    if (clip_count == 0) {
         if (has_effect) {
-            rgblight_indicator_clear_range(start, count);  // V251014R6: 효과 범위를 한 번에 초기화해 분기 계산을 제거
+            rgblight_indicator_clear_range(start, count);  // V251014R8: 클리핑이 비활성화된 경우 효과 범위만 정리
         }
 
         rgblight_indicator_state.needs_render = false;
         return true;
     }
 
+    if (!has_effect) {
+        rgblight_indicator_clear_range(clip_start, clip_count);  // V251014R8: 효과 범위가 없을 때는 클리핑 구간만 정리
+
+        rgblight_indicator_state.needs_render = false;
+        return true;
+    }
+
+    uint16_t clip_end   = (uint16_t)clip_start + clip_count;      // V251013R3: 합산 시 오버플로우를 피하기 위해 16비트로 계산
+    uint16_t effect_end = (uint16_t)start + count;
+    uint16_t fill_begin = (start > clip_start) ? start : clip_start;   // V251014R5: 교집합 시작 위치를 공통 계산해 분기 수를 줄임
+    uint16_t fill_end   = (effect_end < clip_end) ? effect_end : clip_end;  // V251014R5: 교집합 종료 위치를 공통 계산해 후속 계산 재사용
+
+    if (!has_brightness || fill_end <= fill_begin) {
+        rgblight_indicator_clear_range(clip_start, clip_count);  // V251014R8: 밝기 0 또는 교집합이 없으면 전체 클리핑 범위를 정리
+        rgblight_indicator_clear_range(start, count);            // V251014R8: 효과 범위 역시 동시에 초기화
+
+        rgblight_indicator_state.needs_render = false;
+        return true;
+    }
+
+    uint16_t front_count = fill_begin - clip_start;  // V251014R7: 교집합 앞단 길이를 재사용하기 위해 선행 계산
+    if (front_count > 0) {
+        rgblight_indicator_clear_range(clip_start, front_count);  // V251014R7: 계산된 길이를 재사용해 분기 수 감소
+    }
+
+    uint16_t tail_count = clip_end - fill_end;  // V251014R7: 교집합 이후 길이를 재사용하기 위해 선행 계산
+    if (tail_count > 0) {
+        rgblight_indicator_clear_range((uint8_t)fill_end, tail_count);  // V251014R7: 후단 정리 길이도 재사용
+    }
+
     rgb_led_t cached = rgblight_indicator_state.color;  // V251012R4: 캐시된 색상을 그대로 복사
 
-    uint16_t    fill_count = fill_end - fill_begin;  // V251014R7: 교집합 길이를 재사용해 루프 조건을 단순화 (should_fill true → 0 초과)
+    uint16_t    fill_count = fill_end - fill_begin;  // V251014R7: 교집합 길이를 재사용해 루프 조건을 단순화
     rgb_led_t * target_led = &led[fill_begin];
 
     // V251014R2: 클리핑 범위와 실제로 겹치는 구간만 채워 불필요한 버퍼 쓰기를 제거
