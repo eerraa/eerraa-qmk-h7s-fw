@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251013R9"  // V251013R9: 효과 범위 빈 구간 허용으로 인디케이터 초기화 보완
+#define _DEF_FIRMWATRE_VERSION      "V251014R1"  // V251014R1: 클리핑 0 구간에서 인디케이터 버퍼 재작성 방지
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
