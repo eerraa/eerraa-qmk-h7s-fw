@@ -348,6 +348,15 @@ void rgblight_indicator_apply_host_led(led_t host_led_state)
 }
 
 void rgblight_set_clipping_range(uint8_t start_pos, uint8_t num_leds) {
+    if (start_pos > RGBLIGHT_LED_COUNT) {
+        return;  // V251013R8: 잘못된 시작 인덱스는 무시해 기존 범위를 유지
+    }
+
+    uint16_t end = (uint16_t)start_pos + num_leds;
+    if (end > RGBLIGHT_LED_COUNT) {
+        return;  // V251013R8: LED 개수를 넘는 범위는 적용하지 않는다
+    }
+
     if (rgblight_ranges.clipping_start_pos == start_pos &&
         rgblight_ranges.clipping_num_leds == num_leds) {
         return;  // V251013R7: 동일 범위 반복 시 재렌더 예약을 생략해 타이머 깨우기 방지
