@@ -244,13 +244,12 @@ static bool rgblight_indicator_prepare_buffer(void)
     uint16_t effect_end = (uint16_t)start + count;
     bool     clip_covers_effect = (clip_count > 0) && has_effect &&
                                   (start >= clip_start) && (effect_end <= clip_end);  // V251013R3: 클리핑 범위가 효과 범위를 완전히 덮는지 여부 계산
-    bool clip_matches_effect = clip_covers_effect && (clip_start == start) &&
-                               (clip_count == count);  // V251013R4: 클리핑과 효과 범위가 완전히 일치할 때만 잔여 영역 초기화를 생략
 
     if (clip_count > 0) {
         if (!should_fill) {
             rgblight_indicator_clear_range(clip_start, clip_count);  // V251013R5: 공통 초기화 헬퍼로 0 길이 호출 제거
-        } else if (!clip_matches_effect) {
+        } else {
+            // V251014R4: clip_matches_effect 분기를 제거해 동일 경로에서 선행/후행 영역을 정리
             if (start > clip_start) {
                 uint16_t front_count = start - clip_start;
                 if (front_count > clip_count) {
