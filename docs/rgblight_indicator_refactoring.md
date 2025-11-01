@@ -1,28 +1,33 @@
-# V251013R7 RGB 인디케이터 추가 리팩토링 검토
+# V251013R8 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
-- 대상: V251012R2~V251013R6에서 정비한 Brick60 RGB 인디케이터 파이프라인.
-- 목표: 동일 범위가 반복 전달되는 시나리오에서 불필요하게 `rgblight_set()`가 깨워지는지, 그리고 경계 조건이 누락된 초기화 루틴이 남아 있는지 확인하여 보수적으로 개선 여부 판단.
+- 대상: V251012R2~V251013R7에서 정비한 Brick60 RGB 인디케이터 파이프라인.
+- 목표: 동일 범위 반복 갱신으로 인한 재렌더 트리거를 다시 확인하고, 분리 키보드/사용자 매크로가 잘못된 클리핑 범위를 요구하는 경우를 방어할 수 있는지 검토하여 보수적으로 개선 여부 판단.
 
 ## 시나리오별 점검
 1. **정적 인디케이터 + Split 초기화**: 좌/우 반쪽이 `rgblight_set_clipping_range()`를 각각 호출하며, 이미 동일 값이 적용된 상태에서 다시 호출될 수 있다. 이때 `needs_render`가 다시 켜져 `rgblight_set()`가 불필요하게 깨워지므로 중복 호출을 억제한다.
 2. **동적 효과 + 범위 변경 감시**: 레이어 또는 사용자 커맨드가 `rgblight_set_effect_range()`를 주기적으로 호출하지만 범위가 변하지 않는 경우가 있다. 현재 구조는 매 호출마다 재렌더 플래그가 세팅되어 애니메이션 루프가 인디케이터 활성 상태에서도 계속 인터럽트를 유발하므로, 동일 값은 무시한다.
 3. **인디케이터 비활성 + 경계 밖 정리 요청**: 포트 계층이 잘못된 범위를 요청하거나 효과 범위가 0인 상태에서 클리핑 범위만 크게 잡히면 `rgblight_indicator_clear_range()`가 배열 경계를 넘어설 수 있어, 헬퍼가 범위를 보정하도록 방어 로직을 추가한다.
+4. **Split 재동기화 + VIA 사용자 매크로**: 슬레이브 보드가 재연결되면서 기본 펌웨어는 0개의 LED를 갖는 쪽에 `rgblight_set_clipping_range(total_leds, 0)`을 투입하고, 동시에 VIA 매크로가 이전 상태를 그대로 재적용하면 `start_pos + num_leds`가 전체 개수를 초과한 값이 전달될 수 있다. 기존 코드에서는 클리핑 범위를 즉시 갱신해 포인터가 배열 밖을 가리킬 수 있으므로, 범위가 유효하지 않으면 무시해 기존 안전한 상태를 유지하도록 검토한다.
 
 ## 불필요 코드 / 사용 종료된 요소 정리
 - `rgblight_set_clipping_range()`와 `rgblight_set_effect_range()`에서 동일 값 반복 시 조기 반환을 추가해, 이미 제거된 래퍼 대신 남아 있던 중복 동작을 정리했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L139-L156】
+- `rgblight_set_clipping_range()`가 배열 경계를 벗어나는 요청을 무시하도록 조기 반환을 추가해, 실제로 사용할 수 없는 범위 설정을 더 이상 적용하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L356-L367】
 
 ## 성능 및 오버헤드 검토
 - 범위가 변하지 않은 호출을 무시함으로써 `needs_render`가 불필요하게 켜지는 빈도를 제거해, 타이머 루프가 인디케이터 활성 상태에서도 idle 상태를 유지한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L139-L156】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1230-L1267】
 - `rgblight_indicator_clear_range()`에 경계 보정을 도입해, 이상 범위 입력으로 인해 DMA 전송 전에 버퍼를 초과로 지우는 상황을 차단한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L118-L133】
+- 클리핑 범위가 유효한 경우에만 구조체를 갱신하므로, 잘못된 입력으로 인해 `rgblight_set()` 호출 시 포인터 산출이 배열 끝을 넘어가면서 발생할 수 있는 오버런과 그에 따른 불필요한 재렌더 요청을 동시에 차단한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L356-L375】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1166-L1204】
 
 ## 제어 흐름 간소화
 - 범위 값이 바뀐 경우에만 상태 플래그를 조정해, 호출부 로직을 변경하지 않고도 상태 머신 외부 분기가 단순해졌다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L139-L156】
 - 경계 보정 로직을 헬퍼에 캡슐화해, 호출부는 기존 인터페이스를 그대로 유지하면서 안전성만 향상된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L118-L133】
+- 잘못된 클리핑 범위는 조기 반환으로 정리되어, 이후 흐름에서 조건 분기나 별도의 보정 코드가 필요하지 않다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L356-L367】
 
 ## 수정 적용 여부 판단
 - 동일 범위 반복 호출을 무시해도 기존 외부 API의 계약은 유지되며, 인디케이터 활성 시 불필요한 `rgblight_set()` 호출만 줄어든다.
 - 경계 보정은 잘못된 입력에 대한 방어 로직으로, 정상 시나리오에는 영향을 주지 않으므로 보수적 변경으로 인정 가능.
+- 클리핑 범위 유효성 검사는 기존 동작(정상 범위 수용)을 유지하면서, 잠재적 오버런만 막는 소극적 방어로 판단된다.
 
 **결론: 수정 적용.**
 

@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251013R7"  // V251013R7: 범위 중복 갱신 최적화 및 버퍼 경계 보정
+#define _DEF_FIRMWATRE_VERSION      "V251013R8"  // V251013R8: 클리핑 범위 유효성 검사를 추가해 오버런 방지
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
