@@ -1,3 +1,28 @@
+# V251015R7 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: `rgblight_timer_task()`가 인디케이터 활성 시 애니메이션 루프를 무조건 중단하던 로직.
+- 목표: 클리핑/효과 범위가 0으로 수렴한 시나리오에서 기본 애니메이션이 멈추지 않도록, 실제 출력 범위가 있을 때만 차단하도록 조정.
+
+## 시나리오별 점검
+1. **정적 효과 + 클리핑 0**: CAPS 인디케이터가 활성 상태라도 클리핑 범위를 0으로 줄이면 새 분기가 애니메이션 차단을 건너뛰어, 기본 정적 효과가 즉시 유지된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1344-L1353】
+2. **동적 효과 + 정상 범위 유지**: 클리핑·효과 범위가 모두 유효하면 기존과 동일하게 인디케이터가 애니메이션을 차단하고, 필요 시 `needs_render`가 true일 때만 `rgblight_set()`를 호출한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1344-L1355】
+3. **효과 범위 0 복귀**: VIA에서 효과 범위를 0으로 내린 뒤 다시 확장하면 애니메이션이 일시 정지했다가, 범위가 복구되는 즉시 차단이 재개되어 리그레션이 없다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1344-L1355】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- 인디케이터 활성 여부만으로 애니메이션을 중단하던 조기 반환을 제거하고, 출력 범위가 0인 경우에는 기본 루프를 유지하도록 정리했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1344-L1355】
+
+## 성능 및 오버헤드 검토
+- 출력 범위가 없을 때 애니메이션 루프를 그대로 실행해, 불필요한 `rgblight_set()` 호출을 피하면서 기본 효과 갱신을 계속 허용한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1344-L1355】
+
+## 제어 흐름 간소화
+- 출력 범위 존재 여부를 단일 불리언으로 판별해, 애니메이션 차단 조건을 명시적으로 읽을 수 있게 했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1346-L1353】
+
+## 수정 적용 여부 판단
+- 출력 범위가 사라진 경우에도 기본 RGB 효과가 정상적으로 갱신되고, 유효 범위에서는 기존 차단 동작이 유지됨을 확인해 보수적 변경으로 확정했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1344-L1355】
+
+**결: 수정 적용.**
+
 # V251015R6 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요

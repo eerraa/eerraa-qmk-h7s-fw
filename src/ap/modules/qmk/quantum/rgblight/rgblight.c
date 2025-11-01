@@ -1349,7 +1349,14 @@ void rgblight_timer_task(void) {
         if (rgblight_indicator_state.needs_render && is_rgblight_initialized) {
             rgblight_set();
         }
-        return;
+
+        bool indicator_has_output =
+            (rgblight_ranges.clipping_num_leds > 0) &&
+            (rgblight_ranges.effect_num_leds > 0);  // V251015R7: 출력 범위가 없으면 애니메이션 루프를 계속 실행
+
+        if (indicator_has_output) {
+            return;
+        }
     }
     if (rgblight_status.timer_enabled) {
         if (rgblight_ranges.effect_num_leds == 0) {
