@@ -135,6 +135,7 @@ typedef struct {
     rgb_led_t                   color;        // V251012R4: HSV 변환 결과를 캐시해 재계산을 피한다
     bool                        active;
     bool                        needs_render;
+    bool                        has_visible_output;  // V251015R9: 렌더링 결과가 실제 출력에 영향을 주는지 추적
 } rgblight_indicator_state_t;
 
 static rgblight_indicator_state_t rgblight_indicator_state = {
@@ -143,6 +144,7 @@ static rgblight_indicator_state_t rgblight_indicator_state = {
     .color = {0},
     .active = false,
     .needs_render = false,
+    .has_visible_output = false,
 };
 
 // V251013R5: 인디케이터 버퍼 초기화를 공통화해 0 길이 memset 호출을 방지
@@ -234,18 +236,16 @@ static rgb_led_t rgblight_indicator_compute_color(rgblight_indicator_config_t co
 // V251012R2: 인디케이터 출력 시 사용할 LED 버퍼를 채우는 헬퍼
 // V251012R3: LED 버퍼 초기화와 채우기 경로를 간소화해 불필요한 반복 연산을 제거
 // V251012R4: HSV→RGB 변환 결과를 캐시한 색상을 복사하도록 수정
+// V251015R9: 렌더링 결과가 출력에 반영되는지 추적해 타이머 우회 조건을 일원화
 static bool rgblight_indicator_prepare_buffer(void)
 {
     if (!rgblight_indicator_state.active) {
+        rgblight_indicator_state.has_visible_output = false;  // V251015R9: 비활성화 시 출력 상태를 초기화
         return false;
     }
 
-    bool indicator_has_output =
-        (rgblight_ranges.clipping_num_leds > 0) &&
-        (rgblight_ranges.effect_num_leds > 0);  // V251015R8: 출력 범위가 없으면 기본 파이프라인을 유지
-
     if (!rgblight_indicator_state.needs_render) {
-        return indicator_has_output;  // V251015R8: 인디케이터 출력이 없으면 애니메이션 루프를 계속 실행
+        return rgblight_indicator_state.has_visible_output;  // V251015R9: 직전 렌더링 결과를 재사용
     }
 
     uint8_t clip_start = rgblight_ranges.clipping_start_pos;
@@ -261,6 +261,7 @@ static bool rgblight_indicator_prepare_buffer(void)
             rgblight_indicator_clear_range(start, count);  // V251014R8: 클리핑이 비활성화된 경우 효과 범위만 정리
         }
 
+        rgblight_indicator_state.has_visible_output = false;  // V251015R9: 출력 범위가 없으므로 우선권 해제
         rgblight_indicator_state.needs_render = false;
         return false;  // V251015R6: 출력 구간이 없으면 기본 RGB 경로를 유지
     }
@@ -268,6 +269,7 @@ static bool rgblight_indicator_prepare_buffer(void)
     if (!has_effect) {
         rgblight_indicator_clear_range(clip_start, clip_count);  // V251014R8: 효과 범위가 없을 때는 클리핑 구간만 정리
 
+        rgblight_indicator_state.has_visible_output = false;  // V251015R9: 효과가 비어 있으면 출력 플래그를 리셋
         rgblight_indicator_state.needs_render = false;
         return false;  // V251015R6: 효과가 비어 있으면 인디케이터 오버라이드를 중단
     }
@@ -294,8 +296,9 @@ static bool rgblight_indicator_prepare_buffer(void)
             rgblight_indicator_clear_range((uint8_t)tail_start, effect_tail_clear);  // V251015R3: 클리핑 이후 실제 효과 범위만 정리
         }
 
+        rgblight_indicator_state.has_visible_output = false;  // V251015R9: 교집합이 없으면 인디케이터 우선권을 해제
         rgblight_indicator_state.needs_render = false;
-        return true;
+        return false;
     }
 
     uint16_t front_count = fill_begin - clip_start;  // V251014R7: 교집합 앞단 길이를 재사용하기 위해 선행 계산
@@ -329,6 +332,7 @@ static bool rgblight_indicator_prepare_buffer(void)
         rgblight_indicator_clear_range((uint8_t)fill_end, effect_tail_clear);  // V251014R6: 교집합 이후 구간을 단일 계산으로 정리
     }
 
+    rgblight_indicator_state.has_visible_output = true;  // V251015R9: 교집합이 존재할 때만 출력 플래그를 세팅
     rgblight_indicator_state.needs_render = false;
     return true;
 }
@@ -342,6 +346,9 @@ static void rgblight_indicator_commit_state(bool should_enable, bool request_ren
 
     rgblight_indicator_state.active       = should_enable;
     rgblight_indicator_state.needs_render = needs_render;
+    if (!should_enable) {
+        rgblight_indicator_state.has_visible_output = false;  // V251015R9: 비활성 전환 시 출력 상태를 재설정
+    }
 
     if (!is_rgblight_initialized) {
         return;
@@ -1354,9 +1361,7 @@ void rgblight_timer_task(void) {
             rgblight_set();
         }
 
-        bool indicator_has_output =
-            (rgblight_ranges.clipping_num_leds > 0) &&
-            (rgblight_ranges.effect_num_leds > 0);  // V251015R7: 출력 범위가 없으면 애니메이션 루프를 계속 실행
+        bool indicator_has_output = rgblight_indicator_state.has_visible_output;  // V251015R9: 준비된 출력 상태를 재사용
 
         if (indicator_has_output) {
             return;
