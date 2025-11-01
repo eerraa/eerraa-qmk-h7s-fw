@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251015R9"  // V251015R9: 인디케이터 출력 플래그로 타이머 우회 조건 정비
+#define _DEF_FIRMWATRE_VERSION      "V251016R1"  // V251016R1: 인디케이터 렌더 플래그 후처리를 단일 경로로 통합
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
