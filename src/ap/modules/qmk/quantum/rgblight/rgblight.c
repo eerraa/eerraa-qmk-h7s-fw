@@ -1311,6 +1311,10 @@ void rgblight_timer_task(void) {
         return;
     }
     if (rgblight_status.timer_enabled) {
+        if (rgblight_ranges.effect_num_leds == 0) {
+            return;  // V251013R10: 빈 효과 범위에서는 애니메이션 루프를 건너뛰어 0으로 나누는 연산을 방지
+        }
+
         effect_func_t effect_func   = rgblight_effect_dummy;
         uint16_t      interval_time = 2000; // dummy interval
         uint8_t       delta         = rgblight_config.mode - rgblight_status.base_mode;

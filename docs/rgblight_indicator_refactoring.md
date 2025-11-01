@@ -15,6 +15,7 @@
 ## 불필요 코드 / 사용 종료된 요소 정리
 - `rgblight_set_clipping_range()`와 `rgblight_set_effect_range()`에서 동일 값 반복 시 조기 반환을 추가해, 이미 제거된 래퍼 대신 남아 있던 중복 동작을 정리했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L139-L156】
 - `rgblight_set_effect_range()`가 전체 LED 개수와 동일한 시작 인덱스를 허용해 빈 범위로 초기화하는 경로를 활성화하여, 더 이상 사용할 수 없는 이전 범위를 즉시 제거한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L381-L389】
+- 빈 효과 범위가 유지되는 동안 애니메이션 루프가 0으로 나누는 연산을 실행하지 않도록, 타이머 태스크가 즉시 반환해 안전하게 무시한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1312-L1316】
 - `rgblight_set_clipping_range()`가 배열 경계를 벗어나는 요청을 무시하도록 조기 반환을 추가해, 실제로 사용할 수 없는 범위 설정을 더 이상 적용하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L356-L367】
 - `rgblight_indicator_prepare_buffer()`가 `clip_count == 0`인 경우에는 버퍼를 다시 채우지 않고, 필요하면 기존 데이터를 0으로 정리하기만 하도록 조정해 사용하지 않는 색상 복사를 제거했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L238-L268】
 
