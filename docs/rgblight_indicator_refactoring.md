@@ -1,3 +1,28 @@
+# V251015R6 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: 출력 구간이 사라졌을 때도 인디케이터가 기본 RGB 파이프라인을 막던 `rgblight_indicator_prepare_buffer()` 반환 처리.
+- 목표: 클리핑이 0이거나 효과 범위가 비어 있는 시나리오에서 굳이 인디케이터가 오버라이드하지 않아도 되는지 반복 호출 시나리오로 확인.
+
+## 시나리오별 점검
+1. **클리핑 비활성 + 인디케이터 활성 유지**: 호스트 LED가 켜진 상태에서 클리핑 범위를 0으로 낮추면, 변경된 반환값 덕분에 기본 RGB 경로가 즉시 실행되어 기존 백라이트가 복원되고, 효과 범위만 초기화되어 잔광이 남지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L256-L266】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1200-L1236】
+2. **효과 범위 0 + 정적 모드**: 효과 범위를 0으로 줄여도 인디케이터가 false를 반환해 베이스 루프가 동일 프레임에서 실행되고, 클리핑 범위만 정리되어 정적 모드 LED가 즉시 다시 채워진다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L268-L275】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1200-L1236】
+3. **범위 복구 후 재렌더**: 클리핑/효과 범위를 다시 유효 값으로 되돌리면 `needs_render`가 유지되어 교집합 분기가 그대로 실행되고, true를 반환해 인디케이터가 기존과 동일하게 우선권을 가져간다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L277-L323】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- 출력 구간이 없을 때 true를 반환하던 경로를 false로 변경해, 실제로 버퍼를 건드리지 않는 상황에서 기본 파이프라인을 차단하던 불필요한 오버라이드를 제거했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L256-L275】
+
+## 성능 및 오버헤드 검토
+- 인디케이터가 그릴 LED가 없으면 즉시 false를 반환해, 이후 루프가 백라이트를 채우면서 중복 초기화를 피하고 인터럽트 경로에서 쓸데없는 `memset` 반복을 막는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L256-L323】
+
+## 제어 흐름 간소화
+- 반환값이 실제 오버라이드 여부와 일치하게 정리되어, 호출자는 true가 나온 경우에만 인디케이터가 색상 복사를 수행했음을 보장받는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L256-L323】
+
+## 수정 적용 여부 판단
+- 출력 구간이 없을 때 기본 RGB 경로를 복원해도 기존 효과 재적용 시에는 동일 분기가 다시 true를 반환해 리그레션이 발생하지 않아, 보수적 변경으로 확정했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L256-L323】
+
+**결: 수정 적용.**
+
 # V251015R5 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
