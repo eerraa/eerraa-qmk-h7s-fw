@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251015R5"  // V251015R5: 밝기 0 경로 정리를 통합해 교집합 검사만 수행
+#define _DEF_FIRMWATRE_VERSION      "V251015R6"  // V251015R6: 출력 구간이 없을 때 기본 RGB 경로 복원을 허용
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

@@ -258,14 +258,14 @@ static bool rgblight_indicator_prepare_buffer(void)
         }
 
         rgblight_indicator_state.needs_render = false;
-        return true;
+        return false;  // V251015R6: 출력 구간이 없으면 기본 RGB 경로를 유지
     }
 
     if (!has_effect) {
         rgblight_indicator_clear_range(clip_start, clip_count);  // V251014R8: 효과 범위가 없을 때는 클리핑 구간만 정리
 
         rgblight_indicator_state.needs_render = false;
-        return true;
+        return false;  // V251015R6: 효과가 비어 있으면 인디케이터 오버라이드를 중단
     }
 
     uint16_t clip_end   = (uint16_t)clip_start + clip_count;      // V251013R3: 합산 시 오버플로우를 피하기 위해 16비트로 계산
