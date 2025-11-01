@@ -1,3 +1,33 @@
+# V251014R8 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: V251012R2~V251014R7 누적 변경 후 남은 Brick60 RGB 인디케이터 버퍼 준비 루틴.
+- 목표: 실제 동작 시나리오에서 불필요한 교집합 계산을 줄이고, 밝기 0/클리핑 비활성화 등 소등 경로를 조기 반환으로 묶어 오버헤드를 더 줄일 수 있는지 보수적으로 확인.
+
+## 시나리오별 점검
+1. **클리핑 비활성화 + 효과 범위 유지**: `clipping_num_leds`가 0으로 비활성화된 상태에서 효과 범위만 남아 있을 때 즉시 효과 범위만 초기화하고 반환해, DMA 버퍼가 잔류 색상을 남기지 않으면서 추가 교집합 계산을 건너뛴다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L238-L248】
+2. **효과 범위 미지정 + 인디케이터 활성**: 효과 범위가 0으로 조정된 상태에서 인디케이터가 켜져 있어도 곧바로 클리핑 범위만 정리하고 반환해, 무의미한 교집합 계산과 루프 진입을 피한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L238-L255】
+3. **밝기 0 반복 + 효과 이동**: 밝기가 0으로 토글된 상태에서 효과 범위가 계속 바뀌어도, 밝기/교집합 조합을 조기 판정해 클리핑·효과 범위를 한 번에 초기화하고 반환하므로 기존처럼 잔류 색상이 남지 않으면서도 분기 수가 줄었다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L257-L268】
+4. **동적 효과 + 부분 교차**: 실제 교집합이 있을 때만 선행/후행 정리 길이를 계산하고 버퍼를 채우도록 남겨, 기존 분기와 동일한 범위를 정리/채움하면서 불필요한 계산을 제거했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L270-L302】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- 밝기 0 또는 교집합 부재 경로에서 사용되지 않는 선행/후행 길이 계산을 제거하고, 해당 시나리오를 조기 반환으로 대체했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L241-L278】
+- 클리핑 길이 0 또는 효과 길이 0 시나리오를 분리해, 더 이상 쓰이지 않는 `should_fill`/`has_intersection` 보조 플래그를 제거했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L238-L268】
+
+## 성능 및 오버헤드 검토
+- 밝기 0·무교집합·클리핑 비활성화 시 즉시 반환하도록 정리해, 인터럽트 타이머 호출에서 매번 교집합 길이를 계산하던 오버헤드를 제거했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L238-L268】
+- 실제 채움 경로에서만 선행/후행 길이를 계산하도록 바꿔, DMA 준비 루프에 들어가지 않는 호출의 연산 수를 줄였다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L270-L278】
+
+## 제어 흐름 간소화
+- 조기 반환 경로가 정리되어 밝기 0, 클리핑 비활성화, 효과 범위 없음 등 소등 시나리오를 읽기 쉬운 단일 경로로 따라갈 수 있게 됐다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L238-L268】
+- 실제 채움 경로는 기존 계산을 유지해 동작을 보수적으로 유지하면서도, 필요 조건을 모두 만족했을 때만 실행되도록 명확해졌다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L270-L302】
+
+## 수정 적용 여부 판단
+- 조기 반환 경로는 기존에도 전체 초기화를 수행하던 구간을 그대로 실행하므로, DMA 버퍼 안전성과 색상 초기화 규약이 유지된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L241-L268】
+- 채움 경로는 기존 계산을 유지해 Split·동적 효과 시나리오와의 호환성이 유지되므로, 보수적 변경으로 판단했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L270-L302】
+
+**결: 수정 적용.**
+
 # V251014R7 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요

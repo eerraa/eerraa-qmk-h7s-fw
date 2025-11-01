@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251014R7"  // V251014R7: 교집합 길이 재사용으로 인디케이터 초기화 분기 간소화
+#define _DEF_FIRMWATRE_VERSION      "V251014R8"  // V251014R8: 클리핑/효과 조기 반환으로 인디케이터 초기화 오버헤드 감소
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
