@@ -170,6 +170,12 @@ static inline void rgblight_indicator_clear_range(uint8_t start, uint16_t count)
     memset(&led[start], 0, (size_t)length * sizeof(rgb_led_t));
 }
 
+// V251015R3: 범위 길이 계산 시 언더플로우를 방지하는 포화 감산 헬퍼
+static inline uint16_t rgblight_indicator_saturating_sub(uint16_t value, uint16_t subtractor)
+{
+    return (value > subtractor) ? (value - subtractor) : 0;
+}
+
 // V251012R2: 인디케이터 대상과 호스트 LED 상태를 비교하여 활성화 여부를 반환
 static bool rgblight_indicator_target_active(uint8_t target, led_t host_state)
 {
@@ -183,6 +189,16 @@ static bool rgblight_indicator_target_active(uint8_t target, led_t host_state)
         default:
             return false;
     }
+}
+
+// V251015R4: 밝기 0 구성은 인디케이터 비활성화로 처리해 애니메이션 계산을 생략
+static bool rgblight_indicator_should_enable(rgblight_indicator_config_t config, led_t host_state)
+{
+    if (config.val == 0) {
+        return false;
+    }
+
+    return rgblight_indicator_target_active(config.target, host_state);
 }
 
 // V251012R4: 구성 변경 시 한 번만 HSV→RGB 변환을 수행해 캐시한다
@@ -260,29 +276,20 @@ static bool rgblight_indicator_prepare_buffer(void)
     uint16_t fill_end   = (effect_end < clip_end) ? effect_end : clip_end;  // V251014R5: 교집합 종료 위치를 공통 계산해 후속 계산 재사용
 
     if (!has_brightness || fill_end <= fill_begin) {
-        bool clip_covers_effect =
-            (start >= clip_start) && (effect_end <= clip_end);  // V251014R9: 클리핑이 효과 범위를 완전히 덮으면 중복 초기화를 생략
-
         rgblight_indicator_clear_range(clip_start, clip_count);  // V251014R8: 밝기 0 또는 교집합이 없으면 전체 클리핑 범위를 정리
 
-        if (!clip_covers_effect) {
-            if (start < clip_start) {
-                uint16_t front_end          = (effect_end < clip_start) ? effect_end : clip_start;  // V251015R2: 효과 범위가 클리핑 앞단을 넘지 않는 경우 실제 효과 끝으로 제한
-                uint16_t effect_front_clear = front_end - start;                                    // V251015R2: 효과 구간만 정리하도록 길이 보정
+        uint16_t front_end          = (clip_start < effect_end) ? clip_start : effect_end;  // V251015R3: 효과 앞단 잔여 길이를 단일 계산으로 보정
+        uint16_t effect_front_clear = rgblight_indicator_saturating_sub(front_end, start);   // V251015R3: 포화 감산으로 실제 남은 길이만 사용
 
-                if (effect_front_clear > 0) {
-                    rgblight_indicator_clear_range(start, effect_front_clear);  // V251015R2: 교집합 앞단에 남은 실제 효과 범위만 초기화
-                }
-            }
+        if (effect_front_clear > 0) {
+            rgblight_indicator_clear_range(start, effect_front_clear);  // V251015R3: 교집합 앞단에 남은 실제 효과 범위만 초기화
+        }
 
-            if (effect_end > clip_end) {
-                uint16_t tail_start         = (((uint16_t)start) > clip_end) ? (uint16_t)start : clip_end;  // V251015R2: 효과 범위가 클리핑 뒤에 떨어진 경우 시작점을 효과 범위로 보정
-                uint16_t effect_tail_clear  = (effect_end > tail_start) ? (effect_end - tail_start) : 0;     // V251015R2: 교집합 이후 남은 효과 길이만 계산
+        uint16_t tail_start         = (clip_end > start) ? clip_end : start;  // V251015R3: 효과 후단 시작 위치를 단일 분기로 산출
+        uint16_t effect_tail_clear  = rgblight_indicator_saturating_sub(effect_end, tail_start);  // V251015R3: 교집합 이후 남은 효과 길이만 계산
 
-                if (effect_tail_clear > 0) {
-                    rgblight_indicator_clear_range((uint8_t)tail_start, effect_tail_clear);  // V251015R2: 클리핑 이후 실제 효과 범위만 정리
-                }
-            }
+        if (effect_tail_clear > 0) {
+            rgblight_indicator_clear_range((uint8_t)tail_start, effect_tail_clear);  // V251015R3: 클리핑 이후 실제 효과 범위만 정리
         }
 
         rgblight_indicator_state.needs_render = false;
@@ -365,7 +372,7 @@ void rgblight_indicator_update_config(rgblight_indicator_config_t config)
     rgblight_indicator_state.config = config;
     rgblight_indicator_state.color  = rgblight_indicator_compute_color(config);  // V251012R4: 렌더링 시 재사용할 색상 캐시
 
-    bool should_enable = rgblight_indicator_target_active(config.target, rgblight_indicator_state.host_state);
+    bool should_enable = rgblight_indicator_should_enable(config, rgblight_indicator_state.host_state);
 
     rgblight_indicator_commit_state(should_enable, true);  // V251012R3: 구성 변경 시 즉시 재렌더링
 }
@@ -379,7 +386,7 @@ void rgblight_indicator_apply_host_led(led_t host_led_state)
 
     rgblight_indicator_state.host_state = host_led_state;
 
-    bool should_enable = rgblight_indicator_target_active(rgblight_indicator_state.config.target, host_led_state);
+    bool should_enable = rgblight_indicator_should_enable(rgblight_indicator_state.config, host_led_state);
 
     rgblight_indicator_commit_state(should_enable, false);  // V251012R3: 호스트 이벤트는 전이 감지만 수행
 }
@@ -540,7 +547,7 @@ void rgblight_init(void) {
     is_rgblight_initialized = true;
 
     bool indicator_should_enable =
-        rgblight_indicator_target_active(rgblight_indicator_state.config.target,
+        rgblight_indicator_should_enable(rgblight_indicator_state.config,
                                          rgblight_indicator_state.host_state);
 
     rgblight_indicator_commit_state(indicator_should_enable,
