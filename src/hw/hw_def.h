@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251015R4"  // V251015R4: 밝기 0 구성 시 인디케이터를 비활성화해 애니메이션 계산을 생략
+#define _DEF_FIRMWATRE_VERSION      "V251015R5"  // V251015R5: 밝기 0 경로 정리를 통합해 교집합 검사만 수행
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
