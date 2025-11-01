@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251014R9"  // V251014R9: 밝기 0 경로 중복 초기화 제거로 인디케이터 버퍼 정리 간소화
+#define _DEF_FIRMWATRE_VERSION      "V251015R1"  // V251015R1: 밝기 0 경로에서 교집합 외 구간만 초기화해 중복 memset 제거
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

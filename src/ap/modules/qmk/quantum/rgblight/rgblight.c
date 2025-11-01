@@ -266,7 +266,17 @@ static bool rgblight_indicator_prepare_buffer(void)
         rgblight_indicator_clear_range(clip_start, clip_count);  // V251014R8: 밝기 0 또는 교집합이 없으면 전체 클리핑 범위를 정리
 
         if (!clip_covers_effect) {
-            rgblight_indicator_clear_range(start, count);  // V251014R9: 클리핑 밖 효과 구간만 추가로 정리
+            if (start < clip_start) {
+                uint16_t effect_front_clear = (uint16_t)clip_start - start;  // V251015R1: 클리핑 앞단 밖에 남은 효과 범위만 정리
+
+                rgblight_indicator_clear_range(start, effect_front_clear);  // V251015R1: 중복 초기화를 피하고 필요한 구간만 초기화
+            }
+
+            if (effect_end > clip_end) {
+                uint16_t effect_tail_clear = effect_end - clip_end;  // V251015R1: 클리핑 이후에 남은 효과 범위를 별도로 계산
+
+                rgblight_indicator_clear_range((uint8_t)clip_end, effect_tail_clear);  // V251015R1: 교집합 밖 잔여 구간만 정리
+            }
         }
 
         rgblight_indicator_state.needs_render = false;
