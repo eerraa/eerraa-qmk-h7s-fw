@@ -1,3 +1,28 @@
+# V251016R1 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: `rgblight_indicator_prepare_buffer()`가 각 분기에서 직접 `has_visible_output`·`needs_render`를 갱신하던 경로.
+- 목표: 출력 여부와 렌더 완료 플래그를 공통 후처리로 묶어 중복 대입을 제거하고, 조기 종료가 반복되더라도 상태가 일관되게 정리되는지 보수적으로 확인.
+
+## 시나리오별 점검
+1. **정적 효과 + 클리핑 0 반복 호출**: 첫 호출에서 `clip_count == 0` 분기가 break로 빠져나오며 공통 후처리에서 `needs_render`가 false로 내려가고, 이후 호출은 `needs_render`가 이미 해제돼 동일 프레임 재평가 없이 바로 false를 반환한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L261-L276】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L331-L333】
+2. **동적 효과 + 교집합 유지**: 효과·클리핑 교집합이 유지되는 동안에는 루프를 모두 통과해 `has_visible_output`이 true로 설정되고, 공통 후처리에서 한 번만 상태를 저장해 타이머가 같은 값으로 우회한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L277-L329】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L331-L333】
+3. **호스트 LED Off 복귀**: 교집합이 사라지는 프레임에서 break로 빠져나온 뒤 공통 후처리가 false를 기록해 다음 타이머 주기부터 기본 루프가 재개되고, 불필요한 상태 잔여가 남지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L277-L307】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L331-L333】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- 각 분기에서 반복 대입하던 `has_visible_output`·`needs_render` 업데이트를 공통 후처리로 이동해 동일 코드가 세 번 이상 반복되던 경로를 제거했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L261-L333】
+
+## 성능 및 오버헤드 검토
+- 조기 종료가 발생한 프레임에서도 한 번만 상태를 기록하므로, 인터럽트 경로에서 불필요한 캐시 쓰기와 메모리 장벽 영향을 최소화했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L261-L333】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1359-L1366】
+
+## 제어 흐름 간소화
+- do-while 블록으로 조기 종료 경로를 감싸 break 처리만으로 모든 분기를 마무리할 수 있게 되어, 상태 갱신이 함수 말단 한 곳으로 응집되었다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L261-L333】
+
+## 수정 적용 여부 판단
+- 각 시나리오에서 출력/비출력 여부가 정확히 기록되고 기본 RGB 루프 복귀 시점도 변하지 않음을 재확인해 보수적으로 변경을 확정했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L261-L333】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1359-L1366】
+
+**결: 수정 적용.**
+
 # V251015R9 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요

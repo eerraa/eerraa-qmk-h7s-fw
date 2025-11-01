@@ -253,88 +253,87 @@ static bool rgblight_indicator_prepare_buffer(void)
     uint8_t start      = rgblight_ranges.effect_start_pos;
     uint8_t count      = rgblight_ranges.effect_num_leds;
 
-    bool has_effect = count > 0;
+    bool has_effect         = count > 0;
+    bool has_visible_output = false;  // V251016R1: 출력 여부와 렌더 완료 처리를 단일 지점에서 갱신하도록 정리
     // V251015R5: 밝기 0 구성은 should_enable 단계에서 걸러져 활성 경로로 진입하지 않는다
 
-    if (clip_count == 0) {
-        if (has_effect) {
-            rgblight_indicator_clear_range(start, count);  // V251014R8: 클리핑이 비활성화된 경우 효과 범위만 정리
+    do {  // V251016R1: 조기 종료 경로에서도 공통 후처리를 수행하기 위해 단일 블록으로 묶음
+        if (clip_count == 0) {
+            if (has_effect) {
+                rgblight_indicator_clear_range(start, count);  // V251014R8: 클리핑이 비활성화된 경우 효과 범위만 정리
+            }
+
+            break;  // V251015R6: 출력 구간이 없으면 기본 RGB 경로를 유지
         }
 
-        rgblight_indicator_state.has_visible_output = false;  // V251015R9: 출력 범위가 없으므로 우선권 해제
-        rgblight_indicator_state.needs_render = false;
-        return false;  // V251015R6: 출력 구간이 없으면 기본 RGB 경로를 유지
-    }
+        if (!has_effect) {
+            rgblight_indicator_clear_range(clip_start, clip_count);  // V251014R8: 효과 범위가 없을 때는 클리핑 구간만 정리
 
-    if (!has_effect) {
-        rgblight_indicator_clear_range(clip_start, clip_count);  // V251014R8: 효과 범위가 없을 때는 클리핑 구간만 정리
+            break;  // V251015R6: 효과가 비어 있으면 인디케이터 오버라이드를 중단
+        }
 
-        rgblight_indicator_state.has_visible_output = false;  // V251015R9: 효과가 비어 있으면 출력 플래그를 리셋
-        rgblight_indicator_state.needs_render = false;
-        return false;  // V251015R6: 효과가 비어 있으면 인디케이터 오버라이드를 중단
-    }
+        uint16_t clip_end   = (uint16_t)clip_start + clip_count;      // V251013R3: 합산 시 오버플로우를 피하기 위해 16비트로 계산
+        uint16_t effect_end = (uint16_t)start + count;
+        uint16_t fill_begin = (start > clip_start) ? start : clip_start;   // V251014R5: 교집합 시작 위치를 공통 계산해 분기 수를 줄임
+        uint16_t fill_end   = (effect_end < clip_end) ? effect_end : clip_end;  // V251014R5: 교집합 종료 위치를 공통 계산해 후속 계산 재사용
 
-    uint16_t clip_end   = (uint16_t)clip_start + clip_count;      // V251013R3: 합산 시 오버플로우를 피하기 위해 16비트로 계산
-    uint16_t effect_end = (uint16_t)start + count;
-    uint16_t fill_begin = (start > clip_start) ? start : clip_start;   // V251014R5: 교집합 시작 위치를 공통 계산해 분기 수를 줄임
-    uint16_t fill_end   = (effect_end < clip_end) ? effect_end : clip_end;  // V251014R5: 교집합 종료 위치를 공통 계산해 후속 계산 재사용
+        if (fill_end <= fill_begin) {
+            rgblight_indicator_clear_range(clip_start, clip_count);  // V251015R5: 교집합이 없을 때만 전체 클리핑 범위를 정리
 
-    if (fill_end <= fill_begin) {
-        rgblight_indicator_clear_range(clip_start, clip_count);  // V251015R5: 교집합이 없을 때만 전체 클리핑 범위를 정리
+            uint16_t front_end          = (clip_start < effect_end) ? clip_start : effect_end;  // V251015R3: 효과 앞단 잔여 길이를 단일 계산으로 보정
+            uint16_t effect_front_clear = rgblight_indicator_saturating_sub(front_end, start);   // V251015R3: 포화 감산으로 실제 남은 길이만 사용
 
-        uint16_t front_end          = (clip_start < effect_end) ? clip_start : effect_end;  // V251015R3: 효과 앞단 잔여 길이를 단일 계산으로 보정
-        uint16_t effect_front_clear = rgblight_indicator_saturating_sub(front_end, start);   // V251015R3: 포화 감산으로 실제 남은 길이만 사용
+            if (effect_front_clear > 0) {
+                rgblight_indicator_clear_range(start, effect_front_clear);  // V251015R3: 교집합 앞단에 남은 실제 효과 범위만 초기화
+            }
+
+            uint16_t tail_start        = (clip_end > start) ? clip_end : start;  // V251015R3: 효과 후단 시작 위치를 단일 분기로 산출
+            uint16_t effect_tail_clear = rgblight_indicator_saturating_sub(effect_end, tail_start);  // V251015R3: 교집합 이후 남은 효과 길이만 계산
+
+            if (effect_tail_clear > 0) {
+                rgblight_indicator_clear_range((uint8_t)tail_start, effect_tail_clear);  // V251015R3: 클리핑 이후 실제 효과 범위만 정리
+            }
+
+            break;
+        }
+
+        uint16_t front_count = fill_begin - clip_start;  // V251014R7: 교집합 앞단 길이를 재사용하기 위해 선행 계산
+        if (front_count > 0) {
+            rgblight_indicator_clear_range(clip_start, front_count);  // V251014R7: 계산된 길이를 재사용해 분기 수 감소
+        }
+
+        uint16_t tail_count = clip_end - fill_end;  // V251014R7: 교집합 이후 길이를 재사용하기 위해 선행 계산
+        if (tail_count > 0) {
+            rgblight_indicator_clear_range((uint8_t)fill_end, tail_count);  // V251014R7: 후단 정리 길이도 재사용
+        }
+
+        rgb_led_t cached = rgblight_indicator_state.color;  // V251012R4: 캐시된 색상을 그대로 복사
+
+        uint16_t    fill_count = fill_end - fill_begin;  // V251014R7: 교집합 길이를 재사용해 루프 조건을 단순화
+        rgb_led_t * target_led = &led[fill_begin];
+
+        // V251014R2: 클리핑 범위와 실제로 겹치는 구간만 채워 불필요한 버퍼 쓰기를 제거
+        for (uint16_t i = 0; i < fill_count; i++) {
+            target_led[i] = cached;
+        }
+
+        uint16_t effect_front_clear = fill_begin - start;     // V251014R7: 효과 범위 선행 구간 길이를 재사용
+        uint16_t effect_tail_clear  = effect_end - fill_end;  // V251014R7: 효과 범위 후행 구간 길이를 재사용
 
         if (effect_front_clear > 0) {
-            rgblight_indicator_clear_range(start, effect_front_clear);  // V251015R3: 교집합 앞단에 남은 실제 효과 범위만 초기화
+            rgblight_indicator_clear_range(start, effect_front_clear);  // V251014R6: 교집합 앞단을 직접 계산해 초기화
         }
-
-        uint16_t tail_start         = (clip_end > start) ? clip_end : start;  // V251015R3: 효과 후단 시작 위치를 단일 분기로 산출
-        uint16_t effect_tail_clear  = rgblight_indicator_saturating_sub(effect_end, tail_start);  // V251015R3: 교집합 이후 남은 효과 길이만 계산
 
         if (effect_tail_clear > 0) {
-            rgblight_indicator_clear_range((uint8_t)tail_start, effect_tail_clear);  // V251015R3: 클리핑 이후 실제 효과 범위만 정리
+            rgblight_indicator_clear_range((uint8_t)fill_end, effect_tail_clear);  // V251014R6: 교집합 이후 구간을 단일 계산으로 정리
         }
 
-        rgblight_indicator_state.has_visible_output = false;  // V251015R9: 교집합이 없으면 인디케이터 우선권을 해제
-        rgblight_indicator_state.needs_render = false;
-        return false;
-    }
+        has_visible_output = true;  // V251015R9: 교집합이 존재할 때만 출력 플래그를 세팅
+    } while (false);
 
-    uint16_t front_count = fill_begin - clip_start;  // V251014R7: 교집합 앞단 길이를 재사용하기 위해 선행 계산
-    if (front_count > 0) {
-        rgblight_indicator_clear_range(clip_start, front_count);  // V251014R7: 계산된 길이를 재사용해 분기 수 감소
-    }
-
-    uint16_t tail_count = clip_end - fill_end;  // V251014R7: 교집합 이후 길이를 재사용하기 위해 선행 계산
-    if (tail_count > 0) {
-        rgblight_indicator_clear_range((uint8_t)fill_end, tail_count);  // V251014R7: 후단 정리 길이도 재사용
-    }
-
-    rgb_led_t cached = rgblight_indicator_state.color;  // V251012R4: 캐시된 색상을 그대로 복사
-
-    uint16_t    fill_count = fill_end - fill_begin;  // V251014R7: 교집합 길이를 재사용해 루프 조건을 단순화
-    rgb_led_t * target_led = &led[fill_begin];
-
-    // V251014R2: 클리핑 범위와 실제로 겹치는 구간만 채워 불필요한 버퍼 쓰기를 제거
-    for (uint16_t i = 0; i < fill_count; i++) {
-        target_led[i] = cached;
-    }
-
-    uint16_t effect_front_clear = fill_begin - start;     // V251014R7: 효과 범위 선행 구간 길이를 재사용
-    uint16_t effect_tail_clear  = effect_end - fill_end;  // V251014R7: 효과 범위 후행 구간 길이를 재사용
-
-    if (effect_front_clear > 0) {
-        rgblight_indicator_clear_range(start, effect_front_clear);  // V251014R6: 교집합 앞단을 직접 계산해 초기화
-    }
-
-    if (effect_tail_clear > 0) {
-        rgblight_indicator_clear_range((uint8_t)fill_end, effect_tail_clear);  // V251014R6: 교집합 이후 구간을 단일 계산으로 정리
-    }
-
-    rgblight_indicator_state.has_visible_output = true;  // V251015R9: 교집합이 존재할 때만 출력 플래그를 세팅
-    rgblight_indicator_state.needs_render = false;
-    return true;
+    rgblight_indicator_state.has_visible_output = has_visible_output;  // V251016R1: 모든 경로에서 공통 후처리 수행
+    rgblight_indicator_state.needs_render       = false;
+    return has_visible_output;
 }
 
 // V251012R3: 인디케이터 상태 전이를 공통화해 중복 로직과 불필요한 rgblight_set 호출을 축소
