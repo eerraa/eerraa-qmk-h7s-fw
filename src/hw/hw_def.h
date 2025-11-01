@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251015R7"  // V251015R7: 출력 범위가 없는 인디케이터는 애니메이션 차단을 해제
+#define _DEF_FIRMWATRE_VERSION      "V251015R8"  // V251015R8: 출력 범위가 없는 인디케이터는 기본 파이프라인을 유지
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

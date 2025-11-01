@@ -1,3 +1,28 @@
+# V251015R8 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: 출력 구간이 사라진 이후에도 `rgblight_indicator_prepare_buffer()`가 기본 파이프라인을 차단하던 조기 반환.
+- 목표: 인디케이터가 실제로 그릴 LED가 없을 때는 애니메이션 루프와 기본 RGB 경로가 그대로 실행되도록, 활성/렌더 플래그 조합을 보수적으로 재검토.
+
+## 시나리오별 점검
+1. **정적 효과 + 클리핑 0**: 캡스락 토글 후 클리핑 범위를 0으로 줄이면 새 분기가 `indicator_has_output`을 false로 판정해 즉시 false를 반환하고, 기본 정적 모드가 같은 프레임에서 복원된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L243-L253】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1210-L1234】
+2. **동적 효과 + 효과 범위 0**: 효과 범위를 0으로 줄인 경우에도 `needs_render`가 내려간 이후 반환값이 false로 유지돼, 타이머 루프가 계속 실행되며 호스트 LED가 꺼질 때까지 기존 애니메이션이 유지된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L243-L253】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1352-L1366】
+3. **출력 범위 복구**: 범위를 다시 확장하면 `needs_render`가 true로 설정되어 기존 분기가 그대로 실행되고, `indicator_has_output`이 true로 돌아와 재렌더 이후에는 인디케이터가 다시 우선권을 가진다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L243-L253】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L297-L333】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- `needs_render`가 false일 때도 인디케이터가 기본 루프를 막던 반환을 출력 구간 유무에 따라 분기시켜, 사용되지 않는 오버라이드 경로를 제거했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L243-L253】
+
+## 성능 및 오버헤드 검토
+- 출력 구간이 없을 때는 조기에 false를 반환해, 불필요한 `rgblight_layers_write()`·`rgblight_set()` 차단을 피하고 타이머 루프가 정상적으로 RGB 효과를 갱신하도록 했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L243-L253】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1210-L1234】
+
+## 제어 흐름 간소화
+- 활성 플래그가 유지되더라도 실제 출력이 없으면 반환값이 false가 되어 애니메이션 경로가 명확히 분리되도록, 조기 반환 조건을 단일 불리언으로 정리했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L243-L253】
+
+## 수정 적용 여부 판단
+- 출력 구간이 사라진 이후에도 기본 애니메이션이 즉시 복원되고, 구간이 복구되면 기존 렌더 경로가 그대로 유지됨을 재확인해 보수적 변경으로 확정했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L243-L253】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1352-L1366】
+
+**결: 수정 적용.**
+
 # V251015R7 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
