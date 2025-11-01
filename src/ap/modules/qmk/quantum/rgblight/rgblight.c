@@ -246,17 +246,18 @@ static bool rgblight_indicator_prepare_buffer(void)
     bool     should_fill      = has_brightness && has_intersection;  // V251014R5: 밝기와 교집합이 모두 존재할 때만 채움 경로 실행
 
     if (clip_count > 0) {
+        uint16_t front_count = fill_begin - clip_start;  // V251014R7: 교집합 앞단 길이를 재사용하기 위해 선행 계산
+        uint16_t tail_count  = clip_end - fill_end;       // V251014R7: 교집합 이후 길이를 재사용하기 위해 선행 계산
+
         if (!should_fill) {
             rgblight_indicator_clear_range(clip_start, clip_count);  // V251013R5: 공통 초기화 헬퍼로 0 길이 호출 제거
         } else {
-            if (fill_begin > clip_start) {
-                uint16_t front_count = fill_begin - clip_start;  // V251014R5: 교집합 앞단만 정리해 중복 초기화를 방지
-                rgblight_indicator_clear_range(clip_start, front_count);
+            if (front_count > 0) {
+                rgblight_indicator_clear_range(clip_start, front_count);  // V251014R7: 계산된 길이를 재사용해 분기 수 감소
             }
 
-            if (clip_end > fill_end) {
-                uint16_t tail_count = clip_end - fill_end;  // V251014R5: 교집합 이후 구간만 정리
-                rgblight_indicator_clear_range((uint8_t)fill_end, tail_count);
+            if (tail_count > 0) {
+                rgblight_indicator_clear_range((uint8_t)fill_end, tail_count);  // V251014R7: 후단 정리 길이도 재사용
             }
         }
     }
@@ -272,24 +273,23 @@ static bool rgblight_indicator_prepare_buffer(void)
 
     rgb_led_t cached = rgblight_indicator_state.color;  // V251012R4: 캐시된 색상을 그대로 복사
 
-    if (fill_end > fill_begin) {
-        // V251014R2: 클리핑 범위와 실제로 겹치는 구간만 채워 불필요한 버퍼 쓰기를 제거
-        uint16_t    fill_count = fill_end - fill_begin;
-        rgb_led_t * target_led = &led[fill_begin];
+    uint16_t    fill_count = fill_end - fill_begin;  // V251014R7: 교집합 길이를 재사용해 루프 조건을 단순화 (should_fill true → 0 초과)
+    rgb_led_t * target_led = &led[fill_begin];
 
-        for (uint16_t i = 0; i < fill_count; i++) {
-            target_led[i] = cached;
-        }
+    // V251014R2: 클리핑 범위와 실제로 겹치는 구간만 채워 불필요한 버퍼 쓰기를 제거
+    for (uint16_t i = 0; i < fill_count; i++) {
+        target_led[i] = cached;
     }
 
-    if (has_effect) {
-        if (fill_begin > start) {
-            rgblight_indicator_clear_range(start, fill_begin - start);  // V251014R6: 교집합 앞단을 직접 계산해 초기화
-        }
+    uint16_t effect_front_clear = fill_begin - start;     // V251014R7: 효과 범위 선행 구간 길이를 재사용
+    uint16_t effect_tail_clear  = effect_end - fill_end;  // V251014R7: 효과 범위 후행 구간 길이를 재사용
 
-        if (fill_end < effect_end) {
-            rgblight_indicator_clear_range((uint8_t)fill_end, effect_end - fill_end);  // V251014R6: 교집합 이후 구간을 단일 계산으로 정리
-        }
+    if (effect_front_clear > 0) {
+        rgblight_indicator_clear_range(start, effect_front_clear);  // V251014R6: 교집합 앞단을 직접 계산해 초기화
+    }
+
+    if (effect_tail_clear > 0) {
+        rgblight_indicator_clear_range((uint8_t)fill_end, effect_tail_clear);  // V251014R6: 교집합 이후 구간을 단일 계산으로 정리
     }
 
     rgblight_indicator_state.needs_render = false;

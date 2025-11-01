@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251014R6"  // V251014R6: 효과 범위 초기화 분기를 정리해 렌더링 경로를 간소화
+#define _DEF_FIRMWATRE_VERSION      "V251014R7"  // V251014R7: 교집합 길이 재사용으로 인디케이터 초기화 분기 간소화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
