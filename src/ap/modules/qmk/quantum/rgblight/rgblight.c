@@ -146,13 +146,28 @@ static rgblight_indicator_state_t rgblight_indicator_state = {
 };
 
 // V251013R5: 인디케이터 버퍼 초기화를 공통화해 0 길이 memset 호출을 방지
+// V251013R7: 범위가 LED 배열을 벗어나는 경우를 방지하도록 길이를 보정
 static inline void rgblight_indicator_clear_range(uint8_t start, uint16_t count)
 {
     if (count == 0) {
         return;
     }
 
-    memset(&led[start], 0, count * sizeof(rgb_led_t));
+    if (start >= RGBLIGHT_LED_COUNT) {
+        return;  // V251013R7: 잘못된 시작 인덱스는 무시해 오버런을 차단
+    }
+
+    uint16_t end = (uint16_t)start + count;
+    if (end > RGBLIGHT_LED_COUNT) {
+        end = RGBLIGHT_LED_COUNT;  // V251013R7: LED 개수를 넘는 구간은 끝을 잘라낸다
+    }
+
+    uint16_t length = end - start;
+    if (length == 0) {
+        return;
+    }
+
+    memset(&led[start], 0, (size_t)length * sizeof(rgb_led_t));
 }
 
 // V251012R2: 인디케이터 대상과 호스트 LED 상태를 비교하여 활성화 여부를 반환
@@ -333,23 +348,38 @@ void rgblight_indicator_apply_host_led(led_t host_led_state)
 }
 
 void rgblight_set_clipping_range(uint8_t start_pos, uint8_t num_leds) {
+    if (rgblight_ranges.clipping_start_pos == start_pos &&
+        rgblight_ranges.clipping_num_leds == num_leds) {
+        return;  // V251013R7: 동일 범위 반복 시 재렌더 예약을 생략해 타이머 깨우기 방지
+    }
+
     rgblight_ranges.clipping_start_pos = start_pos;
     rgblight_ranges.clipping_num_leds  = num_leds;
 
     if (rgblight_indicator_state.active) {
         rgblight_indicator_state.needs_render = true;  // V251013R6: 범위 변경 시 인디케이터 버퍼 재적용 예약
+                                                        // V251013R7: 값이 바뀐 경우에만 플래그를 세팅
     }
 }
 
 void rgblight_set_effect_range(uint8_t start_pos, uint8_t num_leds) {
     if (start_pos >= RGBLIGHT_LED_COUNT) return;
-    if (start_pos + num_leds > RGBLIGHT_LED_COUNT) return;
+
+    uint16_t end = (uint16_t)start_pos + num_leds;
+    if (end > RGBLIGHT_LED_COUNT) return;
+
+    if (rgblight_ranges.effect_start_pos == start_pos &&
+        rgblight_ranges.effect_num_leds == num_leds) {
+        return;  // V251013R7: 동일 범위 반복 시 재렌더 예약을 생략
+    }
+
     rgblight_ranges.effect_start_pos = start_pos;
-    rgblight_ranges.effect_end_pos   = start_pos + num_leds;
+    rgblight_ranges.effect_end_pos   = (uint8_t)end;
     rgblight_ranges.effect_num_leds  = num_leds;
 
     if (rgblight_indicator_state.active) {
         rgblight_indicator_state.needs_render = true;  // V251013R6: 효과 범위 갱신 시 재렌더링 플래그 설정
+                                                        // V251013R7: 값이 실제로 변한 경우에만 트리거
     }
 }
 

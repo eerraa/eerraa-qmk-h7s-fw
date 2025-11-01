@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251013R6"  // V251013R6: 인디케이터 재렌더 조건 및 범위 변경 플래그 정비
+#define _DEF_FIRMWATRE_VERSION      "V251013R7"  // V251013R7: 범위 중복 갱신 최적화 및 버퍼 경계 보정
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
