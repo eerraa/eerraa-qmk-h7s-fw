@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251013R8"  // V251013R8: 클리핑 범위 유효성 검사를 추가해 오버런 방지
+#define _DEF_FIRMWATRE_VERSION      "V251013R10"  // V251013R10: 빈 효과 범위 시 애니메이션 루프를 우회해 0 나눗셈을 차단
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

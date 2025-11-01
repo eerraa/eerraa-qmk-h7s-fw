@@ -372,7 +372,9 @@ void rgblight_set_clipping_range(uint8_t start_pos, uint8_t num_leds) {
 }
 
 void rgblight_set_effect_range(uint8_t start_pos, uint8_t num_leds) {
-    if (start_pos >= RGBLIGHT_LED_COUNT) return;
+    if (start_pos > RGBLIGHT_LED_COUNT) {
+        return;  // V251013R9: 전체 LED 개수와 같은 시작 인덱스를 허용해 빈 범위 설정을 지원
+    }
 
     uint16_t end = (uint16_t)start_pos + num_leds;
     if (end > RGBLIGHT_LED_COUNT) return;
@@ -1308,6 +1310,10 @@ void rgblight_timer_task(void) {
         return;
     }
     if (rgblight_status.timer_enabled) {
+        if (rgblight_ranges.effect_num_leds == 0) {
+            return;  // V251013R10: 빈 효과 범위에서는 애니메이션 루프를 건너뛰어 0으로 나누는 연산을 방지
+        }
+
         effect_func_t effect_func   = rgblight_effect_dummy;
         uint16_t      interval_time = 2000; // dummy interval
         uint8_t       delta         = rgblight_config.mode - rgblight_status.base_mode;
