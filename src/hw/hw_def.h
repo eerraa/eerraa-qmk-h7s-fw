@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251015R1"  // V251015R1: 밝기 0 경로에서 교집합 외 구간만 초기화해 중복 memset 제거
+#define _DEF_FIRMWATRE_VERSION      "V251015R2"  // V251015R2: 밝기 0 경로에서 효과 잔여 구간만 정리하도록 범위 보정
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
