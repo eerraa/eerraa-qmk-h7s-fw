@@ -1,3 +1,33 @@
+# V251014R6 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: V251012R2~V251014R5 누적 변경으로 정리된 Brick60 RGB 인디케이터 버퍼 준비 루틴.
+- 목표: 효과 범위 초기화 경로의 분기를 더 줄일 수 있는지, 밝기 0/무교집합 시 전체 효과 범위를 한 번에 정리해도 안전한지, 그리고 교집합 앞/뒤 정리가 단일 계산으로 대체돼도 DMA 준비 및 Split 시나리오에 회귀가 없는지 추가 검증.
+
+## 시나리오별 점검
+1. **밝기 0 + 효과 범위 유지**: `should_fill`이 false인 상태에서 효과 범위를 전체 초기화하도록 경로를 단일 호출로 바꿔도, 클리핑 구간 초기화 후 즉시 `rgblight_indicator_clear_range(start, count)`가 실행돼 잔류 색상이 남지 않음을 확인했다. 반복 호출에서도 추가 분기가 없어 오버헤드가 늘지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L246-L274】
+2. **무교집합 + Split 전환**: 좌/우 클리핑 범위가 서로 다르게 설정돼 교집합이 사라진 경우에도 동일 경로가 전체 효과 범위를 초기화해, 이전 프레임 색상이 남지 않고 DMA 전송 전에 버퍼가 깨끗하게 유지됨을 검증했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L246-L274】
+3. **동적 효과 + 부분 교차**: `should_fill`이 true인 상태에서 교집합 앞/뒤 정리를 `fill_begin`과 `fill_end` 직접 계산으로 대체해도, 선행/후행 구간이 정확히 잘라지고 교집합 구간만 채워진 뒤 DMA 전송에 참여함을 확인했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L282-L304】
+4. **효과 범위 축소 반복**: VIA 매크로가 효과 범위를 계속 줄이는 상황에서도 새 계산이 동일한 값을 재사용해 선행/후행 정리 범위가 즉시 갱신되고, 불필요한 min/max 비교가 사라져 타이머 호출당 분기 수가 감소함을 확인했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L282-L304】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- 밝기 0 또는 무교집합 시 효과 범위 정리를 단일 호출로 대체해, 앞/뒤 구간을 별도로 계산하던 보조 분기를 제거했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L246-L274】
+- 교집합 앞/뒤 정리도 `fill_begin`/`fill_end`를 직접 사용하도록 변경해, 동일 값을 다시 비교하거나 클램프할 필요가 없어졌다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L282-L304】
+
+## 성능 및 오버헤드 검토
+- 효과 범위 초기화를 단일 호출로 합쳐, 밝기 0 반복 호출에서 불필요한 분기/비교 연산이 제거되어 인터럽트 경로의 예측 실패 가능성이 줄었다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L246-L274】
+- 교집합 앞/뒤 정리 범위를 직접 계산하면서 루프 외부에서 재사용하던 min/max 비교를 없애, 렌더링 루틴의 연산 수가 감소했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L282-L304】
+
+## 제어 흐름 간소화
+- `should_fill` false 경로가 전체 효과 범위를 즉시 정리해, 호출 순서를 따라갈 때 분기 추적이 더 쉬워졌다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L246-L274】
+- 교집합 앞/뒤 정리가 동일 계산을 공유해, 추가 범위 변화가 생겨도 값 추적이 단순해졌다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L282-L304】
+
+## 수정 적용 여부 판단
+- 효과 범위를 한 번에 정리해도 `rgblight_indicator_clear_range()`가 기존과 동일하게 경계 보정을 적용하므로, DMA 버퍼 계약을 깨지 않는다고 판단했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L246-L304】
+- 교집합 앞/뒤 정리를 직접 계산해도 기존 초기화 범위를 그대로 재현하므로, Split 타이머 반복 호출에서 회귀 가능성이 없다고 판단했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L282-L304】
+
+**결론: 수정 적용.**
+
 # V251014R5 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
