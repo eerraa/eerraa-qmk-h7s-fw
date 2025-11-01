@@ -266,7 +266,23 @@ static bool rgblight_indicator_prepare_buffer(void)
         rgblight_indicator_clear_range(clip_start, clip_count);  // V251014R8: 밝기 0 또는 교집합이 없으면 전체 클리핑 범위를 정리
 
         if (!clip_covers_effect) {
-            rgblight_indicator_clear_range(start, count);  // V251014R9: 클리핑 밖 효과 구간만 추가로 정리
+            if (start < clip_start) {
+                uint16_t front_end          = (effect_end < clip_start) ? effect_end : clip_start;  // V251015R2: 효과 범위가 클리핑 앞단을 넘지 않는 경우 실제 효과 끝으로 제한
+                uint16_t effect_front_clear = front_end - start;                                    // V251015R2: 효과 구간만 정리하도록 길이 보정
+
+                if (effect_front_clear > 0) {
+                    rgblight_indicator_clear_range(start, effect_front_clear);  // V251015R2: 교집합 앞단에 남은 실제 효과 범위만 초기화
+                }
+            }
+
+            if (effect_end > clip_end) {
+                uint16_t tail_start         = (((uint16_t)start) > clip_end) ? (uint16_t)start : clip_end;  // V251015R2: 효과 범위가 클리핑 뒤에 떨어진 경우 시작점을 효과 범위로 보정
+                uint16_t effect_tail_clear  = (effect_end > tail_start) ? (effect_end - tail_start) : 0;     // V251015R2: 교집합 이후 남은 효과 길이만 계산
+
+                if (effect_tail_clear > 0) {
+                    rgblight_indicator_clear_range((uint8_t)tail_start, effect_tail_clear);  // V251015R2: 클리핑 이후 실제 효과 범위만 정리
+                }
+            }
         }
 
         rgblight_indicator_state.needs_render = false;

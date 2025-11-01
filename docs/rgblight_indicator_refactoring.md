@@ -1,3 +1,55 @@
+# V251015R2 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: V251015R1 변경 이후 밝기 0·무교집합 경로에서 클리핑과 효과 범위 사이 간격이 존재하는 시나리오.
+- 목표: 간격이 남는 경우에도 효과 범위만 초기화되도록 앞·뒤 잔여 길이를 보정해, 다른 애니메이션 색상이 보존되는지 재확인.
+
+## 시나리오별 점검
+1. **밝기 0 + 효과 범위가 클리핑 뒤쪽 간격 이후 위치**: `tail_start`를 효과 시작점으로 보정해 간격 구간(clip_end~start)에는 손을 대지 않고, 효과가 존재하는 LED만 초기화됨을 확인했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L266-L285】
+2. **밝기 0 + 효과 범위가 클리핑 앞쪽에만 위치**: `front_end`를 효과 종료 지점으로 제한해 실제 효과 길이만큼만 초기화되고, 클리핑 앞쪽과 효과 사이의 간격은 유지됨을 검증했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L266-L277】
+3. **밝기 0 + 교집합 유지 + 후단 확장**: 교집합 이후 잔여 길이 계산이 유지되어, DMA 대상 구간과 동일하게 효과 잔여 구간만 정리되는 기존 시나리오와 호환됨을 확인했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L278-L285】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- 간격이 존재하는 경우에도 효과 범위만 초기화하도록 앞·뒤 잔여 길이 계산을 보정해, DMA 버퍼 외 구간 색상 소거를 방지했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L266-L285】
+
+## 성능 및 오버헤드 검토
+- 기존 조건을 그대로 유지하면서 실제 초기화 호출 길이만 줄여, 밝기 0 토글이 반복될 때 `memset()` 범위가 최소화되도록 했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L266-L285】
+
+## 제어 흐름 간소화
+- 간격 여부와 무관하게 동일 분기에서 앞·뒤 잔여 길이를 계산하되, 실제 효과 범위에 맞춰 조정해 추후 시나리오 추가 시에도 로직을 재사용할 수 있게 했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L266-L285】
+
+## 수정 적용 여부 판단
+- 간격이 존재하는 시나리오에서도 DMA 범위 밖 색상 보존과 초기화 범위의 보수적 동작이 유지됨을 확인해 수정 적용을 확정했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L266-L285】
+
+**결: 수정 적용.**
+
+# V251015R1 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: V251012R2~V251014R9 누적 변경 이후 남은 밝기 0·무교집합 경로의 중복 초기화.
+- 목표: 효과 범위가 클리핑 밖으로 확장된 실제 시나리오에서 중복 `memset()` 호출 없이도 DMA 버퍼 잔류 색상을 확실히 제거하는지 검증.
+
+## 시나리오별 점검
+1. **밝기 0 + 효과 범위 전후 확장**: 효과 범위가 클리핑 전후단을 모두 넘는 상태에서 조기 반환 경로가 전단·후단 잔여 길이만 별도로 초기화해, 교집합 구간을 반복 초기화하지 않으면서 DMA 외 영역까지 정리됨을 확인했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L266-L285】
+2. **밝기 0 + 전단만 확장**: Split 반대편 등 효과 범위가 클리핑 앞쪽으로만 남은 경우에도, 앞단 길이 계산만 실행되어 나머지 범위는 기존 클리핑 초기화로 충분해 불필요한 `memset()` 호출이 발생하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L266-L279】
+3. **밝기 0 + 후단만 확장**: 효과 범위가 클리핑 뒤쪽으로만 넘어가는 경우 후단 길이만 계산해 초기화하므로, 타이머가 동일 프레임을 다시 호출해도 중복 초기화가 반복되지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L277-L285】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- 밝기 0·무교집합 경로에서 클리핑과 동일 구간을 다시 초기화하던 호출을 제거하고, 교집합 밖 남는 구간만 정리하도록 조정했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L266-L285】
+
+## 성능 및 오버헤드 검토
+- 전단·후단 길이를 조건부로 계산해 필요한 구간만 `memset()`하므로, 밝기 토글이 잦은 인터럽트 컨텍스트에서 메모리 초기화 오버헤드를 더 줄였다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L266-L285】
+- 교집합 구간은 단일 초기화로 끝나 조기 반환 경로의 분기 수를 유지하면서도 메모리 접근 횟수를 최소화했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L266-L285】
+
+## 제어 흐름 간소화
+- 교집합 외 잔여 구간을 전단·후단으로 구분해 처리함으로써, 실제로 초기화가 필요한 범위를 코드에서 바로 추적할 수 있게 됐다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L266-L285】
+
+## 수정 적용 여부 판단
+- 효과 범위가 클리핑을 벗어나는 경우에도 교집합 외 구간만 정리하도록 제한되어, DMA에 실리는 영역과 동일하게 정리됨을 보수적으로 확인했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L266-L285】
+- 기존 조기 반환 흐름과 `needs_render` 관리가 그대로 유지되어, 렌더 예약이나 타이머 동작에 변화가 없어 안전하다고 판단했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L266-L285】
+
+**결: 수정 적용.**
+
 # V251014R9 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
