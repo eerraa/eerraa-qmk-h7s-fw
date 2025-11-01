@@ -237,7 +237,8 @@ static bool rgblight_indicator_prepare_buffer(void)
 
     bool has_brightness = config.val > 0;
     bool has_effect     = count > 0;
-    bool should_fill    = has_brightness && has_effect;            // V251013R3: 분기 공통 조건을 계산해 반복 검사를 줄임
+    bool should_fill    = has_brightness && has_effect && (clip_count > 0);  // V251013R3: 공통 조건 계산
+    // V251014R1: 출력 범위가 없으면 버퍼 재작성 생략
 
     uint16_t clip_end   = (uint16_t)clip_start + clip_count;      // V251013R3: 합산 시 오버플로우를 피하기 위해 16비트로 계산
     uint16_t effect_end = (uint16_t)start + count;
