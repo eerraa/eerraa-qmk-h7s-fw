@@ -254,9 +254,7 @@ static bool rgblight_indicator_prepare_buffer(void)
     // V251016R4: 조기 종료 분기를 if-else 체인으로 재구성해 break 없이 흐름을 단순화
 
     if (clip_count == 0) {
-        if (has_effect) {
-            rgblight_indicator_clear_range(start, count);  // V251014R8: 클리핑이 비활성화된 경우 효과 범위만 정리
-        }
+        // V251016R6: 클리핑이 비활성화된 경우 효과 버퍼를 유지해 불필요한 초기화를 방지
     } else if (!has_effect) {
         rgblight_indicator_clear_range(clip_start, clip_count);  // V251014R8: 효과 범위가 없을 때는 클리핑 구간만 정리
     } else {

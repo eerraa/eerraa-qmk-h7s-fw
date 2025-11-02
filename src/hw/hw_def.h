@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251016R5"  // V251016R5: 인디케이터 비교 분기 간소화 및 포화 감산 헬퍼 제거
+#define _DEF_FIRMWATRE_VERSION      "V251016R6"  // V251016R6: 클리핑 비활성 시 효과 버퍼 초기화를 생략해 오버헤드 감소
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
