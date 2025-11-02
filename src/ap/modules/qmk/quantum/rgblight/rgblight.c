@@ -173,12 +173,6 @@ static inline void rgblight_indicator_clear_range(uint16_t start, uint16_t count
     memset(&led[start], 0, (size_t)length * sizeof(rgb_led_t));
 }
 
-// V251015R3: 범위 길이 계산 시 언더플로우를 방지하는 포화 감산 헬퍼
-static inline uint16_t rgblight_indicator_saturating_sub(uint16_t value, uint16_t subtractor)
-{
-    return (value > subtractor) ? (value - subtractor) : 0;
-}
-
 // V251012R2: 인디케이터 대상과 호스트 LED 상태를 비교하여 활성화 여부를 반환
 static bool rgblight_indicator_target_active(uint8_t target, led_t host_state)
 {
@@ -273,20 +267,7 @@ static bool rgblight_indicator_prepare_buffer(void)
 
         if (fill_end <= fill_begin) {
             rgblight_indicator_clear_range(clip_start, clip_count);  // V251015R5: 교집합이 없을 때만 전체 클리핑 범위를 정리
-
-            uint16_t front_end          = (clip_start < effect_end) ? clip_start : effect_end;  // V251015R3: 효과 앞단 잔여 길이를 단일 계산으로 보정
-            uint16_t effect_front_clear = rgblight_indicator_saturating_sub(front_end, start);   // V251015R3: 포화 감산으로 실제 남은 길이만 사용
-
-            if (effect_front_clear > 0) {
-                rgblight_indicator_clear_range(start, effect_front_clear);  // V251015R3: 교집합 앞단에 남은 실제 효과 범위만 초기화
-            }
-
-            uint16_t tail_start        = (clip_end > start) ? clip_end : start;  // V251015R3: 효과 후단 시작 위치를 단일 분기로 산출
-            uint16_t effect_tail_clear = rgblight_indicator_saturating_sub(effect_end, tail_start);  // V251015R3: 교집합 이후 남은 효과 길이만 계산
-
-            if (effect_tail_clear > 0) {
-                rgblight_indicator_clear_range(tail_start, effect_tail_clear);  // V251015R3: 클리핑 이후 실제 효과 범위만 정리
-            }
+            rgblight_indicator_clear_range(start, count);            // V251016R5: 효과 범위 전체를 한 번에 초기화해 포화 감산 헬퍼 제거
         } else {
             uint16_t front_count = fill_begin - clip_start;  // V251014R7: 교집합 앞단 길이를 재사용하기 위해 선행 계산
             if (front_count > 0) {
