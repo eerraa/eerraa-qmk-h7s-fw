@@ -40,6 +40,7 @@ cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/sirind/brick60'
 cmake --build build -j10
 rm -rf build
 ```
+- 별도의 **빌드 테스트 실행 명령**이 없다면 빌드 테스트는 생략합니다.
 - UF2 변환은 CMake 타깃 내부에서 자동으로 처리됩니다.
 
 ## 7. 디렉터리 힌트
