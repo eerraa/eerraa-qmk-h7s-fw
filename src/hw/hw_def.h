@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251016R4"  // V251016R4: 인디케이터 조기 종료 분기를 if-else 체인으로 간소화
+#define _DEF_FIRMWATRE_VERSION      "V251016R5"  // V251016R5: 인디케이터 비교 분기 간소화 및 포화 감산 헬퍼 제거
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

@@ -1,3 +1,28 @@
+# V251016R5 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: `rgblight_indicator_prepare_buffer()`의 클리핑/효과 범위가 겹치지 않는 경로와 `rgblight_indicator_clear_range()` 조합.
+- 목표: 실제 구동 시나리오에서 교집합이 없을 때 포화 감산 헬퍼 없이도 전체 효과 범위를 안전하게 비우고, 분기 및 산술 오버헤드를 줄일 수 있는지 확인.
+
+## 시나리오별 점검
+1. **정적 효과 + 클리핑 분리**: CAPS 인디케이터를 켠 뒤 클리핑 범위를 비활성화하고 효과 범위를 분리하면, 조기 분기에서 효과 범위 전체를 한 번에 초기화해 잔류 색상이 남지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L262-L287】
+2. **동적 효과 + 범위 이동 반복**: VIA에서 효과 범위를 클리핑과 겹치지 않도록 이동시키는 동적 시나리오에서도 동일 경로가 발동해 포인터 루프가 실행되지 않고, 상태 플래그는 기존 후처리에서 정리된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L262-L300】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L326-L333】
+3. **호스트 LED Off 복귀**: 호스트 LED를 끄면 `should_enable`이 false로 내려가며, 새 분기가 전체 효과 범위를 비워 `has_visible_output`이 다음 타이머 주기에 false로 유지된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L262-L287】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L335-L341】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- 교집합이 없을 때 전체 효과 범위를 초기화하도록 조정해 `rgblight_indicator_saturating_sub()` 헬퍼와 관련 포화 감산 분기를 제거했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L262-L287】
+
+## 성능 및 오버헤드 검토
+- 분기 내 산술 계산과 비교가 사라져 인터럽트 컨텍스트에서 수행되던 포화 감산 두 번을 줄였고, 함수 호출은 동일 `rgblight_indicator_clear_range()` 두 번만 남아 호출 비용을 최소화했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L262-L287】
+
+## 제어 흐름 간소화
+- 교집합 없음 분기가 두 줄로 축소되어 앞·뒤 보정 경로가 없어지고, 후속 분기가 명확히 교집합 존재 여부만 판단하면 되도록 단순화됐다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L262-L300】
+
+## 수정 적용 여부 판단
+- 정적/동적 효과와 호스트 토글 시나리오 모두에서 효과 범위 전체 초기화가 기존 상태 플래그 흐름과 충돌하지 않고, 잔여 컬러를 남기지 않음을 확인해 보수적으로 변경을 확정했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L262-L333】
+
+**결: 수정 적용.**
+
 # V251016R4 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
