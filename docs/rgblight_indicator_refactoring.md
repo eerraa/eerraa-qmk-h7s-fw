@@ -1,3 +1,28 @@
+# V251016R4 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: `rgblight_indicator_prepare_buffer()` 내부의 `do { ... } while (false)` 블록과 break 기반 조기 종료 경로.
+- 목표: 실제 구동 시나리오에서 조기 종료 조건을 if-else 체인으로 단순화했을 때 상태 후처리가 일관되게 수행되고, 분기 비용이 줄어드는지 확인.
+
+## 시나리오별 점검
+1. **정적 효과 + 클리핑 비활성**: CAPS 인디케이터가 켜진 상태에서 클리핑 범위를 0으로 만들면 if 첫 분기가 실행되어 효과 범위만 정리하고, 후처리에서 출력 플래그가 false로 내려가 기본 효과가 즉시 복귀한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L256-L274】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L335-L341】
+2. **동적 효과 + 효과 범위 0**: VIA에서 효과 범위를 0으로 줄이면 `has_effect` 검사 분기가 실행되어 클리핑 구간만 초기화하고, 렌더링 플래그가 false로 정리되어 다음 주기에서 기본 루프가 유지된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L258-L274】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L335-L341】
+3. **교집합 유지 + 포인터 채우기**: 클리핑/효과 범위가 겹칠 때 else 블록이 실행되어 기존 포인터 루프와 앞·뒤 정리 경로가 그대로 수행되고, 최종적으로 출력 플래그가 true로 기록되어 인디케이터가 우선권을 유지한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L276-L333】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L335-L341】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- break 기반 조기 종료를 if-else 체인으로 교체해 `do { ... } while (false)` 구조를 제거했고, 상태 후처리는 기존 단일 위치를 그대로 사용한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L256-L341】
+
+## 성능 및 오버헤드 검토
+- 조기 종료 조건이 단일 if-else 체인으로 정리되어 분기 예측 부담이 줄고, 교집합이 없는 프레임에서도 불필요한 비교/브레이크 없이 곧바로 후처리로 이어진다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L256-L341】
+
+## 제어 흐름 간소화
+- `has_effect`·`clip_count` 조합이 상위 분기로 승격되어 break가 사라졌고, 이후 흐름은 두 갈래(교집합 없음/존재)로만 나뉘어 읽기와 유지보수가 쉬워졌다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L256-L341】
+
+## 수정 적용 여부 판단
+- 세 가지 시나리오 모두에서 상태 플래그와 버퍼 정리가 의도대로 수행되고, 기존 포인터 루프도 영향을 받지 않아 보수적으로 변경을 확정했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L256-L341】
+
+**결: 수정 적용.**
+
 # V251016R3 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
