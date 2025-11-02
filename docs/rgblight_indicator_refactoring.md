@@ -1,3 +1,28 @@
+# V251016R6 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: `rgblight_indicator_prepare_buffer()`의 클리핑 범위 길이가 0인 경로.
+- 목표: 실제 구동 시나리오에서 클리핑이 완전히 비활성화된 동안 효과 범위까지 초기화하는 비용을 줄여, 베이스 이펙트 버퍼를 불필요하게 지우지 않도록 확인.
+
+## 시나리오별 점검
+1. **정적 이펙트 + 클리핑 비활성 유지**: CAPS 인디케이터를 켠 채 클리핑 범위를 0으로 만들고 유지하면, 새 분기가 효과 버퍼를 지우지 않아 베이스 이펙트가 직전 상태를 그대로 보존하며 추가 `memset()`이 발생하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L231-L309】
+2. **동적 범위 이동 + 비활성 클리핑**: VIA에서 효과 범위를 반복 이동하더라도 클리핑 길이가 0인 동안에는 버퍼가 그대로 유지되고, 재렌더 플래그 해제 후 다음 호출에서는 추가 연산 없이 종료된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L231-L309】
+3. **호스트 LED Off 복귀**: 호스트 락 LED를 끈 상태에서 클리핑을 0으로 유지하면, 출력 플래그가 false로 내려가면서도 버퍼는 유지돼 이후 클리핑 복귀 시 즉시 교집합 분기로 복원된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L231-L309】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L333-L341】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- 클리핑이 비활성화된 경우 효과 범위를 다시 지우지 않고, 해당 분기를 주석으로 대체해 중복 초기화를 제거했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L256-L258】
+
+## 성능 및 오버헤드 검토
+- 클리핑 길이 0일 때 수행되던 `rgblight_indicator_clear_range()` 호출을 생략해 인터럽트 컨텍스트에서 대량 `memset()`이 반복되는 것을 방지했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L256-L309】
+
+## 제어 흐름 간소화
+- 클리핑 비활성 경로가 주석 처리된 빈 블록으로 정리돼, 이후 분기는 실제 교집합 존재 여부만 판단하면 되도록 더 명확해졌다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L256-L304】
+
+## 수정 적용 여부 판단
+- 클리핑이 0인 동안 물리 LED 업데이트가 발생하지 않는다는 점을 확인해, 효과 버퍼를 유지해도 리그레션 위험이 없으므로 보수적으로 변경을 확정했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L256-L309】
+
+**결: 수정 적용.**
+
 # V251016R5 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
