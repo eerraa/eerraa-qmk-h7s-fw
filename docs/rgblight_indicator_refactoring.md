@@ -1,3 +1,28 @@
+# V251016R7 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: `rgblight_indicator_update_config()`에서 타겟이 `OFF`로 설정된 경로.
+- 목표: 실제 시나리오에서 인디케이터를 끈 구성에 대해 HSV 변환과 색상 캐시 갱신이 불필요하게 실행되지 않도록 조정했을 때, 재활성화 흐름과 상태 머신이 안전하게 유지되는지 확인.
+
+## 시나리오별 점검
+1. **정적 이펙트 + 타겟 OFF 유지**: VIA에서 인디케이터를 OFF로 전환한 뒤 CAPS LED를 반복 토글해도, 새 분기가 즉시 색상 캐시를 0으로 초기화하면서 HSV 변환을 건너뛰어 불필요 연산이 발생하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L347-L362】
+2. **타겟 OFF → CAPS 재활성화**: OFF 상태에서 다시 CAPS 타겟을 선택하면, else 분기가 기존 HSV 캐시 경로를 재사용해 색상을 복원하고 `rgblight_indicator_commit_state()`가 재렌더를 예약해 즉시 출력이 복귀한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L353-L362】
+3. **호스트 LED Off 복귀 + 타겟 OFF**: 타겟 OFF 동안 호스트 LED 상태만 변하더라도 `rgblight_indicator_should_enable()`이 false를 반환해 인디케이터가 비활성 유지되며, 색상 캐시는 0 상태로 남아 추가 렌더가 일어나지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L180-L199】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L353-L362】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- 타겟이 OFF인 구성에서 HSV 변환 결과를 사용할 일이 없어 `rgblight_indicator_update_config()`가 즉시 색상 캐시를 0으로 만들고 변환 호출을 제거했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L353-L362】
+
+## 성능 및 오버헤드 검토
+- OFF 구성 변경 시 HSV 변환과 포화 연산을 생략해 인터럽트 외부에서도 불필요한 산술 수행을 막고, 구성 변경 시 호출 오버헤드를 줄였다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L353-L362】
+
+## 제어 흐름 간소화
+- OFF 전용 경로가 명시돼 상태 머신이 타겟 활성 경로와 분리되어 읽기 쉬워졌고, 캐시 값이 0으로 고정돼 재활성화 시점에서도 일관된 초기 상태를 보장한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L353-L362】
+
+## 수정 적용 여부 판단
+- 타겟 OFF 구성은 출력이 존재하지 않으므로 캐시를 0으로 비워도 리그레션 위험이 없고, 필요 시 재활성화 분기에서 즉시 HSV 변환을 재실행하므로 보수적으로 변경을 확정했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L353-L362】
+
+**결: 수정 적용.**
+
 # V251016R6 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요

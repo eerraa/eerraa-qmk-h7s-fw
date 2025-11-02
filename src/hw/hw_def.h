@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251016R6"  // V251016R6: 클리핑 비활성 시 효과 버퍼 초기화를 생략해 오버헤드 감소
+#define _DEF_FIRMWATRE_VERSION      "V251016R7"  // V251016R7: 타겟 OFF 구성에서 HSV 변환을 생략해 불필요 연산 제거
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

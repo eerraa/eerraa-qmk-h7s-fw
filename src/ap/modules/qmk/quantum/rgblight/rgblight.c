@@ -351,7 +351,11 @@ void rgblight_indicator_update_config(rgblight_indicator_config_t config)
     }
 
     rgblight_indicator_state.config = config;
-    rgblight_indicator_state.color  = rgblight_indicator_compute_color(config);  // V251012R4: 렌더링 시 재사용할 색상 캐시
+    if (config.target == RGBLIGHT_INDICATOR_TARGET_OFF) {
+        rgblight_indicator_state.color = (rgb_led_t){0};  // V251016R7: 인디케이터 비활성 구성은 HSV 변환 없이 캐시를 초기화
+    } else {
+        rgblight_indicator_state.color = rgblight_indicator_compute_color(config);  // V251012R4: 렌더링 시 재사용할 색상 캐시
+    }
 
     bool should_enable = rgblight_indicator_should_enable(config, rgblight_indicator_state.host_state);
 
