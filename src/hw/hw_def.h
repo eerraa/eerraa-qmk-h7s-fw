@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251016R8"   // V251016R8: 인디케이터 범위 전달 구조 정비 및 오버레이 대응
+#define _DEF_FIRMWATRE_VERSION      "V251016R9"   // V251016R9: 인디케이터 프레임 준비 로직 단순화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
