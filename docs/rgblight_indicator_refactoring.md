@@ -1,3 +1,28 @@
+# V251016R8 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: `rgblight_indicator_state_t`의 `has_visible_output` 캐시와 이를 사용하는 타이머 우회 분기.
+- 목표: 일반 키보드처럼 일부 RGB만 인디케이터로 사용할 때 기본 RGB 이펙트가 중단되지 않도록 하고, Brick60 전용 전체 덮어쓰기 흐름은 유지되는지 확인.
+
+## 시나리오별 점검
+1. **일반 키보드(부분 인디케이터)**: Caps/Scroll/Num을 각각 하나의 LED에 매핑해도 타이머 루프가 `overrides_all` 값만 확인하므로, 나머지 이펙트가 계속 실행되고 인디케이터 범위만 오버레이된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1395-L1404】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1245-L1275】
+2. **Brick60(전체 덮어쓰기)**: Brick60처럼 0~29번 LED를 하나의 인디케이터로 사용하는 경우 `overrides_all`이 true로 유지돼 타이머가 즉시 반환하고, 오버레이 루프는 기존과 동일하게 모든 LED를 동일 색으로 채운다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L220-L237】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1245-L1275】
+3. **인디케이터 비활성/범위 무효**: 호스트 LED가 꺼지거나 범위가 0이 되면 준비 함수가 재렌더 플래그를 내리고 즉시 false를 반환해, 인디케이터가 비활성화된 상태에서도 타이머가 정상적으로 베이스 이펙트를 처리한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L290-L308】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L347-L360】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- 부분 인디케이터에서도 항상 true가 되던 `has_visible_output` 캐시를 제거해, 타이머 루프 조기 반환 조건에서 사용되지 않도록 정리했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L138-L158】
+
+## 성능 및 오버헤드 검토
+- 부분 인디케이터 활성 시에도 애니메이션 루프가 계속 돌기 때문에, `rgblight_timer_task()`가 불필요하게 idle 상태로 머무는 일이 사라져 효과 전환 시 프레임 드롭이 발생하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1395-L1404】
+
+## 제어 흐름 간소화
+- 인디케이터 오버레이 준비/적용 경로가 `active`와 범위 유효성만 확인하도록 정리돼, 중간 캐시 없이도 전체 덮어쓰기와 부분 오버레이가 동일한 흐름을 공유한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L220-L343】
+
+## 수정 적용 여부 판단
+- 일반 키보드 시나리오에서 기본 RGB 이펙트 중단 문제가 해소되고, Brick60 전체 덮어쓰기 경로도 동일하게 유지됨을 확인했으므로 보수적으로 수정 적용을 확정한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L1395-L1404】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L220-L343】
+
+**결: 수정 적용.**
+
 # V251016R7 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요

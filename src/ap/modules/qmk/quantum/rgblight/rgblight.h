@@ -173,14 +173,15 @@ enum RGBLIGHT_EFFECT_MODE {
 #include "color.h"
 #include "led.h"  // V251012R2: 인디케이터 대상 판별을 위해 led_t 참조
 
-// V251012R2: Brick60 RGB 인디케이터 구성을 rgblight 내부로 이관하기 위한 구조체 및 상수 정의
-// V251012R3: 포트 계층이 동일한 구조체를 공유할 수 있도록 공개 인터페이스 유지
+// V251016R8: Brick60 기본 인디케이터 타깃 열거형을 공용 헤더로 환원
 enum rgblight_indicator_target {
     RGBLIGHT_INDICATOR_TARGET_OFF    = 0,
     RGBLIGHT_INDICATOR_TARGET_CAPS   = 1,
     RGBLIGHT_INDICATOR_TARGET_SCROLL = 2,
     RGBLIGHT_INDICATOR_TARGET_NUM    = 3,
 };
+
+typedef bool (*rgblight_indicator_target_callback_t)(uint8_t target, led_t host_state);  // V251016R8: 키보드별 타깃 판별 콜백
 
 typedef union {
     uint32_t raw;
@@ -192,8 +193,15 @@ typedef union {
     };
 } rgblight_indicator_config_t;
 
+typedef struct {
+    uint8_t start;
+    uint8_t count;
+} rgblight_indicator_range_t;  // V251016R8: 인디케이터 대상별 LED 범위 정보
+
 void rgblight_indicator_update_config(rgblight_indicator_config_t config);
 void rgblight_indicator_apply_host_led(led_t host_led_state);
+void rgblight_indicator_set_target_callback(rgblight_indicator_target_callback_t callback);  // V251016R8: 포트 콜백 등록
+void rgblight_indicator_set_ranges(const rgblight_indicator_range_t *ranges, uint8_t length);  // V251016R8: 키보드별 범위 전달
 // V251012R3: HSV → RGB 변환 헬퍼를 외부에서도 재사용할 수 있도록 선언
 RGB rgblight_hsv_to_rgb(HSV hsv);
 

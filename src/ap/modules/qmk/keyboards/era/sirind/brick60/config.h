@@ -40,8 +40,11 @@
 #define KKUK_ENABLE
 
 
+// V251016R8: Brick60 전용 RGB 인디케이터 기능 플래그를 INDICATOR_ENABLE로 선언
+#define INDICATOR_ENABLE
+
 // RGB LIGHT : set(RGBLIGHT_ENABLE true)
-// 
+//
 #define EEPROM_ENABLE
 #define RGBLIGHT_SLEEP
 #define RGBLIGHT_DEFAULT_ON         true

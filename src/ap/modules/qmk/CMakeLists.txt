@@ -94,7 +94,6 @@ add_compile_definitions(KEYMAP_C="${QMK_KEYBOARD_PATH}/keymap.c")
 
 
 
-
 if (RGBLIGHT_ENABLE)
   add_compile_definitions(RGBLIGHT_ENABLE)
 endif()
