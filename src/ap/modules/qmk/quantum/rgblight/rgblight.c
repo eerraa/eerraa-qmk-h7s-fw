@@ -278,31 +278,7 @@ static rgb_led_t rgblight_indicator_compute_color(rgblight_indicator_config_t co
     return color;
 }
 
-// V251012R2: 인디케이터 출력 시 사용할 LED 버퍼를 채우는 헬퍼
-// V251012R3: LED 버퍼 초기화와 채우기 경로를 간소화해 불필요한 반복 연산을 제거
-// V251012R4: HSV→RGB 변환 결과를 캐시한 색상을 복사하도록 수정
-// V251016R8: 유효 범위를 확인하고 전체 덮어쓰기 여부를 호출자에게 반환
-static bool rgblight_indicator_prepare_buffer(void)
-{
-    if (!rgblight_indicator_state.active) {
-        rgblight_indicator_state.needs_render       = false;
-        return false;
-    }
-
-    rgblight_indicator_range_t range = rgblight_indicator_state.range;
-    if (range.count == 0 || range.start >= RGBLIGHT_LED_COUNT) {
-        rgblight_indicator_state.needs_render       = false;
-        return false;
-    }
-
-    if (!rgblight_indicator_state.overrides_all) {
-        rgblight_indicator_state.needs_render = true;  // V251016R8: 일반 RGB 파이프라인 이후에 오버레이를 재적용한다.
-    }
-
-    return rgblight_indicator_state.overrides_all;
-}
-
-// V251016R8: 준비된 인디케이터 범위를 LED 버퍼에 덮어쓴다.
+// V251016R9: 프레임 준비 로직이 호출부로 이관되어 오버레이 함수는 적용만 수행
 static void rgblight_indicator_apply_overlay(void)
 {
     if (!rgblight_indicator_state.active) {
@@ -311,7 +287,7 @@ static void rgblight_indicator_apply_overlay(void)
     }
 
     rgblight_indicator_range_t range = rgblight_indicator_state.range;
-    if (range.count == 0 || range.start >= RGBLIGHT_LED_COUNT) {
+    if (range.count == 0) {
         rgblight_indicator_state.needs_render = false;
         return;
     }
@@ -322,14 +298,10 @@ static void rgblight_indicator_apply_overlay(void)
 
     uint16_t start = range.start;
     uint16_t count = range.count;
-    uint16_t end   = start + count;
-    if (end > RGBLIGHT_LED_COUNT) {
-        end = RGBLIGHT_LED_COUNT;
-    }
 
     rgb_led_t  cached     = rgblight_indicator_state.color;
     rgb_led_t *target_led = &led[start];
-    rgb_led_t *target_end = &led[end];
+    rgb_led_t *target_end = target_led + count;
 
     while (target_led < target_end) {
         *target_led++ = cached;
@@ -1238,8 +1210,19 @@ void rgblight_wakeup(void) {
 
 void rgblight_set(void) {
     rgb_led_t *start_led;
-    uint8_t    num_leds            = rgblight_ranges.clipping_num_leds;
-    bool       indicator_overrides = rgblight_indicator_prepare_buffer(); // V251012R2: 인디케이터 우선 렌더링
+    uint8_t    num_leds = rgblight_ranges.clipping_num_leds;
+    bool       indicator_active = rgblight_indicator_state.active;
+    rgblight_indicator_range_t indicator_range = rgblight_indicator_state.range;
+    bool indicator_has_range = indicator_active && (indicator_range.count > 0);
+    bool indicator_overrides = indicator_has_range && rgblight_indicator_state.overrides_all;
+
+    if (!indicator_active) {
+        rgblight_indicator_state.needs_render = false;  // V251016R9: 비활성 프레임에서 대기 플래그 정리
+    } else if (!indicator_has_range) {
+        rgblight_indicator_state.needs_render = false;  // V251016R9: 유효 범위가 없으면 오버레이를 건너뛰고 타이머 대기 해제
+    } else if (!indicator_overrides) {
+        rgblight_indicator_state.needs_render = true;   // V251016R9: 부분 오버레이는 기본 이펙트 이후에 항상 재적용
+    }
 
     if (!indicator_overrides) {
         if (!rgblight_config.enable) {
@@ -1266,7 +1249,9 @@ void rgblight_set(void) {
 #endif
     }
 
-    rgblight_indicator_apply_overlay();  // V251016R8: 인디케이터 범위를 RGB 버퍼에 반영
+    if (indicator_has_range && (!indicator_overrides || rgblight_indicator_state.needs_render)) {
+        rgblight_indicator_apply_overlay();  // V251016R9: 준비가 완료된 프레임만 오버레이 적용
+    }
 
 #ifdef RGBLIGHT_LED_MAP
     rgb_led_t led0[RGBLIGHT_LED_COUNT];

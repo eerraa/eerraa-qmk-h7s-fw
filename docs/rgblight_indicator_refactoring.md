@@ -1,3 +1,31 @@
+# V251016R9 RGB 인디케이터 추가 리팩토링 검토
+
+## 검토 개요
+- 대상: `rgblight_set()`의 인디케이터 프레임 준비 분기와 `rgblight_indicator_apply_overlay()`의 범위 보정 경로.
+- 목표: 실제 구동 시나리오에서 프레임 준비 헬퍼를 제거해 중복 범위 검사를 줄이고, 부분/전체 오버레이가 필요한 호출에서만 실행되도록 단순화했을 때 타이머 루프와 인터럽트 경로의 일관성이 유지되는지 확인.
+
+## 시나리오별 점검
+1. **정적 이펙트 + 전체 덮어쓰기 유지**: Brick60 전용 전체 범위 인디케이터를 켠 상태에서 `rgblight_set()`이 호출되면, 새 분기가 `indicator_overrides`만 확인해 기본 이펙트 경로를 건너뛰고, 재렌더 요청이 남아 있을 때만 오버레이를 수행해 기존 덮어쓰기 성능이 유지된다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L309-L333】
+2. **동적 범위 이동 + 부분 오버레이 반복**: VIA에서 범위를 이동해 부분 오버레이를 유지하는 동안, 프레임 준비 로직이 즉시 `needs_render`를 true로 설정해 기본 이펙트 렌더 이후 오버레이가 매 프레임 재적용되어 잔류 색상이 남지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L309-L333】
+3. **인디케이터 비활성/범위 무효**: 호스트 LED를 끄거나 범위 테이블이 비워진 경우, 새 분기가 `needs_render`를 즉시 정리하고 오버레이 호출 자체를 건너뛰어 타이머가 불필요하게 `rgblight_set()`을 재호출하지 않는다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L309-L333】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L278-L305】
+
+## 불필요 코드 / 사용 종료된 요소 정리
+- 프레임 준비 전용 `rgblight_indicator_prepare_buffer()` 헬퍼를 제거해, 동일 조건 검사가 두 번 발생하던 경로를 `rgblight_set()` 내부로 통합했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L278-L333】
+- `rgblight_indicator_apply_overlay()`의 `RGBLIGHT_LED_COUNT` 초과 보호는 범위 설정 시 이미 보정되고 있어 중복이 되어 제거했다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L278-L305】【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L162-L186】
+
+## 성능 및 오버헤드 검토
+- 프레임 준비 로직이 `rgblight_set()`에 통합되면서 분기 수가 줄어들어, 타이머가 매 마이크로프레임마다 호출하는 경로에서 불필요한 조건 평가와 함수 호출이 사라졌다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L309-L333】
+- 오버레이 함수가 범위 길이만 확인하도록 축소되어, 인터럽트 컨텍스트에서 반복되던 상한 보정 분기가 제거됐다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L278-L305】
+
+## 제어 흐름 간소화
+- `rgblight_set()`이 인디케이터 활성/무효/부분 덮어쓰기 세 갈래만 판단하면 되도록 재구성되어, 베이스 이펙트와 오버레이 호출 순서가 명확해졌다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L309-L333】
+- 오버레이 함수는 범위 길이와 재렌더 플래그만 확인해 실제 덮어쓰기 작업에 집중하도록 단순화됐다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L278-L305】
+
+## 수정 적용 여부 판단
+- 전체 덮어쓰기 시나리오와 부분 오버레이, 비활성 상태 모두에서 버퍼 재적용과 타이머 플래그 정리가 기존 동작과 동일하게 유지됨을 확인했으므로, 보수적으로 수정 적용을 확정한다.【F:src/ap/modules/qmk/quantum/rgblight/rgblight.c†L278-L333】
+
+**결: 수정 적용.**
+
 # V251016R8 RGB 인디케이터 추가 리팩토링 검토
 
 ## 검토 개요
