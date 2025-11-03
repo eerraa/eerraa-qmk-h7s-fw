@@ -9,12 +9,37 @@
 // V251012R3: rgblight 내부 정의를 그대로 사용해 구성 슬롯 중복 정의를 제거한다.
 static rgblight_indicator_config_t indicator_config = {.raw = 0};
 
+enum
+{
+  BRICK60_INDICATOR_START_INDEX = 0,
+  BRICK60_INDICATOR_END_INDEX   = 29,
+  BRICK60_INDICATOR_LED_COUNT   = (BRICK60_INDICATOR_END_INDEX - BRICK60_INDICATOR_START_INDEX + 1),
+};  // V251016R8: Brick60 인디케이터는 RGB 0~29번을 고정 사용
+
+static const rgblight_indicator_range_t brick60_indicator_ranges[] = {
+  [RGBLIGHT_INDICATOR_TARGET_OFF] = {.start = 0, .count = 0},
+  [RGBLIGHT_INDICATOR_TARGET_CAPS] = {
+    .start = BRICK60_INDICATOR_START_INDEX,
+    .count = BRICK60_INDICATOR_LED_COUNT,
+  },
+  [RGBLIGHT_INDICATOR_TARGET_SCROLL] = {
+    .start = BRICK60_INDICATOR_START_INDEX,
+    .count = BRICK60_INDICATOR_LED_COUNT,
+  },
+  [RGBLIGHT_INDICATOR_TARGET_NUM] = {
+    .start = BRICK60_INDICATOR_START_INDEX,
+    .count = BRICK60_INDICATOR_LED_COUNT,
+  },
+};  // V251016R8: Caps/Scroll/Num 인디케이터 모두 0~29번 RGB를 공유
+
 _Static_assert(sizeof(rgblight_indicator_config_t) == sizeof(uint32_t),
                "EECONFIG out of spec.");  // V251012R3: 슬롯 크기 검증 유지
 
 static void indicator_via_get_value(uint8_t *data);
 static void indicator_via_set_value(uint8_t *data);
 static void indicator_via_save(void);
+static void indicator_apply_led_ranges(void);  // V251016R8: 인디케이터 대상별 LED 범위 등록
+static bool indicator_target_from_host(uint8_t target, led_t host_state);  // V251016R8: Brick60 전용 타깃 판별기
 
 EECONFIG_DEBOUNCE_HELPER(indicator, EECONFIG_USER_LED_CAPS, indicator_config);
 
@@ -35,6 +60,10 @@ void usbHidSetStatusLed(uint8_t led_bits)
 
 void led_init_ports(void)
 {
+  rgblight_indicator_set_target_callback(indicator_target_from_host);  // V251016R8: Brick60 호스트 LED 매핑 등록
+
+  indicator_apply_led_ranges();
+
   eeconfig_init_indicator();
 
   if (indicator_config.raw == 0 || indicator_config.target > RGBLIGHT_INDICATOR_TARGET_NUM)
@@ -50,6 +79,36 @@ void led_init_ports(void)
 void led_update_ports(led_t led_state)
 {
   rgblight_indicator_apply_host_led(led_state);  // V251012R2: 호스트 LED → rgblight 인디케이터 연동
+}
+
+static bool indicator_target_from_host(uint8_t target, led_t host_state)
+{
+  switch (target)
+  {
+    case RGBLIGHT_INDICATOR_TARGET_CAPS:
+    {
+      return host_state.caps_lock;
+    }
+    case RGBLIGHT_INDICATOR_TARGET_SCROLL:
+    {
+      return host_state.scroll_lock;
+    }
+    case RGBLIGHT_INDICATOR_TARGET_NUM:
+    {
+      return host_state.num_lock;
+    }
+    default:
+    {
+      return false;
+    }
+  }
+}
+
+static void indicator_apply_led_ranges(void)
+{
+  uint8_t range_count = (uint8_t)(sizeof(brick60_indicator_ranges) / sizeof(brick60_indicator_ranges[0]));
+
+  rgblight_indicator_set_ranges(brick60_indicator_ranges, range_count);  // V251016R8: Caps/Scroll/Num 범위를 rgblight에 전달
 }
 
 void indicator_port_via_command(uint8_t *data, uint8_t length)

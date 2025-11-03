@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251016R7"  // V251016R7: 타겟 OFF 구성에서 HSV 변환을 생략해 불필요 연산 제거
+#define _DEF_FIRMWATRE_VERSION      "V251016R8"   // V251016R8: 인디케이터 범위 전달 구조 정비 및 오버레이 대응
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

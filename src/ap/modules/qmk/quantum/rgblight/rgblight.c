@@ -19,6 +19,7 @@
 #include "progmem.h"
 #include "sync_timer.h"
 #include "rgblight.h"
+#include "port.h"  // V251016R8: 포트 계층 인디케이터 구성을 참조
 #include "color.h"
 #include "debug.h"
 #include "util.h"
@@ -128,53 +129,65 @@ static bool deferred_set_layer_state = false;
 
 rgblight_ranges_t rgblight_ranges = {0, RGBLIGHT_LED_COUNT, 0, RGBLIGHT_LED_COUNT, RGBLIGHT_LED_COUNT};
 
+#define RGBLIGHT_INDICATOR_RANGE_TABLE_LENGTH (RGBLIGHT_INDICATOR_TARGET_NUM + 1)  // V251016R8: Caps/Scroll/Num + OFF
+#define RGBLIGHT_INDICATOR_TARGET_INVALID      0xFF  // V251016R8: 범위 재적용을 위한 센티널 값
+
+static rgblight_indicator_range_t rgblight_indicator_range_table[RGBLIGHT_INDICATOR_RANGE_TABLE_LENGTH] = {0};
+
 // V251012R2: Brick60 인디케이터 상태를 rgblight 내부에서 추적하기 위한 구조체
 typedef struct {
     rgblight_indicator_config_t config;
     led_t                       host_state;
     rgb_led_t                   color;        // V251012R4: HSV 변환 결과를 캐시해 재계산을 피한다
+    uint8_t                     range_target;  // V251016R8: 현재 적용된 LED 범위를 추적
+    rgblight_indicator_range_t  range;         // V251016R8: 현재 적용 중인 인디케이터 LED 범위 캐시
+    bool                        overrides_all; // V251016R8: 전체 LED가 인디케이터에 의해 덮어쓰이는지 여부
     bool                        active;
     bool                        needs_render;
-    bool                        has_visible_output;  // V251015R9: 렌더링 결과가 실제 출력에 영향을 주는지 추적
 } rgblight_indicator_state_t;
 
 static rgblight_indicator_state_t rgblight_indicator_state = {
     .config = {.raw = 0},
     .host_state = {.raw = 0},
     .color = {0},
+    .range_target = RGBLIGHT_INDICATOR_TARGET_INVALID,
+    .range = {0, 0},
+    .overrides_all = false,
     .active = false,
     .needs_render = false,
-    .has_visible_output = false,
 };
 
-// V251013R5: 인디케이터 버퍼 초기화를 공통화해 0 길이 memset 호출을 방지
-// V251013R7: 범위가 LED 배열을 벗어나는 경우를 방지하도록 길이를 보정
-// V251016R2: 시작 인덱스를 16비트로 승격해 래핑 없이 경계 보정을 수행
-static inline void rgblight_indicator_clear_range(uint16_t start, uint16_t count)
+// V251016R8: 포트가 제공한 범위를 LED 개수에 맞춰 보정한다.
+static rgblight_indicator_range_t rgblight_indicator_sanitize_range(rgblight_indicator_range_t range)
 {
-    if (count == 0) {
-        return;
-    }
+  if (range.count == 0) {
+    return (rgblight_indicator_range_t){0, 0};
+  }
 
-    if (start >= RGBLIGHT_LED_COUNT) {
-        return;  // V251013R7: 잘못된 시작 인덱스는 무시해 오버런을 차단
-    }
+  uint16_t start = range.start;
+  if (start >= RGBLIGHT_LED_COUNT) {
+    return (rgblight_indicator_range_t){0, 0};
+  }
 
-    uint16_t end = (uint16_t)start + count;
-    if (end > RGBLIGHT_LED_COUNT) {
-        end = RGBLIGHT_LED_COUNT;  // V251013R7: LED 개수를 넘는 구간은 끝을 잘라낸다
-    }
+  uint16_t end = start + range.count;
+  if (end > RGBLIGHT_LED_COUNT) {
+    end = RGBLIGHT_LED_COUNT;
+  }
 
-    uint16_t length = end - start;
-    if (length == 0) {
-        return;
-    }
+  uint16_t count = end - start;
+  if (count == 0) {
+    return (rgblight_indicator_range_t){0, 0};
+  }
 
-    memset(&led[start], 0, (size_t)length * sizeof(rgb_led_t));
+  rgblight_indicator_range_t sanitized = {
+    .start = (uint8_t)start,
+    .count = (uint8_t)count,
+  };
+
+  return sanitized;
 }
 
-// V251012R2: 인디케이터 대상과 호스트 LED 상태를 비교하여 활성화 여부를 반환
-static bool rgblight_indicator_target_active(uint8_t target, led_t host_state)
+static bool rgblight_indicator_target_active_default(uint8_t target, led_t host_state)
 {
     switch (target) {
         case RGBLIGHT_INDICATOR_TARGET_CAPS:
@@ -186,6 +199,48 @@ static bool rgblight_indicator_target_active(uint8_t target, led_t host_state)
         default:
             return false;
     }
+}
+
+static rgblight_indicator_target_callback_t rgblight_indicator_target_callback =
+    rgblight_indicator_target_active_default;  // V251016R8: 기본 Caps/Scroll/Num 매핑으로 초기화
+
+static void rgblight_indicator_apply_target_range(uint8_t target)
+{
+    if (target > RGBLIGHT_INDICATOR_TARGET_NUM) {
+        target = RGBLIGHT_INDICATOR_TARGET_OFF;  // V251016R8: 범위를 지정할 수 없는 타깃은 비활성 처리
+    }
+
+    rgblight_indicator_range_t previous_range = rgblight_indicator_state.range;
+    bool                        previous_override = rgblight_indicator_state.overrides_all;
+    rgblight_indicator_range_t  range = {0, 0};
+    if (target < RGBLIGHT_INDICATOR_RANGE_TABLE_LENGTH) {
+        range = rgblight_indicator_range_table[target];
+    }
+
+    bool overrides_all = false;
+    if (range.count > 0 && range.start == 0) {
+        uint16_t span = range.count;
+        if (span >= RGBLIGHT_LED_COUNT) {
+            overrides_all = true;
+        }
+    }
+
+    rgblight_indicator_state.range_target = target;
+    rgblight_indicator_state.range        = range;
+    rgblight_indicator_state.overrides_all = overrides_all;
+
+    bool range_changed = (previous_range.start != range.start) || (previous_range.count != range.count);
+    if (range_changed || previous_override != overrides_all) {
+        if (rgblight_indicator_state.active) {
+            rgblight_indicator_state.needs_render = true;  // V251016R8: 범위 변화 시 오버레이 재적용 요청
+        }
+    }
+}
+
+// V251012R2: 인디케이터 대상과 호스트 LED 상태를 비교하여 활성화 여부를 반환
+static bool rgblight_indicator_target_active(uint8_t target, led_t host_state)
+{
+    return rgblight_indicator_target_callback(target, host_state);  // V251016R8: 포트 지정 콜백을 통해 판별
 }
 
 // V251015R4: 밝기 0 구성은 인디케이터 비활성화로 처리해 애니메이션 계산을 생략
@@ -231,82 +286,61 @@ static rgb_led_t rgblight_indicator_compute_color(rgblight_indicator_config_t co
 // V251012R2: 인디케이터 출력 시 사용할 LED 버퍼를 채우는 헬퍼
 // V251012R3: LED 버퍼 초기화와 채우기 경로를 간소화해 불필요한 반복 연산을 제거
 // V251012R4: HSV→RGB 변환 결과를 캐시한 색상을 복사하도록 수정
-// V251015R9: 렌더링 결과가 출력에 반영되는지 추적해 타이머 우회 조건을 일원화
+// V251016R8: 유효 범위를 확인하고 전체 덮어쓰기 여부를 호출자에게 반환
 static bool rgblight_indicator_prepare_buffer(void)
 {
     if (!rgblight_indicator_state.active) {
-        rgblight_indicator_state.has_visible_output = false;  // V251015R9: 비활성화 시 출력 상태를 초기화
+        rgblight_indicator_state.needs_render       = false;
         return false;
     }
 
-    if (!rgblight_indicator_state.needs_render) {
-        return rgblight_indicator_state.has_visible_output;  // V251015R9: 직전 렌더링 결과를 재사용
+    rgblight_indicator_range_t range = rgblight_indicator_state.range;
+    if (range.count == 0 || range.start >= RGBLIGHT_LED_COUNT) {
+        rgblight_indicator_state.needs_render       = false;
+        return false;
     }
 
-    uint16_t clip_start = rgblight_ranges.clipping_start_pos;   // V251016R3: 16비트 로컬 복사로 반복 캐스팅을 제거
-    uint16_t clip_count = rgblight_ranges.clipping_num_leds;
-    uint16_t start      = rgblight_ranges.effect_start_pos;
-    uint16_t count      = rgblight_ranges.effect_num_leds;
-
-    bool has_effect         = count > 0;
-    bool has_visible_output = false;  // V251016R1: 출력 여부와 렌더 완료 처리를 단일 지점에서 갱신하도록 정리
-    // V251015R5: 밝기 0 구성은 should_enable 단계에서 걸러져 활성 경로로 진입하지 않는다
-    // V251016R4: 조기 종료 분기를 if-else 체인으로 재구성해 break 없이 흐름을 단순화
-
-    if (clip_count == 0) {
-        // V251016R6: 클리핑이 비활성화된 경우 효과 버퍼를 유지해 불필요한 초기화를 방지
-    } else if (!has_effect) {
-        rgblight_indicator_clear_range(clip_start, clip_count);  // V251014R8: 효과 범위가 없을 때는 클리핑 구간만 정리
-    } else {
-        uint16_t clip_end   = clip_start + clip_count;      // V251013R3: 합산 시 오버플로우를 피하기 위해 16비트로 계산
-        uint16_t effect_end = start + count;
-        uint16_t fill_begin = (start > clip_start) ? start : clip_start;   // V251014R5: 교집합 시작 위치를 공통 계산해 분기 수를 줄임
-        uint16_t fill_end   = (effect_end < clip_end) ? effect_end : clip_end;  // V251014R5: 교집합 종료 위치를 공통 계산해 후속 계산 재사용
-
-        if (fill_end <= fill_begin) {
-            rgblight_indicator_clear_range(clip_start, clip_count);  // V251015R5: 교집합이 없을 때만 전체 클리핑 범위를 정리
-            rgblight_indicator_clear_range(start, count);            // V251016R5: 효과 범위 전체를 한 번에 초기화해 포화 감산 헬퍼 제거
-        } else {
-            uint16_t front_count = fill_begin - clip_start;  // V251014R7: 교집합 앞단 길이를 재사용하기 위해 선행 계산
-            if (front_count > 0) {
-                rgblight_indicator_clear_range(clip_start, front_count);  // V251014R7: 계산된 길이를 재사용해 분기 수 감소
-            }
-
-            uint16_t tail_count = clip_end - fill_end;  // V251014R7: 교집합 이후 길이를 재사용하기 위해 선행 계산
-            if (tail_count > 0) {
-                rgblight_indicator_clear_range(fill_end, tail_count);  // V251014R7: 후단 정리 길이도 재사용
-            }
-
-            rgb_led_t cached = rgblight_indicator_state.color;  // V251012R4: 캐시된 색상을 그대로 복사
-
-            uint16_t    fill_count = fill_end - fill_begin;  // V251014R7: 교집합 길이를 재사용해 루프 조건을 단순화
-            rgb_led_t * target_led = &led[fill_begin];
-            rgb_led_t * target_end = target_led + fill_count;
-
-            // V251014R2: 클리핑 범위와 실제로 겹치는 구간만 채워 불필요한 버퍼 쓰기를 제거
-            // V251016R3: 포인터 증감으로 인덱스 연산을 제거해 루프 오버헤드를 축소
-            while (target_led < target_end) {
-                *target_led++ = cached;
-            }
-
-            uint16_t effect_front_clear = fill_begin - start;     // V251014R7: 효과 범위 선행 구간 길이를 재사용
-            uint16_t effect_tail_clear  = effect_end - fill_end;  // V251014R7: 효과 범위 후행 구간 길이를 재사용
-
-            if (effect_front_clear > 0) {
-                rgblight_indicator_clear_range(start, effect_front_clear);  // V251014R6: 교집합 앞단을 직접 계산해 초기화
-            }
-
-            if (effect_tail_clear > 0) {
-                rgblight_indicator_clear_range(fill_end, effect_tail_clear);  // V251014R6: 교집합 이후 구간을 단일 계산으로 정리
-            }
-
-            has_visible_output = true;  // V251015R9: 교집합이 존재할 때만 출력 플래그를 세팅
-        }
+    if (!rgblight_indicator_state.overrides_all) {
+        rgblight_indicator_state.needs_render = true;  // V251016R8: 일반 RGB 파이프라인 이후에 오버레이를 재적용한다.
     }
 
-    rgblight_indicator_state.has_visible_output = has_visible_output;  // V251016R1: 모든 경로에서 공통 후처리 수행
-    rgblight_indicator_state.needs_render       = false;
-    return has_visible_output;
+    return rgblight_indicator_state.overrides_all;
+}
+
+// V251016R8: 준비된 인디케이터 범위를 LED 버퍼에 덮어쓴다.
+static void rgblight_indicator_apply_overlay(void)
+{
+    if (!rgblight_indicator_state.active) {
+        rgblight_indicator_state.needs_render = false;
+        return;
+    }
+
+    rgblight_indicator_range_t range = rgblight_indicator_state.range;
+    if (range.count == 0 || range.start >= RGBLIGHT_LED_COUNT) {
+        rgblight_indicator_state.needs_render = false;
+        return;
+    }
+
+    if (!rgblight_indicator_state.needs_render && rgblight_indicator_state.overrides_all) {
+        return;
+    }
+
+    uint16_t start = range.start;
+    uint16_t count = range.count;
+    uint16_t end   = start + count;
+    if (end > RGBLIGHT_LED_COUNT) {
+        end = RGBLIGHT_LED_COUNT;
+    }
+
+    rgb_led_t  cached     = rgblight_indicator_state.color;
+    rgb_led_t *target_led = &led[start];
+    rgb_led_t *target_end = &led[end];
+
+    while (target_led < target_end) {
+        *target_led++ = cached;
+    }
+
+    rgblight_indicator_state.needs_render = false;
 }
 
 // V251012R3: 인디케이터 상태 전이를 공통화해 중복 로직과 불필요한 rgblight_set 호출을 축소
@@ -318,9 +352,6 @@ static void rgblight_indicator_commit_state(bool should_enable, bool request_ren
 
     rgblight_indicator_state.active       = should_enable;
     rgblight_indicator_state.needs_render = needs_render;
-    if (!should_enable) {
-        rgblight_indicator_state.has_visible_output = false;  // V251015R9: 비활성 전환 시 출력 상태를 재설정
-    }
 
     if (!is_rgblight_initialized) {
         return;
@@ -342,6 +373,33 @@ static void rgblight_indicator_commit_state(bool should_enable, bool request_ren
     }
 }
 
+// V251016R8: 포트 계층이 인디케이터 타깃 판별 함수를 주입할 수 있도록 인터페이스 제공
+void rgblight_indicator_set_target_callback(rgblight_indicator_target_callback_t callback)
+{
+    if (callback == NULL) {
+        rgblight_indicator_target_callback = rgblight_indicator_target_active_default;
+        return;
+    }
+
+    rgblight_indicator_target_callback = callback;
+}
+
+void rgblight_indicator_set_ranges(const rgblight_indicator_range_t *ranges, uint8_t length)
+{
+    uint8_t limit = RGBLIGHT_INDICATOR_RANGE_TABLE_LENGTH;
+
+    for (uint8_t index = 0; index < limit; ++index) {
+        if (ranges != NULL && index < length) {
+            rgblight_indicator_range_table[index] = rgblight_indicator_sanitize_range(ranges[index]);
+        } else {
+            rgblight_indicator_range_table[index] = (rgblight_indicator_range_t){0, 0};
+        }
+    }
+
+    rgblight_indicator_state.range_target = RGBLIGHT_INDICATOR_TARGET_INVALID;  // V251016R8: 새 범위 적용을 위해 무효화
+    rgblight_indicator_apply_target_range(rgblight_indicator_state.config.target);
+}
+
 // V251012R2: VIA 및 포트 계층에서 전달된 구성 변경을 반영
 // V251012R6: 내부 상태만 사용하도록 구성 조회 API 정리
 void rgblight_indicator_update_config(rgblight_indicator_config_t config)
@@ -351,6 +409,7 @@ void rgblight_indicator_update_config(rgblight_indicator_config_t config)
     }
 
     rgblight_indicator_state.config = config;
+    rgblight_indicator_apply_target_range(config.target);  // V251016R8: 선택된 인디케이터 범위를 즉시 반영
     if (config.target == RGBLIGHT_INDICATOR_TARGET_OFF) {
         rgblight_indicator_state.color = (rgb_led_t){0};  // V251016R7: 인디케이터 비활성 구성은 HSV 변환 없이 캐시를 초기화
     } else {
@@ -1213,6 +1272,8 @@ void rgblight_set(void) {
 #endif
     }
 
+    rgblight_indicator_apply_overlay();  // V251016R8: 인디케이터 범위를 RGB 버퍼에 반영
+
 #ifdef RGBLIGHT_LED_MAP
     rgb_led_t led0[RGBLIGHT_LED_COUNT];
     for (uint8_t i = 0; i < RGBLIGHT_LED_COUNT; i++) {
@@ -1337,10 +1398,8 @@ void rgblight_timer_task(void) {
             rgblight_set();
         }
 
-        bool indicator_has_output = rgblight_indicator_state.has_visible_output;  // V251015R9: 준비된 출력 상태를 재사용
-
-        if (indicator_has_output) {
-            return;
+        if (rgblight_indicator_state.overrides_all) {
+            return;  // V251016R8: 전체 LED를 덮어쓰는 경우에만 애니메이션 우회
         }
     }
     if (rgblight_status.timer_enabled) {
