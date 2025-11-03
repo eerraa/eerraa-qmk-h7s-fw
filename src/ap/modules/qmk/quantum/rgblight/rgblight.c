@@ -130,8 +130,6 @@ static bool deferred_set_layer_state = false;
 rgblight_ranges_t rgblight_ranges = {0, RGBLIGHT_LED_COUNT, 0, RGBLIGHT_LED_COUNT, RGBLIGHT_LED_COUNT};
 
 #define RGBLIGHT_INDICATOR_RANGE_TABLE_LENGTH (RGBLIGHT_INDICATOR_TARGET_NUM + 1)  // V251016R8: Caps/Scroll/Num + OFF
-#define RGBLIGHT_INDICATOR_TARGET_INVALID      0xFF  // V251016R8: 범위 재적용을 위한 센티널 값
-
 static rgblight_indicator_range_t rgblight_indicator_range_table[RGBLIGHT_INDICATOR_RANGE_TABLE_LENGTH] = {0};
 
 // V251012R2: Brick60 인디케이터 상태를 rgblight 내부에서 추적하기 위한 구조체
@@ -139,8 +137,7 @@ typedef struct {
     rgblight_indicator_config_t config;
     led_t                       host_state;
     rgb_led_t                   color;        // V251012R4: HSV 변환 결과를 캐시해 재계산을 피한다
-    uint8_t                     range_target;  // V251016R8: 현재 적용된 LED 범위를 추적
-    rgblight_indicator_range_t  range;         // V251016R8: 현재 적용 중인 인디케이터 LED 범위 캐시
+    rgblight_indicator_range_t  range;         // V251016R8: 범위 타깃 캐시 제거 후 테이블 결과만 추적
     bool                        overrides_all; // V251016R8: 전체 LED가 인디케이터에 의해 덮어쓰이는지 여부
     bool                        active;
     bool                        needs_render;
@@ -150,7 +147,6 @@ static rgblight_indicator_state_t rgblight_indicator_state = {
     .config = {.raw = 0},
     .host_state = {.raw = 0},
     .color = {0},
-    .range_target = RGBLIGHT_INDICATOR_TARGET_INVALID,
     .range = {0, 0},
     .overrides_all = false,
     .active = false,
@@ -225,7 +221,6 @@ static void rgblight_indicator_apply_target_range(uint8_t target)
         }
     }
 
-    rgblight_indicator_state.range_target = target;
     rgblight_indicator_state.range        = range;
     rgblight_indicator_state.overrides_all = overrides_all;
 
@@ -396,8 +391,7 @@ void rgblight_indicator_set_ranges(const rgblight_indicator_range_t *ranges, uin
         }
     }
 
-    rgblight_indicator_state.range_target = RGBLIGHT_INDICATOR_TARGET_INVALID;  // V251016R8: 새 범위 적용을 위해 무효화
-    rgblight_indicator_apply_target_range(rgblight_indicator_state.config.target);
+    rgblight_indicator_apply_target_range(rgblight_indicator_state.config.target);  // V251016R8: range_target 필드 제거로 즉시 재평가
 }
 
 // V251012R2: VIA 및 포트 계층에서 전달된 구성 변경을 반영
