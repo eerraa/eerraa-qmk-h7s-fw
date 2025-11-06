@@ -57,10 +57,42 @@ uint8_t matrix_scan(void)
 
   const volatile matrix_row_t *hw_matrix = (const volatile matrix_row_t *)keysPeekColsBuf();  // V250924R5: DMA 버퍼를 직접 참조하여 스캔 복사 비용 제거 (재검토: volatile 로 최신 스캔 보장)
   // V251009R3: DMA 폴백 블록을 제거해 단일 경로로 단순화
+  // V251017R2: DMA 프레임 tear 감지를 위해 이중 스냅샷 검증을 수행해 일관된 행 상태 확보
+  matrix_row_t matrix_snapshot[MATRIX_ROWS];
+  matrix_row_t matrix_verify[MATRIX_ROWS];
+  bool         frame_consistent = false;
+
+  for (uint32_t attempt=0; attempt<3 && frame_consistent == false; attempt++)
+  {
+    for (uint32_t rows=0; rows<MATRIX_ROWS; rows++)
+    {
+      matrix_snapshot[rows] = hw_matrix[rows];
+    }
+
+    for (uint32_t rows=0; rows<MATRIX_ROWS; rows++)
+    {
+      matrix_verify[rows] = hw_matrix[rows];
+    }
+
+    frame_consistent = true;
+    for (uint32_t rows=0; rows<MATRIX_ROWS; rows++)
+    {
+      if (matrix_snapshot[rows] != matrix_verify[rows])
+      {
+        frame_consistent = false;
+        break;
+      }
+    }
+  }
+
+  if (frame_consistent == false)
+  {
+    memcpy(matrix_snapshot, matrix_verify, sizeof(matrix_snapshot));  // V251017R2: tear 감지 실패 시 최신 검증 결과로 강제 동기화
+  }
 
   for (uint32_t rows=0; rows<MATRIX_ROWS; rows++)
   {
-    matrix_row_t new_state = (matrix_row_t)hw_matrix[rows];
+    matrix_row_t new_state = matrix_snapshot[rows];
 
     if (raw_matrix[rows] != new_state)
     {

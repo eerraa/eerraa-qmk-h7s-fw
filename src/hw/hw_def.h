@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251016R9"   // V251016R9: 인디케이터 프레임 준비 로직 단순화
+#define _DEF_FIRMWATRE_VERSION      "V251017R2"   // V251017R2: DMA tear 검증을 위한 이중 스냅샷 안정화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
