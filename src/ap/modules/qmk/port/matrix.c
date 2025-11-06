@@ -20,6 +20,8 @@ static matrix_row_t matrix[MATRIX_ROWS];     // debounced values
 static bool         is_info_enable      = false;
 static bool         matrix_debug_enable = false;  // V251017R3: USB_CDC 기반 매트릭스 디버그 토글
 static uint32_t     matrix_debug_last_scan_us = 0; // V251017R3: 스캔 간격 측정을 위한 타임스탬프 유지
+static uint32_t     matrix_debug_idle_count = 0;    // V251017R4: 연속 무변화 스캔 누적
+static uint32_t     matrix_debug_idle_start_us = 0; // V251017R4: 무변화 구간 시작 시각 추적
 
 static void cliCmd(cli_args_t *args);
 static void matrix_info(void);
@@ -46,7 +48,7 @@ void matrixDebugLog(const char *fmt, ...)
 
   if (written > 0)
   {
-    logPrintf("[V251017R3][matrix] %s", log_buf);  // V251017R3: 매트릭스 디버그 로그 통일 프리픽스
+    logPrintf("[V251017R4][matrix] %s", log_buf);  // V251017R4: 매트릭스 디버그 로그 프리픽스 갱신
   }
 }
 
@@ -91,9 +93,10 @@ uint8_t matrix_scan(void)
   }
   matrix_debug_last_scan_us = now_us;
 
-  if (matrix_debug_enable)
+  if (matrix_debug_enable == false)
   {
-    matrixDebugLog("scan begin t=%lu us interval=%lu us\n", (unsigned long)now_us, (unsigned long)interval);
+    matrix_debug_idle_count     = 0;  // V251017R4: 디버그 비활성화 시 무변화 누적 초기화
+    matrix_debug_idle_start_us  = 0;  // V251017R4: 디버그 비활성화 시 기준 시각 초기화
   }
 
   _Static_assert(sizeof(matrix_row_t) == sizeof(uint16_t),
@@ -105,11 +108,14 @@ uint8_t matrix_scan(void)
   matrix_row_t matrix_snapshot[MATRIX_ROWS];
   matrix_row_t matrix_verify[MATRIX_ROWS];
   matrix_row_t matrix_before[MATRIX_ROWS];
+  matrix_row_t raw_prev_values[MATRIX_ROWS];    // V251017R4: 지연 로그 출력을 위한 이전 raw 상태 저장
+  matrix_row_t raw_new_values[MATRIX_ROWS];     // V251017R4: 지연 로그 출력을 위한 신규 raw 상태 저장
   bool         frame_consistent = false;
-  uint32_t     mismatch_attempt = 0;
   uint32_t     mismatch_row     = 0;
   matrix_row_t mismatch_snapshot = 0;
   matrix_row_t mismatch_verify   = 0;
+  bool         tear_retry_detected = false;     // V251017R4: tear 재시도 여부 추적
+  uint32_t     tear_retry_count   = 0;          // V251017R4: tear 재시도 횟수 누적
 
   for (uint32_t attempt=0; attempt<3 && frame_consistent == false; attempt++)
   {
@@ -129,27 +135,12 @@ uint8_t matrix_scan(void)
       if (matrix_snapshot[rows] != matrix_verify[rows])
       {
         frame_consistent = false;
-        mismatch_attempt  = attempt + 1U;
         mismatch_row      = rows;
         mismatch_snapshot = matrix_snapshot[rows];
         mismatch_verify   = matrix_verify[rows];
+        tear_retry_detected = true;       // V251017R4: tear 감지 기록
+        tear_retry_count++;               // V251017R4: tear 재시도 횟수 증가
         break;
-      }
-    }
-
-    if (matrix_debug_enable)
-    {
-      if (frame_consistent)
-      {
-        matrixDebugLog("scan frame stable after attempt %lu\n", (unsigned long)(attempt + 1U));
-      }
-      else
-      {
-        matrixDebugLog("scan tear attempt %lu row %lu snap=0x%04X verify=0x%04X\n",
-                       (unsigned long)mismatch_attempt,
-                       (unsigned long)mismatch_row,
-                       mismatch_snapshot,
-                       mismatch_verify);
       }
     }
   }
@@ -157,12 +148,6 @@ uint8_t matrix_scan(void)
   if (frame_consistent == false)
   {
     memcpy(matrix_snapshot, matrix_verify, sizeof(matrix_snapshot));  // V251017R2: tear 감지 실패 시 최신 검증 결과로 강제 동기화
-    if (matrix_debug_enable)
-    {
-      matrixDebugLog("scan tear unresolved after retries, fallback row %lu value=0x%04X\n",
-                     (unsigned long)mismatch_row,
-                     mismatch_verify);
-    }
   }
 
   uint32_t raw_changed_mask = 0;
@@ -173,22 +158,12 @@ uint8_t matrix_scan(void)
 
     if (prev_state != new_state)
     {
+      raw_prev_values[rows] = prev_state;   // V251017R4: raw 변경 로그를 지연 출력하기 위해 보관
+      raw_new_values[rows]  = new_state;    // V251017R4: raw 변경 로그를 지연 출력하기 위해 보관
       raw_matrix[rows] = new_state;
       changed          = true;
       raw_changed_mask |= (1U << rows);
-      if (matrix_debug_enable)
-      {
-        matrixDebugLog("raw[%lu] 0x%04X -> 0x%04X\n",
-                       (unsigned long)rows,
-                       prev_state,
-                       new_state);
-      }
     }
-  }
-
-  if (matrix_debug_enable && raw_changed_mask == 0)
-  {
-    matrixDebugLog("raw matrix unchanged\n");
   }
 
   matrixInstrumentationLogScan(pre_time, is_info_enable);
@@ -196,25 +171,97 @@ uint8_t matrix_scan(void)
   memcpy(matrix_before, matrix, sizeof(matrix_before));
   changed = debounce(raw_matrix, matrix, MATRIX_ROWS, changed);
 
+  uint32_t debounced_mask = 0;
   if (matrix_debug_enable)
   {
-    uint32_t debounced_mask = 0;
     for (uint32_t rows=0; rows<MATRIX_ROWS; rows++)
     {
       if (matrix_before[rows] != matrix[rows])
       {
         debounced_mask |= (1U << rows);
-        matrixDebugLog("debounce[%lu] 0x%04X -> 0x%04X\n",
-                       (unsigned long)rows,
-                       matrix_before[rows],
-                       matrix[rows]);
       }
     }
-    matrixDebugLog("scan complete changed=%u frame_consistent=%s raw_mask=0x%04X debounced_mask=0x%04X\n",
-                   changed ? 1U : 0U,
-                   frame_consistent ? "yes":"no",
-                   (unsigned int)raw_changed_mask,
-                   (unsigned int)debounced_mask);
+
+    bool has_activity = (raw_changed_mask != 0U) || (debounced_mask != 0U) || (frame_consistent == false) || tear_retry_detected;  // V251017R4: 무변화 구간 판별
+
+    if (has_activity == false)
+    {
+      if (matrix_debug_idle_count == 0)
+      {
+        matrix_debug_idle_start_us = now_us;     // V251017R4: 무변화 시작 시각 저장
+      }
+      matrix_debug_idle_count++;
+
+      uint32_t idle_duration = now_us - matrix_debug_idle_start_us;
+      if (idle_duration >= 200000U || matrix_debug_idle_count >= 512U)
+      {
+        matrixDebugLog("scan idle streak count=%lu duration=%lu us last_interval=%lu us\n",
+                       (unsigned long)matrix_debug_idle_count,
+                       (unsigned long)idle_duration,
+                       (unsigned long)interval);  // V251017R4: 무변화 누적 구간을 요약 출력
+        matrix_debug_idle_count    = 0;
+        matrix_debug_idle_start_us = 0;
+      }
+    }
+    else
+    {
+      if (matrix_debug_idle_count > 0)
+      {
+        uint32_t idle_duration = now_us - matrix_debug_idle_start_us;
+        matrixDebugLog("scan idle streak ended count=%lu duration=%lu us\n",
+                       (unsigned long)matrix_debug_idle_count,
+                       (unsigned long)idle_duration);  // V251017R4: 무변화 누적 종료 알림
+        matrix_debug_idle_count    = 0;
+        matrix_debug_idle_start_us = 0;
+      }
+
+      matrixDebugLog("scan begin t=%lu us interval=%lu us\n", (unsigned long)now_us, (unsigned long)interval);
+
+      if (tear_retry_detected)
+      {
+        matrixDebugLog("scan tear retries=%lu last_row=%lu snap=0x%04X verify=0x%04X resolved=%s\n",
+                       (unsigned long)tear_retry_count,
+                       (unsigned long)mismatch_row,
+                       mismatch_snapshot,
+                       mismatch_verify,
+                       frame_consistent ? "yes" : "no");  // V251017R4: tear 재시도 결과 요약
+      }
+
+      if (frame_consistent == false)
+      {
+        matrixDebugLog("scan tear unresolved after retries, fallback row %lu value=0x%04X\n",
+                       (unsigned long)mismatch_row,
+                       mismatch_verify);  // V251017R4: tear 실패 시 기존 안내 유지
+      }
+
+      for (uint32_t rows=0; rows<MATRIX_ROWS; rows++)
+      {
+        if ((raw_changed_mask & (1U << rows)) != 0U)
+        {
+          matrixDebugLog("raw[%lu] 0x%04X -> 0x%04X\n",
+                         (unsigned long)rows,
+                         raw_prev_values[rows],
+                         raw_new_values[rows]);  // V251017R4: raw 변경 사항 지연 출력
+        }
+      }
+
+      for (uint32_t rows=0; rows<MATRIX_ROWS; rows++)
+      {
+        if ((debounced_mask & (1U << rows)) != 0U)
+        {
+          matrixDebugLog("debounce[%lu] 0x%04X -> 0x%04X\n",
+                         (unsigned long)rows,
+                         matrix_before[rows],
+                         matrix[rows]);  // V251017R4: 디바운스 결과 지연 출력
+        }
+      }
+
+      matrixDebugLog("scan complete changed=%u frame_consistent=%s raw_mask=0x%04X debounced_mask=0x%04X\n",
+                     changed ? 1U : 0U,
+                     frame_consistent ? "yes":"no",
+                     (unsigned int)raw_changed_mask,
+                     (unsigned int)debounced_mask);  // V251017R4: 스캔 요약 출력
+    }
   }
 
   matrixInstrumentationPropagate(changed, pre_time);
@@ -268,6 +315,8 @@ void cliCmd(cli_args_t *args)
     {
       matrix_debug_enable      = true;   // V251017R3: 매트릭스 디버그 로그 활성화
       matrix_debug_last_scan_us = 0;
+      matrix_debug_idle_count   = 0;     // V251017R4: 디버그 재개 시 무변화 누적 초기화
+      matrix_debug_idle_start_us = 0;    // V251017R4: 디버그 재개 시 기준 시각 초기화
       matrixDebugLog("debug logging enabled\n");
       cliPrintf("matrix debug : on\n");
       ret = true;
@@ -276,10 +325,12 @@ void cliCmd(cli_args_t *args)
     {
       if (matrix_debug_enable)
       {
-        logPrintf("[V251017R3][matrix] debug logging disabled\n");
+        logPrintf("[V251017R4][matrix] debug logging disabled\n");  // V251017R4: 디버그 종료 안내 버전 갱신
       }
       matrix_debug_enable       = false;
       matrix_debug_last_scan_us = 0;
+      matrix_debug_idle_count   = 0;     // V251017R4: 디버그 종료 시 누적 상태 정리
+      matrix_debug_idle_start_us = 0;    // V251017R4: 디버그 종료 시 기준 시각 정리
       cliPrintf("matrix debug : off\n");
       ret = true;
     }
