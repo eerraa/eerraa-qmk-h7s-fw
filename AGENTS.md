@@ -4,6 +4,7 @@
 
 ## 1. 필수 응답 규칙
 - 모든 답변, 커밋 메시지, PR 본문은 **반드시 한국어**로 작성합니다.
+- 저장소 탐색은 사용자 요청 범위와 아래 §11 참조 경로에 맞춰 필요한 파일만 열람합니다. 추가로 열람이 필요하면 사용자에게 사전 요청합니다.
 
 ## 2. 프로젝트 개요
 - 대상 보드: STM32H7S (내장 HS PHY) — 기본 USB 폴링 주기 8000Hz.
@@ -63,3 +64,16 @@ rm -rf build
 ## 10. 참고 팁
 - 저장소 전반의 디버그 로그는 `src/hw/hw.c` 초기화 루틴과 연동되어 있으므로, 버전 문자열 출력 경로를 수정할 때는 전역 영향 범위를 검토하세요.
 - 장기 실행 타이머를 건드릴 경우 USB instability monitor의 워밍업/타임아웃 조건을 함께 확인하면 리그레션을 줄일 수 있습니다.
+
+## 11. 작업별 참조 가이드
+- **펌웨어 버전 및 로그 문자열 조정**: `src/hw/hw_def.h`의 `_DEF_FIRMWATRE_VERSION`, `src/hw/hw.c`의 `hwInit()` 버전 출력; 배경 설명은 `docs/features_instability_monitor.md`.
+- **엔트리 포인트 및 메인 루프**: `src/main.c`의 `main()`, `src/ap/ap.c`의 `apInit()/apMain()` 흐름, 초기 설정은 `src/ap/ap_def.h`.
+- **QMK 포팅 공통 계층**: `src/ap/modules/qmk/port/`의 `sys_port.*`, `matrix*.c`, `ver_port.c`, 플랫폼별 HAL 연동은 `port/platforms/`.
+- **키보드별 키맵/설정**: `src/ap/modules/qmk/keyboards/<vendor>/<board>/`, VIA/VIAL 처리는 `src/ap/modules/qmk/port/via_hid.*`.
+- **USB instability monitor & 폴링 다운그레이드 큐**: `src/hw/driver/usb/usb_hid/usbd_hid.c`, `src/hw/driver/usb/usb.[ch]`, 관련 문서는 `docs/features_instability_monitor.md`.
+- **USB 클래스/엔드포인트 정의**: `src/hw/driver/usb/` 하위 `cdc.c`, `usb_hid/`, `usbd_hid_instrumentation.c`; 보조 타이머 설계는 `docs/review_usb_backup_timer.md`.
+- **EEPROM/BootMode 및 설정 유지**: `src/hw/driver/eeprom/`, `src/ap/modules/qmk/port/port.h`의 `EECONFIG_USER_BOOTMODE`, 백그라운드 설명은 `docs/features_bootmode.md`.
+- **키 입력 경로와 디바운스**: `src/hw/driver/keys.c`, `src/ap/modules/qmk/port/matrix*.c`, 개요는 `docs/features_keyinput.md`.
+- **LED 및 RGB 인디케이터**: `src/hw/driver/led.c`, `src/hw/driver/ws2812.c`, QMK 헬퍼는 `src/ap/modules/qmk/quantum/rgblight/`, 설계 문서는 `docs/rgblight_indicator_refactoring.md`, `docs/indicator_plan.md`.
+- **로깅 및 CLI**: `src/hw/driver/log.c`, `src/hw/driver/uart.c`, USB CLI 진입점은 `src/hw/driver/usb/usb.c`의 `cliBoot`.
+- **빌드/툴체인 스크립트**: `tools/` 디렉터리 일체 (CMake 헬퍼, UF2 변환).
