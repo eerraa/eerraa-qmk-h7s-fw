@@ -57,10 +57,18 @@ uint8_t matrix_scan(void)
 
   const volatile matrix_row_t *hw_matrix = (const volatile matrix_row_t *)keysPeekColsBuf();  // V250924R5: DMA 버퍼를 직접 참조하여 스캔 복사 비용 제거 (재검토: volatile 로 최신 스캔 보장)
   // V251009R3: DMA 폴백 블록을 제거해 단일 경로로 단순화
+  // V251017R1: DMA 버퍼를 직접 참조하되 한 번에 스냅샷으로 복사해 프레임 일관성 확보
+  matrix_row_t matrix_snapshot[MATRIX_ROWS];
 
   for (uint32_t rows=0; rows<MATRIX_ROWS; rows++)
   {
-    matrix_row_t new_state = (matrix_row_t)hw_matrix[rows];
+    matrix_snapshot[rows] = hw_matrix[rows];
+  }
+
+  // V251017R1: DMA 버퍼를 스냅샷으로 복사해 한 스캔 호출 내 행 일관성을 확보
+  for (uint32_t rows=0; rows<MATRIX_ROWS; rows++)
+  {
+    matrix_row_t new_state = matrix_snapshot[rows];
 
     if (raw_matrix[rows] != new_state)
     {
