@@ -6,7 +6,7 @@
 #include "action_tapping.h"
 #include "keycode.h"
 #include "timer.h"
-#include "port/matrix_debug.h"  // V251017R3: DMA tear 원인 분석을 위한 매트릭스 디버그 로그 연동
+#include "../port/matrix_debug.h"  // V251017R3: DMA tear 원인 분석을 위한 매트릭스 디버그 로그 연동
 
 #ifndef NO_ACTION_TAPPING
 

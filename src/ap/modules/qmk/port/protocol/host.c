@@ -24,7 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "debug.h"
 #include "usb.h"
 #include "micros.h"
-#include "port/matrix_debug.h"  // V251017R3: HID 전송 경로 디버그 로깅
+#include "../matrix_debug.h"  // V251017R3: HID 전송 경로 디버그 로깅
 
 
 #ifdef DIGITIZER_ENABLE
