@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251017R4"   // V251017R4: 매트릭스 디버그 로그 무변화 요약 및 터미널 과부하 완화
+#define _DEF_FIRMWATRE_VERSION      "V251017R6"   // V251017R6: 무변화 로그 최소 간격을 1000 ms로 확대
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

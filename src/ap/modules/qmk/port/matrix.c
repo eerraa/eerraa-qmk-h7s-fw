@@ -22,6 +22,7 @@ static bool         matrix_debug_enable = false;  // V251017R3: USB_CDC 기반 �
 static uint32_t     matrix_debug_last_scan_us = 0; // V251017R3: 스캔 간격 측정을 위한 타임스탬프 유지
 static uint32_t     matrix_debug_idle_count = 0;    // V251017R4: 연속 무변화 스캔 누적
 static uint32_t     matrix_debug_idle_start_us = 0; // V251017R4: 무변화 구간 시작 시각 추적
+static uint32_t     matrix_debug_idle_last_report_us = 0; // V251017R5: 무변화 로그 최소 간격 적용
 
 static void cliCmd(cli_args_t *args);
 static void matrix_info(void);
@@ -95,8 +96,9 @@ uint8_t matrix_scan(void)
 
   if (matrix_debug_enable == false)
   {
-    matrix_debug_idle_count     = 0;  // V251017R4: 디버그 비활성화 시 무변화 누적 초기화
-    matrix_debug_idle_start_us  = 0;  // V251017R4: 디버그 비활성화 시 기준 시각 초기화
+    matrix_debug_idle_count        = 0;  // V251017R4: 디버그 비활성화 시 무변화 누적 초기화
+    matrix_debug_idle_start_us     = 0;  // V251017R4: 디버그 비활성화 시 기준 시각 초기화
+    matrix_debug_idle_last_report_us = 0; // V251017R5: 디버그 비활성화 시 최소 간격 상태 초기화
   }
 
   _Static_assert(sizeof(matrix_row_t) == sizeof(uint16_t),
@@ -193,14 +195,32 @@ uint8_t matrix_scan(void)
       matrix_debug_idle_count++;
 
       uint32_t idle_duration = now_us - matrix_debug_idle_start_us;
-      if (idle_duration >= 200000U || matrix_debug_idle_count >= 512U)
+      const uint32_t idle_report_interval_us = 1000000U;  // V251017R6: 무변화 로그 최소 간격을 1000 ms로 확대
+      bool allow_idle_report = false;
+
+      if (matrix_debug_idle_last_report_us == 0)
+      {
+        allow_idle_report = true;
+      }
+      else
+      {
+        uint32_t since_last = now_us - matrix_debug_idle_last_report_us;
+
+        if (since_last >= idle_report_interval_us)
+        {
+          allow_idle_report = true;
+        }
+      }
+
+      if (allow_idle_report && idle_duration >= idle_report_interval_us)
       {
         matrixDebugLog("scan idle streak count=%lu duration=%lu us last_interval=%lu us\n",
                        (unsigned long)matrix_debug_idle_count,
                        (unsigned long)idle_duration,
-                       (unsigned long)interval);  // V251017R4: 무변화 누적 구간을 요약 출력
-        matrix_debug_idle_count    = 0;
-        matrix_debug_idle_start_us = 0;
+                       (unsigned long)interval);  // V251017R5: 무변화 누적 구간을 최소 간격으로 요약 출력
+        matrix_debug_idle_count        = 0;
+        matrix_debug_idle_start_us     = 0;
+        matrix_debug_idle_last_report_us = now_us;  // V251017R5: 다음 로그까지 최소 간격 보장
       }
     }
     else
@@ -211,8 +231,9 @@ uint8_t matrix_scan(void)
         matrixDebugLog("scan idle streak ended count=%lu duration=%lu us\n",
                        (unsigned long)matrix_debug_idle_count,
                        (unsigned long)idle_duration);  // V251017R4: 무변화 누적 종료 알림
-        matrix_debug_idle_count    = 0;
-        matrix_debug_idle_start_us = 0;
+        matrix_debug_idle_count        = 0;
+        matrix_debug_idle_start_us     = 0;
+        matrix_debug_idle_last_report_us = 0;  // V251017R5: 종료 후 즉시 다음 누적을 허용
       }
 
       matrixDebugLog("scan begin t=%lu us interval=%lu us\n", (unsigned long)now_us, (unsigned long)interval);
@@ -317,6 +338,7 @@ void cliCmd(cli_args_t *args)
       matrix_debug_last_scan_us = 0;
       matrix_debug_idle_count   = 0;     // V251017R4: 디버그 재개 시 무변화 누적 초기화
       matrix_debug_idle_start_us = 0;    // V251017R4: 디버그 재개 시 기준 시각 초기화
+      matrix_debug_idle_last_report_us = 0; // V251017R5: 재개 시 최소 간격 상태 초기화
       matrixDebugLog("debug logging enabled\n");
       cliPrintf("matrix debug : on\n");
       ret = true;
@@ -331,6 +353,7 @@ void cliCmd(cli_args_t *args)
       matrix_debug_last_scan_us = 0;
       matrix_debug_idle_count   = 0;     // V251017R4: 디버그 종료 시 누적 상태 정리
       matrix_debug_idle_start_us = 0;    // V251017R4: 디버그 종료 시 기준 시각 정리
+      matrix_debug_idle_last_report_us = 0; // V251017R5: 디버그 종료 시 최소 간격 상태 정리
       cliPrintf("matrix debug : off\n");
       ret = true;
     }
