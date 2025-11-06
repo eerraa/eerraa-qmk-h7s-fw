@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251017R2"   // V251017R2: CDC 부트 로그 전송 안정화
+#define _DEF_FIRMWATRE_VERSION      "V251017R2"   // V251017R2: 부트 로그 버퍼 확장 및 CDC 전송 안정화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
@@ -49,7 +49,7 @@
 
 #define _USE_HW_LOG
 #define      HW_LOG_CH              HW_UART_CH_SWD
-#define      HW_LOG_BOOT_BUF_MAX    2048
+#define      HW_LOG_BOOT_BUF_MAX    4096           // V251017R2: 부트 로그 손실 방지를 위해 용량 확장
 #define      HW_LOG_LIST_BUF_MAX    4096
 
 #define _USE_HW_I2C
