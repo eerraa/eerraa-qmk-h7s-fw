@@ -34,7 +34,7 @@ bool hwInit(void)
   }
 
   logOpen(HW_LOG_CH, 115200);
-  logPrintf("\r\n[ Firmware Begin... ]\r\n");
+  logPrintf("[ Firmware Begin... ]\r\n");                    // V251017R2 부트 헤더 개행 정렬
   logPrintf("Booting..Name \t\t: %s\r\n", _DEF_BOARD_NAME);
   logPrintf("Booting..KBD  \t\t: %s\r\n", KBD_NAME);  
   logPrintf("Booting..Ver  \t\t: %s\r\n", _DEF_FIRMWATRE_VERSION);  
@@ -43,7 +43,7 @@ bool hwInit(void)
   logPrintf("Booting..Time \t\t: %s\r\n", __TIME__); 
   logPrintf("Booting..Addr \t\t: 0x%X\r\n", (uint32_t)&_fw_flash_begin); 
 
-  logPrintf("\n");
+  // V251017R2 불필요한 공백 로그 제거로 부트 버퍼 사용량 절감
   logPrintf("[  ] ICache  %s\n", (SCB->CCR & SCB_CCR_IC_Msk) ? "ON":"OFF");
   logPrintf("[  ] DCache  %s\n", (SCB->CCR & SCB_CCR_DC_Msk) ? "ON":"OFF");
   
