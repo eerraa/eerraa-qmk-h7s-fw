@@ -16,12 +16,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <stdint.h>
+#include <string.h>
 #include "keyboard.h"
 #include "keycode.h"
 #include "host.h"
 #include "util.h"
 #include "debug.h"
 #include "usb.h"
+#include "micros.h"
+#include "port/matrix_debug.h"  // V251017R3: HID 전송 경로 디버그 로깅
 
 
 #ifdef DIGITIZER_ENABLE
@@ -83,6 +86,43 @@ void host_keyboard_send(report_keyboard_t *report)
     return;
   }
 #endif
+
+  if (matrixDebugIsEnabled())
+  {
+    static report_keyboard_t prev_report = {0};
+    static bool              prev_valid  = false;
+    static uint32_t          prev_us     = 0;
+
+    uint32_t now_us  = micros();
+    uint32_t delta_us = (prev_us == 0) ? 0 : (now_us - prev_us);
+    bool     changed = true;
+
+    if (prev_valid && memcmp(&prev_report, report, sizeof(report_keyboard_t)) == 0)
+    {
+      changed = false;
+    }
+
+    if (changed)
+    {
+      prev_report = *report;
+      prev_valid  = true;
+      matrixDebugLog("usb report mods=0x%02X keys=%02X %02X %02X %02X %02X %02X dt=%lu us\n",
+                     report->mods,
+                     report->keys[0],
+                     report->keys[1],
+                     report->keys[2],
+                     report->keys[3],
+                     report->keys[4],
+                     report->keys[5],
+                     (unsigned long)delta_us);  // V251017R3: HID 레포트 변화를 USB_CDC 로깅
+    }
+    else
+    {
+      matrixDebugLog("usb report unchanged dt=%lu us\n", (unsigned long)delta_us);
+    }
+
+    prev_us = now_us;
+  }
 
   usbHidSendReport((uint8_t *)report, sizeof(report_keyboard_t));
 

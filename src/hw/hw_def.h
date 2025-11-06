@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251017R2"   // V251017R2: DMA tear 검증을 위한 이중 스냅샷 안정화
+#define _DEF_FIRMWATRE_VERSION      "V251017R3"   // V251017R3: 매트릭스/USB 디버그 로깅 강화 및 진단 경로 확장
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
