@@ -6,6 +6,7 @@
 #include "action_tapping.h"
 #include "keycode.h"
 #include "timer.h"
+#include "port/matrix_debug.h"  // V251017R3: DMA tear 원인 분석을 위한 매트릭스 디버그 로그 연동
 
 #ifndef NO_ACTION_TAPPING
 
@@ -72,13 +73,30 @@ static bool waiting_buffer_has_anykey_pressed(void);
 static void waiting_buffer_scan_tap(void);
 static void debug_tapping_key(void);
 static void debug_waiting_buffer(void);
+static void matrix_debug_log_record_state(const char *tag, const keyrecord_t *record);  // V251017R3: tap-hold 상태 추적 로그
+static void matrix_debug_log_waiting_state(const char *tag);                             // V251017R3: waiting buffer 상태 로그
+static void matrix_debug_log_tapping_state(const char *tag);                             // V251017R3: 현재 tapping_key 상태 로그
 
 /** \brief Action Tapping Process
  *
  * FIXME: Needs doc
  */
 void action_tapping_process(keyrecord_t record) {
-    if (process_tapping(&record)) {
+    if (matrixDebugIsEnabled() && IS_EVENT(record.event)) {
+        matrix_debug_log_record_state("tap_input", &record);        // V251017R3: 입력 이벤트 기록
+        matrix_debug_log_tapping_state("tap_state_before");         // V251017R3: 처리 전 tapping 상태 확인
+        matrix_debug_log_waiting_state("waiting_before");           // V251017R3: 처리 전 버퍼 상태 확인
+    }
+
+    bool processed = process_tapping(&record);
+
+    if (matrixDebugIsEnabled() && IS_EVENT(record.event)) {
+        matrix_debug_log_waiting_state("waiting_after_primary");    // V251017R3: process_tapping 호출 직후 버퍼 상태
+        matrix_debug_log_tapping_state("tap_state_after");          // V251017R3: tapping_key 변화 확인
+        matrixDebugLog("tap_result processed=%u\n", processed ? 1U : 0U);
+    }
+
+    if (processed) {
         if (IS_EVENT(record.event)) {
             ac_dprintf("processed: ");
             debug_record(record);
@@ -91,6 +109,9 @@ void action_tapping_process(keyrecord_t record) {
             clear_keyboard();
             waiting_buffer_clear();
             tapping_key = (keyrecord_t){0};
+            if (matrixDebugIsEnabled()) {
+                matrixDebugLog("waiting overflow -> state reset\n");  // V251017R3: 오버플로우 상황 표시
+            }
         }
     }
 
@@ -109,6 +130,9 @@ void action_tapping_process(keyrecord_t record) {
     }
     if (IS_EVENT(record.event)) {
         ac_dprintf("\n");
+        if (matrixDebugIsEnabled()) {
+            matrix_debug_log_waiting_state("waiting_after_flush");  // V251017R3: waiting buffer 후처리 상태
+        }
     }
 }
 
@@ -443,6 +467,11 @@ bool waiting_buffer_enq(keyrecord_t record) {
 
     if ((waiting_buffer_head + 1) % WAITING_BUFFER_SIZE == waiting_buffer_tail) {
         ac_dprintf("waiting_buffer_enq: Over flow.\n");
+        if (matrixDebugIsEnabled()) {
+            matrixDebugLog("waiting enqueue overflow head=%u tail=%u\n",
+                           waiting_buffer_head,
+                           waiting_buffer_tail);  // V251017R3: waiting buffer 포화 로그
+        }
         return false;
     }
 
@@ -451,6 +480,10 @@ bool waiting_buffer_enq(keyrecord_t record) {
 
     ac_dprintf("waiting_buffer_enq: ");
     debug_waiting_buffer();
+    if (matrixDebugIsEnabled()) {
+        matrix_debug_log_record_state("waiting_enq", &record);
+        matrix_debug_log_waiting_state("waiting_after_enq");
+    }
     return true;
 }
 
@@ -461,6 +494,9 @@ bool waiting_buffer_enq(keyrecord_t record) {
 void waiting_buffer_clear(void) {
     waiting_buffer_head = 0;
     waiting_buffer_tail = 0;
+    if (matrixDebugIsEnabled()) {
+        matrixDebugLog("waiting buffer clear\n");  // V251017R3: waiting buffer 초기화 로그
+    }
 }
 
 /** \brief Waiting buffer typed
@@ -515,9 +551,65 @@ void waiting_buffer_scan_tap(void) {
 
             ac_dprintf("waiting_buffer_scan_tap: found at [%u]\n", i);
             debug_waiting_buffer();
+            if (matrixDebugIsEnabled()) {
+                matrix_debug_log_record_state("waiting_scan_match", candidate);  // V251017R3: waiting buffer 일치 항목 기록
+                matrix_debug_log_tapping_state("tap_state_scan_match");          // V251017R3: 매칭 후 tapping 상태
+            }
             return;
         }
     }
+}
+
+static void matrix_debug_log_record_state(const char *tag, const keyrecord_t *record)
+{
+    if (!matrixDebugIsEnabled()) {
+        return;
+    }
+
+    matrixDebugLog("%s row=%u col=%u pressed=%u time=%u tap.count=%u interrupted=%u\n",
+                   tag,
+                   record->event.key.row,
+                   record->event.key.col,
+                   record->event.pressed ? 1U : 0U,
+                   record->event.time,
+                   record->tap.count,
+                   record->tap.interrupted ? 1U : 0U);  // V251017R3: tap 이벤트 요약
+}
+
+static void matrix_debug_log_waiting_state(const char *tag)
+{
+    if (!matrixDebugIsEnabled()) {
+        return;
+    }
+
+    uint8_t count = (waiting_buffer_head + WAITING_BUFFER_SIZE - waiting_buffer_tail) % WAITING_BUFFER_SIZE;
+
+    matrixDebugLog("%s head=%u tail=%u count=%u\n",
+                   tag,
+                   waiting_buffer_head,
+                   waiting_buffer_tail,
+                   count);  // V251017R3: waiting buffer 포인터 상태
+}
+
+static void matrix_debug_log_tapping_state(const char *tag)
+{
+    if (!matrixDebugIsEnabled()) {
+        return;
+    }
+
+    if (IS_NOEVENT(tapping_key.event)) {
+        matrixDebugLog("%s tapping=idle\n", tag);
+        return;
+    }
+
+    matrixDebugLog("%s row=%u col=%u pressed=%u time=%u tap.count=%u interrupted=%u\n",
+                   tag,
+                   tapping_key.event.key.row,
+                   tapping_key.event.key.col,
+                   tapping_key.event.pressed ? 1U : 0U,
+                   tapping_key.event.time,
+                   tapping_key.tap.count,
+                   tapping_key.tap.interrupted ? 1U : 0U);  // V251017R3: 현재 tapping_key 요약
 }
 
 /** \brief Tapping key debug print

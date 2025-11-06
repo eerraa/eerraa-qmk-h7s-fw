@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251016R9"   // V251016R9: 인디케이터 프레임 준비 로직 단순화
+#define _DEF_FIRMWATRE_VERSION      "V251017R3"   // V251017R3: 매트릭스/USB 디버그 로깅 강화 및 진단 경로 확장
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
