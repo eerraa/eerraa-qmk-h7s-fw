@@ -74,6 +74,8 @@ static uint64_t log_cdc_boot_sent    = 0;                      // V251017R1 부�
 static uint64_t log_cdc_list_sent    = 0;                      // V251017R1 일반 로그 CDC 전송 위치
 static uint64_t log_list_boot_mirror_end = 0;                  // V251017R2 부트 로그 전송 경계값 유지
 
+static uint32_t logBufferAdvance(const log_buf_t *p_log, uint32_t index, uint32_t step);   // V251017R3 CDC 링버퍼 순환 인덱스 계산
+static uint32_t logBufferAlignToLineHead(const log_buf_t *p_log, uint32_t start, uint32_t *p_available); // V251017R3 CDC 라인 정렬 헬퍼
 static void logCdcTryFlush(void);
 static void logCdcFlushBuffered(void);
 static void logCdcDrainBuffer(log_buf_t *p_log, uint64_t *p_sent_total);
@@ -342,23 +344,14 @@ static void logCdcDrainBuffer(log_buf_t *p_log, uint64_t *p_sent_total)
 
   if (available > capacity)
   {
-    *p_sent_total = total - capacity;
-    available = capacity;
-    uint32_t idx     = (uint32_t)(*p_sent_total % capacity);   // V251017R2 라인 경계 보존을 위해 헤더 조정
-    uint32_t eaten   = 0;
-    while (eaten < available)
-    {
-      if (p_log->buf[idx] == '\n')
-      {
-        idx = (idx + 1) % capacity;
-        eaten++;
-        break;
-      }
-      idx = (idx + 1) % capacity;
-      eaten++;
-    }
-    *p_sent_total += eaten;
-    available     -= eaten;
+    uint64_t trimmed_sent = total - capacity;                  // V251017R3 링버퍼 초과 영역 컷오프
+    uint32_t start        = (uint32_t)(trimmed_sent % capacity);
+    uint32_t trimmed_available = capacity;
+
+    start = logBufferAlignToLineHead(p_log, start, &trimmed_available);
+    *p_sent_total = total - trimmed_available;
+    available     = trimmed_available;
+
     if (available == 0)
     {
       return;
@@ -384,20 +377,65 @@ static void logCdcDrainBuffer(log_buf_t *p_log, uint64_t *p_sent_total)
       return;
     }
 
-    start     += sent;
+    start     = logBufferAdvance(p_log, start, sent);
     remaining -= sent;
     *p_sent_total += sent;
-
-    if (start >= capacity)
-    {
-      start = 0;
-    }
 
     if (sent < chunk)
     {
       return;
     }
   }
+}
+#endif
+
+#ifdef _USE_HW_CDC
+static uint32_t logBufferAdvance(const log_buf_t *p_log, uint32_t index, uint32_t step)
+{
+  uint32_t capacity = p_log->buf_length_max;
+
+  if (capacity == 0)
+  {
+    return 0;                                                   // V251017R3 빈 버퍼 예외 처리
+  }
+
+  index += step;
+  if (index >= capacity)
+  {
+    index -= capacity;
+  }
+
+  return index;
+}
+
+static uint32_t logBufferAlignToLineHead(const log_buf_t *p_log, uint32_t start, uint32_t *p_available)
+{
+  uint32_t capacity  = p_log->buf_length_max;
+  uint32_t available = *p_available;
+
+  while (available > 0)
+  {
+    uint32_t chunk = capacity - start;
+    if (chunk > available)
+    {
+      chunk = available;
+    }
+
+    uint8_t *newline = (uint8_t *)memchr(&p_log->buf[start], '\n', chunk);
+    if (newline != NULL)
+    {
+      uint32_t step = (uint32_t)(newline - &p_log->buf[start]) + 1;
+      available    -= step;
+      *p_available  = available;
+      return logBufferAdvance(p_log, start, step);              // V251017R3 라인 헤더 단위 정렬
+    }
+
+    available -= chunk;
+    start      = logBufferAdvance(p_log, start, chunk);
+  }
+
+  *p_available = 0;
+  return start;                                                  // V251017R3 개행이 없으면 전송 없음
 }
 #else
 void logProcess(void)
