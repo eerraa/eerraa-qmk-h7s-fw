@@ -10,6 +10,7 @@
 
 #include "log.h"
 #include "uart.h"
+#include <string.h>                                             // V251017R3 부트 로그 공유 영역 초기화
 #ifdef _USE_HW_CLI
 #include "cli.h"
 #endif
@@ -40,10 +41,17 @@ typedef struct
 } log_buf_t;
 
 
-log_buf_t log_buf_boot;
+#define LOG_BOOT_MAGIC  0x424F4F54UL                            // V251017R3 부트로더 로그 공유 영역 식별
+
+extern uint32_t _fw_flash_begin;
+
+
+static uint32_t log_boot_magic __attribute__((section(".non_cache"))); // V251017R3 부트로더 로그 공유 영역 유지
+
+log_buf_t log_buf_boot __attribute__((section(".non_cache")));        // V251017R3 부트로더 로그 공유 영역 유지
 log_buf_t log_buf_list;
 
-static uint8_t buf_boot[LOG_BOOT_BUF_MAX];
+static uint8_t buf_boot[LOG_BOOT_BUF_MAX] __attribute__((section(".non_cache"))); // V251017R3 부트로더 로그 버퍼 공유
 static uint8_t buf_list[LOG_LIST_BUF_MAX];
 
 static bool is_init = false;
@@ -87,12 +95,46 @@ bool logInit(void)
   mutex_lock = xSemaphoreCreateMutex();
 #endif
 
-  log_buf_boot.line_index     = 0;
-  log_buf_boot.buf_length     = 0;
+  bool is_app_image = ((uint32_t)&_fw_flash_begin >= 0x24000000U);      // V251017R3 펌웨어/부트 구분
+  bool reuse_boot_log = false;
+
+  if (is_app_image == true)
+  {
+    if (log_boot_magic == LOG_BOOT_MAGIC &&
+        log_buf_boot.buf == buf_boot &&
+        log_buf_boot.buf_length_max == LOG_BOOT_BUF_MAX)
+    {
+      reuse_boot_log = true;                                            // V251017R3 부트로더 로그 인계
+    }
+  }
+
+  if (reuse_boot_log != true)
+  {
+    memset(&log_buf_boot, 0, sizeof(log_buf_boot));                      // V251017R3 부트로더 로그 영역 초기화
+    memset(buf_boot, 0, sizeof(buf_boot));                               // V251017R3 부트로더 로그 버퍼 클리어
+  }
+  else
+  {
+    if (log_buf_boot.buf_length > LOG_BOOT_BUF_MAX)                      // V251017R3 인계 데이터 경계 보정
+    {
+      log_buf_boot.buf_length = LOG_BOOT_BUF_MAX;
+    }
+    if (log_buf_boot.buf_index >= LOG_BOOT_BUF_MAX)
+    {
+      log_buf_boot.buf_index %= LOG_BOOT_BUF_MAX;
+    }
+  }
+
   log_buf_boot.buf_length_max = LOG_BOOT_BUF_MAX;
-  log_buf_boot.buf_index      = 0;
   log_buf_boot.buf            = buf_boot;
-  log_buf_boot.total_length   = 0;
+
+  if (reuse_boot_log != true)
+  {
+    log_buf_boot.line_index   = 0;
+    log_buf_boot.total_length = 0;
+  }
+
+  log_boot_magic = LOG_BOOT_MAGIC;                                      // V251017R3 부트 로그 공유 영역 활성화
 
 
   log_buf_list.line_index     = 0;
