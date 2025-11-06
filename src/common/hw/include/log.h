@@ -21,6 +21,7 @@ void logEnable(void);
 void logDisable(void);
 bool logOpen(uint8_t ch, uint32_t baud);
 void logBoot(uint8_t enable);
+void logProcess(void);                                         // V251017R1 CDC 로그 반영용 처리 루틴
 void logPrintf(const char *fmt, ...);
 
 #endif

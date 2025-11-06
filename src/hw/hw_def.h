@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251016R9"   // V251016R9: 인디케이터 프레임 준비 로직 단순화
+#define _DEF_FIRMWATRE_VERSION      "V251017R2"   // V251017R2: CDC 부트 로그 전송 안정화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
