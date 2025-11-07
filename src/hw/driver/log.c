@@ -69,12 +69,13 @@ static SemaphoreHandle_t mutex_lock;
 
 #ifdef _USE_HW_CDC
 static bool     log_cdc_ready        = false;                  // V251017R1 CDC 연결 상태 캐시
+static bool     log_cdc_pending      = false;                  // V251017R5 CDC 전송 대기 상태 캐시
 static uint64_t log_cdc_boot_sent    = 0;                      // V251017R1 부트 로그 CDC 전송 위치
 static uint64_t log_cdc_list_sent    = 0;                      // V251017R1 일반 로그 CDC 전송 위치
 static uint64_t log_list_boot_mirror_end = 0;                  // V251017R2 부트 로그 전송 경계값 유지
 
 static void logCdcTryFlush(bool is_connected);                 // V251017R3 CDC 연결 상태 분리로 재호출 최소화
-static void logCdcFlushBuffered(void);
+static bool logCdcFlushBuffered(void);                         // V251017R5 CDC 플러시 결과를 통해 대기 상태 업데이트
 static void logCdcDrainBuffer(log_buf_t *p_log, uint64_t *p_sent_total, uint32_t *p_budget);
 static void logCdcResetState(void);                            // V251017R3 CDC 상태 초기화 헬퍼
 static void logCdcApplyBootDisable(void);                      // V251017R3 부트 로그 종료 시 CDC 동기화 처리
@@ -237,13 +238,29 @@ void logPrintf(const char *fmt, ...)
     uartWrite(log_ch, (uint8_t *)print_buf, data_len);
   }
 
+  bool appended = false;                                        // V251017R5 CDC 전송 버퍼 갱신 여부
   if (is_boot_log)
   {
-    logBufPrintf(&log_buf_boot, print_buf, data_len);
+    if (logBufPrintf(&log_buf_boot, print_buf, data_len))
+    {
+      appended = true;
+    }
   }
-  logBufPrintf(&log_buf_list, print_buf, data_len);
+  if (logBufPrintf(&log_buf_list, print_buf, data_len))
+  {
+    appended = true;
+  }
 #ifdef _USE_HW_CDC
-  logCdcTryFlush(cdcIsConnect());                              // V251017R3 CDC 연결 상태를 재사용
+  if (appended)
+  {
+    log_cdc_pending = true;                                     // V251017R5 CDC 플러시 조건 캐시
+    if (log_cdc_ready == true)
+    {
+      logCdcTryFlush(true);                                     // V251017R5 연결된 상태에서는 즉시 플러시
+    }
+  }
+#else
+  (void)appended;                                               // V251017R5 CDC 미사용 빌드 경고 억제
 #endif
 
   va_end(args);
@@ -260,14 +277,23 @@ void logProcess(void)
   }
 
   bool is_connected = cdcIsConnect();
-  if (is_connected != true && log_cdc_ready == false)
+  if (is_connected != true)
   {
+    if (log_cdc_ready == true)
+    {
+      lock();
+      logCdcTryFlush(false);                                    // V251017R5 연결 종료 시 상태만 정리
+      unLock();
+    }
     return;                                                    // V251017R3 비연결 상태에서 불필요한 락 제거
   }
 
-  lock();
-  logCdcTryFlush(is_connected);                                // V251017R3 주기적 CDC 플러시
-  unLock();
+  if (log_cdc_ready == false || log_cdc_pending == true)       // V251017R5 전송 필요시에만 락 획득
+  {
+    lock();
+    logCdcTryFlush(true);                                      // V251017R3 주기적 CDC 플러시
+    unLock();
+  }
 }
 
 static void logCdcTryFlush(bool is_connected)
@@ -295,10 +321,10 @@ static void logCdcTryFlush(bool is_connected)
     }
   }
 
-  logCdcFlushBuffered();
+  log_cdc_pending = logCdcFlushBuffered();
 }
 
-static void logCdcFlushBuffered(void)
+static bool logCdcFlushBuffered(void)
 {
   uint32_t budget = LOG_CDC_FLUSH_BUDGET;                      // V251017R4 CDC 플러시당 전송 한도
 
@@ -307,6 +333,17 @@ static void logCdcFlushBuffered(void)
   {
     logCdcDrainBuffer(&log_buf_list, &log_cdc_list_sent, &budget);
   }
+
+  if (log_buf_boot.total_length != log_cdc_boot_sent)
+  {
+    return true;
+  }
+  if (log_buf_list.total_length != log_cdc_list_sent)
+  {
+    return true;
+  }
+
+  return false;
 }
 
 static void logCdcDrainBuffer(log_buf_t *p_log, uint64_t *p_sent_total, uint32_t *p_budget)
@@ -404,6 +441,7 @@ static void logCdcDrainBuffer(log_buf_t *p_log, uint64_t *p_sent_total, uint32_t
 static void logCdcResetState(void)
 {
   log_cdc_ready            = false;
+  log_cdc_pending          = false;                             // V251017R5 CDC 플러시 대기 상태 초기화
   log_cdc_boot_sent        = 0;
   log_cdc_list_sent        = 0;
   log_list_boot_mirror_end = 0;

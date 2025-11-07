@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251017R4"   // V251017R4: CDC 로그 플러시 버짓 한도 적용
+#define _DEF_FIRMWATRE_VERSION      "V251017R5"   // V251017R5: CDC 로그 플러시 상태 최적화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
