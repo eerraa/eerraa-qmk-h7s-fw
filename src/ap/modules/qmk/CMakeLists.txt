@@ -84,7 +84,7 @@ add_compile_definitions(VIA_ENABLE)
 add_compile_definitions(RAW_ENABLE)
 add_compile_definitions(DYNAMIC_KEYMAP_ENABLE)
 add_compile_definitions(KEY_OVERRIDE_ENABLE)
-add_compile_definitions(HOLD_ON_OTHER_KEY_PRESS)
+# add_compile_definitions(HOLD_ON_OTHER_KEY_PRESS) // QMK와 디폴트와 매치하지 않음
 add_compile_definitions(EXTRAKEY_ENABLE)
 
 

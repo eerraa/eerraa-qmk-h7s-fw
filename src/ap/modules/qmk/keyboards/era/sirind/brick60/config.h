@@ -39,6 +39,9 @@
 #define KILL_SWITCH_ENABLE
 #define KKUK_ENABLE
 
+// Tapping Term 테스트
+//
+#define TAPPING_TERM 2000
 
 // V251016R8: Brick60 전용 RGB 인디케이터 기능 플래그를 INDICATOR_ENABLE로 선언
 #define INDICATOR_ENABLE
