@@ -1431,7 +1431,9 @@ void rgblight_wakeup(void) {
 
 #endif
 
-void rgblight_set(void) {
+// V251018R6: WS2812 전송 루틴을 별도 함수로 분리해 호출 컨텍스트를 제어
+static void rgblight_render_frame(void)
+{
     rgb_led_t *start_led;
     uint8_t    num_leds = rgblight_ranges.clipping_num_leds;
     bool       indicator_active = rgblight_indicator_state.active;
@@ -1496,6 +1498,17 @@ void rgblight_set(void) {
     }
 #endif
     rgblight_driver.setleds(start_led, num_leds);
+}
+
+// V251018R6: 초기화 이후에는 렌더를 큐잉해 WS2812 전송을 주 루프에서만 수행
+void rgblight_set(void)
+{
+    if (!is_rgblight_initialized) {
+        rgblight_render_frame();
+        return;
+    }
+
+    rgblight_request_render();
 }
 
 #ifdef RGBLIGHT_SPLIT
@@ -2137,7 +2150,7 @@ static void rgblight_flush_render_queue(void)
     }
 
     rgblight_render_pending = false;
-    rgblight_set();  // V251018R1: WS2812 전송은 오직 주 루프에서만 실행
+    rgblight_render_frame();  // V251018R6: 예약된 프레임을 주 루프에서만 전송
 }
 
 void rgblight_task(void) {
