@@ -153,6 +153,8 @@ static rgblight_indicator_state_t rgblight_indicator_state = {
     .needs_render = false,
 };
 
+static void rgblight_sethsv_noeeprom_old(uint8_t hue, uint8_t sat, uint8_t val);  // V251018R4: Blink 제어 블록에서 참조
+
 #if defined(RGBLIGHT_EFFECT_BLINK_IN) || defined(RGBLIGHT_EFFECT_BLINK_OUT)
 typedef struct {
     bool     latched;
@@ -267,6 +269,18 @@ static void rgblight_effect_blink_handle_keypress(void)
     rgblight_blink_effect_state.latched     = true;
     rgblight_blink_effect_state.deadline_ms = now + rgblight_effect_blink_duration_ms();
     rgblight_effect_blink_evaluate_output();
+}
+
+static void rgblight_effect_blink_in(animation_status_t *anim)
+{
+    (void)anim;
+    rgblight_effect_blink_evaluate_output();  // V251018R4: Blink in 상태 머신 처리
+}
+
+static void rgblight_effect_blink_out(animation_status_t *anim)
+{
+    (void)anim;
+    rgblight_effect_blink_evaluate_output();  // V251018R4: Blink out 상태 머신 처리
 }
 #else
 static inline void rgblight_effect_blink_on_base_mode_update(void) {}
@@ -956,7 +970,7 @@ void rgblight_decrease_speed_noeeprom(void) {
     rgblight_decrease_speed_helper(false);
 }
 
-void rgblight_sethsv_noeeprom_old(uint8_t hue, uint8_t sat, uint8_t val) {
+static void rgblight_sethsv_noeeprom_old(uint8_t hue, uint8_t sat, uint8_t val) {
     if (rgblight_config.enable) {
         rgb_led_t tmp_led;
         sethsv(hue, sat, val, &tmp_led);
@@ -2000,22 +2014,6 @@ void rgblight_effect_twinkle(animation_status_t *anim) {
     }
 
     rgblight_set();
-}
-#endif
-
-#ifdef RGBLIGHT_EFFECT_BLINK_IN
-void rgblight_effect_blink_in(animation_status_t *anim)
-{
-    (void)anim;
-    rgblight_effect_blink_evaluate_output();  // V251018R4: Blink in 상태 머신 처리
-}
-#endif
-
-#ifdef RGBLIGHT_EFFECT_BLINK_OUT
-void rgblight_effect_blink_out(animation_status_t *anim)
-{
-    (void)anim;
-    rgblight_effect_blink_evaluate_output();  // V251018R4: Blink out 상태 머신 처리
 }
 #endif
 
