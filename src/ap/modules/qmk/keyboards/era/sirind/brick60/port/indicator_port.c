@@ -55,7 +55,8 @@ static void indicator_apply_defaults(void)
 // V251012R2: USB HID 호스트 LED 이벤트를 QMK LED 파이프라인으로 전달한다.
 void usbHidSetStatusLed(uint8_t led_bits)
 {
-  led_set(led_bits);
+  led_t host_state = {.raw = led_bits};
+  rgblight_indicator_post_host_event(host_state);  // V251018R1: USB 인터럽트에서 rgblight_set 호출을 피하기 위해 큐잉
 }
 
 void led_init_ports(void)
@@ -78,7 +79,7 @@ void led_init_ports(void)
 
 void led_update_ports(led_t led_state)
 {
-  rgblight_indicator_apply_host_led(led_state);  // V251012R2: 호스트 LED → rgblight 인디케이터 연동
+  rgblight_indicator_post_host_event(led_state);  // V251018R1: 모든 host LED 이벤트를 rgblight_task 큐로 위임
 }
 
 static bool indicator_target_from_host(uint8_t target, led_t host_state)

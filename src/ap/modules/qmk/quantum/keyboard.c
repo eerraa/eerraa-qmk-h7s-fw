@@ -898,8 +898,6 @@ void keyboard_task(void) {
     haptic_task();
 #endif
 
-    led_task();
-
 #ifdef OS_DETECTION_ENABLE
     os_detection_task();
 #endif

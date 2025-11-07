@@ -153,6 +153,14 @@ static rgblight_indicator_state_t rgblight_indicator_state = {
     .needs_render = false,
 };
 
+static volatile bool    rgblight_host_led_pending    = false;  // V251018R1: USB IRQ에서 전달된 호스트 LED 버퍼 상태
+static volatile uint8_t rgblight_host_led_raw_buffer = 0;
+static bool             rgblight_render_pending      = false;  // V251018R1: rgblight_set 실행을 주 루프에서 단일 처리
+
+static void rgblight_request_render(void)
+{
+    rgblight_render_pending = true;
+}
 // V251016R8: 포트가 제공한 범위를 LED 개수에 맞춰 보정한다.
 static rgblight_indicator_range_t rgblight_indicator_sanitize_range(rgblight_indicator_range_t range)
 {
@@ -320,23 +328,15 @@ static void rgblight_indicator_commit_state(bool should_enable, bool request_ren
     rgblight_indicator_state.active       = should_enable;
     rgblight_indicator_state.needs_render = needs_render;
 
-    if (!is_rgblight_initialized) {
-        return;
-    }
-
     if (should_enable) {
         if (!was_active || needs_render) {
-            rgblight_set();
+            rgblight_request_render();
         }
         return;
     }
 
     if (was_active) {
-        if (rgblight_config.enable) {
-            rgblight_mode_noeeprom(rgblight_config.mode);
-        } else {
-            rgblight_set();
-        }
+        rgblight_request_render();
     }
 }
 
@@ -400,6 +400,12 @@ void rgblight_indicator_apply_host_led(led_t host_led_state)
 
     rgblight_indicator_commit_state(should_enable, false);  // V251012R3: 호스트 이벤트는 전이 감지만 수행
 }
+
+void rgblight_indicator_post_host_event(led_t host_led_state)
+{
+    rgblight_host_led_raw_buffer = host_led_state.raw;
+    rgblight_host_led_pending    = true;
+}  // V251018R1: IRQ 컨텍스트에서는 상태만 저장하고 실제 처리는 rgblight_task로 위임
 
 void rgblight_set_clipping_range(uint8_t start_pos, uint8_t num_leds) {
     if (start_pos > RGBLIGHT_LED_COUNT) {
@@ -1372,14 +1378,8 @@ static void rgblight_effect_dummy(animation_status_t *anim) {
 }
 
 void rgblight_timer_task(void) {
-    if (rgblight_indicator_state.active) { // V251012R2: 인디케이터 활성 시 애니메이션 루프를 우회
-        if (rgblight_indicator_state.needs_render && is_rgblight_initialized) {
-            rgblight_set();
-        }
-
-        if (rgblight_indicator_state.overrides_all) {
-            return;  // V251016R8: 전체 LED를 덮어쓰는 경우에만 애니메이션 우회
-        }
+    if (rgblight_indicator_state.active && rgblight_indicator_state.needs_render) { // V251018R1: 렌더 예약만 수행
+        rgblight_request_render();
     }
     if (rgblight_status.timer_enabled) {
         if (rgblight_ranges.effect_num_leds == 0) {
@@ -1863,10 +1863,33 @@ void preprocess_rgblight(void) {
 #endif
 }
 
+static void rgblight_consume_host_led_queue(void)
+{
+    if (!rgblight_host_led_pending) {
+        return;
+    }
+
+    led_t pending = {.raw = rgblight_host_led_raw_buffer};
+    rgblight_host_led_pending = false;
+    rgblight_indicator_apply_host_led(pending);  // V251018R1: 큐에 적재된 상태를 메인 루프에서 처리
+}
+
+static void rgblight_flush_render_queue(void)
+{
+    if (!rgblight_render_pending || !is_rgblight_initialized) {
+        return;
+    }
+
+    rgblight_render_pending = false;
+    rgblight_set();  // V251018R1: WS2812 전송은 오직 주 루프에서만 실행
+}
+
 void rgblight_task(void) {
+    rgblight_consume_host_led_queue();
 #ifdef RGBLIGHT_USE_TIMER
     rgblight_timer_task();
 #endif
+    rgblight_flush_render_queue();
 
 #ifdef VELOCIKEY_ENABLE
     if (rgblight_velocikey_enabled()) {

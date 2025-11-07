@@ -200,6 +200,7 @@ typedef struct {
 
 void rgblight_indicator_update_config(rgblight_indicator_config_t config);
 void rgblight_indicator_apply_host_led(led_t host_led_state);
+void rgblight_indicator_post_host_event(led_t host_led_state);  // V251018R1: IRQ에서 전달된 호스트 LED 이벤트 큐
 void rgblight_indicator_set_target_callback(rgblight_indicator_target_callback_t callback);  // V251016R8: 포트 콜백 등록
 void rgblight_indicator_set_ranges(const rgblight_indicator_range_t *ranges, uint8_t length);  // V251016R8: 키보드별 범위 전달
 // V251012R3: HSV → RGB 변환 헬퍼를 외부에서도 재사용할 수 있도록 선언
