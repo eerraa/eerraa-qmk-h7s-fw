@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251017R2"   // V251017R2: 부트 로그 버퍼 확장 및 CDC 전송 안정화
+#define _DEF_FIRMWATRE_VERSION      "V251017R3"   // V251017R3: CDC 로그 경계 리팩토링 및 성능 최적화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

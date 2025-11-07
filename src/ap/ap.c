@@ -32,7 +32,7 @@ void apMain(void)
       ledOff(_DEF_LED1);
     }
 
-    logProcess();                                              // V251017R1 CDC 로그 출력 처리
+    logProcess();                                              // V251017R3 CDC 로그 전송 최적화 처리
     cliUpdate();
     usbProcess();                                               // V250924R2 USB 안정성 이벤트 처리
     qmkUpdate();
