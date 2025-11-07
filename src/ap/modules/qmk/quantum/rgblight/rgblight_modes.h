@@ -61,6 +61,12 @@ _RGBM_TMP_DYNAMIC(twinkle_40, TWINKLE)
 _RGBM_TMP_DYNAMIC(twinkle_41, TWINKLE)
 _RGBM_TMP_DYNAMIC(TWINKLE_end, TWINKLE)
 #    endif
+#    ifdef RGBLIGHT_EFFECT_BLINK_IN
+_RGBM_SINGLE_DYNAMIC(BLINK_IN)   // V251018R4: Blink in 모드 등록
+#    endif
+#    ifdef RGBLIGHT_EFFECT_BLINK_OUT
+_RGBM_SINGLE_DYNAMIC(BLINK_OUT)  // V251018R4: Blink out 모드 등록
+#    endif
 ////  Add a new mode here.
 // #ifdef RGBLIGHT_EFFECT_<name>
 //    _RGBM_<SINGLE|MULTI>_<STATIC|DYNAMIC>( <name> )

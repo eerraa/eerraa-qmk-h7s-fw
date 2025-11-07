@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251018R3"   // V251018R3: 정적 이펙트 복원 로직 재도입
+#define _DEF_FIRMWATRE_VERSION      "V251018R4"   // V251018R4: Blink in/out RGB 이펙트 및 VIA 연동 추가
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

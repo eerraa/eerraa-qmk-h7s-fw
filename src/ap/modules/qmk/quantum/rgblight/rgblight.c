@@ -153,6 +153,127 @@ static rgblight_indicator_state_t rgblight_indicator_state = {
     .needs_render = false,
 };
 
+#if defined(RGBLIGHT_EFFECT_BLINK_IN) || defined(RGBLIGHT_EFFECT_BLINK_OUT)
+typedef struct {
+    bool     latched;
+    bool     initialized;
+    bool     output_on;
+    uint32_t deadline_ms;
+} rgblight_blink_effect_state_t;  // V251018R4: Blink in/out 상태 추적
+
+static rgblight_blink_effect_state_t rgblight_blink_effect_state = {
+    .latched = false,
+    .initialized = false,
+    .output_on = false,
+    .deadline_ms = 0,
+};
+
+static bool rgblight_effect_blink_mode_active(void)
+{
+    bool active = false;
+#    ifdef RGBLIGHT_EFFECT_BLINK_IN
+    active |= (rgblight_status.base_mode == RGBLIGHT_MODE_BLINK_IN);
+#    endif
+#    ifdef RGBLIGHT_EFFECT_BLINK_OUT
+    active |= (rgblight_status.base_mode == RGBLIGHT_MODE_BLINK_OUT);
+#    endif
+    return active;
+}
+
+static bool rgblight_effect_blink_default_on(void)
+{
+#    ifdef RGBLIGHT_EFFECT_BLINK_OUT
+    if (rgblight_status.base_mode == RGBLIGHT_MODE_BLINK_OUT) {
+        return true;
+    }
+#    endif
+    return false;
+}
+
+static uint16_t rgblight_effect_blink_duration_ms(void)
+{
+    return (uint16_t)RGBLIGHT_EFFECT_BLINK_DURATION_MIN_MS +
+           (uint16_t)rgblight_config.speed * (uint16_t)RGBLIGHT_EFFECT_BLINK_DURATION_STEP_MS;
+}
+
+static void rgblight_effect_blink_reset_state(void)
+{
+    rgblight_blink_effect_state.latched     = false;
+    rgblight_blink_effect_state.initialized = false;
+    rgblight_blink_effect_state.output_on   = false;
+    rgblight_blink_effect_state.deadline_ms = 0;
+}
+
+static void rgblight_effect_blink_apply_output(bool on)
+{
+    if (!rgblight_config.enable) {
+        rgblight_blink_effect_state.output_on   = on;
+        rgblight_blink_effect_state.initialized = true;
+        return;
+    }
+
+    if (on) {
+        rgblight_sethsv_noeeprom_old(rgblight_config.hue, rgblight_config.sat, rgblight_config.val);
+    } else {
+        rgblight_setrgb(0, 0, 0);
+    }
+
+    rgblight_blink_effect_state.output_on   = on;
+    rgblight_blink_effect_state.initialized = true;
+}
+
+static void rgblight_effect_blink_evaluate_output(void)
+{
+    if (!rgblight_effect_blink_mode_active()) {
+        return;
+    }
+
+    if (rgblight_blink_effect_state.latched) {
+        uint32_t now = sync_timer_read32();
+        if ((int32_t)(now - rgblight_blink_effect_state.deadline_ms) >= 0) {
+            rgblight_blink_effect_state.latched     = false;
+            rgblight_blink_effect_state.deadline_ms = 0;
+        }
+    }
+
+    bool default_on = rgblight_effect_blink_default_on();
+    bool target_on  = rgblight_blink_effect_state.latched ? !default_on : default_on;
+
+    if (!rgblight_blink_effect_state.initialized || rgblight_blink_effect_state.output_on != target_on) {
+        rgblight_effect_blink_apply_output(target_on);
+    }
+}
+
+static void rgblight_effect_blink_on_base_mode_update(void)
+{
+    if (!rgblight_effect_blink_mode_active()) {
+        rgblight_effect_blink_reset_state();
+        return;
+    }
+
+    rgblight_blink_effect_state.latched     = false;
+    rgblight_blink_effect_state.deadline_ms = 0;
+    rgblight_blink_effect_state.initialized = false;
+    rgblight_effect_blink_evaluate_output();
+}
+
+static void rgblight_effect_blink_handle_keypress(void)
+{
+    if (!rgblight_effect_blink_mode_active() || !rgblight_config.enable) {
+        return;
+    }
+
+    uint32_t now = sync_timer_read32();
+    rgblight_blink_effect_state.latched     = true;
+    rgblight_blink_effect_state.deadline_ms = now + rgblight_effect_blink_duration_ms();
+    rgblight_effect_blink_evaluate_output();
+}
+#else
+static inline void rgblight_effect_blink_on_base_mode_update(void) {}
+static inline void rgblight_effect_blink_handle_keypress(void) {}
+static inline void rgblight_effect_blink_evaluate_output(void) {}
+#endif
+
 static volatile bool    rgblight_host_led_pending    = false;  // V251018R1: USB IRQ에서 전달된 호스트 LED 버퍼 상태
 static volatile uint8_t rgblight_host_led_raw_buffer = 0;
 static bool             rgblight_render_pending      = false;  // V251018R1: rgblight_set 실행을 주 루프에서 단일 처리
@@ -851,6 +972,7 @@ void rgblight_sethsv_eeprom_helper(uint8_t hue, uint8_t sat, uint8_t val, bool w
         }
 #endif
         rgblight_status.base_mode = mode_base_table[rgblight_config.mode];
+        rgblight_effect_blink_on_base_mode_update();  // V251018R4: Blink 모드 전환 시 상태 초기화
         if (rgblight_config.mode == RGBLIGHT_MODE_STATIC_LIGHT) {
             // same static color
             rgb_led_t tmp_led;
@@ -1469,6 +1591,18 @@ void rgblight_timer_task(void) {
             effect_func   = (effect_func_t)rgblight_effect_twinkle;
         }
 #    endif
+#    ifdef RGBLIGHT_EFFECT_BLINK_IN
+        else if (rgblight_status.base_mode == RGBLIGHT_MODE_BLINK_IN) {
+            interval_time = 5;  // V251018R4: Blink in은 짧은 주기로 타이머를 갱신
+            effect_func   = (effect_func_t)rgblight_effect_blink_in;
+        }
+#    endif
+#    ifdef RGBLIGHT_EFFECT_BLINK_OUT
+        else if (rgblight_status.base_mode == RGBLIGHT_MODE_BLINK_OUT) {
+            interval_time = 5;  // V251018R4: Blink out은 동일한 주기로 상태를 평가
+            effect_func   = (effect_func_t)rgblight_effect_blink_out;
+        }
+#    endif
         if (animation_status.restart) {
             animation_status.restart    = false;
             animation_status.last_timer = sync_timer_read();
@@ -1869,7 +2003,24 @@ void rgblight_effect_twinkle(animation_status_t *anim) {
 }
 #endif
 
+#ifdef RGBLIGHT_EFFECT_BLINK_IN
+void rgblight_effect_blink_in(animation_status_t *anim)
+{
+    (void)anim;
+    rgblight_effect_blink_evaluate_output();  // V251018R4: Blink in 상태 머신 처리
+}
+#endif
+
+#ifdef RGBLIGHT_EFFECT_BLINK_OUT
+void rgblight_effect_blink_out(animation_status_t *anim)
+{
+    (void)anim;
+    rgblight_effect_blink_evaluate_output();  // V251018R4: Blink out 상태 머신 처리
+}
+#endif
+
 void preprocess_rgblight(void) {
+    rgblight_effect_blink_handle_keypress();  // V251018R4: 키 입력 시 Blink 상태 갱신
 #ifdef VELOCIKEY_ENABLE
     if (rgblight_velocikey_enabled()) {
         rgblight_velocikey_accelerate();
