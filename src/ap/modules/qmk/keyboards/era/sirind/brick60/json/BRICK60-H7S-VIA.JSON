@@ -28,6 +28,8 @@
               "content": ["id_qmk_rgblight_effect", 2, 2],
               "options": [
                 ["All Off",     0],
+                ["Blink in", 43],
+                ["Blink out", 44],
                 ["Solid Color", 1],
                 ["Breathing 1", 2],
                 ["Breathing 2", 3],
