@@ -336,7 +336,11 @@ static void rgblight_indicator_commit_state(bool should_enable, bool request_ren
     }
 
     if (was_active) {
-        rgblight_request_render();
+        if (rgblight_config.enable && is_static_effect(rgblight_config.mode)) {
+            rgblight_mode_noeeprom(rgblight_config.mode);  // V251018R3: 정적 효과는 즉시 재렌더해 원본 상태 복구
+        } else {
+            rgblight_request_render();
+        }
     }
 }
 
