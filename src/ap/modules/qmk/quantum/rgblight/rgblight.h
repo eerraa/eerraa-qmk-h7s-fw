@@ -85,9 +85,11 @@
   || defined(RGBLIGHT_EFFECT_CHRISTMAS)     \
   || defined(RGBLIGHT_EFFECT_RGB_TEST)      \
   || defined(RGBLIGHT_EFFECT_ALTERNATING)   \
-  || defined(RGBLIGHT_EFFECT_TWINKLE)       \
-  || defined(RGBLIGHT_EFFECT_BLINK_IN)      \
-  || defined(RGBLIGHT_EFFECT_BLINK_OUT)
+  || defined(RGBLIGHT_EFFECT_TWINKLE)             \
+  || defined(RGBLIGHT_EFFECT_PULSE_ON_PRESS)      \
+  || defined(RGBLIGHT_EFFECT_PULSE_OFF_PRESS)     \
+  || defined(RGBLIGHT_EFFECT_PULSE_ON_PRESS_HOLD) \
+  || defined(RGBLIGHT_EFFECT_PULSE_OFF_PRESS_HOLD)
 #    define RGBLIGHT_USE_TIMER
 #endif
 
@@ -152,11 +154,11 @@ enum RGBLIGHT_EFFECT_MODE {
 #ifndef RGBLIGHT_EFFECT_TWINKLE_PROBABILITY
 #    define RGBLIGHT_EFFECT_TWINKLE_PROBABILITY 1 / 127
 #endif
-#ifndef RGBLIGHT_EFFECT_BLINK_DURATION_MIN_MS
-#    define RGBLIGHT_EFFECT_BLINK_DURATION_MIN_MS 20   // V251018R4: Blink in/out 최소 지속 시간
+#ifndef RGBLIGHT_EFFECT_PULSE_DURATION_MIN_MS
+#    define RGBLIGHT_EFFECT_PULSE_DURATION_MIN_MS 20   // V251018R5: Pulse 계열 최소 지속 시간
 #endif
-#ifndef RGBLIGHT_EFFECT_BLINK_DURATION_STEP_MS
-#    define RGBLIGHT_EFFECT_BLINK_DURATION_STEP_MS 1   // V251018R4: Blink in/out ms/step
+#ifndef RGBLIGHT_EFFECT_PULSE_DURATION_STEP_MS
+#    define RGBLIGHT_EFFECT_PULSE_DURATION_STEP_MS 1   // V251018R5: Pulse 계열 ms/step
 #endif
 
 #ifndef RGBLIGHT_HUE_STEP
@@ -435,7 +437,7 @@ void rgblight_mode_eeprom_helper(uint8_t mode, bool write_to_eeprom);
 #define EZ_RGB(val) rgblight_show_solid_color((val >> 16) & 0xFF, (val >> 8) & 0xFF, val & 0xFF)
 void rgblight_show_solid_color(uint8_t r, uint8_t g, uint8_t b);
 
-void preprocess_rgblight(void);
+void preprocess_rgblight(bool pressed, uint8_t row, uint8_t col);  // V251018R5: Pulse 계열 입력 감지를 위해 위치 정보 전달
 void rgblight_task(void);
 
 #ifdef RGBLIGHT_USE_TIMER

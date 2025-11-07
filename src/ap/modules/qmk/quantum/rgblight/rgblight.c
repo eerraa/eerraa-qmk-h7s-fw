@@ -153,64 +153,96 @@ static rgblight_indicator_state_t rgblight_indicator_state = {
     .needs_render = false,
 };
 
-static void rgblight_sethsv_noeeprom_old(uint8_t hue, uint8_t sat, uint8_t val);  // V251018R4: Blink 제어 블록에서 참조
+static void rgblight_sethsv_noeeprom_old(uint8_t hue, uint8_t sat, uint8_t val);  // V251018R5: Pulse 제어 블록에서 재사용
 
-#if defined(RGBLIGHT_EFFECT_BLINK_IN) || defined(RGBLIGHT_EFFECT_BLINK_OUT)
+#if defined(RGBLIGHT_EFFECT_PULSE_ON_PRESS) || defined(RGBLIGHT_EFFECT_PULSE_OFF_PRESS) || defined(RGBLIGHT_EFFECT_PULSE_ON_PRESS_HOLD) || defined(RGBLIGHT_EFFECT_PULSE_OFF_PRESS_HOLD)
 typedef struct {
     bool     latched;
     bool     initialized;
     bool     output_on;
+    bool     key_tracking_valid;
+    uint8_t  key_row;
+    uint8_t  key_col;
     uint32_t deadline_ms;
-} rgblight_blink_effect_state_t;  // V251018R4: Blink in/out 상태 추적
+} rgblight_pulse_effect_state_t;  // V251018R5: Pulse 계열 이펙트 상태 추적
 
-static rgblight_blink_effect_state_t rgblight_blink_effect_state = {
+static rgblight_pulse_effect_state_t rgblight_pulse_effect_state = {
     .latched = false,
     .initialized = false,
     .output_on = false,
+    .key_tracking_valid = false,
+    .key_row = 0,
+    .key_col = 0,
     .deadline_ms = 0,
 };
 
-static bool rgblight_effect_blink_mode_active(void)
+static bool rgblight_effect_pulse_mode_active(void)
 {
     bool active = false;
-#    ifdef RGBLIGHT_EFFECT_BLINK_IN
-    active |= (rgblight_status.base_mode == RGBLIGHT_MODE_BLINK_IN);
+#    ifdef RGBLIGHT_EFFECT_PULSE_ON_PRESS
+    active |= (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_ON_PRESS);
 #    endif
-#    ifdef RGBLIGHT_EFFECT_BLINK_OUT
-    active |= (rgblight_status.base_mode == RGBLIGHT_MODE_BLINK_OUT);
+#    ifdef RGBLIGHT_EFFECT_PULSE_OFF_PRESS
+    active |= (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_OFF_PRESS);
+#    endif
+#    ifdef RGBLIGHT_EFFECT_PULSE_ON_PRESS_HOLD
+    active |= (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_ON_PRESS_HOLD);
+#    endif
+#    ifdef RGBLIGHT_EFFECT_PULSE_OFF_PRESS_HOLD
+    active |= (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD);
 #    endif
     return active;
 }
 
-static bool rgblight_effect_blink_default_on(void)
+static bool rgblight_effect_pulse_hold_mode_active(void)
 {
-#    ifdef RGBLIGHT_EFFECT_BLINK_OUT
-    if (rgblight_status.base_mode == RGBLIGHT_MODE_BLINK_OUT) {
+    bool hold = false;
+#    ifdef RGBLIGHT_EFFECT_PULSE_ON_PRESS_HOLD
+    hold |= (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_ON_PRESS_HOLD);
+#    endif
+#    ifdef RGBLIGHT_EFFECT_PULSE_OFF_PRESS_HOLD
+    hold |= (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD);
+#    endif
+    return hold;
+}
+
+static bool rgblight_effect_pulse_default_on(void)
+{
+#    ifdef RGBLIGHT_EFFECT_PULSE_OFF_PRESS
+    if (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_OFF_PRESS) {
+        return true;
+    }
+#    endif
+#    ifdef RGBLIGHT_EFFECT_PULSE_OFF_PRESS_HOLD
+    if (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD) {
         return true;
     }
 #    endif
     return false;
 }
 
-static uint16_t rgblight_effect_blink_duration_ms(void)
+static uint16_t rgblight_effect_pulse_duration_ms(void)
 {
-    return (uint16_t)RGBLIGHT_EFFECT_BLINK_DURATION_MIN_MS +
-           (uint16_t)rgblight_config.speed * (uint16_t)RGBLIGHT_EFFECT_BLINK_DURATION_STEP_MS;
+    return (uint16_t)RGBLIGHT_EFFECT_PULSE_DURATION_MIN_MS +
+           (uint16_t)rgblight_config.speed * (uint16_t)RGBLIGHT_EFFECT_PULSE_DURATION_STEP_MS;
 }
 
-static void rgblight_effect_blink_reset_state(void)
+static void rgblight_effect_pulse_reset_state(void)
 {
-    rgblight_blink_effect_state.latched     = false;
-    rgblight_blink_effect_state.initialized = false;
-    rgblight_blink_effect_state.output_on   = false;
-    rgblight_blink_effect_state.deadline_ms = 0;
+    rgblight_pulse_effect_state.latched            = false;
+    rgblight_pulse_effect_state.initialized        = false;
+    rgblight_pulse_effect_state.output_on          = false;
+    rgblight_pulse_effect_state.key_tracking_valid = false;
+    rgblight_pulse_effect_state.key_row            = 0;
+    rgblight_pulse_effect_state.key_col            = 0;
+    rgblight_pulse_effect_state.deadline_ms        = 0;
 }
 
-static void rgblight_effect_blink_apply_output(bool on)
+static void rgblight_effect_pulse_apply_output(bool on)
 {
     if (!rgblight_config.enable) {
-        rgblight_blink_effect_state.output_on   = on;
-        rgblight_blink_effect_state.initialized = true;
+        rgblight_pulse_effect_state.output_on   = on;
+        rgblight_pulse_effect_state.initialized = true;
         return;
     }
 
@@ -220,72 +252,117 @@ static void rgblight_effect_blink_apply_output(bool on)
         rgblight_setrgb(0, 0, 0);
     }
 
-    rgblight_blink_effect_state.output_on   = on;
-    rgblight_blink_effect_state.initialized = true;
+    rgblight_pulse_effect_state.output_on   = on;
+    rgblight_pulse_effect_state.initialized = true;
 }
 
-static void rgblight_effect_blink_evaluate_output(void)
+static void rgblight_effect_pulse_evaluate_output(void)
 {
-    if (!rgblight_effect_blink_mode_active()) {
+    if (!rgblight_effect_pulse_mode_active()) {
         return;
     }
 
-    if (rgblight_blink_effect_state.latched) {
-        uint32_t now = sync_timer_read32();
-        if ((int32_t)(now - rgblight_blink_effect_state.deadline_ms) >= 0) {
-            rgblight_blink_effect_state.latched     = false;
-            rgblight_blink_effect_state.deadline_ms = 0;
+    if (rgblight_pulse_effect_state.latched) {
+        uint32_t now     = sync_timer_read32();
+        bool     expired = (int32_t)(now - rgblight_pulse_effect_state.deadline_ms) >= 0;
+        if (expired && !(rgblight_effect_pulse_hold_mode_active() && rgblight_pulse_effect_state.key_tracking_valid)) {
+            rgblight_pulse_effect_state.latched     = false;
+            rgblight_pulse_effect_state.deadline_ms = 0;
         }
     }
 
-    bool default_on = rgblight_effect_blink_default_on();
-    bool target_on  = rgblight_blink_effect_state.latched ? !default_on : default_on;
+    bool default_on = rgblight_effect_pulse_default_on();
+    bool target_on  = rgblight_pulse_effect_state.latched ? !default_on : default_on;
 
-    if (!rgblight_blink_effect_state.initialized || rgblight_blink_effect_state.output_on != target_on) {
-        rgblight_effect_blink_apply_output(target_on);
+    if (!rgblight_pulse_effect_state.initialized || rgblight_pulse_effect_state.output_on != target_on) {
+        rgblight_effect_pulse_apply_output(target_on);
     }
 }
 
-static void rgblight_effect_blink_on_base_mode_update(void)
+static void rgblight_effect_pulse_on_base_mode_update(void)
 {
-    if (!rgblight_effect_blink_mode_active()) {
-        rgblight_effect_blink_reset_state();
+    if (!rgblight_effect_pulse_mode_active()) {
+        rgblight_effect_pulse_reset_state();
         return;
     }
 
-    rgblight_blink_effect_state.latched     = false;
-    rgblight_blink_effect_state.deadline_ms = 0;
-    rgblight_blink_effect_state.initialized = false;
-    rgblight_effect_blink_evaluate_output();
+    rgblight_pulse_effect_state.latched            = false;
+    rgblight_pulse_effect_state.deadline_ms        = 0;
+    rgblight_pulse_effect_state.initialized        = false;
+    rgblight_pulse_effect_state.key_tracking_valid = false;
+    rgblight_effect_pulse_evaluate_output();
 }
 
-static void rgblight_effect_blink_handle_keypress(void)
+static void rgblight_effect_pulse_handle_keyevent(bool pressed, uint8_t row, uint8_t col)
 {
-    if (!rgblight_effect_blink_mode_active() || !rgblight_config.enable) {
+    if (!rgblight_effect_pulse_mode_active() || !rgblight_config.enable) {
+        if (!pressed) {
+            rgblight_pulse_effect_state.key_tracking_valid = false;
+        }
         return;
     }
 
-    uint32_t now = sync_timer_read32();
-    rgblight_blink_effect_state.latched     = true;
-    rgblight_blink_effect_state.deadline_ms = now + rgblight_effect_blink_duration_ms();
-    rgblight_effect_blink_evaluate_output();
+    if (pressed) {
+        uint32_t now                              = sync_timer_read32();
+        rgblight_pulse_effect_state.latched       = true;
+        rgblight_pulse_effect_state.deadline_ms   = now + rgblight_effect_pulse_duration_ms();
+        rgblight_pulse_effect_state.key_row       = row;
+        rgblight_pulse_effect_state.key_col       = col;
+        rgblight_pulse_effect_state.key_tracking_valid = true;
+        rgblight_effect_pulse_evaluate_output();
+        return;
+    }
+
+    bool matches_tracked_key = rgblight_pulse_effect_state.key_tracking_valid &&
+                               rgblight_pulse_effect_state.key_row == row &&
+                               rgblight_pulse_effect_state.key_col == col;
+
+    if (matches_tracked_key) {
+        rgblight_pulse_effect_state.key_tracking_valid = false;
+
+        if (rgblight_effect_pulse_hold_mode_active()) {
+            uint32_t now = sync_timer_read32();
+            if ((int32_t)(now - rgblight_pulse_effect_state.deadline_ms) >= 0) {
+                rgblight_pulse_effect_state.latched     = false;
+                rgblight_pulse_effect_state.deadline_ms = 0;
+                rgblight_effect_pulse_evaluate_output();  // V251018R5: Hold 해제 시 즉시 상태 복구
+            }
+        }
+    }
 }
 
-static void rgblight_effect_blink_in(animation_status_t *anim)
+static void rgblight_effect_pulse_on_press(animation_status_t *anim)
 {
     (void)anim;
-    rgblight_effect_blink_evaluate_output();  // V251018R4: Blink in 상태 머신 처리
+    rgblight_effect_pulse_evaluate_output();  // V251018R5: Pulse On Press 상태 머신 처리
 }
 
-static void rgblight_effect_blink_out(animation_status_t *anim)
+static void rgblight_effect_pulse_off_press(animation_status_t *anim)
 {
     (void)anim;
-    rgblight_effect_blink_evaluate_output();  // V251018R4: Blink out 상태 머신 처리
+    rgblight_effect_pulse_evaluate_output();  // V251018R5: Pulse Off Press 상태 머신 처리
+}
+
+static void rgblight_effect_pulse_on_press_hold(animation_status_t *anim)
+{
+    (void)anim;
+    rgblight_effect_pulse_evaluate_output();  // V251018R5: Pulse On Press (Hold) 상태 머신 처리
+}
+
+static void rgblight_effect_pulse_off_press_hold(animation_status_t *anim)
+{
+    (void)anim;
+    rgblight_effect_pulse_evaluate_output();  // V251018R5: Pulse Off Press (Hold) 상태 머신 처리
 }
 #else
-static inline void rgblight_effect_blink_on_base_mode_update(void) {}
-static inline void rgblight_effect_blink_handle_keypress(void) {}
-static inline void rgblight_effect_blink_evaluate_output(void) {}
+static inline void rgblight_effect_pulse_on_base_mode_update(void) {}
+static inline void rgblight_effect_pulse_handle_keyevent(bool pressed, uint8_t row, uint8_t col)
+{
+    (void)pressed;
+    (void)row;
+    (void)col;
+}
+static inline void rgblight_effect_pulse_evaluate_output(void) {}
 #endif
 
 static volatile bool    rgblight_host_led_pending    = false;  // V251018R1: USB IRQ에서 전달된 호스트 LED 버퍼 상태
@@ -986,7 +1063,7 @@ void rgblight_sethsv_eeprom_helper(uint8_t hue, uint8_t sat, uint8_t val, bool w
         }
 #endif
         rgblight_status.base_mode = mode_base_table[rgblight_config.mode];
-        rgblight_effect_blink_on_base_mode_update();  // V251018R4: Blink 모드 전환 시 상태 초기화
+        rgblight_effect_pulse_on_base_mode_update();  // V251018R5: Pulse 계열 모드 전환 시 상태 초기화
         if (rgblight_config.mode == RGBLIGHT_MODE_STATIC_LIGHT) {
             // same static color
             rgb_led_t tmp_led;
@@ -1605,16 +1682,28 @@ void rgblight_timer_task(void) {
             effect_func   = (effect_func_t)rgblight_effect_twinkle;
         }
 #    endif
-#    ifdef RGBLIGHT_EFFECT_BLINK_IN
-        else if (rgblight_status.base_mode == RGBLIGHT_MODE_BLINK_IN) {
-            interval_time = 5;  // V251018R4: Blink in은 짧은 주기로 타이머를 갱신
-            effect_func   = (effect_func_t)rgblight_effect_blink_in;
+#    ifdef RGBLIGHT_EFFECT_PULSE_ON_PRESS
+        else if (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_ON_PRESS) {
+            interval_time = 5;  // V251018R5: Pulse On Press는 짧은 주기로 상태를 평가
+            effect_func   = (effect_func_t)rgblight_effect_pulse_on_press;
         }
 #    endif
-#    ifdef RGBLIGHT_EFFECT_BLINK_OUT
-        else if (rgblight_status.base_mode == RGBLIGHT_MODE_BLINK_OUT) {
-            interval_time = 5;  // V251018R4: Blink out은 동일한 주기로 상태를 평가
-            effect_func   = (effect_func_t)rgblight_effect_blink_out;
+#    ifdef RGBLIGHT_EFFECT_PULSE_OFF_PRESS
+        else if (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_OFF_PRESS) {
+            interval_time = 5;  // V251018R5: Pulse Off Press 역시 동일 주기 사용
+            effect_func   = (effect_func_t)rgblight_effect_pulse_off_press;
+        }
+#    endif
+#    ifdef RGBLIGHT_EFFECT_PULSE_ON_PRESS_HOLD
+        else if (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_ON_PRESS_HOLD) {
+            interval_time = 5;  // V251018R5: Pulse On Press (Hold) 확장 모드도 동일 주기 적용
+            effect_func   = (effect_func_t)rgblight_effect_pulse_on_press_hold;
+        }
+#    endif
+#    ifdef RGBLIGHT_EFFECT_PULSE_OFF_PRESS_HOLD
+        else if (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD) {
+            interval_time = 5;  // V251018R5: Pulse Off Press (Hold) 확장 모드도 동일 주기 적용
+            effect_func   = (effect_func_t)rgblight_effect_pulse_off_press_hold;
         }
 #    endif
         if (animation_status.restart) {
@@ -2017,8 +2106,12 @@ void rgblight_effect_twinkle(animation_status_t *anim) {
 }
 #endif
 
-void preprocess_rgblight(void) {
-    rgblight_effect_blink_handle_keypress();  // V251018R4: 키 입력 시 Blink 상태 갱신
+void preprocess_rgblight(bool pressed, uint8_t row, uint8_t col) {
+    rgblight_effect_pulse_handle_keyevent(pressed, row, col);  // V251018R5: Pulse 계열 입력 상태 갱신
+
+    if (!pressed) {
+        return;
+    }
 #ifdef VELOCIKEY_ENABLE
     if (rgblight_velocikey_enabled()) {
         rgblight_velocikey_accelerate();

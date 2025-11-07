@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251018R4"   // V251018R4: Blink in/out RGB 이펙트 및 VIA 연동 추가
+#define _DEF_FIRMWATRE_VERSION      "V251018R5"   // V251018R5: Pulse On/Off Press 리네이밍 및 Hold 파생 이펙트 추가
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

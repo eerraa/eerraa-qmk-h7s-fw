@@ -69,6 +69,8 @@
 #define RGBLIGHT_EFFECT_RAINBOW_MOOD
 #define RGBLIGHT_EFFECT_RAINBOW_SWIRL
 #define RGBLIGHT_EFFECT_TWINKLE
-#define RGBLIGHT_EFFECT_BLINK_IN       // V251018R4: Blink in 커스텀 이펙트 활성화
-#define RGBLIGHT_EFFECT_BLINK_OUT      // V251018R4: Blink out 커스텀 이펙트 활성화
+#define RGBLIGHT_EFFECT_PULSE_ON_PRESS       // V251018R5: Pulse On Press 커스텀 이펙트 활성화
+#define RGBLIGHT_EFFECT_PULSE_OFF_PRESS      // V251018R5: Pulse Off Press 커스텀 이펙트 활성화
+#define RGBLIGHT_EFFECT_PULSE_ON_PRESS_HOLD  // V251018R5: Pulse On Press (Hold) 파생 이펙트 활성화
+#define RGBLIGHT_EFFECT_PULSE_OFF_PRESS_HOLD // V251018R5: Pulse Off Press (Hold) 파생 이펙트 활성화
 #define VELOCIKEY_ENABLE

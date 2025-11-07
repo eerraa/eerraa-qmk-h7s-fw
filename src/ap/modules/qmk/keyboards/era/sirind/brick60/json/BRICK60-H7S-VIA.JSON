@@ -28,8 +28,10 @@
               "content": ["id_qmk_rgblight_effect", 2, 2],
               "options": [
                 ["All Off",     0],
-                ["Blink in", 43],
-                ["Blink out", 44],
+                ["Pulse On Press", 43],
+                ["Pulse Off Press", 44],
+                ["Pulse On Press (Hold)", 45],
+                ["Pulse Off Press (Hold)", 46],
                 ["Solid Color", 1],
                 ["Breathing 1", 2],
                 ["Breathing 2", 3],
