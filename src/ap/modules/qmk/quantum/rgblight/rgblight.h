@@ -156,7 +156,7 @@ enum RGBLIGHT_EFFECT_MODE {
 #    define RGBLIGHT_EFFECT_BLINK_DURATION_MIN_MS 20   // V251018R4: Blink in/out 최소 지속 시간
 #endif
 #ifndef RGBLIGHT_EFFECT_BLINK_DURATION_STEP_MS
-#    define RGBLIGHT_EFFECT_BLINK_DURATION_STEP_MS 2    // V251018R4: Blink in/out ms/step
+#    define RGBLIGHT_EFFECT_BLINK_DURATION_STEP_MS 1   // V251018R4: Blink in/out ms/step
 #endif
 
 #ifndef RGBLIGHT_HUE_STEP
