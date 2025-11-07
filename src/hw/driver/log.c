@@ -42,7 +42,8 @@ typedef struct
 
 enum
 {
-  LOG_PREFIX_RESERVE = 8U                                      // V251017R3 CDC/CLI 공통 라인 헤더 예약 길이
+  LOG_PREFIX_RESERVE   = 8U,                                   // V251017R3 CDC/CLI 공통 라인 헤더 예약 길이
+  LOG_CDC_FLUSH_BUDGET = 512U                                  // V251017R4 CDC 전송 버짓으로 메인루프 점유 최소화
 };
 
 
@@ -74,7 +75,7 @@ static uint64_t log_list_boot_mirror_end = 0;                  // V251017R2 부�
 
 static void logCdcTryFlush(bool is_connected);                 // V251017R3 CDC 연결 상태 분리로 재호출 최소화
 static void logCdcFlushBuffered(void);
-static void logCdcDrainBuffer(log_buf_t *p_log, uint64_t *p_sent_total);
+static void logCdcDrainBuffer(log_buf_t *p_log, uint64_t *p_sent_total, uint32_t *p_budget);
 static void logCdcResetState(void);                            // V251017R3 CDC 상태 초기화 헬퍼
 static void logCdcApplyBootDisable(void);                      // V251017R3 부트 로그 종료 시 CDC 동기화 처리
 static void logCdcApplyBootEnable(void);                       // V251017R3 부트 로그 시작 시 CDC 동기화 처리
@@ -299,11 +300,16 @@ static void logCdcTryFlush(bool is_connected)
 
 static void logCdcFlushBuffered(void)
 {
-  logCdcDrainBuffer(&log_buf_boot, &log_cdc_boot_sent);
-  logCdcDrainBuffer(&log_buf_list, &log_cdc_list_sent);
+  uint32_t budget = LOG_CDC_FLUSH_BUDGET;                      // V251017R4 CDC 플러시당 전송 한도
+
+  logCdcDrainBuffer(&log_buf_boot, &log_cdc_boot_sent, &budget);
+  if (budget > 0)
+  {
+    logCdcDrainBuffer(&log_buf_list, &log_cdc_list_sent, &budget);
+  }
 }
 
-static void logCdcDrainBuffer(log_buf_t *p_log, uint64_t *p_sent_total)
+static void logCdcDrainBuffer(log_buf_t *p_log, uint64_t *p_sent_total, uint32_t *p_budget)
 {
   uint32_t capacity = p_log->buf_length_max;
   uint64_t total    = p_log->total_length;
@@ -352,7 +358,12 @@ static void logCdcDrainBuffer(log_buf_t *p_log, uint64_t *p_sent_total)
   uint32_t start     = (uint32_t)(*p_sent_total % capacity);
   uint32_t remaining = (uint32_t)available;
 
-  while (remaining > 0)
+  if (*p_budget == 0)
+  {
+    return;
+  }
+
+  while (remaining > 0 && *p_budget > 0)
   {
     uint32_t limit = start + remaining;
     if (limit > capacity)
@@ -361,6 +372,10 @@ static void logCdcDrainBuffer(log_buf_t *p_log, uint64_t *p_sent_total)
     }
 
     uint32_t chunk = limit - start;
+    if (chunk > *p_budget)
+    {
+      chunk = *p_budget;                                       // V251017R4 CDC 전송 버짓에 맞춘 청크 제한
+    }
     uint32_t sent  = cdcWrite(&p_log->buf[start], chunk);
 
     if (sent == 0)
@@ -371,13 +386,14 @@ static void logCdcDrainBuffer(log_buf_t *p_log, uint64_t *p_sent_total)
     start     += sent;
     remaining -= sent;
     *p_sent_total += sent;
+    *p_budget -= sent;
 
     if (start >= capacity)
     {
       start = 0;
     }
 
-    if (sent < chunk)
+    if (sent < chunk || *p_budget == 0)
     {
       return;
     }
