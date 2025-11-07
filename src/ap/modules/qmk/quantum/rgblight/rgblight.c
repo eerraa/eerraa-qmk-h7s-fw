@@ -1255,8 +1255,12 @@ void rgblight_set(void) {
 #endif
     }
 
-    if (indicator_has_range && (!indicator_overrides || rgblight_indicator_state.needs_render)) {
-        rgblight_indicator_apply_overlay();  // V251016R9: 준비가 완료된 프레임만 오버레이 적용
+    if (indicator_has_range) {
+        if (!indicator_overrides && !rgblight_indicator_state.needs_render) {
+            // 부분 오버레이는 재렌더 요청이 있을 때만 적용한다.  // V251018R2
+        } else {
+            rgblight_indicator_apply_overlay();  // V251016R9: 준비가 완료된 프레임만 오버레이 적용
+        }
     }
 
 #ifdef RGBLIGHT_LED_MAP
@@ -1378,8 +1382,14 @@ static void rgblight_effect_dummy(animation_status_t *anim) {
 }
 
 void rgblight_timer_task(void) {
-    if (rgblight_indicator_state.active && rgblight_indicator_state.needs_render) { // V251018R1: 렌더 예약만 수행
+    bool indicator_active   = rgblight_indicator_state.active;
+    bool indicator_override = indicator_active && rgblight_indicator_state.overrides_all;
+
+    if (indicator_active && rgblight_indicator_state.needs_render) { // V251018R1: 렌더 예약만 수행
         rgblight_request_render();
+    }
+    if (indicator_override) {
+        return;  // V251018R2: 전체 LED 덮어쓰기 중에는 애니메이션을 정지해 버퍼 덮어쓰기를 방지
     }
     if (rgblight_status.timer_enabled) {
         if (rgblight_ranges.effect_num_leds == 0) {

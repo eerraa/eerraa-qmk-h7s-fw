@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251018R1"   // V251018R1: rgblight 전담 경로 및 WS2812 안정화
+#define _DEF_FIRMWATRE_VERSION      "V251018R2"   // V251018R2: 인디케이터 오버레이/애니메이션 동기화 보강
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
