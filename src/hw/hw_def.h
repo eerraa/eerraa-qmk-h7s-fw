@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251108R9"   // V251108R9: USB SOF 모니터 slow/timeout 경로 확장
+#define _DEF_FIRMWATRE_VERSION      "V251109R1"   // V251109R1: USB 열화(열거 실패) 모니터링 확장
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

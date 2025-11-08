@@ -94,6 +94,11 @@ static uint32_t usbHidBackupTimerOffsetUs(void);                       // V25101
 static void usbHidMonitorSof(uint32_t now_us);                          // V250924R2 SOF 안정성 추적
 static void usbHidMonitorProcessDelta(uint32_t now_us, uint32_t delta_us);  // V251108R9 SOF 간격 평가
 static void usbHidMonitorPrimeTimeout(uint32_t now_us);                 // V251108R9 SOF 누락 타임아웃 갱신
+static bool usbHidMonitorCommitDowngrade(uint32_t now_us,
+                                         uint32_t delta_us,
+                                         uint32_t expected_us);         // V251109R1 공통 다운그레이드 처리
+static void usbHidMonitorTrackEnumeration(uint32_t now_us,
+                                          bool     monitor_enabled);    // V251109R1 열거 실패 감시
 static UsbBootMode_t usbHidResolveDowngradeTarget(void);                // V250924R2 다운그레이드 대상 계산
 void usbHidMonitorBackgroundTick(uint32_t now_us);                      // V251108R9 SOF 중단 감시
 #endif
@@ -487,8 +492,15 @@ enum
   USB_SOF_MONITOR_RESUME_HOLDOFF_US   = 50U * 1000UL,                                      // V251108R9 일시중지 해제 후 감시 재개 지연(us)
   USB_SOF_MONITOR_RECOVERY_DELAY_US   = 50U * 1000UL,                                      // 다운그레이드 실패 후 지연(us)
   USB_SOF_MONITOR_NO_SOF_TIMEOUT_FACTOR = 64U,                                            // V251108R9 SOF 누락 감시용 시간 배수
+  USB_ENUM_MONITOR_ATTEMPT_TIMEOUT_MS = 250U,                                             // V251109R1 열거 시도 타임아웃(ms)
+  USB_ENUM_MONITOR_FAIL_THRESHOLD     = 3U,                                               // V251109R1 열거 실패 다운그레이드 임계
+  USB_ENUM_MONITOR_SCORE_CAP          = 5U,                                               // V251109R1 열거 실패 점수 상한
+  USB_ENUM_MONITOR_RECOVERY_MS        = 1000U,                                            // V251109R1 열거 안정 여부 감쇠(ms)
   USB_BOOT_MONITOR_CONFIRM_DELAY_US   = USB_BOOT_MONITOR_CONFIRM_DELAY_MS * 1000UL          // 다운그레이드 확인 대기(us)
 };
+
+#define USB_ENUM_MONITOR_ATTEMPT_TIMEOUT_US (USB_ENUM_MONITOR_ATTEMPT_TIMEOUT_MS * 1000UL)
+#define USB_ENUM_MONITOR_RECOVERY_US       (USB_ENUM_MONITOR_RECOVERY_MS * 1000UL)
 
 typedef struct
 {
@@ -515,6 +527,17 @@ typedef struct
 
 static usb_sof_monitor_t sof_monitor = {0};                       // V250924R2 SOF 안정성 상태
 static uint8_t           sof_prev_dev_state = USBD_STATE_DEFAULT; // V250924R2 마지막 USB 장치 상태
+
+typedef struct                                             // V251109R1 USB 열거 실패 감시 상태
+{
+  uint32_t attempt_deadline_us;
+  uint32_t stable_since_us;
+  uint8_t  fail_score;
+  uint8_t  pending_state;
+  bool     waiting_config;
+} usb_enumeration_monitor_t;
+
+static usb_enumeration_monitor_t enum_monitor = {0};
 
 static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 속도별 모니터링 파라미터 캐시
 {
@@ -1517,6 +1540,14 @@ static void usbHidMonitorProcessDelta(uint32_t now_us, uint32_t delta_us)
     return;
   }
 
+  (void)usbHidMonitorCommitDowngrade(now_us, delta_us, expected_us);
+}
+
+static bool usbHidMonitorCommitDowngrade(uint32_t now_us,
+                                         uint32_t delta_us,
+                                         uint32_t expected_us)
+{
+  bool downgrade_requested = false;
   UsbBootMode_t next_mode = usbHidResolveDowngradeTarget();
 
   if (next_mode < USB_BOOT_MODE_MAX)
@@ -1530,6 +1561,7 @@ static void usbHidMonitorProcessDelta(uint32_t now_us, uint32_t delta_us)
     if (request_result == USB_BOOT_DOWNGRADE_ARMED || request_result == USB_BOOT_DOWNGRADE_CONFIRMED)
     {
       sof_monitor.holdoff_end_us = now_us + USB_BOOT_MONITOR_CONFIRM_DELAY_US;
+      downgrade_requested = true;
     }
     else
     {
@@ -1543,11 +1575,91 @@ static void usbHidMonitorProcessDelta(uint32_t now_us, uint32_t delta_us)
 
   sof_monitor.score      = 0U;
   sof_monitor.slow_score = 0U;
+
+  return downgrade_requested;
+}
+
+static void usbHidMonitorTrackEnumeration(uint32_t now_us,
+                                          bool     monitor_enabled)
+{
+  USBD_HandleTypeDef *pdev = &USBD_Device;
+  uint8_t dev_state = pdev->dev_state;
+
+  if (dev_state == USBD_STATE_CONFIGURED)
+  {
+    enum_monitor.waiting_config = false;
+    enum_monitor.pending_state  = dev_state;
+
+    if (enum_monitor.fail_score > 0U)
+    {
+      if (enum_monitor.stable_since_us == 0U)
+      {
+        enum_monitor.stable_since_us = now_us;
+      }
+      else if ((now_us - enum_monitor.stable_since_us) >= USB_ENUM_MONITOR_RECOVERY_US)
+      {
+        enum_monitor.fail_score--;
+        enum_monitor.stable_since_us = (enum_monitor.fail_score > 0U) ? now_us : 0U;
+      }
+    }
+    else
+    {
+      enum_monitor.stable_since_us = now_us;
+    }
+    return;
+  }
+
+  enum_monitor.stable_since_us = 0U;
+
+  if (dev_state == USBD_STATE_DEFAULT || dev_state == USBD_STATE_ADDRESSED)
+  {
+    if (enum_monitor.waiting_config == false || enum_monitor.pending_state != dev_state)
+    {
+      enum_monitor.waiting_config    = true;
+      enum_monitor.pending_state     = dev_state;
+      enum_monitor.attempt_deadline_us = now_us + USB_ENUM_MONITOR_ATTEMPT_TIMEOUT_US;
+      return;
+    }
+
+    if (enum_monitor.waiting_config && now_us >= enum_monitor.attempt_deadline_us)
+    {
+      if (enum_monitor.fail_score < USB_ENUM_MONITOR_SCORE_CAP)
+      {
+        enum_monitor.fail_score++;
+      }
+      enum_monitor.attempt_deadline_us = now_us + USB_ENUM_MONITOR_ATTEMPT_TIMEOUT_US;
+
+      if (monitor_enabled && enum_monitor.fail_score >= USB_ENUM_MONITOR_FAIL_THRESHOLD)
+      {
+        uint32_t expected_us = (sof_monitor.expected_us > 0U) ? sof_monitor.expected_us : 125U;
+        bool downgrade_ok = usbHidMonitorCommitDowngrade(now_us,
+                                                         USB_ENUM_MONITOR_ATTEMPT_TIMEOUT_US,
+                                                         expected_us);
+#if HW_USB_LOG == 1
+        logPrintf("[!] USB Enum Fail (%u/%u) -> downgrade %s\n",
+                  enum_monitor.fail_score,
+                  (uint32_t)USB_ENUM_MONITOR_FAIL_THRESHOLD,
+                  downgrade_ok ? "request" : "rejected");
+#endif
+        enum_monitor.fail_score     = 0U;
+        enum_monitor.waiting_config = false;
+        enum_monitor.pending_state  = dev_state;
+      }
+    }
+  }
+  else
+  {
+    enum_monitor.waiting_config = false;
+    enum_monitor.pending_state  = dev_state;
+  }
 }
 
 void usbHidMonitorBackgroundTick(uint32_t now_us)                    // V251108R9 SOF 중단 감시
 {
-  if (usbInstabilityIsEnabled() == false)
+  bool monitor_enabled = usbInstabilityIsEnabled();
+  usbHidMonitorTrackEnumeration(now_us, monitor_enabled);
+
+  if (monitor_enabled == false)
   {
     return;
   }

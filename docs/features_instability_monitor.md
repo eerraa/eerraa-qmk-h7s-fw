@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | `src/ap/modules/qmk/port/port.h` | `EECONFIG_USER_BOOTMODE`, `EECONFIG_USER_USB_INSTABILITY` | // V251108R1: BootMode/USB 모니터 4B 슬롯을 각각 +28/+32 오프셋에 정의합니다. |
 | `src/hw/hw.c` | `usbBootModeLoad()` | 부팅 초기화 단계에서 저장된 모드를 로드해 모니터 파라미터를 초기화합니다. |
-| `src/hw/hw_def.h` | `_DEF_FIRMWATRE_VERSION` | 모니터 기능 릴리스 버전을 `V251108R9`로 명시합니다. |
+| `src/hw/hw_def.h` | `_DEF_FIRMWATRE_VERSION` | 모니터 기능 릴리스 버전을 `V251109R1`로 명시합니다. |
 | `src/hw/driver/usb/usb.h` | `usb_boot_mode_request_t`, `usbInstabilityLoad()` | 다운그레이드 큐와 VIA 토글 연동 API 프로토타입을 제공합니다. |
 | `src/hw/driver/usb/usb.c` | `usbRequestBootModeDowngrade()`, `usbProcess()`, `usbInstabilityStore()` | 큐 상태 머신(ARMED→COMMIT)과 VIA 토글 저장/로드, 로그, 리셋 처리를 담당합니다. |
 | `src/hw/driver/usb/usb_hid/usbd_hid.c` | `usbHidMonitorSof()`, `usbHidSofMonitorApplySpeedParams()` | SOF 모니터 점수 계산, 워밍업/홀드오프 관리, 속도별 파라미터 캐싱을 수행합니다. |
@@ -40,7 +40,21 @@
   3. **점수 가산**: 기대 간격 대비 초과 시간을 누락 프레임 수로 환산하여 점수를 부여합니다.
   4. **감쇠**: `decay_interval_us`마다 점수를 1씩 낮춥니다.
   5. **임계 도달**: `degrade_threshold` 또는 `slow_degrade_threshold` 이상이면 다운그레이드 큐에 요청을 보냅니다.
-  6. **SOF 타임아웃**: SOF 인터럽트가 끊기면 백그라운드 훅(`usbHidMonitorBackgroundTick`)이 `no_sof_deadline_us`를 기준으로 지연을 점수화합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1393-L1579】
+  6. **SOF 타임아웃**: SOF 인터럽트가 끊기면 백그라운드 훅(`usbHidMonitorBackgroundTick`)이 `no_sof_deadline_us`를 기준으로 지연을 점수화합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1393-L1540】
+
+### 3.3 `usb_enumeration_monitor_t`
+- **필드**
+  - `attempt_deadline_us`: `USBD_STATE_DEFAULT/ADDRESSED`에서 `CONFIGURED`에 진입해야 하는 마감 시각. 기본 250 ms.
+  - `stable_since_us`: `CONFIGURED` 상태 유지 시간. 1초 이상 안정 시 열거 실패 점수를 1 감소시킵니다.
+  - `fail_score`: 열거 실패 누적 점수(`USB_ENUM_MONITOR_SCORE_CAP`으로 캡).
+  - `pending_state`: 현재 감시 중인 USB 장치 상태 스냅샷.
+  - `waiting_config`: `CONFIGURED` 진입 대기 여부.
+- **동작**
+  1. `DEFAULT/ADDRESSED` 상태가 연속으로 유지되고 마감 시간이 지날 경우 `fail_score`를 1 증가시킵니다.
+  2. `fail_score >= USB_ENUM_MONITOR_FAIL_THRESHOLD`가 되면 즉시 다운그레이드 큐에 이벤트를 전파합니다.
+  3. `CONFIGURED` 상태가 1초 이상 유지되면 `fail_score`를 1 감소시켜 정상 복구 시 과도한 다운그레이드를 방지합니다.
+  4. VIA 토글 등으로 모니터가 비활성화되어도 열거 추적은 계속 진행되며, 실제 다운그레이드는 모니터가 활성화된 경우에만 수행됩니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1513-L1603】
+  5. `usbHidMonitorBackgroundTick()`이 항상 먼저 열거 상태를 처리하므로, 시나리오 1(초기화 실패 반복)에서도 펌웨어만으로 안정적인 다운그레이드 판단이 가능합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1605-L1646】
 
 ### 3.2 `usb_boot_mode_request_t`
 - **필드**
