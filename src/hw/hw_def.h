@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251108R4"   // V251108R4: VIA BootMode 드롭다운 save 명령 처리
+#define _DEF_FIRMWATRE_VERSION      "V251108R6"   // V251108R6: BootMode Apply 동일 모드에서도 재부팅 처리
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

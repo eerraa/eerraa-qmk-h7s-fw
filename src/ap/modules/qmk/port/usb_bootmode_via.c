@@ -30,7 +30,7 @@ void via_qmk_usb_bootmode_command(uint8_t *data, uint8_t length)
 
   uint8_t *command_id = &(data[0]);
 
-  if (length < 4)
+  if ((*command_id != id_custom_save) && length < 4)
   {
     return;
   }
@@ -55,10 +55,7 @@ void via_qmk_usb_bootmode_command(uint8_t *data, uint8_t length)
       {
         if (value_data[0] == 1U)
         {
-          if (pending_boot_mode != usbBootModeGet())
-          {
-            usbBootModeScheduleApply(pending_boot_mode);  // V251108R3: 인터럽트 문맥에서는 리셋을 예약만 수행
-          }
+          usbBootModeScheduleApply(pending_boot_mode);  // V251108R6: 동일 값이라도 Apply 요청 시 재부팅
         }
         value_data[0] = 0U;
       }

@@ -16,7 +16,9 @@ void via_custom_value_command_kb(uint8_t *data, uint8_t length)
     uint8_t value_id = data[2];
 
 #ifdef BOOTMODE_ENABLE
-    if (value_id == id_qmk_usb_bootmode_select || value_id == id_qmk_usb_bootmode_apply)
+    if (*command_id == id_custom_save ||
+        value_id == id_qmk_usb_bootmode_select ||
+        value_id == id_qmk_usb_bootmode_apply)
     {
       via_qmk_usb_bootmode_command(data, length);  // V251108R1: BootMode VIA value ID 1/2
       return;

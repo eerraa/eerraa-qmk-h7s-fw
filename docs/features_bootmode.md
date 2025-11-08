@@ -85,4 +85,6 @@ cliBoot "set <mode>"
 - // V251108R2: channel 13 value ID 1(부트 모드 선택)은 런타임 폴링 레이트를 바꾸지 않고 보류 값(`pending_boot_mode`)만 갱신하며, value ID 2(Apply 토글)가 1이 될 때 현재 설정과 다를 경우에만 `usbBootModeSaveAndReset()`을 호출해 CLI `boot set`과 동일한 EEPROM 저장→리셋 흐름을 수행합니다.【F:src/ap/modules/qmk/port/usb_bootmode_via.c†L5-L87】
 - // V251108R3: Apply 명령은 USB 인터럽트에서 직접 리셋하지 않고 `usbBootModeScheduleApply()`를 통해 메인 루프(`usbProcess()`)로 위임하여 호스트 응답을 정상 종료한 뒤 재부팅합니다.【F:src/ap/modules/qmk/port/usb_bootmode_via.c†L58-L66】【F:src/hw/driver/usb/usb.c†L200-L273】
 - // V251108R4: VIA `id_custom_save` 명령도 Indicator와 동일하게 no-op으로 응답해 드롭다운 변경 시 오류를 방지합니다.【F:src/ap/modules/qmk/port/usb_bootmode_via.c†L66-L83】
+- // V251108R5: channel 13 분기에서 `id_custom_save` 패킷도 BootMode 핸들러로 전달해 VIA 오류 팝업을 제거했습니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/port/via_port.c†L14-L34】
+- // V251108R6: Apply 토글은 선택한 모드가 현재 모드와 같아도 `usbBootModeScheduleApply()`를 호출해 항상 재부팅하도록 합니다.【F:src/ap/modules/qmk/port/usb_bootmode_via.c†L42-L67】
 - `BRICK60-H7S-VIA.JSON`의 "USB POLLING" 블록은 `BOOTMODE_ENABLE`/`USB_MONITOR_ENABLE`이 비활성화된 빌드에서는 파일에서 제거해야 하며, 기본 JSON은 해당 의존성을 라벨에 명시합니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/json/BRICK60-H7S-VIA.JSON†L248-L292】
