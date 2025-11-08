@@ -177,9 +177,19 @@ bool ws2812InitHw(void)
 
 bool ws2812Refresh(void)
 {
-  HAL_TIM_PWM_Stop_DMA(ws2812.h_timer, ws2812.channel);
-  HAL_TIM_PWM_Start_DMA(ws2812.h_timer, ws2812.channel,  (const uint32_t *)bit_buf, sizeof(bit_buf));
-  return true;
+  const uint32_t retry_limit = 3;
+
+  for (uint32_t attempt = 0; attempt < retry_limit; attempt++)
+  {
+    (void)HAL_TIM_PWM_Stop_DMA(ws2812.h_timer, ws2812.channel);
+
+    if (HAL_TIM_PWM_Start_DMA(ws2812.h_timer, ws2812.channel, (const uint32_t *)bit_buf, sizeof(bit_buf)) == HAL_OK)
+    {
+      return true;  // V251018R1: DMA BUSY/ERROR 시 재시도 후 성공 시점만 반환
+    }
+  }
+
+  return false;  // V251018R1: 반복 실패 시 상위 레이어가 복구 루틴을 트리거 할 수 있도록 상태 전달
 }
 
 void ws2812SetColor(uint32_t ch, uint32_t color)

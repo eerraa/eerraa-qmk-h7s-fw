@@ -1,4 +1,5 @@
 #include "hw.h"
+#include "qmk/port/platforms/eeprom.h"  // V250923R1 Preload QMK EEPROM services
 
 
 
@@ -50,6 +51,19 @@ bool hwInit(void)
   resetInit();    
   i2cInit();
   eepromInit();
+  eeprom_init();                                              // V250923R1 Sync QMK EEPROM image before USB init
+#ifdef BOOTMODE_ENABLE
+  if (usbBootModeLoad() != true)                              // V250923R1 Apply stored USB boot mode preference
+  {
+    logPrintf("[!] usbBootModeLoad Fail\n");
+  }
+#endif
+#ifdef USB_MONITOR_ENABLE
+  if (usbInstabilityLoad() != true)                           // V251108R1: VIA 토글과 USB 모니터 상태 동기화
+  {
+    logPrintf("[!] usbInstabilityLoad Fail\n");
+  }
+#endif
   #ifdef _USE_HW_QSPI
   qspiInit();
   #endif

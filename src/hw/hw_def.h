@@ -6,9 +6,16 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V250627R1"
+#define _DEF_FIRMWATRE_VERSION      "V251109R3"   // V251109R3: 속도/서스펜드 이벤트 창 고정화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
+
+#ifndef _DEF_ENABLE_MATRIX_TIMING_PROBE
+#define _DEF_ENABLE_MATRIX_TIMING_PROBE   0  // V251010R4: 기본값은 비활성화, 필요 시 보드/빌드에서 재정의
+#endif
+#ifndef _DEF_ENABLE_USB_HID_TIMING_PROBE
+#define _DEF_ENABLE_USB_HID_TIMING_PROBE  0  // V251009R5: usbd_hid 계측 기본 비활성화, 필요 시 빌드 옵션으로만 활성화
+#endif
 
 #define _USE_HW_CACHE
 #define _USE_HW_MICROS
@@ -55,7 +62,7 @@
 #define      HW_RESET_BOOT          1
 
 #define _USE_HW_KEYS
-#define      HW_KEYS_PRESS_MAX      8
+#define      HW_KEYS_PRESS_MAX      20
 
 // #define _USE_HW_WS2812
 // #define     HW_WS2812_MAX_CH        45
@@ -63,7 +70,7 @@
 #define _USE_HW_USB
 #define _USE_HW_CDC
 #ifdef  _USE_HW_VCOM
-#define      HW_USB_LOG             1
+#define      HW_USB_LOG             0
 #define      HW_USB_CMP             1
 #define      HW_USB_CDC             1
 #define      HW_USB_MSC             0

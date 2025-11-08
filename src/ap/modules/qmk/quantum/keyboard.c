@@ -16,6 +16,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <stdint.h>
+// V251010R3: _DEF_ENABLE_MATRIX_TIMING_PROBE 매크로를 참조하기 위해 하드웨어 설정 헤더를 포함합니다.
+#include "hw_def.h"
 #include "keyboard.h"
 #include "keycode_config.h"
 #include "matrix.h"
@@ -150,14 +152,24 @@ uint32_t last_input_activity_elapsed(void) {
 }
 
 static uint32_t last_matrix_modification_time = 0;
+static uint32_t pending_matrix_activity_time  = 0;  // V251001R3: matrix_task에서 공유한 타임스탬프로 sync_timer_read32() 중복 호출 제거
 uint32_t        last_matrix_activity_time(void) {
     return last_matrix_modification_time;
 }
 uint32_t last_matrix_activity_elapsed(void) {
     return sync_timer_elapsed32(last_matrix_modification_time);
 }
-void last_matrix_activity_trigger(void) {
-    last_matrix_modification_time = last_input_modification_time = sync_timer_read32();
+void last_matrix_activity_trigger(void)
+{
+  uint32_t activity_time = pending_matrix_activity_time;  // V251001R3: matrix_task에서 기록한 32비트 타임스탬프를 우선 사용
+  pending_matrix_activity_time = 0;
+
+  if (!activity_time)
+  {
+    activity_time = sync_timer_read32();  // V251001R3: 타임스탬프가 공유되지 않은 예외 상황에서는 기존 경로를 사용
+  }
+
+  last_matrix_modification_time = last_input_modification_time = activity_time;
 }
 
 static uint32_t last_encoder_modification_time = 0;
@@ -190,7 +202,8 @@ void set_activity_timestamps(uint32_t matrix_timestamp, uint32_t encoder_timesta
 }
 
 // Only enable this if console is enabled to print to
-#if defined(DEBUG_MATRIX_SCAN_RATE)
+#if _DEF_ENABLE_MATRIX_TIMING_PROBE
+// V251010R4: DEBUG_MATRIX_SCAN_RATE 대신 _DEF_ENABLE_MATRIX_TIMING_PROBE 단일 플래그로 스캔 계측을 제어
 static uint32_t matrix_timer           = 0;
 static uint32_t matrix_scan_count      = 0;
 static uint32_t last_matrix_scan_count = 0;
@@ -213,20 +226,79 @@ uint32_t get_matrix_scan_rate(void) {
     return last_matrix_scan_count;
 }
 #else
-#    define matrix_scan_perf_task()
+void matrix_scan_perf_task(void)
+{
+    // V251010R4: 빌드 가드 비활성화 시에도 호출 지점을 유지하기 위해 빈 함수로 남깁니다.
+}
+
+uint32_t get_matrix_scan_rate(void)
+{
+    return 0U;  // V251010R4: 계측 비활성화 상태에서는 0을 반환해 CLI에서 안내 메시지를 출력합니다.
+}
 #endif
 
 #ifdef MATRIX_HAS_GHOST
-static matrix_row_t get_real_keys(uint8_t row, matrix_row_t rowdata) {
-    matrix_row_t out = 0;
+static matrix_row_t real_key_mask[MATRIX_ROWS];
+static bool         real_key_mask_dirty[MATRIX_ROWS];
+static bool         real_key_mask_ready;
+
+static void mark_all_real_key_masks_dirty(void) {
+    for (uint8_t row = 0; row < MATRIX_ROWS; row++) {
+        real_key_mask_dirty[row] = true;  // V250928R3: 초기화 및 전체 무효화 시 지연 계산 대비
+    }
+    real_key_mask_ready = true;  // V250928R3: 최초 접근 시점에 한 번만 초기화하도록 표시
+}
+
+static void refresh_real_key_mask(uint8_t row) {
+    matrix_row_t mask = 0;
+
     for (uint8_t col = 0; col < MATRIX_COLS; col++) {
-        // read each key in the row data and check if the keymap defines it as a real key
-        if (keycode_at_keymap_location(0, row, col) && (rowdata & (((matrix_row_t)1) << col))) {
-            // this creates new row data, if a key is defined in the keymap, it will be set here
-            out |= ((matrix_row_t)1) << col;
+        if (keycode_at_keymap_location(0, row, col)) {
+            mask |= ((matrix_row_t)1) << col;
         }
     }
-    return out;
+
+    real_key_mask[row]       = mask;      // V250928R3: 열 비트를 캐싱해 반복 키맵 조회 제거
+    real_key_mask_dirty[row] = false;
+}
+
+void keyboard_keymap_real_keys_invalidate(uint8_t row) {
+    if (row < MATRIX_ROWS) {
+        if (!real_key_mask_ready) {
+            mark_all_real_key_masks_dirty();  // V250928R3: 초기 접근 전에 무효화 요청이 들어오면 전체 초기화
+        }
+        real_key_mask_dirty[row] = true;      // V250928R3: 동적 키맵 변경 시 해당 행만 다시 계산
+    }
+}
+
+void keyboard_keymap_real_keys_invalidate_all(void) {
+    mark_all_real_key_masks_dirty();  // V250928R3: 대량 업데이트 시 전체 행을 다시 계산하도록 플래그 설정
+}
+
+static matrix_row_t get_real_keys(uint8_t row, matrix_row_t rowdata) {
+    if (!real_key_mask_ready) {
+        mark_all_real_key_masks_dirty();  // V250928R3: 최초 호출 시 모든 행을 지연 초기화로 준비
+    }
+    if (real_key_mask_dirty[row]) {
+        refresh_real_key_mask(row);  // V250928R3: 필요한 행만 즉시 재계산
+    }
+
+    return rowdata & real_key_mask[row];
+}
+
+static matrix_row_t real_rowdata_cache[MATRIX_ROWS];          // V251001R4: 고스트 판정 시 필터링된 행 상태를 캐시해 중복 계산 제거
+static uint32_t     real_rowdata_cache_epoch[MATRIX_ROWS];    // V251001R4: 행별 캐시가 유효한 스캔 번호를 추적
+static uint32_t     real_rowdata_epoch = 1;                   // V251001R4: matrix_task() 호출 간 캐시 세대를 구분
+
+static inline matrix_row_t get_cached_real_keys(uint8_t row, matrix_row_t rowdata)
+{
+  if (real_rowdata_cache_epoch[row] != real_rowdata_epoch)
+  {
+    real_rowdata_cache[row]       = get_real_keys(row, rowdata);  // V251001R4: 동일 스캔에서 반복 호출을 방지
+    real_rowdata_cache_epoch[row] = real_rowdata_epoch;
+  }
+
+  return real_rowdata_cache[row];
 }
 
 static inline bool popcount_more_than_one(matrix_row_t rowdata) {
@@ -235,11 +307,14 @@ static inline bool popcount_more_than_one(matrix_row_t rowdata) {
 }
 
 static inline bool has_ghost_in_row(uint8_t row, matrix_row_t rowdata) {
+    if ((rowdata & (rowdata - 1)) == 0) {
+        return false;  // V250924R8: 물리적으로 0/1키만 눌린 경우 바로 종료해 키맵 필터 비용 절감
+    }
     /* No ghost exists when less than 2 keys are down on the row.
     If there are "active" blanks in the matrix, the key can't be pressed by the user,
     there is no doubt as to which keys are really being pressed.
     The ghosts will be ignored, they are KC_NO.   */
-    rowdata = get_real_keys(row, rowdata);
+    rowdata = get_cached_real_keys(row, rowdata);  // V251001R4: 필터링된 행 상태를 재사용해 키맵 마스크 연산 절감
     if ((popcount_more_than_one(rowdata)) == 0) {
         return false;
     }
@@ -251,7 +326,18 @@ static inline bool has_ghost_in_row(uint8_t row, matrix_row_t rowdata) {
     we are checking one row at a time, not all of them at once.
     */
     for (uint8_t i = 0; i < MATRIX_ROWS; i++) {
-        if (i != row && popcount_more_than_one(get_real_keys(i, matrix_get_row(i)) & rowdata)) {
+        if (i == row) {
+            continue;
+        }
+
+        const matrix_row_t other_row_state = matrix_get_row(i);
+        const matrix_row_t overlap         = other_row_state & rowdata;
+
+        if ((overlap & (overlap - 1)) == 0) {
+            continue;  // V250928R2: 물리 중복 열이 0/1개면 고스트가 생길 수 없어 키맵 필터링을 생략
+        }
+
+        if (popcount_more_than_one(get_cached_real_keys(i, other_row_state) & rowdata)) {
             return true;
         }
     }
@@ -486,7 +572,8 @@ void keyboard_init(void) {
     haptic_init();
 #endif
 
-#if defined(DEBUG_MATRIX_SCAN_RATE) && defined(CONSOLE_ENABLE)
+#if _DEF_ENABLE_MATRIX_TIMING_PROBE && defined(CONSOLE_ENABLE)
+    // V251010R4: 콘솔 자동 활성화 조건을 새로운 빌드 가드에 맞춰 조정
     debug_enable = true;
 #endif
 
@@ -511,13 +598,23 @@ void switch_events(uint8_t row, uint8_t col, bool pressed) {
  * @brief Generates a tick event at a maximum rate of 1KHz that drives the
  * internal QMK state machine.
  */
-static inline void generate_tick_event(void) {
-    static uint16_t last_tick = 0;
-    const uint16_t  now       = timer_read();
-    if (TIMER_DIFF_16(now, last_tick) != 0) {
-        action_exec(MAKE_TICK_EVENT);
-        last_tick = now;
-    }
+static inline void generate_tick_event(void)
+{
+  static uint16_t last_tick = 0;
+  const uint16_t  now       = timer_read();
+
+  if (TIMER_DIFF_16(now, last_tick) != 0)
+  {
+    const keyevent_t tick_event = {
+      .key = {.row = 0, .col = 0},
+      .time = now,            // V251001R1: tick 이벤트도 스캔 시각을 재사용해 timer_read() 중복 호출 제거
+      .type = TICK_EVENT,
+      .pressed = false,
+    };
+
+    action_exec(tick_event);
+    last_tick = now;
+  }
 }
 
 /**
@@ -534,52 +631,110 @@ static bool matrix_task(void) {
     }
 
     static matrix_row_t matrix_previous[MATRIX_ROWS];
+    static bool         ghost_pending = false;  // V250924R6: 고스트 감지 시 후속 스캔에서도 행 비교 유지
 
-    matrix_scan();
-    bool matrix_changed = false;
-    for (uint8_t row = 0; row < MATRIX_ROWS && !matrix_changed; row++) {
-        matrix_changed |= matrix_previous[row] ^ matrix_get_row(row);
-    }
+    const bool scan_changed   = matrix_scan();
+    bool       matrix_changed = scan_changed || ghost_pending;
 
     matrix_scan_perf_task();
 
-    // Short-circuit the complete matrix processing if it is not necessary
+    // 고스트가 없고 스캔 결과가 동일하면 행 순회를 생략해 낭비를 줄인다. (V250924R6)
     if (!matrix_changed) {
         generate_tick_event();
-        return matrix_changed;
+        return false;
     }
+
+#ifdef MATRIX_HAS_GHOST
+    real_rowdata_epoch++;  // V251001R4: 스캔마다 캐시 세대를 갱신해 행별 필터링 결과를 분리
+    if (real_rowdata_epoch == 0)
+    {
+      real_rowdata_epoch = 1;  // V251001R4: 32비트 오버플로우 시 세대 값을 재설정
+      for (uint8_t i = 0; i < MATRIX_ROWS; i++)
+      {
+        real_rowdata_cache_epoch[i] = 0;  // V251001R4: 오버플로우 후 이전 캐시가 재사용되지 않도록 무효화
+      }
+    }
+#endif
 
     if (debug_config.matrix) {
         matrix_print();
     }
 
-    const bool process_keypress = should_process_keypress();
+    bool       process_keypress    = false;
+    bool       event_initialized   = false;
+    bool       new_ghost_pending   = false;
+    uint32_t   event_time_32       = 0;    // V251001R3: 키 이벤트와 활동 타임스탬프를 공유해 타이머 접근을 1회로 축소
+    uint16_t   event_time_16       = 0;
+    keyevent_t event;
 
     for (uint8_t row = 0; row < MATRIX_ROWS; row++) {
         const matrix_row_t current_row = matrix_get_row(row);
         const matrix_row_t row_changes = current_row ^ matrix_previous[row];
 
-        if (!row_changes || has_ghost_in_row(row, current_row)) {
+        if (!row_changes) {
             continue;
         }
 
-        matrix_row_t col_mask = 1;
-        for (uint8_t col = 0; col < MATRIX_COLS; col++, col_mask <<= 1) {
-            if (row_changes & col_mask) {
-                const bool key_pressed = current_row & col_mask;
+        if (!event_time_32)
+        {
+          event_time_32 = sync_timer_read32();        // V251001R3: 첫 변화 시점의 32비트 타임스탬프를 확보해 이후 재사용
+          event_time_16 = (uint16_t)event_time_32;
+        }
 
-                if (process_keypress) {
-                    action_exec(MAKE_KEYEVENT(row, col, key_pressed));
-                }
+        if (has_ghost_in_row(row, current_row)) {
+            new_ghost_pending = true;
+            continue;
+        }
 
-                switch_events(row, col, key_pressed);
+        if (!event_initialized) {
+            // V251001R2: 실제 키 이벤트가 확정된 이후에만 should_process_keypress()와 timer_read()를 호출해 고스트 반복 검사 시 낭비 제거
+            process_keypress  = should_process_keypress();
+            event_initialized = true;
+
+            if (process_keypress) {
+                event = (keyevent_t){
+                    .key = {.row = 0, .col = 0},
+                    .time = event_time_16,   // V250928R5: 스캔 단위로 타임스탬프를 공유해 timer_read() 호출을 1회로 축소 (V250928R4 확장) / V251001R3: 32비트 활동 타임스탬프와 동기화
+                    .type = KEY_EVENT,
+                    .pressed = false,
+                };
             }
+        }
+
+        matrix_row_t pending_changes = row_changes;
+        if (process_keypress) {
+            event.key.row = row;
+            event.key.col = 0;
+        }
+
+        while (pending_changes) {
+            const uint8_t      col      = __builtin_ctz((unsigned long)pending_changes);  // V250924R7: 변경 비트만 스캔해 열 루프 비용 최소화
+            const matrix_row_t col_mask = ((matrix_row_t)1) << col;
+
+            pending_changes &= pending_changes - 1;  // V250924R7: 처리한 비트를 제거해 반복 횟수를 줄임
+
+            const bool key_pressed = current_row & col_mask;
+
+            if (process_keypress) {
+                event.key.col = col;
+                event.pressed = key_pressed;
+                action_exec(event);
+            }
+
+            switch_events(row, col, key_pressed);
         }
 
         matrix_previous[row] = current_row;
     }
 
-    return matrix_changed;
+    if (event_time_32)
+    {
+      pending_matrix_activity_time = event_time_32;  // V251001R3: matrix_task와 last_matrix_activity_trigger() 간 타임스탬프 공유
+    }
+
+    ghost_pending = new_ghost_pending;
+
+    return true;
 }
 
 /** \brief Tasks previously located in matrix_scan_quantum
@@ -742,8 +897,6 @@ void keyboard_task(void) {
 #ifdef HAPTIC_ENABLE
     haptic_task();
 #endif
-
-    led_task();
 
 #ifdef OS_DETECTION_ENABLE
     os_detection_task();

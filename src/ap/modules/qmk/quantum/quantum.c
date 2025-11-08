@@ -285,8 +285,8 @@ bool process_record_quantum(keyrecord_t *record) {
 #endif
 
 #ifdef RGBLIGHT_ENABLE
-    if (record->event.pressed) {
-        preprocess_rgblight();
+    if (IS_KEYEVENT(record->event)) {
+        preprocess_rgblight(record->event.pressed, record->event.key.row, record->event.key.col);  // V251018R5: Pulse Hold 판정을 위해 release 이벤트 전달
     }
 #endif
 

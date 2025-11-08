@@ -9,6 +9,8 @@
 
 // hw_def.h
 //
+// #define _DEF_ENABLE_MATRIX_TIMING_PROBE   0     // MATRIX 계측을 개발 빌드에서 강제 활성화하려면 정의
+// #define _DEF_ENABLE_USB_HID_TIMING_PROBE  0     // HID 계측을 개발 빌드에서 강제 활성화하려면 정의
 // #define _USE_HW_VCOM
 #define _USE_HW_WS2812
 #define     HW_WS2812_MAX_CH        30
@@ -32,14 +34,25 @@
 
 
 // #define DEBUG_KEY_SEND
-#define DEBUG_MATRIX_SCAN_RATE
 #define GRAVE_ESC_ENABLE
 #define KILL_SWITCH_ENABLE
 #define KKUK_ENABLE
+// V251108R1: Brick60 기본 빌드에서 BootMode/USB 모니터 VIA 채널을 활성화
+#define USB_MONITOR_ENABLE 1
+#define BOOTMODE_ENABLE    1
+#if defined(USB_MONITOR_ENABLE) && !defined(BOOTMODE_ENABLE)
+#  define BOOTMODE_ENABLE 1
+#endif
 
+// Tapping Term 테스트
+//
+#define TAPPING_TERM 200
+
+// V251016R8: Brick60 전용 RGB 인디케이터 기능 플래그를 INDICATOR_ENABLE로 선언
+#define INDICATOR_ENABLE
 
 // RGB LIGHT : set(RGBLIGHT_ENABLE true)
-// 
+//
 #define EEPROM_ENABLE
 #define RGBLIGHT_SLEEP
 #define RGBLIGHT_DEFAULT_ON         true
@@ -61,4 +74,8 @@
 #define RGBLIGHT_EFFECT_RAINBOW_MOOD
 #define RGBLIGHT_EFFECT_RAINBOW_SWIRL
 #define RGBLIGHT_EFFECT_TWINKLE
+#define RGBLIGHT_EFFECT_PULSE_ON_PRESS       // V251018R5: Pulse On Press 커스텀 이펙트 활성화
+#define RGBLIGHT_EFFECT_PULSE_OFF_PRESS      // V251018R5: Pulse Off Press 커스텀 이펙트 활성화
+#define RGBLIGHT_EFFECT_PULSE_ON_PRESS_HOLD  // V251018R5: Pulse On Press (Hold) 파생 이펙트 활성화
+#define RGBLIGHT_EFFECT_PULSE_OFF_PRESS_HOLD // V251018R5: Pulse Off Press (Hold) 파생 이펙트 활성화
 #define VELOCIKEY_ENABLE

@@ -3,13 +3,9 @@
 
 #ifdef _USE_HW_KEYS
 #include "button.h"
-#include "cli.h"
 
 
 
-#if CLI_USE(HW_KEYS)
-static void cliCmd(cli_args_t *args);
-#endif
 static bool keysInitTimer(void);
 static bool keysInitDma(void);
 static bool keysInitGpio(void);
@@ -19,7 +15,7 @@ static bool keysInitGpio(void);
 const static uint8_t row_wr_buf[] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20};
 
 __attribute__((section(".non_cache")))
-static uint16_t col_rd_buf[MATRIX_ROWS] = {0x00,};
+static volatile uint16_t col_rd_buf[MATRIX_ROWS] = {0x00,};  // V250924R5: DMA 직접 참조 재검토로 volatile 지정해 최신 값 보장
 
 
 
@@ -44,12 +40,8 @@ bool keysInit(void)
   HAL_TIM_Base_Start(&htim16);
   HAL_TIM_OC_Start(&htim16, TIM_CHANNEL_1);
 
-  
 
-#if CLI_USE(HW_KEYS)
-  cliAdd("keys", cliCmd);
-#endif
-
+  // V251009R2: DMA 기반 자동 스캔이 상시 갱신되므로 CLI 키 매트릭스 뷰어를 제거함
   return true;
 }
 
@@ -295,11 +287,6 @@ bool keysIsBusy(void)
   return false;
 }
 
-bool keysUpdate(void)
-{
-  return true;
-}
-
 bool keysReadBuf(uint8_t *p_data, uint32_t length)
 {
   return true;
@@ -307,8 +294,13 @@ bool keysReadBuf(uint8_t *p_data, uint32_t length)
 
 bool keysReadColsBuf(uint16_t *p_data, uint32_t rows_cnt)
 {
-  memcpy(p_data, col_rd_buf, rows_cnt * sizeof(uint16_t));
+  memcpy(p_data, (const void *)col_rd_buf, rows_cnt * sizeof(uint16_t));
   return true;
+}
+
+const volatile uint16_t *keysPeekColsBuf(void)
+{
+  return col_rd_buf;  // V250924R5: DMA 수집 버퍼를 직접 노출하여 추가 복사 없이 스캔 상태를 참조 (재검토: volatile 접근으로 안정성 확보)
 }
 
 bool keysGetPressed(uint16_t row, uint16_t col)
@@ -325,57 +317,5 @@ bool keysGetPressed(uint16_t row, uint16_t col)
 
   return ret;
 }
-
-#if CLI_USE(HW_KEYS)
-void cliCmd(cli_args_t *args)
-{
-  bool ret = false;
-
-
-
-  if (args->argc == 1 && args->isStr(0, "info"))
-  {
-    cliShowCursor(false);
-
-
-    while(cliKeepLoop())
-    {
-      keysUpdate();
-      delay(10);
-
-      cliPrintf("     ");
-      for (int cols=0; cols<MATRIX_COLS; cols++)
-      {
-        cliPrintf("%02d ", cols);
-      }
-      cliPrintf("\n");
-
-      for (int rows=0; rows<MATRIX_ROWS; rows++)
-      {
-        cliPrintf("%02d : ", rows);
-
-        for (int cols=0; cols<MATRIX_COLS; cols++)
-        {
-          if (keysGetPressed(rows, cols))
-            cliPrintf("O  ");
-          else
-            cliPrintf("_  ");
-        }
-        cliPrintf("\n");
-      }
-      cliMoveUp(MATRIX_ROWS+1);
-    }
-    cliMoveDown(MATRIX_ROWS+1);
-
-    cliShowCursor(true);
-    ret = true;
-  }
-
-  if (ret == false)
-  {
-    cliPrintf("keys info\n");
-  }
-}
-#endif
 
 #endif

@@ -85,7 +85,11 @@
   || defined(RGBLIGHT_EFFECT_CHRISTMAS)     \
   || defined(RGBLIGHT_EFFECT_RGB_TEST)      \
   || defined(RGBLIGHT_EFFECT_ALTERNATING)   \
-  || defined(RGBLIGHT_EFFECT_TWINKLE)
+  || defined(RGBLIGHT_EFFECT_TWINKLE)             \
+  || defined(RGBLIGHT_EFFECT_PULSE_ON_PRESS)      \
+  || defined(RGBLIGHT_EFFECT_PULSE_OFF_PRESS)     \
+  || defined(RGBLIGHT_EFFECT_PULSE_ON_PRESS_HOLD) \
+  || defined(RGBLIGHT_EFFECT_PULSE_OFF_PRESS_HOLD)
 #    define RGBLIGHT_USE_TIMER
 #endif
 
@@ -150,6 +154,12 @@ enum RGBLIGHT_EFFECT_MODE {
 #ifndef RGBLIGHT_EFFECT_TWINKLE_PROBABILITY
 #    define RGBLIGHT_EFFECT_TWINKLE_PROBABILITY 1 / 127
 #endif
+#ifndef RGBLIGHT_EFFECT_PULSE_DURATION_MIN_MS
+#    define RGBLIGHT_EFFECT_PULSE_DURATION_MIN_MS 20   // V251018R5: Pulse 계열 최소 지속 시간
+#endif
+#ifndef RGBLIGHT_EFFECT_PULSE_DURATION_STEP_MS
+#    define RGBLIGHT_EFFECT_PULSE_DURATION_STEP_MS 1   // V251018R5: Pulse 계열 ms/step
+#endif
 
 #ifndef RGBLIGHT_HUE_STEP
 #    define RGBLIGHT_HUE_STEP 8
@@ -171,6 +181,40 @@ enum RGBLIGHT_EFFECT_MODE {
 #include "eeconfig.h"
 #include "ws2812.h"
 #include "color.h"
+#include "led.h"  // V251012R2: 인디케이터 대상 판별을 위해 led_t 참조
+
+// V251016R8: Brick60 기본 인디케이터 타깃 열거형을 공용 헤더로 환원
+enum rgblight_indicator_target {
+    RGBLIGHT_INDICATOR_TARGET_OFF    = 0,
+    RGBLIGHT_INDICATOR_TARGET_CAPS   = 1,
+    RGBLIGHT_INDICATOR_TARGET_SCROLL = 2,
+    RGBLIGHT_INDICATOR_TARGET_NUM    = 3,
+};
+
+typedef bool (*rgblight_indicator_target_callback_t)(uint8_t target, led_t host_state);  // V251016R8: 키보드별 타깃 판별 콜백
+
+typedef union {
+    uint32_t raw;
+    struct PACKED {
+        uint8_t target;
+        uint8_t val;
+        uint8_t hue;
+        uint8_t sat;
+    };
+} rgblight_indicator_config_t;
+
+typedef struct {
+    uint8_t start;
+    uint8_t count;
+} rgblight_indicator_range_t;  // V251016R8: 인디케이터 대상별 LED 범위 정보
+
+void rgblight_indicator_update_config(rgblight_indicator_config_t config);
+void rgblight_indicator_apply_host_led(led_t host_led_state);
+void rgblight_indicator_post_host_event(led_t host_led_state);  // V251018R1: IRQ에서 전달된 호스트 LED 이벤트 큐
+void rgblight_indicator_set_target_callback(rgblight_indicator_target_callback_t callback);  // V251016R8: 포트 콜백 등록
+void rgblight_indicator_set_ranges(const rgblight_indicator_range_t *ranges, uint8_t length);  // V251016R8: 키보드별 범위 전달
+// V251012R3: HSV → RGB 변환 헬퍼를 외부에서도 재사용할 수 있도록 선언
+RGB rgblight_hsv_to_rgb(HSV hsv);
 
 #ifdef RGBLIGHT_LAYERS
 typedef struct {
@@ -393,7 +437,7 @@ void rgblight_mode_eeprom_helper(uint8_t mode, bool write_to_eeprom);
 #define EZ_RGB(val) rgblight_show_solid_color((val >> 16) & 0xFF, (val >> 8) & 0xFF, val & 0xFF)
 void rgblight_show_solid_color(uint8_t r, uint8_t g, uint8_t b);
 
-void preprocess_rgblight(void);
+void preprocess_rgblight(bool pressed, uint8_t row, uint8_t col);  // V251018R5: Pulse 계열 입력 감지를 위해 위치 정보 전달
 void rgblight_task(void);
 
 #ifdef RGBLIGHT_USE_TIMER

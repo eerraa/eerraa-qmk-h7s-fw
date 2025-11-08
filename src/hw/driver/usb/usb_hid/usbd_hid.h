@@ -160,14 +160,25 @@ typedef struct
   uint32_t freq_hz;
   uint32_t time_max;
   uint32_t time_min;
+  uint32_t time_excess_max;  // V250928R3 예상 간격 초과분 최대값(us)
+  uint32_t queue_depth_max;  // V250928R3 폴링 지연 당시 대기 중이던 큐 길이 최대값
 } usb_hid_rate_info_t;
 
 bool usbHidSetViaReceiveFunc(void (*func)(uint8_t *, uint8_t));
+bool usbHidEnqueueViaResponse(const uint8_t *p_data, uint8_t length);  // V251108R8: VIA 응답을 메인 루프에서 큐잉
 bool usbHidSendReport(uint8_t *p_data, uint16_t length);
 bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length);
 bool usbHidGetRateInfo(usb_hid_rate_info_t *p_info);
 bool usbHidSetTimeLog(uint16_t index, uint32_t time_us);
 void usbHidSetStatusLed(uint8_t led_bits);
+#ifdef USB_MONITOR_ENABLE
+void usbHidMonitorBackgroundTick(uint32_t now_us);                  // V251108R9 SOF 중단 감시 진입점
+#else
+static inline void usbHidMonitorBackgroundTick(uint32_t now_us)
+{
+  (void)now_us;
+}
+#endif
 
 /**
   * @}

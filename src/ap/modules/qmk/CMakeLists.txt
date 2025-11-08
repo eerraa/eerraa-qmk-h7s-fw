@@ -54,9 +54,6 @@ file(GLOB QMK_SRC_FILES CONFIGURE_DEPENDS
   # ${QMK_KEYBOARD_PATH}/*.c
   ${QMK_KEYBOARD_PATH}/port/*.c
   
-  #추가
-  ${QMK_ROOT_PATH}/port/override.c
-  
   ${QMK_ADD_FILES}
 )
 
@@ -87,14 +84,13 @@ add_compile_definitions(VIA_ENABLE)
 add_compile_definitions(RAW_ENABLE)
 add_compile_definitions(DYNAMIC_KEYMAP_ENABLE)
 add_compile_definitions(KEY_OVERRIDE_ENABLE)
-add_compile_definitions(HOLD_ON_OTHER_KEY_PRESS)
+# add_compile_definitions(HOLD_ON_OTHER_KEY_PRESS) // QMK와 디폴트와 매치하지 않음
 add_compile_definitions(EXTRAKEY_ENABLE)
 
 
 add_compile_definitions(QMK_KEYBOARD_H="quantum.h")
 add_compile_definitions(QMK_KEYMAP_CONFIG_H="${QMK_KEYBOARD_PATH}/config.h")
 add_compile_definitions(KEYMAP_C="${QMK_KEYBOARD_PATH}/keymap.c")
-
 
 
 

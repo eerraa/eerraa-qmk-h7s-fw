@@ -1,11 +1,11 @@
 {
-	"name": "H7S-60MX-6.25U",
-
-	"vendorId": "0x0483",
-	"productId": "0x5302",
-  
-	"matrix": { "rows": 5, "cols": 14 },
-
+  "name": "BRICK60",
+  "vendorId": "0x4552",
+  "productId": "0x0022",
+  "matrix": {
+    "rows": 5,
+    "cols": 15
+  },
   "keycodes": [
     "qmk_lighting"
   ],
@@ -14,30 +14,7 @@
       "label": "Lighting",
       "content": [
         {
-          "label": "INDICATORS",
-          "content": [
-            {
-              "label": "Caps Enable",
-              "type": "toggle",
-              "content": ["id_qmk_led_caps_enable", 6, 1]
-            },            
-            {
-              "showIf": "{id_qmk_led_caps_enable} == 1",
-              "label": "Caps Brightness",
-              "type": "range",
-              "options": [0, 255],
-              "content": ["id_qmk_led_caps_brightness", 6, 2]
-            },
-            {
-              "showIf": "{id_qmk_led_caps_enable} == 1",
-              "label": "Caps Color",
-              "type": "color",
-              "content": ["id_qmk_led_caps_color", 6, 3]
-            }
-          ]
-        },
-        {
-          "label": "Underglow",
+          "label": "RGB ROW",
           "content": [
             {
               "label": "Brightness",
@@ -51,48 +28,98 @@
               "content": ["id_qmk_rgblight_effect", 2, 2],
               "options": [
                 ["All Off",     0],
+                ["Pulse On Press", 43],
+                ["Pulse Off Press", 44],
+                ["Pulse On Press (Hold)", 45],
+                ["Pulse Off Press (Hold)", 46],
                 ["Solid Color", 1],
                 ["Breathing 1", 2],
                 ["Breathing 2", 3],
                 ["Breathing 3", 4],
                 ["Breathing 4", 5],
-
-                ["Snake 1",     6], 
-                ["Snake 2",     7], 
-                ["Snake 3",     8], 
-                ["Snake 4",     9], 
-                ["Snake 5",     10], 
-                ["Snake 6",     11], 
-
-                ["Gradient 1",  12],
-                ["Gradient 2",  13],
-                ["Gradient 3",  14],
-                ["Gradient 4",  15],
-                ["Gradient 5",  16],
-                ["Gradient 6",  17],
-                ["Gradient 7",  18],
-                ["Gradient 8",  19],
-                ["Gradient 9",  20],
-                ["Gradient 10", 21],
-
-                ["RGB Test",    22]
+                ["Rainbow Mood 1", 6],
+                ["Rainbow Mood 2", 7],
+                ["Rainbow Mood 3", 8],
+                ["Rainbow Swirl 1", 9],
+                ["Rainbow Swirl 2", 10],
+                ["Rainbow Swirl 3", 11],
+                ["Rainbow Swirl 4", 12],
+                ["Rainbow Swirl 5", 13],
+                ["Rainbow Swirl 6", 14],
+                ["Snake 1",     15], 
+                ["Snake 2",     16], 
+                ["Snake 3",     17], 
+                ["Snake 4",     18], 
+                ["Snake 5",     19], 
+                ["Snake 6",     20], 
+                ["Knight 1",     21], 
+                ["Knight 2",     22], 
+                ["Knight 3",     23], 
+                ["Christmas",     24], 
+                ["Gradient 1",  25],
+                ["Gradient 2",  26],
+                ["Gradient 3",  27],
+                ["Gradient 4",  28],
+                ["Gradient 5",  29],
+                ["Gradient 6",  30],
+                ["Gradient 7",  31],
+                ["Gradient 8",  32],
+                ["Gradient 9",  33],
+                ["Gradient 10", 34],
+                ["RGB Test",    35],
+                ["Alternating",  36],
+                ["Twinkle 1",  37],
+                ["Twinkle 2",  38],
+                ["Twinkle 3",  39],
+                ["Twinkle 4",  40],
+                ["Twinkle 5",  41],
+                ["Twinkle 6",  42]
               ]
             },
             {
-              "showIf": "{id_qmk_rgblight_effect} != 0",
+              "showIf": "{id_qmk_rgblight_effect} != 0 && {id_qmk_rgblight_effect} != 1 && {id_qmk_rgblight_effect} != 2 && {id_qmk_rgblight_effect} != 3 && {id_qmk_rgblight_effect} != 4 && {id_qmk_rgblight_effect} != 5",
               "label": "Effect Speed",
               "type": "range",
               "options": [0, 255],
               "content": ["id_qmk_rgblight_effect_speed", 2, 3]
             },
             {
-              "showIf": "{id_qmk_rgblight_effect} != 0 && {id_qmk_rgblight_effect} != 22",
+              "showIf": "{id_qmk_rgblight_effect} != 0 && {id_qmk_rgblight_effect} != 35",
               "label": "Color",
               "type": "color",
               "content": ["id_qmk_rgblight_color", 2, 4]
             }
           ]
-        }        
+        },
+        {
+          "label": "INDICATOR",
+          "content": [
+            {
+              "label": "Indicator Select",
+              "type": "dropdown",
+              "content": ["id_qmk_custom_ind_selec", 0, 1],
+              "options": [
+                ["Off", 0],
+                ["Caps Lock", 1],
+                ["Scroll Lock", 2],
+                ["Num Lock", 3]
+              ]
+            },            
+            {
+              "showIf": "{id_qmk_custom_ind_selec} != 0",
+              "label": "Indicator Brightness",
+              "type": "range",
+              "options": [0, 255],
+              "content": ["id_qmk_custom_ind_brightness", 0, 2]
+            },
+            {
+              "showIf": "{id_qmk_custom_ind_selec} != 0",
+              "label": "Indicator Color",
+              "type": "color",
+              "content": ["id_qmk_custom_ind_color", 0, 3]
+            }
+          ]
+        }
       ]
     },
     {
@@ -134,7 +161,7 @@
               "label": "- KEY 2",
               "type": "keycode",
               "content": ["id_qmk_kill_switch_down", 11, 3]
-            }            
+            }
           ]
         },
         {
@@ -175,9 +202,9 @@
               "content": ["id_qmk_kkuk_repeat_time", 12, 3]
             }
           ]
-        }      
+        }
       ]
-    },    
+    },
     {
       "label": "SYSTEM",
       "content": [
@@ -209,7 +236,33 @@
               "type": "dropdown",
               "options": ["R1","R2","R3","R4","R5","R6","R7","R8","R9"],
               "content": ["id_qmk_ver_rv", 8, 4]
-            }                     
+            }
+          ]
+        },
+        {
+          "label": "USB POLLING",
+          "content": [
+            {
+              "label": "Boot Polling Mode",
+              "type": "dropdown",
+              "content": ["id_qmk_usb_bootmode", 13, 1],
+              "options": [
+                ["8 kHz (HS)", 0],
+                ["4 kHz (HS)", 1],
+                ["2 kHz (HS)", 2],
+                ["1 kHz (FS)", 3]
+              ]
+            },
+            {
+              "label": "Apply Selected Mode",
+              "type": "toggle",
+              "content": ["id_qmk_usb_bootmode_apply", 13, 2]
+            },
+            {
+              "label": "Auto downgrade on USB unstable [BETA]",
+              "type": "toggle",
+              "content": ["id_qmk_usb_autodg_beta", 13, 3]
+            }
           ]
         },
         {
@@ -219,7 +272,7 @@
               "label": "Jump To BOOT",
               "type": "toggle",
               "content": ["id_qmk_system_dfu", 9, 1]
-            }                           
+            }
           ]
         },
         {
@@ -239,16 +292,26 @@
               "label": "Are you sure ?",
               "type": "toggle",
               "content": ["id_qmk_system_reset_done", 9, 4]
-            }                           
+            }
           ]
-        }        
+        }
       ]
     }
   ],
-  
-	"layouts": {
-    
-		"keymap": [
+  "layouts": {
+    "labels": [
+      [
+        "Backspace",
+        "Unified",
+        "Split"
+      ],
+      [
+        "Left Shift",
+        "Unified",
+        "Split"
+      ]
+    ],
+    "keymap": [
       [
         {
           "c": "#777777"
@@ -273,10 +336,17 @@
           "c": "#aaaaaa",
           "w": 2
         },
-        "0,13"
+        "0,14\n\n\n0,0",
+        {
+          "x": 0.5,
+          "c": "#cccccc"
+        },
+        "0,13\n\n\n0,1",
+        "0,14\n\n\n0,1"
       ],
       [
         {
+          "c": "#aaaaaa",
           "w": 1.5
         },
         "1,0",
@@ -296,19 +366,20 @@
         "1,11",
         "1,12",
         {
-          "c": "#aaaaaa",
           "w": 1.5
         },
-        "1,13"
+        "1,14"
       ],
       [
         {
+          "c": "#aaaaaa",
           "w": 1.75
         },
         "2,0",
         {
           "c": "#cccccc"
         },
+        "2,1",
         "2,2",
         "2,3",
         "2,4",
@@ -319,15 +390,15 @@
         "2,9",
         "2,10",
         "2,11",
-        "2,12",
         {
-          "c": "#aaaaaa",
+          "c": "#777777",
           "w": 2.25
         },
-        "2,13"
+        "2,14"
       ],
       [
         {
+          "c": "#aaaaaa",
           "w": 2.25
         },
         "3,0",
@@ -348,44 +419,40 @@
           "c": "#aaaaaa",
           "w": 2.75
         },
-        "3,13"
+        "3,12\n\n\n1,0",
+        {
+          "x": 0.5,
+          "w": 1.75
+        },
+        "3,12\n\n\n1,1",
+        "3,14\n\n\n1,1"
       ],
       [
         {
-          "w": 1.25
+          "w": 1.5
         },
         "4,0",
-        {
-          "w": 1.25
-        },
         "4,1",
         {
-          "w": 1.25
+          "w": 1.5
         },
         "4,2",
         {
           "c": "#cccccc",
-          "w": 6.25
+          "w": 7
         },
-        "4,6",
+        "4,7",
         {
           "c": "#aaaaaa",
-          "w": 1.25
-        },
-        "4,10",
-        {
-          "w": 1.25
-        },
-        "4,11",
-        {
-          "w": 1.25
+          "w": 1.5
         },
         "4,12",
+        "4,13",
         {
-          "w": 1.25
+          "w": 1.5
         },
-        "4,13"
+        "4,14"
       ]
-		]
-	}
+    ]
+  }
 }

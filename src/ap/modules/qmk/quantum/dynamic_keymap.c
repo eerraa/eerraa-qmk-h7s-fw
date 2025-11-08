@@ -21,6 +21,7 @@
 #include "progmem.h"
 #include "send_string.h"
 #include "keycodes.h"
+#include "keyboard.h"  // V250928R3: 고스트 마스크 캐시 무효화를 위해 키보드 헬퍼 호출
 
 #ifdef VIA_ENABLE
 #    include "via.h"
@@ -125,6 +126,11 @@ void dynamic_keymap_set_keycode(uint8_t layer, uint8_t row, uint8_t column, uint
     // Big endian, so we can read/write EEPROM directly from host if we want
     eeprom_update_byte(address, (uint8_t)(keycode >> 8));
     eeprom_update_byte(address + 1, (uint8_t)(keycode & 0xFF));
+#if defined(MATRIX_HAS_GHOST)
+    if (layer == 0) {
+        keyboard_keymap_real_keys_invalidate(row);  // V250928R3: 베이스 레이어 변경 시 해당 행의 캐시를 무효화
+    }
+#endif
 }
 
 #ifdef ENCODER_MAP_ENABLE
@@ -165,6 +171,9 @@ void dynamic_keymap_reset(void) {
         }
 #endif // ENCODER_MAP_ENABLE
     }
+#if defined(MATRIX_HAS_GHOST)
+    keyboard_keymap_real_keys_invalidate_all();  // V250928R3: 초기화 이후 모든 행의 마스크를 다시 계산하도록 요청
+#endif
 }
 
 void dynamic_keymap_get_buffer(uint16_t offset, uint16_t size, uint8_t *data) {
@@ -193,6 +202,9 @@ void dynamic_keymap_set_buffer(uint16_t offset, uint16_t size, uint8_t *data) {
         source++;
         target++;
     }
+#if defined(MATRIX_HAS_GHOST)
+    keyboard_keymap_real_keys_invalidate_all();  // V250928R3: 버퍼 쓰기 시 범위 파악이 어려우므로 전체 행 무효화
+#endif
 }
 
 uint16_t keycode_at_keymap_location(uint8_t layer_num, uint8_t row, uint8_t column) {

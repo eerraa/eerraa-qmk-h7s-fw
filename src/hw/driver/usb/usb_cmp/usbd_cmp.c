@@ -33,6 +33,7 @@
   */
 
 #include "usbd_cmp.h"
+#include "usb.h"                                      // V250923R1 Boot mode aware HID intervals
 
 
 #ifdef USE_USBD_COMPOSITE
@@ -857,10 +858,15 @@ static void  USBD_CMPSIT_HIDKeyboardDesc(USBD_HandleTypeDef *pdev, uint32_t pCon
   *Sze                                 += (uint32_t)sizeof(USBD_HIDDescTypeDef);
 
   /* Append Endpoint descriptor to Configuration descriptor */
+  uint16_t hid_keyboard_mps = HID_EPIN_SIZE;                              // V250923R2 FS 모드에서 64바이트 패킷 유지
+  if (speed == (uint8_t)USBD_SPEED_HIGH)
+  {
+    hid_keyboard_mps |= (2U << 11);                                       // V250923R2 HS 모드에서는 3트랜잭션 유지
+  }
   __USBD_CMPSIT_SET_EP(pdev->tclasslist[pdev->classId].Eps[0].add,
-                       USBD_EP_TYPE_INTR, 
-                       HID_EPIN_SIZE | (2<<11),
-                       HID_HS_BINTERVAL, 
+                       USBD_EP_TYPE_INTR,
+                       hid_keyboard_mps,
+                       usbBootModeGetHsInterval(),
                        HID_FS_BINTERVAL);
 
 
@@ -889,11 +895,11 @@ static void  USBD_CMPSIT_HIDKeyboardDesc(USBD_HandleTypeDef *pdev, uint32_t pCon
 
   /* Append Endpoint descriptor to Configuration descriptor */
   __USBD_CMPSIT_SET_EP(pdev->tclasslist[pdev->classId].Eps[1].add, USBD_EP_TYPE_INTR, HID_VIA_EP_SIZE, \
-                       4, HID_FS_BINTERVAL);
+                       usbBootModeGetHsInterval(), HID_FS_BINTERVAL);
 
   /* Append Endpoint descriptor to Configuration descriptor */
   __USBD_CMPSIT_SET_EP(pdev->tclasslist[pdev->classId].Eps[2].add, USBD_EP_TYPE_INTR, HID_VIA_EP_SIZE, \
-                       4, HID_FS_BINTERVAL);
+                       usbBootModeGetHsInterval(), HID_FS_BINTERVAL);
 
   /* Update Config Descriptor and IAD descriptor */
   ((USBD_ConfigDescTypeDef *)pConf)->bNumInterfaces += 2U;
@@ -925,7 +931,7 @@ static void  USBD_CMPSIT_HIDKeyboardDesc(USBD_HandleTypeDef *pdev, uint32_t pCon
 
   /* Append Endpoint descriptor to Configuration descriptor */
   __USBD_CMPSIT_SET_EP(pdev->tclasslist[pdev->classId].Eps[3].add, USBD_EP_TYPE_INTR, HID_EXK_EP_SIZE, \
-                       HID_HS_BINTERVAL, HID_FS_BINTERVAL);
+                       usbBootModeGetHsInterval(), HID_FS_BINTERVAL);
 
   /* Update Config Descriptor and IAD descriptor */
   ((USBD_ConfigDescTypeDef *)pConf)->bNumInterfaces += 1U;

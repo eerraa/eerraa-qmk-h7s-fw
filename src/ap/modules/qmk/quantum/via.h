@@ -111,13 +111,12 @@ enum via_channel_id {
     id_qmk_rgb_matrix_channel = 3,
     id_qmk_audio_channel      = 4,
     id_qmk_led_matrix_channel = 5,
-    id_qmk_led_caps_channel   = 6,
-    id_qmk_led_scroll_channel = 7,
     id_qmk_version            = 8,
     id_qmk_system             = 9,
     id_qmk_kill_switch_lr     = 10,
     id_qmk_kill_switch_ud     = 11,
     id_qmk_kkuk               = 12,
+    id_qmk_usb_polling        = 13,  // V251108R1: BootMode/USB 모니터 전용 채널
 };
 
 enum via_qmk_backlight_value {
@@ -148,6 +147,20 @@ enum via_qmk_led_matrix_value {
 enum via_qmk_audio_value {
     id_qmk_audio_enable        = 1,
     id_qmk_audio_clicky_enable = 2,
+};
+
+// V251108R1: Brick60 USB POLLING 메뉴 value ID 매핑
+enum via_qmk_usb_polling_value {
+    id_qmk_usb_bootmode_select = 1,
+    id_qmk_usb_bootmode_apply  = 2,
+    id_qmk_usb_monitor_toggle  = 3,
+};
+
+// V251012R2: 커스텀 인디케이터 제어 값 ID
+enum via_qmk_custom_indicator_value {
+    id_qmk_custom_ind_selec      = 1,
+    id_qmk_custom_ind_brightness = 2,
+    id_qmk_custom_ind_color      = 3,
 };
 
 // Can be called in an overriding via_init_kb() to test if keyboard level code usage of

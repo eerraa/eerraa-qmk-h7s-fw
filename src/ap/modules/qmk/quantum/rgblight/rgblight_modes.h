@@ -61,6 +61,18 @@ _RGBM_TMP_DYNAMIC(twinkle_40, TWINKLE)
 _RGBM_TMP_DYNAMIC(twinkle_41, TWINKLE)
 _RGBM_TMP_DYNAMIC(TWINKLE_end, TWINKLE)
 #    endif
+#    ifdef RGBLIGHT_EFFECT_PULSE_ON_PRESS
+_RGBM_SINGLE_DYNAMIC(PULSE_ON_PRESS)        // V251018R5: Pulse On Press 모드 등록
+#    endif
+#    ifdef RGBLIGHT_EFFECT_PULSE_OFF_PRESS
+_RGBM_SINGLE_DYNAMIC(PULSE_OFF_PRESS)       // V251018R5: Pulse Off Press 모드 등록
+#    endif
+#    ifdef RGBLIGHT_EFFECT_PULSE_ON_PRESS_HOLD
+_RGBM_SINGLE_DYNAMIC(PULSE_ON_PRESS_HOLD)   // V251018R5: Pulse On Press (Hold) 모드 등록
+#    endif
+#    ifdef RGBLIGHT_EFFECT_PULSE_OFF_PRESS_HOLD
+_RGBM_SINGLE_DYNAMIC(PULSE_OFF_PRESS_HOLD)  // V251018R5: Pulse Off Press (Hold) 모드 등록
+#    endif
 ////  Add a new mode here.
 // #ifdef RGBLIGHT_EFFECT_<name>
 //    _RGBM_<SINGLE|MULTI>_<STATIC|DYNAMIC>( <name> )
