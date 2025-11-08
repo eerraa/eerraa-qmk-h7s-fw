@@ -30,11 +30,6 @@ void via_qmk_usb_bootmode_command(uint8_t *data, uint8_t length)
 
   uint8_t *command_id = &(data[0]);
 
-  if (*command_id == id_custom_save)
-  {
-    return;  // VIA save command은 별도 처리 불필요
-  }
-
   if (length < 4)
   {
     return;
@@ -81,6 +76,11 @@ void via_qmk_usb_bootmode_command(uint8_t *data, uint8_t length)
         value_data[0] = 0U;
       }
       break;
+    }
+
+    case id_custom_save:
+    {
+      break;  // V251108R4: 저장 명령은 Indicator와 동일하게 no-op
     }
 
     default:
