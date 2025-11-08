@@ -171,6 +171,14 @@ bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length);
 bool usbHidGetRateInfo(usb_hid_rate_info_t *p_info);
 bool usbHidSetTimeLog(uint16_t index, uint32_t time_us);
 void usbHidSetStatusLed(uint8_t led_bits);
+#ifdef USB_MONITOR_ENABLE
+void usbHidMonitorBackgroundTick(uint32_t now_us);                  // V251108R9 SOF 중단 감시 진입점
+#else
+static inline void usbHidMonitorBackgroundTick(uint32_t now_us)
+{
+  (void)now_us;
+}
+#endif
 
 /**
   * @}

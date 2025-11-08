@@ -1,5 +1,6 @@
 #include "ap.h"
 #include "qmk/qmk.h"
+#include "usbd_hid.h"                                      // V251108R9 USB SOF 모니터 백그라운드 훅
 
 
 void cliUpdate(void);
@@ -34,6 +35,7 @@ void apMain(void)
 
     cliUpdate();
     usbProcess();                                               // V250924R2 USB 안정성 이벤트 처리
+    usbHidMonitorBackgroundTick(micros());                      // V251108R9 SOF 누락 백그라운드 감시
     qmkUpdate();
   }
 }

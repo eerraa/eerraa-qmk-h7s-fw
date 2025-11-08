@@ -14,30 +14,33 @@
 | --- | --- | --- |
 | `src/ap/modules/qmk/port/port.h` | `EECONFIG_USER_BOOTMODE`, `EECONFIG_USER_USB_INSTABILITY` | // V251108R1: BootMode/USB 모니터 4B 슬롯을 각각 +28/+32 오프셋에 정의합니다. |
 | `src/hw/hw.c` | `usbBootModeLoad()` | 부팅 초기화 단계에서 저장된 모드를 로드해 모니터 파라미터를 초기화합니다. |
-| `src/hw/hw_def.h` | `_DEF_FIRMWATRE_VERSION` | 모니터 기능 릴리스 버전을 `V250924R4`로 명시합니다. |
+| `src/hw/hw_def.h` | `_DEF_FIRMWATRE_VERSION` | 모니터 기능 릴리스 버전을 `V251108R9`로 명시합니다. |
 | `src/hw/driver/usb/usb.h` | `usb_boot_mode_request_t`, `usbInstabilityLoad()` | 다운그레이드 큐와 VIA 토글 연동 API 프로토타입을 제공합니다. |
 | `src/hw/driver/usb/usb.c` | `usbRequestBootModeDowngrade()`, `usbProcess()`, `usbInstabilityStore()` | 큐 상태 머신(ARMED→COMMIT)과 VIA 토글 저장/로드, 로그, 리셋 처리를 담당합니다. |
 | `src/hw/driver/usb/usb_hid/usbd_hid.c` | `usbHidMonitorSof()`, `usbHidSofMonitorApplySpeedParams()` | SOF 모니터 점수 계산, 워밍업/홀드오프 관리, 속도별 파라미터 캐싱을 수행합니다. |
 | `src/hw/driver/usb/usb_cmp/usbd_cmp.c` | HS/FS `bInterval` 유지 | 다운그레이드 후에도 안정적인 입력 패킷을 제공합니다. |
-| `src/ap/ap.c` | `usbProcess()` 호출 | 메인 루프에서 큐 상태 머신을 주기적으로 서비스합니다. |
+| `src/ap/ap.c` | `usbProcess()`, `usbHidMonitorBackgroundTick()` | 메인 루프에서 큐 상태 머신과 SOF 누락 감시를 주기적으로 서비스합니다.【F:src/ap/ap.c†L28-L46】
 | `src/ap/modules/qmk/port/usb_monitor_via.[ch]` | `via_qmk_usb_monitor_command()`, `usb_monitor_storage_*()` | // V251108R1: VIA channel 13 value ID 3 토글을 EEPROM과 동기화하고 JSON 조건을 문서화합니다. |
 
 ## 3. 데이터 구조 스냅샷
 ### 3.1 `usb_sof_monitor_t`
 - **필드**
-  - `score`: 누락 프레임 가산 점수. 최대 4점까지 상승하며 감쇠 주기마다 1점 감소합니다.
+  - `score`: 누락 프레임 가산 점수. 속도별 `event_score_cap`(HS 6점, FS 4점)까지 단일 이벤트를 누적하며 감쇠 주기마다 1점 감소합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L493-L557】
   - `expected_us`, `stable_threshold_us`: 속도별 기대 간격과 허용 오차.
   - `warmup_deadline_us`, `warmup_good_frames`: 모니터링 활성화 전 워밍업 조건.
   - `holdoff_end_us`: 장치 재개 직후 일정 시간 동안 감시를 중지합니다.
-  - `decay_interval_us`: 감쇠 주기. HS는 4000µs, FS는 20000µs로 설정됩니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L486-L547】
-  - `degrade_threshold`: 다운그레이드 트리거 점수. HS는 12점, FS는 6점으로 속도별로 다르게 적용됩니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L486-L547】
+  - `decay_interval_us` / `slow_decay_interval_us`: 각각 빠른/느린 점수 감쇠 주기. HS는 4ms/12ms, FS는 20ms/60ms로 설정됩니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L523-L544】
+  - `slow_score`, `slow_degrade_threshold`: 장기적인 드롭 빈도를 추적해 3~4회 이상 반복되면 다운그레이드를 보강합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L493-L557】
+  - `no_sof_deadline_us`: 마지막 SOF 이후 허용되는 최대 간격(HS 8ms, FS 64ms). 초과 시 백그라운드 타이머가 강제 평가합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L495-L556】
+  - `degrade_threshold`: 빠른 점수 임계. HS 10점, FS 5점입니다.
   - `active_speed`: 현재 USB 속도 캐시.
 - **상태 전이 이벤트**
   1. **속도/상태 변경**: 파라미터 캐시와 타이머를 초기화합니다.
   2. **워밍업 통과**: HS 2048프레임 또는 FS 128프레임이 안정 범위 내에 들어오면 감시를 시작합니다.
   3. **점수 가산**: 기대 간격 대비 초과 시간을 누락 프레임 수로 환산하여 점수를 부여합니다.
   4. **감쇠**: `decay_interval_us`마다 점수를 1씩 낮춥니다.
-  5. **임계 도달**: `degrade_threshold` 이상이면 다운그레이드 큐에 요청을 보냅니다.
+  5. **임계 도달**: `degrade_threshold` 또는 `slow_degrade_threshold` 이상이면 다운그레이드 큐에 요청을 보냅니다.
+  6. **SOF 타임아웃**: SOF 인터럽트가 끊기면 백그라운드 훅(`usbHidMonitorBackgroundTick`)이 `no_sof_deadline_us`를 기준으로 지연을 점수화합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1393-L1579】
 
 ### 3.2 `usb_boot_mode_request_t`
 - **필드**

@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251108R8"   // V251108R8: BootMode/VIA/USB 모니터 경로 리팩토링
+#define _DEF_FIRMWATRE_VERSION      "V251108R9"   // V251108R9: USB SOF 모니터 slow/timeout 경로 확장
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
