@@ -165,6 +165,7 @@ typedef struct
 } usb_hid_rate_info_t;
 
 bool usbHidSetViaReceiveFunc(void (*func)(uint8_t *, uint8_t));
+bool usbHidEnqueueViaResponse(const uint8_t *p_data, uint8_t length);  // V251108R8: VIA 응답을 메인 루프에서 큐잉
 bool usbHidSendReport(uint8_t *p_data, uint16_t length);
 bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length);
 bool usbHidGetRateInfo(usb_hid_rate_info_t *p_info);

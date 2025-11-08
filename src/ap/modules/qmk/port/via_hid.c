@@ -1,9 +1,24 @@
 #include "via_hid.h"
 #include "raw_hid.h"
+#include <string.h>
+#include "log.h"
+#include "qbuffer.h"
+#include "usb_hid.h"
 
 
 #define USE_VIA_HID_PRINT   0
+#define VIA_HID_REPORT_SIZE 32U
+#define VIA_HID_RX_QUEUE_DEPTH 16U                                   // V251108R8: VIA 명령 큐를 16개로 제한
 
+typedef struct
+{
+  uint8_t len;
+  uint8_t buf[VIA_HID_REPORT_SIZE];
+} via_hid_packet_t;
+
+static qbuffer_t            via_hid_rx_q;
+static via_hid_packet_t     via_hid_rx_buf[VIA_HID_RX_QUEUE_DEPTH];
+static volatile uint32_t    via_hid_rx_drop_cnt = 0;
 
 
 #if USE_VIA_HID_PRINT == 1
@@ -42,7 +57,8 @@ static void via_hid_receive(uint8_t *data, uint8_t length);
 
 void via_hid_init(void)
 {
-  usbHidSetViaReceiveFunc(via_hid_receive);
+  qbufferCreateBySize(&via_hid_rx_q, (uint8_t *)via_hid_rx_buf, sizeof(via_hid_packet_t), VIA_HID_RX_QUEUE_DEPTH);
+  usbHidSetViaReceiveFunc(via_hid_receive);                          // V251108R8: RX 큐 초기화 후 USB ISR 등록
 }
 
 void raw_hid_send(uint8_t *data, uint8_t length)
@@ -55,7 +71,49 @@ void via_hid_receive(uint8_t *data, uint8_t length)
   #if USE_VIA_HID_PRINT == 1
   via_hid_print(data, length, true);
   #endif
-  raw_hid_receive(data, length);
+
+  if (data == NULL || length == 0U)
+  {
+    return;
+  }
+
+  via_hid_packet_t packet;
+  packet.len = length > VIA_HID_REPORT_SIZE ? VIA_HID_REPORT_SIZE : length;
+  memset(packet.buf, 0, sizeof(packet.buf));
+  memcpy(packet.buf, data, packet.len);
+
+  if (qbufferWrite(&via_hid_rx_q, (uint8_t *)&packet, 1) != true)
+  {
+    via_hid_rx_drop_cnt++;                                          // V251108R8: ISR에서 로그 대신 카운터만 증가
+  }
+}
+
+void via_hid_task(void)
+{
+  via_hid_packet_t packet;
+
+  if (via_hid_rx_drop_cnt > 0U)
+  {
+    uint32_t dropped = via_hid_rx_drop_cnt;
+    via_hid_rx_drop_cnt = 0U;
+    logPrintf("[!] VIA RX queue overflow : %lu\n", dropped);        // V251108R8: 메인 루프에서만 로그 출력
+  }
+
+  while (qbufferAvailable(&via_hid_rx_q) > 0U)
+  {
+    if (qbufferRead(&via_hid_rx_q, (uint8_t *)&packet, 1) != true)
+    {
+      break;
+    }
+
+    raw_hid_receive(packet.buf, packet.len);                        // V251108R8: VIA 명령을 메인 루프에서 처리
+
+    if (usbHidEnqueueViaResponse(packet.buf, packet.len) != true)
+    {
+      logPrintf("[!] VIA TX enqueue failed\n");                     // V251108R8: 호스트 응답 큐 적재 실패 감시
+      break;
+    }
+  }
 }
 
 #if USE_VIA_HID_PRINT == 1

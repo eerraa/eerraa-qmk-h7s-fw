@@ -198,6 +198,11 @@ bool usbBootModeScheduleApply(UsbBootMode_t mode)
     return false;
   }
 
+  if (boot_mode_apply_request.pending == true && boot_mode_apply_request.mode == mode)
+  {
+    return true;  // V251108R8: 동일 모드 중복 요청은 메인 루프 부하 없이 무시
+  }
+
   boot_mode_apply_request.mode    = mode;
   boot_mode_apply_request.pending = true;
   return true;
@@ -324,11 +329,37 @@ static void usbProcessBootModeDowngrade(void)                                   
 
 void usbProcess(void)
 {
-#ifdef BOOTMODE_ENABLE
-  usbProcessBootModeApply();
+#if defined(BOOTMODE_ENABLE)
+  bool has_apply_request = boot_mode_apply_request.pending;
+#else
+  const bool has_apply_request = false;
 #endif
 #if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
-  usbProcessBootModeDowngrade();
+  bool has_monitor_request = boot_mode_request.stage != USB_BOOT_MODE_REQ_STAGE_IDLE;
+#else
+  const bool has_monitor_request = false;
+#endif
+
+  if (has_apply_request == false
+#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
+      && has_monitor_request == false
+#endif
+  )
+  {
+    return;  // V251108R8: 대기 중 요청이 없으면 즉시 복귀해 메인 루프 부하를 최소화
+  }
+
+#ifdef BOOTMODE_ENABLE
+  if (has_apply_request)
+  {
+    usbProcessBootModeApply();
+  }
+#endif
+#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
+  if (has_monitor_request)
+  {
+    usbProcessBootModeDowngrade();
+  }
 #endif
 }
 

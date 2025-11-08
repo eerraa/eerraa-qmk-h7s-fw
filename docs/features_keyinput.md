@@ -6,7 +6,7 @@
   1. GPDMA가 열 버퍼(`col_rd_buf`)를 지속적으로 채우고, QMK 포팅층이 DMA 버퍼를 직접 참조해 매트릭스를 구성합니다.
   2. `matrix_task()`가 변화 행을 선별하고 고스트를 차단한 뒤, `action_exec()`/`send_keyboard_report()` 흐름으로 키 이벤트를 전달합니다.
   3. `host_keyboard_send()` → `usbHidSendReport()` 체인이 HID IN 엔드포인트를 전송하거나 큐잉하며, USB 시간/큐 진단값을 업데이트합니다.
-- **현재 펌웨어 버전**: `V251009R7`.【F:src/hw/hw_def.h†L9-L20】
+- **현재 펌웨어 버전**: `V251108R8`.【F:src/hw/hw_def.h†L9-L20】
 
 ## 2. 파일 토폴로지 & 책임
 | 경로 | 핵심 심볼/함수 | 역할 |
@@ -18,7 +18,10 @@
 | `src/ap/modules/qmk/quantum/action.c` & `action_util.c` | `action_exec()`, `send_keyboard_report()` | 키 이벤트를 탭/홀드·레이어·콤보 처리 후 HID 리포트 구조체로 직렬화합니다. |
 | `src/ap/modules/qmk/port/protocol/host.c` | `host_keyboard_send()`, `host_nkro_send()` | 포팅층 호스트 드라이버와 USB HID 래퍼를 연결하며, 블루투스 경로와 LED 상태를 관리합니다. |
 | `src/hw/driver/usb/usb_hid/usbd_hid.c` | `usbHidSendReport()`, `usbHidSendReportEXK()` | HID IN 전송/큐잉, 폴링 계측(`usbHidSetTimeLog`, 큐 깊이 스냅샷)과 원격 웨이크업을 처리합니다. |
+| `src/ap/modules/qmk/port/via_hid.c`<br>`src/hw/driver/usb/usb_hid/usbd_hid.c` | `via_hid_task()`, `usbHidEnqueueViaResponse()` | // V251108R8: VIA RAW HID 명령을 메인 루프 큐에서 처리하고 SOF ISR은 응답 송신만 담당합니다.【F:src/ap/modules/qmk/port/via_hid.c†L1-L117】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1074-L1109】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1152-L1175】 |
 
+- // V251108R8: `qmkUpdate()`는 `keyboard_task()` 이전에 `via_hid_task()`를 호출해 USB 인터럽트가 전달한 RAW HID 패킷을 메인 루프에서 처리하고, 응답은 `usbHidEnqueueViaResponse()`를 통해 SOF 큐에 적재합니다.【F:src/ap/modules/qmk/qmk.c†L33-L38】【F:src/ap/modules/qmk/port/via_hid.c†L58-L117】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1152-L1175】
+- VIA RX 큐 오버플로 로그는 ISR 대신 `via_hid_task()`에서만 출력되므로, `USBD_HID_DataOut()`/`USBD_HID_SOF()` 인터럽트 경로는 큐 복사와 전송에만 집중합니다.【F:src/ap/modules/qmk/port/via_hid.c†L69-L117】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1034-L1109】
 ## 3. 입력 데이터 획득 계층
 ### 3.1 DMA 기반 행/열 버퍼
 - `keysInit()`은 `col_rd_buf`를 대상으로 하는 GPDMA 링크드 리스트를 구성해 스캔 결과를 자동 적재합니다. `.non_cache` 영역에 위치하여 CPU 캐시 동기화가 필요 없습니다.【F:src/hw/driver/keys.c†L240-L318】

@@ -4,6 +4,8 @@
 #include "usb_bootmode_via.h"
 #include "usb_monitor_via.h"
 
+static void via_handle_usb_polling_channel(uint8_t *data, uint8_t length);  // V251108R8: BootMode/USB 모니터 분기 공통화
+
 
 void via_custom_value_command_kb(uint8_t *data, uint8_t length)
 {
@@ -13,27 +15,7 @@ void via_custom_value_command_kb(uint8_t *data, uint8_t length)
 
   if (*channel_id == id_qmk_usb_polling)
   {
-    uint8_t value_id = data[2];
-
-#ifdef BOOTMODE_ENABLE
-    if (*command_id == id_custom_save ||
-        value_id == id_qmk_usb_bootmode_select ||
-        value_id == id_qmk_usb_bootmode_apply)
-    {
-      via_qmk_usb_bootmode_command(data, length);  // V251108R1: BootMode VIA value ID 1/2
-      return;
-    }
-#endif
-
-#ifdef USB_MONITOR_ENABLE
-    if (value_id == id_qmk_usb_monitor_toggle)
-    {
-      via_qmk_usb_monitor_command(data, length);  // V251108R1: USB 모니터 VIA value ID 3
-      return;
-    }
-#endif
-
-    *command_id = id_unhandled;
+    via_handle_usb_polling_channel(data, length);                   // V251108R8: USB POLLING 채널 분기를 단일 함수로 처리
     return;
   }
 
@@ -76,6 +58,39 @@ void via_custom_value_command_kb(uint8_t *data, uint8_t length)
 #endif
 
   // Return the unhandled state
+  *command_id = id_unhandled;
+}
+
+static void via_handle_usb_polling_channel(uint8_t *data, uint8_t length)
+{
+  uint8_t *command_id = &(data[0]);
+
+  if (length < 4U)
+  {
+    *command_id = id_unhandled;
+    return;
+  }
+
+  uint8_t value_id = data[2];
+
+#ifdef BOOTMODE_ENABLE
+  if (*command_id == id_custom_save ||
+      value_id == id_qmk_usb_bootmode_select ||
+      value_id == id_qmk_usb_bootmode_apply)
+  {
+    via_qmk_usb_bootmode_command(data, length);
+    return;
+  }
+#endif
+
+#ifdef USB_MONITOR_ENABLE
+  if (value_id == id_qmk_usb_monitor_toggle)
+  {
+    via_qmk_usb_monitor_command(data, length);
+    return;
+  }
+#endif
+
   *command_id = id_unhandled;
 }
 

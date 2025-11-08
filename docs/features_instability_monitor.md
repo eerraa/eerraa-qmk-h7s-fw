@@ -110,6 +110,7 @@ apMainLoop()
 - // V251108R1: `USB_MONITOR_ENABLE`을 정의하지 않으면 `usbInstabilityLoad/Store()`와 SOF 모니터 전용 코드가 스텁으로 축소되어 다운그레이드 큐가 완전히 제외됩니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/config.h†L42-L49】【F:src/hw/driver/usb/usb.h†L90-L140】
 - HID 계측 매크로 `_DEF_ENABLE_USB_HID_TIMING_PROBE`가 0이면 `usbHidInstrumentation*` 함수가 인라인 스텁으로 대체되어 큐 깊이·타이머 접근이 제거됩니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.h†L11-L68】
 - `USB_MONITOR_ENABLE`이 정의된 빌드에서만 `usbHidInstrumentationNow()`가 항상 `micros()`를 반환하여 SOF 모니터가 필요한 타임스탬프를 유지하며, VIA 토글이 꺼지면 SOF 핸들러가 즉시 반환하여 추가 오버헤드를 방지합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.h†L26-L33】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1035-L1098】
+- // V251108R8: `USBD_HID_SOF()`는 모니터 토글과 계측 매크로를 점검한 뒤 필요한 경우에만 `micros()`를 호출하여 SOF ISR 시간을 더 줄입니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1074-L1100】
 - 매트릭스 계층의 계측 매크로가 꺼져 있더라도 모니터는 HID 내부 타임스탬프만으로 작동하므로, Poll Rate 계측 활성 여부와 독립적으로 안정성 감시가 유지됩니다.【F:src/ap/modules/qmk/port/matrix_instrumentation.h†L13-L45】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1198-L1412】
 
 ## 10. 대표 빌드 시나리오

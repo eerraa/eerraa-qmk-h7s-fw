@@ -43,6 +43,7 @@
 #include "usbd_ctlreq.h"
 #include "usbd_desc.h"
 #include "usb.h"                                                // V250923R1 Boot mode aware intervals
+#include <string.h>                                             // V251108R8: VIA 큐 헬퍼에서 memset 사용
 
 #include "cli.h"
 #include "log.h"
@@ -1063,31 +1064,36 @@ static uint8_t USBD_HID_DataOut(USBD_HandleTypeDef *pdev, uint8_t epnum)
     via_hid_receive_func(via_hid_usb_report, rx_size);
   }
 
-  #if 0
-  USBD_LL_Transmit(pdev, HID_VIA_EP_OUT, via_hid_usb_report, sizeof(via_hid_usb_report));
-  USBD_LL_PrepareReceive(pdev, HID_VIA_EP_OUT, via_hid_usb_report, sizeof(via_hid_usb_report));
-  #else
-  via_report_info_t info;
-  memcpy(info.buf, via_hid_usb_report, sizeof(via_hid_usb_report));
-  qbufferWrite(&via_report_q, (uint8_t *)&info, 1);
-  via_report_pre_time = millis();
-  #endif
   return (uint8_t)USBD_OK;
 }
 
 uint8_t USBD_HID_SOF(USBD_HandleTypeDef *pdev)
 {
 #if defined(USB_MONITOR_ENABLE) || _DEF_ENABLE_USB_HID_TIMING_PROBE
-  uint32_t sof_now_us = usbHidInstrumentationNow();                   // V251009R7: SOF 타임스탬프는 모니터/계측 공용으로 취득
+  bool need_sof_timestamp = false;
 #if defined(USB_MONITOR_ENABLE)
-  if (usbInstabilityIsEnabled())                                      // V251108R1: VIA 토글로 모니터 동작 제어
+  bool monitor_enabled = usbInstabilityIsEnabled();
+  if (monitor_enabled)
   {
-    usbHidMonitorSof(sof_now_us);                                     // V251009R7: 모니터 활성 시 타임스탬프 전달
+    need_sof_timestamp = true;
   }
 #endif
 #if _DEF_ENABLE_USB_HID_TIMING_PROBE
-  usbHidInstrumentationOnSof(sof_now_us);                             // V251009R7: 계측 활성 시 샘플 윈도우 갱신
+  need_sof_timestamp = true;
 #endif
+  if (need_sof_timestamp)                                             // V251108R8: 필요 시에만 micros()를 호출해 ISR 부하 절감
+  {
+    uint32_t sof_now_us = usbHidInstrumentationNow();                 // V251009R7: SOF 타임스탬프는 모니터/계측 공용으로 취득
+#if defined(USB_MONITOR_ENABLE)
+    if (monitor_enabled)                                              // V251108R1: VIA 토글로 모니터 동작 제어
+    {
+      usbHidMonitorSof(sof_now_us);                                   // V251009R7: 모니터 활성 시 타임스탬프 전달
+    }
+#endif
+#if _DEF_ENABLE_USB_HID_TIMING_PROBE
+    usbHidInstrumentationOnSof(sof_now_us);                           // V251009R7: 계측 활성 시 샘플 윈도우 갱신
+#endif
+  }
 #endif
 
   if (qbufferAvailable(&via_report_q) && (millis()-via_report_pre_time) >= via_report_time)
@@ -1136,6 +1142,33 @@ bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev)
 bool usbHidSetViaReceiveFunc(void (*func)(uint8_t *, uint8_t))
 {
   via_hid_receive_func = func;
+  return true;
+}
+
+bool usbHidEnqueueViaResponse(const uint8_t *p_data, uint8_t length)
+{
+  via_report_info_t info;
+
+  if (p_data == NULL)
+  {
+    return false;
+  }
+
+  if (length > sizeof(info.buf))
+  {
+    length = sizeof(info.buf);
+  }
+
+  memset(info.buf, 0, sizeof(info.buf));
+  memcpy(info.buf, p_data, length);
+
+  if (qbufferWrite(&via_report_q, (uint8_t *)&info, 1) != true)
+  {
+    logPrintf("[!] VIA TX queue overflow\n");                         // V251108R8: 메인 루프 큐 적재 실패 감시
+    return false;
+  }
+
+  via_report_pre_time = millis();                                     // V251108R8: 전송 지연 타이머 갱신
   return true;
 }
 

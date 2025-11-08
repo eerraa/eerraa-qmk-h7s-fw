@@ -32,6 +32,7 @@ bool qmkInit(void)
 
 void qmkUpdate(void)
 {
+  via_hid_task();                                                // V251108R8: VIA 명령을 메인 루프에서 처리해 USB ISR 부하 감소
   keyboard_task();
   eeprom_task();
   idle_task();
