@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251108R1"   // V251108R1: Brick60 BootMode/USB 모니터 VIA 토글 통합
+#define _DEF_FIRMWATRE_VERSION      "V251108R2"   // V251108R2: VIA BootMode 선택 오류/재부팅 동작 보강
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
