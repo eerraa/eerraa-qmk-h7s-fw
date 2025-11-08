@@ -9,8 +9,8 @@
 
 // hw_def.h
 //
-#define _DEF_ENABLE_MATRIX_TIMING_PROBE   1
-#define _DEF_ENABLE_USB_HID_TIMING_PROBE  1
+// #define _DEF_ENABLE_MATRIX_TIMING_PROBE   0     // MATRIX 계측을 개발 빌드에서 강제 활성화하려면 정의
+// #define _DEF_ENABLE_USB_HID_TIMING_PROBE  0     // HID 계측을 개발 빌드에서 강제 활성화하려면 정의
 // #define _USE_HW_VCOM
 #define _USE_HW_WS2812
 #define     HW_WS2812_MAX_CH        30
@@ -34,7 +34,6 @@
 
 
 // #define DEBUG_KEY_SEND
-// #define _DEF_ENABLE_MATRIX_TIMING_PROBE  1  // V251010R4: 스캔 계측을 개발 빌드에서 강제 활성화하려면 정의
 #define GRAVE_ESC_ENABLE
 #define KILL_SWITCH_ENABLE
 #define KKUK_ENABLE
