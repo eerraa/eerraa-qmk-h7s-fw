@@ -3,7 +3,7 @@
 #include <string.h>
 #include "log.h"
 #include "qbuffer.h"
-#include "usb_hid.h"
+#include "hw/driver/usb/usb_hid/usbd_hid.h"
 
 
 #define USE_VIA_HID_PRINT   0
