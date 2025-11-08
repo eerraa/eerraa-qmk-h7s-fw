@@ -339,6 +339,7 @@ bool usbInstabilityLoad(void)
 {
   usb_monitor_storage_init();
   usb_instability_enabled = usb_monitor_storage_is_enabled();
+  logPrintf("[  ] USB Monitor : %s\n", usb_instability_enabled ? "ON" : "OFF");  // V251108R7: CLI에서 모니터 상태 확인
   return true;
 }
 
@@ -352,6 +353,7 @@ bool usbInstabilityStore(bool enable)
   usb_instability_enabled = enable;
   usb_monitor_storage_set_enable(enable);
   usb_monitor_storage_flush(true);
+  logPrintf("[  ] USB Monitor Toggle -> %s\n", usb_instability_enabled ? "ON" : "OFF");  // V251108R7
   return true;
 }
 

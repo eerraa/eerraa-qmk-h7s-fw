@@ -97,6 +97,7 @@ apMainLoop()
 - **V251010R5**: `USB_MONITOR_ENABLE` 비활성 빌드에서도 HID 본체가 유지되도록 모니터 전용 블록을 조기 종료.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L486-L546】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1198-L1412】
 - **V251010R6**: `USB_MONITOR_ENABLE` 기본값을 1로 고정해 릴리스 빌드에서 모니터를 상시 활성화.
 - **V251108R1**: `USB_MONITOR_ENABLE`/`BOOTMODE_ENABLE`를 분리하고 VIA channel 13 value ID 3 토글·`EECONFIG_USER_USB_INSTABILITY` 슬롯·`usbInstabilityLoad/Store()`·`usb_monitor_via.[ch]`를 도입했습니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/config.h†L42-L49】【F:src/ap/modules/qmk/port/usb_monitor_via.c†L5-L77】【F:src/hw/driver/usb/usb.c†L200-L278】
+- **V251108R7**: `usbInstabilityLoad()`/`usbInstabilityStore()`가 현재 ON/OFF 상태를 `logPrintf()`로 출력해 CLI에서 즉시 확인할 수 있도록 했습니다.【F:src/hw/driver/usb/usb.c†L335-L375】
 
 ## 8. Codex 작업 체크리스트
 1. SOF 모니터 파라미터를 수정하면 `USB_BOOT_MONITOR_CONFIRM_DELAY_MS` 및 `USB_SOF_MONITOR_*` 상수와의 관계를 재검토합니다.
