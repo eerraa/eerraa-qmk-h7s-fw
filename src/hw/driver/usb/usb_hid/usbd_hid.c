@@ -142,14 +142,6 @@ typedef struct
 static USBD_SetupReqTypedef ep0_req;
 static uint8_t ep0_req_buf[USB_MAX_EP0_SIZE];
 
-typedef enum                                                // V251109R2 다운그레이드 이벤트 구분
-{
-  USB_MONITOR_EVENT_SOF = 0,
-  USB_MONITOR_EVENT_ENUM,
-  USB_MONITOR_EVENT_SPEED,
-  USB_MONITOR_EVENT_SUSPEND
-} usb_monitor_event_t;
-
 static qbuffer_t             via_report_q;
 static via_report_info_t     via_report_q_buf[128];
 static uint32_t              via_report_pre_time;
