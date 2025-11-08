@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include QMK_KEYMAP_CONFIG_H
+
 // V251108R1: USB 안정성 모니터 VIA 핸들러/스토리지 인터페이스
 #ifdef USB_MONITOR_ENABLE
 #include "port.h"
@@ -40,4 +42,3 @@ static inline bool usb_monitor_storage_is_enabled(void)
   return false;
 }
 #endif
-

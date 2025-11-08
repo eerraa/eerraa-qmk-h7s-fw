@@ -87,4 +87,3 @@ void via_qmk_usb_monitor_command(uint8_t *data, uint8_t length)
 }
 
 #endif
-

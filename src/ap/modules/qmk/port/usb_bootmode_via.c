@@ -64,4 +64,3 @@ void via_qmk_usb_bootmode_command(uint8_t *data, uint8_t length)
 }
 
 #endif
-
