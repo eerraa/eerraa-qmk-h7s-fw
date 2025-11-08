@@ -56,7 +56,7 @@ static uint32_t usbHidExpectedPollIntervalUs(void);
 
 uint32_t usbHidInstrumentationNow(void)
 {
-#if _USE_USB_MONITOR || _DEF_ENABLE_USB_HID_TIMING_PROBE
+#if defined(USB_MONITOR_ENABLE) || _DEF_ENABLE_USB_HID_TIMING_PROBE
   return micros();  // V251009R9: 모니터 또는 계측 활성 시에만 타이머 접근
 #else
   return 0U;

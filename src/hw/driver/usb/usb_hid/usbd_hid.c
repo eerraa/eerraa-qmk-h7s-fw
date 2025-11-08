@@ -89,7 +89,7 @@ static void cliCmd(cli_args_t *args);
 static bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev);
 static void usbHidInitTimer(void);
 static uint32_t usbHidBackupTimerOffsetUs(void);                       // V251012R1 FS 백업 전송 지연 재조정
-#if _USE_USB_MONITOR
+#ifdef USB_MONITOR_ENABLE
 static void usbHidMonitorSof(uint32_t now_us);                     // V250924R2 SOF 안정성 추적
 static UsbBootMode_t usbHidResolveDowngradeTarget(void);           // V250924R2 다운그레이드 대상 계산
 #endif
@@ -471,7 +471,7 @@ static uint8_t HIDInEpAdd = HID_EPIN_ADDR;
 extern USBD_HandleTypeDef USBD_Device;
 static TIM_HandleTypeDef htim2;
 
-#if _USE_USB_MONITOR  // V251009R6: USB 불안정성 감시 블록을 독립 매크로로 분리
+#ifdef USB_MONITOR_ENABLE  // V251009R6: USB 불안정성 감시 블록을 독립 매크로로 분리
 enum
 { 
   USB_SOF_MONITOR_CONFIG_HOLDOFF_MS = 750U,                                              // V250924R3 구성 직후 워밍업 지연(ms)
@@ -536,7 +536,7 @@ static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 �
   }
 }
 
-#endif  // _USE_USB_MONITOR  // V251010R5: 모니터 전용 정의 영역을 조기 종료해 일반 HID 경로가 항상 컴파일되도록 조정
+#endif  // USB_MONITOR_ENABLE  // V251010R5: 모니터 전용 정의 영역을 조기 종료해 일반 HID 경로가 항상 컴파일되도록 조정
 
 
 /**
@@ -1077,10 +1077,13 @@ static uint8_t USBD_HID_DataOut(USBD_HandleTypeDef *pdev, uint8_t epnum)
 
 uint8_t USBD_HID_SOF(USBD_HandleTypeDef *pdev)
 {
-#if _USE_USB_MONITOR || _DEF_ENABLE_USB_HID_TIMING_PROBE
+#if defined(USB_MONITOR_ENABLE) || _DEF_ENABLE_USB_HID_TIMING_PROBE
   uint32_t sof_now_us = usbHidInstrumentationNow();                   // V251009R7: SOF 타임스탬프는 모니터/계측 공용으로 취득
-#if _USE_USB_MONITOR
-  usbHidMonitorSof(sof_now_us);                                       // V251009R7: 모니터 활성 시 타임스탬프 전달
+#if defined(USB_MONITOR_ENABLE)
+  if (usbInstabilityIsEnabled())                                      // V251108R1: VIA 토글로 모니터 동작 제어
+  {
+    usbHidMonitorSof(sof_now_us);                                     // V251009R7: 모니터 활성 시 타임스탬프 전달
+  }
 #endif
 #if _DEF_ENABLE_USB_HID_TIMING_PROBE
   usbHidInstrumentationOnSof(sof_now_us);                             // V251009R7: 계측 활성 시 샘플 윈도우 갱신
@@ -1196,7 +1199,7 @@ bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length)
   return true;
 }
 
-#if _USE_USB_MONITOR  // V251010R5: 모니터 비활성 빌드에서도 HID 본체가 유지되도록 함수 정의를 개별 가드로 분리
+#ifdef USB_MONITOR_ENABLE  // V251010R5: 모니터 비활성 빌드에서도 HID 본체가 유지되도록 함수 정의를 개별 가드로 분리
 
 static UsbBootMode_t usbHidResolveDowngradeTarget(void)            // V250924R2 현재 모드 대비 하위 폴링 모드 계산
 {
@@ -1410,7 +1413,7 @@ static void usbHidMonitorSof(uint32_t now_us)
   }
 }
 
-#endif  // _USE_USB_MONITOR  // V251010R5: 모니터 전용 함수 정의 범위 분리 완료
+#endif  // USB_MONITOR_ENABLE  // V251010R5: 모니터 전용 함수 정의 범위 분리 완료
 
 
 __weak void usbHidSetStatusLed(uint8_t led_bits)

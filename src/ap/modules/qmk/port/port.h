@@ -18,3 +18,10 @@
 #define EECONFIG_USER_KILL_SWITCH_UD  ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 16))  // 8B
 #define EECONFIG_USER_KKUK            ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 24))  // 4B
 #define EECONFIG_USER_BOOTMODE        ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 28))  // 4B
+#define EECONFIG_USER_USB_INSTABILITY ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 32))  // 4B  // V251108R1: USB 모니터 토글 저장 슬롯
+
+typedef struct
+{
+  uint8_t enable;
+  uint8_t reserved[3];
+} usb_monitor_config_t;  // V251108R1: USB 안정성 모니터 구성 페이로드

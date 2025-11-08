@@ -86,10 +86,10 @@
 
 ## 9. 계측 컴파일 매크로 & 빌드 시나리오
 - `_DEF_ENABLE_MATRIX_TIMING_PROBE`와 `_DEF_ENABLE_USB_HID_TIMING_PROBE`는 `hw_def.h`에서 기본 0으로 정의되어 릴리스 빌드에서 계측 호출이 제거됩니다.【F:src/hw/hw_def.h†L9-L18】
-- `_USE_USB_MONITOR` 기본값은 1로, 모니터 비활성화 빌드를 원할 때만 키보드 `config.h`에서 재정의하면 됩니다.【F:src/hw/hw_def.h†L9-L21】
+- // V251108R1: Brick60는 `config.h`에서 `USB_MONITOR_ENABLE`/`BOOTMODE_ENABLE`을 토글하여 SOF 모니터와 VIA USB 메뉴 포함 여부를 결정합니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/config.h†L42-L49】
 - `matrixInstrumentationCaptureStart()`와 `matrixInstrumentationPropagate()`는 매크로 조합이 활성화된 경우에만 `micros()` 호출과 HID 타임스탬프 전달을 수행합니다.【F:src/ap/modules/qmk/port/matrix_instrumentation.h†L13-L45】【F:src/ap/modules/qmk/port/matrix.c†L50-L78】
-- HID 계층은 `_DEF_ENABLE_USB_HID_TIMING_PROBE`가 0이면 인라인 스텁으로 축소되지만, `_USE_USB_MONITOR`가 1인 경우 `usbHidInstrumentationNow()`가 `micros()`를 유지해 SOF 모니터와 Poll Rate 계측이 같은 타임스탬프를 공유합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.h†L26-L68】
-- **릴리스 기본(S1)**: 두 계측 매크로 0, `_USE_USB_MONITOR=1` 구성으로 SOF 모니터만 실행되어 Poll Rate 통계 누적이 비활성화됩니다.【F:src/hw/hw_def.h†L9-L21】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1198-L1412】
+- HID 계층은 `_DEF_ENABLE_USB_HID_TIMING_PROBE`가 0이면 인라인 스텁으로 축소되지만, `USB_MONITOR_ENABLE`이 정의된 빌드에서는 `usbHidInstrumentationNow()`가 `micros()`를 유지해 SOF 모니터와 Poll Rate 계측이 같은 타임스탬프를 공유합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.h†L26-L68】
+- **릴리스 기본(S1)**: 두 계측 매크로 0, `USB_MONITOR_ENABLE`이 켜진 구성으로 SOF 모니터만 실행되어 Poll Rate 통계 누적이 비활성화됩니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/config.h†L42-L49】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1198-L1412】
 - **풀 계측(S5)**: 두 계측 매크로를 1로 설정하면 매트릭스 타임스탬프가 HID 계층에 전달되고, `usbHidMeasurePollRate()`가 큐 깊이와 폴링 초과 시간을 집계합니다.【F:src/ap/modules/qmk/port/matrix_instrumentation.h†L13-L45】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1145-L1210】
 
 ## 10. Poll/HID 계측 연동 흐름

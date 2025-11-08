@@ -18,6 +18,7 @@
 | `src/hw/driver/usb/usbd_conf.c` | `usbBootModeIsFullSpeed()` | HS PHY에서도 FS 1kHz를 강제할 수 있도록 PCD 속도를 재설정합니다. |
 | `src/hw/driver/usb/usb_hid/usbd_hid.c` | `usbBootModeGetHsInterval()` 호출부 | HID 엔드포인트 `bInterval`과 폴링 계측 샘플 크기를 부트 모드에 맞춥니다. |
 | `src/hw/driver/usb/usb_cmp/usbd_cmp.c` | `usbBootModeGetHsInterval()` 호출부 | Composite 인터페이스의 `bInterval`을 모드별로 재구성합니다. |
+| `src/ap/modules/qmk/port/usb_bootmode_via.[ch]` | `via_qmk_usb_bootmode_command()` | // V251108R1: Brick60 VIA channel 13 value ID 1/2를 BootMode API와 연동하고, 토글 비활성 빌드에서는 JSON 블록을 제거해야 함을 명시합니다. |
 
 ## 3. 데이터 모델 & 유틸리티
 - **열거형 `usb_boot_mode_t`**
@@ -76,6 +77,10 @@ cliBoot "set <mode>"
 4. HS/FS 파라미터를 조정하면 `usbd_conf.c`, HID/Composite 엔드포인트, CLI 도움말 문자열을 동일하게 업데이트합니다.
 
 ## 9. 조건부 컴파일 & 모니터 연동
-- `_USE_USB_MONITOR` 기본값은 `hw_def.h`에서 1로 정의되어 있어, 펌웨어 릴리스 구성에서도 USB 불안정성 모니터가 항상 BootMode 큐를 구동할 수 있습니다.【F:src/hw/hw_def.h†L9-L21】
-- `usbd_hid.c`는 SOF 모니터 전용 정의를 `_USE_USB_MONITOR` 가드로 감싸되, 가드를 조기에 종료하여 HID 본체와 BootMode 엔드포인트 구성 코드는 항상 컴파일되도록 재구성되었습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L486-L546】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1198-L1412】
-- 모니터가 비활성화된 빌드에서는 `usbHidResolveDowngradeTarget()`과 `usbHidMonitorSof()`가 제외되어 자동 다운그레이드가 발생하지 않으며, CLI를 통한 수동 `boot set`만으로 모드를 변경합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1198-L1412】
+- // V251108R1: Brick60는 `config.h`에서 `BOOTMODE_ENABLE`을 정의해 BootMode 경로를 포함하며, `USB_MONITOR_ENABLE`이 켜져 있을 때 강제로 BootMode를 켜도록 파생 가드를 추가했습니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/config.h†L42-L49】
+- // V251108R1: `usbd_hid.c`의 SOF 모니터 블록은 `USB_MONITOR_ENABLE`가 정의된 빌드에서만 컴파일되며, VIA 토글(`usbInstabilityIsEnabled()`)이 `false`면 SOF 핸들러에서 즉시 반환합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1035-L1098】
+- 모니터 매크로나 VIA 토글이 꺼져 있으면 `usbProcess()` 상태 머신이 no-op으로 유지되어 CLI `boot set`만으로 모드를 바꿀 수 있습니다.【F:src/hw/driver/usb/usb.c†L200-L278】
+
+## 10. VIA 연동 (Brick60)
+- // V251108R1: channel 13 value ID 1(부트 모드 선택)과 2(Apply 토글)는 `via_qmk_usb_bootmode_command()`에서 `usbBootModeStore()`/`usbBootModeSaveAndReset()`으로 직접 연결되며, Apply 토글을 HOST UI와 맞추기 위해 응답값을 항상 0으로 리셋합니다.【F:src/ap/modules/qmk/port/usb_bootmode_via.c†L5-L63】
+- `BRICK60-H7S-VIA.JSON`의 "USB POLLING" 블록은 `BOOTMODE_ENABLE`/`USB_MONITOR_ENABLE`이 비활성화된 빌드에서는 파일에서 제거해야 하며, 기본 JSON은 해당 의존성을 라벨에 명시합니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/json/BRICK60-H7S-VIA.JSON†L248-L292】

@@ -37,6 +37,12 @@
 #define GRAVE_ESC_ENABLE
 #define KILL_SWITCH_ENABLE
 #define KKUK_ENABLE
+// V251108R1: Brick60 기본 빌드에서 BootMode/USB 모니터 VIA 채널을 활성화
+#define USB_MONITOR_ENABLE 1
+#define BOOTMODE_ENABLE    1
+#if defined(USB_MONITOR_ENABLE) && !defined(BOOTMODE_ENABLE)
+#  define BOOTMODE_ENABLE 1
+#endif
 
 // Tapping Term 테스트
 //

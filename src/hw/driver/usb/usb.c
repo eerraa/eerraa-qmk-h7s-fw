@@ -13,6 +13,7 @@
 #include "eeprom.h"
 #include "qmk/port/port.h"
 #include "qmk/port/platforms/eeprom.h"
+#include "qmk/port/usb_monitor_via.h"                                  // V251108R1: USB 모니터 VIA 스토리지 연동
 
 
 #ifdef _USE_HW_USB
@@ -32,8 +33,11 @@ static const char *const usb_boot_mode_name[USB_BOOT_MODE_MAX] = {          // V
 };
 
 static const char *usbBootModeLabel(UsbBootMode_t mode);                     // V250923R1 helpers
-static bool        usbBootModeStore(UsbBootMode_t mode);
+#ifdef BOOTMODE_ENABLE
+bool usbBootModeStore(UsbBootMode_t mode);
+#endif
 
+#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
 typedef enum
 {
   USB_BOOT_MODE_REQ_STAGE_IDLE = 0,
@@ -74,6 +78,7 @@ static void usbBootModeRequestReset(void)
   boot_mode_request.ready_ms   = 0U;
   boot_mode_request.timeout_ms = 0U;
 }
+#endif
 
 #if HW_USB_CMP == 1
 static uint8_t hid_ep_tbl[] = {
@@ -98,6 +103,7 @@ static const char *usbBootModeLabel(UsbBootMode_t mode)
   return "UNKNOWN";
 }
 
+#ifdef BOOTMODE_ENABLE
 bool usbBootModeLoad(void)
 {
   uint32_t raw_mode = eeprom_read_dword((const uint32_t *)EECONFIG_USER_BOOTMODE);
@@ -139,7 +145,7 @@ uint8_t usbBootModeGetHsInterval(void)
   }
 }
 
-static bool usbBootModeStore(UsbBootMode_t mode)
+bool usbBootModeStore(UsbBootMode_t mode)
 {
   uint32_t raw_mode = (uint32_t)mode;
   uint32_t addr     = (uint32_t)EECONFIG_USER_BOOTMODE;
@@ -173,7 +179,9 @@ bool usbBootModeSaveAndReset(UsbBootMode_t mode)
   resetToReset();
   return true;
 }
+#endif
 
+#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
 usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
                                                         uint32_t      measured_delta_us,
                                                         uint32_t      expected_us,
@@ -214,7 +222,9 @@ usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
 
   return USB_BOOT_DOWNGRADE_REJECTED;
 }
+#endif
 
+#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
 void usbProcess(void)                                                                  // V250924R3 USB 안정성 이벤트 처리 루프
 {
   if (boot_mode_request.stage == USB_BOOT_MODE_REQ_STAGE_IDLE)                         // V250924R3 비활성 시 오버헤드 방지
@@ -264,6 +274,40 @@ void usbProcess(void)                                                           
       break;
   }
 }
+#else
+void usbProcess(void)
+{
+}
+#endif
+
+#ifdef USB_MONITOR_ENABLE
+static bool usb_instability_enabled = true;                               // V251108R1: VIA USB 모니터 토글 캐시
+
+bool usbInstabilityLoad(void)
+{
+  usb_monitor_storage_init();
+  usb_instability_enabled = usb_monitor_storage_is_enabled();
+  return true;
+}
+
+bool usbInstabilityStore(bool enable)
+{
+  if (usb_instability_enabled == enable)
+  {
+    return true;
+  }
+
+  usb_instability_enabled = enable;
+  usb_monitor_storage_set_enable(enable);
+  usb_monitor_storage_flush(true);
+  return true;
+}
+
+bool usbInstabilityIsEnabled(void)
+{
+  return usb_instability_enabled;
+}
+#endif
 
 #ifdef _USE_HW_CLI
 static void cliCmd(cli_args_t *args);
@@ -276,7 +320,9 @@ static void cliBoot(cli_args_t *args);                                       // 
 bool usbInit(void)
 {
 #ifdef _USE_HW_USB
-  usbBootModeRequestReset();
+#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
+  usbBootModeRequestReset();                                          // V251108R1: 모니터 활성 시에만 다운그레이드 큐 초기화
+#endif
 #endif
 #ifdef _USE_HW_CLI
   cliAdd("usb", cliCmd);

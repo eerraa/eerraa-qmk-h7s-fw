@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251018R6"   // V251018R6: VIA RGB 이펙트 전환 시 렌더 큐 적용
+#define _DEF_FIRMWATRE_VERSION      "V251108R1"   // V251108R1: Brick60 BootMode/USB 모니터 VIA 토글 통합
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
@@ -16,10 +16,6 @@
 #ifndef _DEF_ENABLE_USB_HID_TIMING_PROBE
 #define _DEF_ENABLE_USB_HID_TIMING_PROBE  0  // V251009R5: usbd_hid 계측 기본 비활성화, 필요 시 빌드 옵션으로만 활성화
 #endif
-#ifndef _USE_USB_MONITOR
-#define _USE_USB_MONITOR                  1  // V251010R6: 기본은 활성화, 필요 시 보드/키맵에서 재정의 가능
-#endif
-
 
 #define _USE_HW_CACHE
 #define _USE_HW_MICROS

@@ -262,10 +262,10 @@
           ]
         },
         {
-          "label": "USB POLLING",
+          "label": "USB POLLING (V251108R1: remove when BOOTMODE_ENABLE/USB_MONITOR_ENABLE are disabled)",
           "content": [
             {
-              "label": "Boot Polling Mode",
+              "label": "Boot Polling Mode [BOOTMODE_ENABLE]",
               "type": "dropdown",
               "content": ["id_qmk_usb_bootmode", 13, 1],
               "options": [
@@ -276,12 +276,12 @@
               ]
             },
             {
-              "label": "Apply Selected Mode",
+              "label": "Apply Selected Mode [BOOTMODE_ENABLE]",
               "type": "toggle",
               "content": ["id_qmk_usb_bootmode_apply", 13, 2]
             },
             {
-              "label": "Auto downgrade on USB unstable [BETA]",
+              "label": "Auto downgrade on USB unstable [USB_MONITOR_ENABLE]",
               "type": "toggle",
               "content": ["id_qmk_usb_autodg_beta", 13, 3]
             }

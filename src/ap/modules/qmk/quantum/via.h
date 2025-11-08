@@ -116,6 +116,7 @@ enum via_channel_id {
     id_qmk_kill_switch_lr     = 10,
     id_qmk_kill_switch_ud     = 11,
     id_qmk_kkuk               = 12,
+    id_qmk_usb_polling        = 13,  // V251108R1: BootMode/USB 모니터 전용 채널
 };
 
 enum via_qmk_backlight_value {
@@ -146,6 +147,13 @@ enum via_qmk_led_matrix_value {
 enum via_qmk_audio_value {
     id_qmk_audio_enable        = 1,
     id_qmk_audio_clicky_enable = 2,
+};
+
+// V251108R1: Brick60 USB POLLING 메뉴 value ID 매핑
+enum via_qmk_usb_polling_value {
+    id_qmk_usb_bootmode_select = 1,
+    id_qmk_usb_bootmode_apply  = 2,
+    id_qmk_usb_monitor_toggle  = 3,
 };
 
 // V251012R2: 커스텀 인디케이터 제어 값 ID

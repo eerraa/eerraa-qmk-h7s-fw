@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "def.h"  // V251010R1: 인라인 스텁에서 _USE_USB_MONITOR 플래그를 참조
+#include "def.h"  // V251108R1: USB_MONITOR_ENABLE/계측 매크로 확인
 #include "cli.h"
 #include "usbd_hid.h"
 #include "usbd_hid_internal.h"
@@ -25,7 +25,7 @@ void     usbHidMeasureRateTime(void);
 
 static inline uint32_t usbHidInstrumentationNow(void)
 {
-#if _USE_USB_MONITOR || _DEF_ENABLE_USB_HID_TIMING_PROBE
+#if defined(USB_MONITOR_ENABLE) || _DEF_ENABLE_USB_HID_TIMING_PROBE
   return micros();  // V251010R1: 모니터 활성 시 타임스탬프 유지
 #else
   return 0U;
