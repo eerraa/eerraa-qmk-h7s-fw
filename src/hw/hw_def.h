@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251109R2"   // V251109R2: 속도/서스펜드 열화 모니터링 확장
+#define _DEF_FIRMWATRE_VERSION      "V251109R3"   // V251109R3: 속도/서스펜드 이벤트 창 고정화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
@@ -62,7 +62,7 @@
 #define      HW_RESET_BOOT          1
 
 #define _USE_HW_KEYS
-#define      HW_KEYS_PRESS_MAX      8
+#define      HW_KEYS_PRESS_MAX      20
 
 // #define _USE_HW_WS2812
 // #define     HW_WS2812_MAX_CH        45
@@ -70,7 +70,7 @@
 #define _USE_HW_USB
 #define _USE_HW_CDC
 #ifdef  _USE_HW_VCOM
-#define      HW_USB_LOG             1
+#define      HW_USB_LOG             0
 #define      HW_USB_CMP             1
 #define      HW_USB_CDC             1
 #define      HW_USB_MSC             0

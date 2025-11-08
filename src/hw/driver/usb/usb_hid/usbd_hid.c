@@ -1364,8 +1364,8 @@ static void usbHidMonitorSof(uint32_t now_us)
     sof_monitor.speed_change_count     = 0U;
     sof_monitor.suspend_count          = 0U;
     sof_monitor.persistent_score       = 0U;
-    sof_monitor.speed_change_window_us = now_us;
-    sof_monitor.suspend_window_us      = now_us;
+    sof_monitor.speed_change_window_us = 0U;          // V251109R3: 이벤트 창을 첫 발생 기준으로 초기화
+    sof_monitor.suspend_window_us      = 0U;          // V251109R3: 서스펜드 창 초기화
     sof_monitor.warmup_grace_active    = false;
     sof_monitor.warmup_grace_deadline_us = 0U;
     sof_prev_dev_state             = pdev->dev_state;
@@ -1387,6 +1387,8 @@ static void usbHidMonitorSof(uint32_t now_us)
     sof_monitor.speed_change_count     = 0U;
     sof_monitor.suspend_count          = 0U;
     sof_monitor.persistent_score       = 0U;
+    sof_monitor.speed_change_window_us = 0U;          // V251109R3: 구성 전에는 창을 비활성화
+    sof_monitor.suspend_window_us      = 0U;          // V251109R3
     sof_monitor.warmup_grace_active    = false;
     sof_monitor.warmup_grace_deadline_us = 0U;
     return;
@@ -1661,8 +1663,8 @@ static bool usbHidMonitorCommitDowngrade(uint32_t      now_us,
   sof_monitor.persistent_score = 0U;
   sof_monitor.speed_change_count = 0U;
   sof_monitor.suspend_count = 0U;
-  sof_monitor.speed_change_window_us = now_us;
-  sof_monitor.suspend_window_us = now_us;
+  sof_monitor.speed_change_window_us = 0U;            // V251109R3: 새 이벤트까지만 창 유지
+  sof_monitor.suspend_window_us = 0U;                 // V251109R3
   sof_monitor.warmup_grace_active = false;
 #if HW_USB_LOG == 1
   if (downgrade_requested)
@@ -1727,12 +1729,14 @@ static void usbHidMonitorHandleSpeedChange(uint32_t now_us)
   if (sof_monitor.warmup_target_frames == 0U)
   {
     sof_monitor.speed_change_count = 0U;
+    sof_monitor.speed_change_window_us = 0U;          // V251109R3: 창 비활성화
     return;
   }
 
-  if (sof_monitor.speed_change_count > 0U && now_us >= sof_monitor.speed_change_window_us)
+  if (sof_monitor.speed_change_count == 0U || now_us >= sof_monitor.speed_change_window_us)
   {
     sof_monitor.speed_change_count = 0U;
+    sof_monitor.speed_change_window_us = now_us + USB_SOF_MONITOR_SPEED_WINDOW_US;  // V251109R3: 첫 이벤트 기준 고정 창
   }
 
   if (sof_monitor.warmup_complete)
@@ -1746,11 +1750,10 @@ static void usbHidMonitorHandleSpeedChange(uint32_t now_us)
     sof_monitor.speed_change_count++;
   }
 
-  sof_monitor.speed_change_window_us = now_us + USB_SOF_MONITOR_SPEED_WINDOW_US;
-
   if (sof_monitor.speed_change_count >= USB_SOF_MONITOR_SPEED_THRESHOLD)
   {
     sof_monitor.speed_change_count = 0U;
+    sof_monitor.speed_change_window_us = now_us + USB_SOF_MONITOR_SPEED_WINDOW_US;  // V251109R3: 새 창 시작
     usbHidMonitorBumpPersistent(now_us, USB_MONITOR_EVENT_SPEED);
   }
 }
@@ -1760,12 +1763,14 @@ static void usbHidMonitorHandleSuspend(uint32_t now_us)
   if (sof_monitor.warmup_target_frames == 0U)
   {
     sof_monitor.suspend_count = 0U;
+    sof_monitor.suspend_window_us = 0U;               // V251109R3: 창 비활성화
     return;
   }
 
-  if (sof_monitor.suspend_count > 0U && now_us >= sof_monitor.suspend_window_us)
+  if (sof_monitor.suspend_count == 0U || now_us >= sof_monitor.suspend_window_us)
   {
     sof_monitor.suspend_count = 0U;
+    sof_monitor.suspend_window_us = now_us + USB_SOF_MONITOR_SUSPEND_WINDOW_US;  // V251109R3: 첫 이벤트 기준 창
   }
 
   if (sof_monitor.warmup_complete)
@@ -1779,11 +1784,10 @@ static void usbHidMonitorHandleSuspend(uint32_t now_us)
     sof_monitor.suspend_count++;
   }
 
-  sof_monitor.suspend_window_us = now_us + USB_SOF_MONITOR_SUSPEND_WINDOW_US;
-
   if (sof_monitor.suspend_count >= USB_SOF_MONITOR_SUSPEND_THRESHOLD)
   {
     sof_monitor.suspend_count = 0U;
+    sof_monitor.suspend_window_us = now_us + USB_SOF_MONITOR_SUSPEND_WINDOW_US;  // V251109R3: 새 창 시작
     usbHidMonitorBumpPersistent(now_us, USB_MONITOR_EVENT_SUSPEND);
   }
 }
@@ -1793,11 +1797,13 @@ static void usbHidMonitorRefreshEventWindows(uint32_t now_us)
   if (sof_monitor.speed_change_count > 0U && now_us >= sof_monitor.speed_change_window_us)
   {
     sof_monitor.speed_change_count = 0U;
+    sof_monitor.speed_change_window_us = 0U;          // V251109R3: 만료 시 창 초기화
   }
 
   if (sof_monitor.suspend_count > 0U && now_us >= sof_monitor.suspend_window_us)
   {
     sof_monitor.suspend_count = 0U;
+    sof_monitor.suspend_window_us = 0U;               // V251109R3
   }
 
   if (sof_monitor.warmup_grace_active && now_us >= sof_monitor.warmup_grace_deadline_us)

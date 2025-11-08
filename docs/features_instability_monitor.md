@@ -32,7 +32,7 @@
   - `decay_interval_us` / `slow_decay_interval_us`: 각각 빠른/느린 점수 감쇠 주기. HS는 4ms/12ms, FS는 20ms/60ms로 설정됩니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L523-L544】
   - `slow_score`, `slow_degrade_threshold`: 장기적인 드롭 빈도를 추적해 3~4회 이상 반복되면 다운그레이드를 보강합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L493-L557】
   - `no_sof_deadline_us`: 마지막 SOF 이후 허용되는 최대 간격(HS 8ms, FS 64ms). 초과 시 백그라운드 타이머가 강제 평가합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L495-L556】
-  - `speed_change_count/suspend_count`, `speed_change_window_us/suspend_window_us`: 1.0s/1.5s 창 내 재협상·서스펜드 발생 횟수를 기록해 과도한 변동을 감지합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L493-L556】
+  - `speed_change_count/suspend_count`, `speed_change_window_us/suspend_window_us`: 1.0s/1.5s 창(첫 이벤트 시각을 기준으로 고정) 내 재협상·서스펜드 발생 횟수를 기록해 과도한 변동을 감지합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L493-L556】
   - `persistent_score`, `persistent_threshold`: 속도/서스펜드 이벤트로 누적된 영속 점수를 추적해 임계(3점)를 넘으면 SOF 데이터가 초기화된 상황에서도 다운그레이드를 요청합니다.
   - `warmup_grace_active`, `warmup_grace_deadline_us`: 워밍업 완료 직후 200ms 이내에 변동이 발생하면 목표 프레임 수를 절반으로 낮춰 감시 재개까지 대기 시간을 줄입니다.
   - `degrade_threshold`: 빠른 점수 임계. HS 10점, FS 5점입니다.
