@@ -161,7 +161,7 @@
               "label": "- KEY 2",
               "type": "keycode",
               "content": ["id_qmk_kill_switch_down", 11, 3]
-            }            
+            }
           ]
         },
         {
@@ -258,7 +258,7 @@
               "type": "dropdown",
               "options": ["R1","R2","R3","R4","R5","R6","R7","R8","R9"],
               "content": ["id_qmk_ver_rv", 8, 4]
-            }                     
+            }
           ]
         },
         {
@@ -294,7 +294,7 @@
               "label": "Jump To BOOT",
               "type": "toggle",
               "content": ["id_qmk_system_dfu", 9, 1]
-            }                           
+            }
           ]
         },
         {
@@ -314,9 +314,9 @@
               "label": "Are you sure ?",
               "type": "toggle",
               "content": ["id_qmk_system_reset_done", 9, 4]
-            }                           
+            }
           ]
-        }        
+        }
       ]
     }
   ],
