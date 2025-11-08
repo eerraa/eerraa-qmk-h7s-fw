@@ -512,12 +512,12 @@ enum
   USB_ENUM_MONITOR_FAIL_THRESHOLD     = 3U,                                               // V251109R1 열거 실패 다운그레이드 임계
   USB_ENUM_MONITOR_SCORE_CAP          = 5U,                                               // V251109R1 열거 실패 점수 상한
   USB_ENUM_MONITOR_RECOVERY_MS        = 1000U,                                            // V251109R1 열거 안정 여부 감쇠(ms)
-  USB_SOF_MONITOR_SPEED_WINDOW_US     = 2000U * 1000UL,                                   // V251109R2 속도 변동 감시 윈도우(us)
-  USB_SOF_MONITOR_SPEED_THRESHOLD     = 4U,                                               // V251109R2 속도 변동 허용 횟수
-  USB_SOF_MONITOR_SUSPEND_WINDOW_US   = 2000U * 1000UL,                                   // V251109R2 서스펜드 감시 윈도우(us)
-  USB_SOF_MONITOR_SUSPEND_THRESHOLD   = 5U,                                               // V251109R2 서스펜드 허용 횟수
-  USB_SOF_MONITOR_PERSISTENT_THRESHOLD = 4U,                                              // V251109R2 영구 점수 임계
-  USB_SOF_MONITOR_WARMUP_GRACE_US     = 100U * 1000UL,                                    // V251109R2 워밍업 완화 기간(us)
+  USB_SOF_MONITOR_SPEED_WINDOW_US     = 1000U * 1000UL,                                   // V251109R2 HS 재협상 평균 재시도(≤1s)에 맞춘 윈도우
+  USB_SOF_MONITOR_SPEED_THRESHOLD     = 3U,                                               // V251109R2 1초 내 3회 이상이면 비정상으로 간주
+  USB_SOF_MONITOR_SUSPEND_WINDOW_US   = 1500U * 1000UL,                                   // V251109R2 Selective Suspend 허용 간격(>1.5s)
+  USB_SOF_MONITOR_SUSPEND_THRESHOLD   = 3U,                                               // V251109R2 1.5s 내 3회 서스펜드는 비정상
+  USB_SOF_MONITOR_PERSISTENT_THRESHOLD = 3U,                                              // V251109R2 영구 점수 임계 (세 번째 이벤트에서 다운그레이드)
+  USB_SOF_MONITOR_WARMUP_GRACE_US     = 200U * 1000UL,                                    // V251109R2 워밍업 완화 기간(us)
   USB_BOOT_MONITOR_CONFIRM_DELAY_US   = USB_BOOT_MONITOR_CONFIRM_DELAY_MS * 1000UL          // 다운그레이드 확인 대기(us)
 };
 
