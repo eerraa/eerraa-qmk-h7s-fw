@@ -65,6 +65,14 @@
 #define logDebug(...) 
 #endif
 
+typedef enum                                                // V251109R2 다운그레이드 이벤트 구분
+{
+  USB_MONITOR_EVENT_SOF = 0,
+  USB_MONITOR_EVENT_ENUM,
+  USB_MONITOR_EVENT_SPEED,
+  USB_MONITOR_EVENT_SUSPEND
+} usb_monitor_event_t;
+
 
 static uint8_t USBD_HID_Init(USBD_HandleTypeDef *pdev, uint8_t cfgidx);
 static uint8_t USBD_HID_DeInit(USBD_HandleTypeDef *pdev, uint8_t cfgidx);
@@ -106,7 +114,9 @@ static void usbHidMonitorBumpPersistent(uint32_t now_us, usb_monitor_event_t eve
 static void usbHidMonitorRefreshEventWindows(uint32_t now_us);          // V251109R2 이벤트 윈도우 만료 처리
 static UsbBootMode_t usbHidResolveDowngradeTarget(void);                // V250924R2 다운그레이드 대상 계산
 void usbHidMonitorBackgroundTick(uint32_t now_us);                      // V251108R9 SOF 중단 감시
+#if HW_USB_LOG == 1
 static const char *usbHidMonitorEventLabel(usb_monitor_event_t event);  // V251109R2 이벤트 문자열
+#endif
 #endif
 
 
@@ -1672,6 +1682,7 @@ static bool usbHidMonitorCommitDowngrade(uint32_t      now_us,
   return downgrade_requested;
 }
 
+#if HW_USB_LOG == 1
 static const char *usbHidMonitorEventLabel(usb_monitor_event_t event)
 {
   switch (event)
@@ -1687,6 +1698,7 @@ static const char *usbHidMonitorEventLabel(usb_monitor_event_t event)
       return "sof";
   }
 }
+#endif
 
 static void usbHidMonitorBumpPersistent(uint32_t now_us, usb_monitor_event_t event)
 {
