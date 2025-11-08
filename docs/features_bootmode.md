@@ -82,5 +82,5 @@ cliBoot "set <mode>"
 - 모니터 매크로나 VIA 토글이 꺼져 있으면 `usbProcess()` 상태 머신이 no-op으로 유지되어 CLI `boot set`만으로 모드를 바꿀 수 있습니다.【F:src/hw/driver/usb/usb.c†L200-L278】
 
 ## 10. VIA 연동 (Brick60)
-- // V251108R1: channel 13 value ID 1(부트 모드 선택)과 2(Apply 토글)는 `via_qmk_usb_bootmode_command()`에서 `usbBootModeStore()`/`usbBootModeSaveAndReset()`으로 직접 연결되며, Apply 토글을 HOST UI와 맞추기 위해 응답값을 항상 0으로 리셋합니다.【F:src/ap/modules/qmk/port/usb_bootmode_via.c†L5-L63】
+- // V251108R1: channel 13 value ID 1(부트 모드 선택)은 런타임 폴링 레이트를 바꾸지 않고 보류 값(`pending_boot_mode`)만 갱신하며, value ID 2(Apply 토글)가 1이 될 때 `usbBootModeSaveAndReset()`을 호출해 CLI `boot set`과 동일한 EEPROM 저장→리셋 흐름을 수행합니다.【F:src/ap/modules/qmk/port/usb_bootmode_via.c†L5-L64】
 - `BRICK60-H7S-VIA.JSON`의 "USB POLLING" 블록은 `BOOTMODE_ENABLE`/`USB_MONITOR_ENABLE`이 비활성화된 빌드에서는 파일에서 제거해야 하며, 기본 JSON은 해당 의존성을 라벨에 명시합니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/json/BRICK60-H7S-VIA.JSON†L248-L292】
