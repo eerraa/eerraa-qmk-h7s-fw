@@ -21,9 +21,11 @@
 #include "usbd_hid.h"
 
 
-static bool          is_init = false;
-static UsbMode_t     is_usb_mode = USB_NON_MODE;
+static bool      is_init = false;
+static UsbMode_t is_usb_mode = USB_NON_MODE;
+#ifdef BOOTMODE_ENABLE
 static UsbBootMode_t usb_boot_mode = USB_BOOT_MODE_HS_8K;                    // V250923R1 Current USB boot mode target
+#endif
 
 static const char *const usb_boot_mode_name[USB_BOOT_MODE_MAX] = {          // V250923R1 Mode labels for logging/CLI
   "HS 8K",
@@ -35,6 +37,13 @@ static const char *const usb_boot_mode_name[USB_BOOT_MODE_MAX] = {          // V
 static const char *usbBootModeLabel(UsbBootMode_t mode);                     // V250923R1 helpers
 #ifdef BOOTMODE_ENABLE
 bool usbBootModeStore(UsbBootMode_t mode);
+#endif
+#ifdef BOOTMODE_ENABLE
+static volatile struct
+{
+  bool          pending;                                                   // V251108R3: VIA에서 요청된 BootMode 적용 큐
+  UsbBootMode_t mode;
+} boot_mode_apply_request = {false, USB_BOOT_MODE_HS_8K};
 #endif
 
 #if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
@@ -181,6 +190,20 @@ bool usbBootModeSaveAndReset(UsbBootMode_t mode)
 }
 #endif
 
+#ifdef BOOTMODE_ENABLE
+bool usbBootModeScheduleApply(UsbBootMode_t mode)
+{
+  if (mode >= USB_BOOT_MODE_MAX)
+  {
+    return false;
+  }
+
+  boot_mode_apply_request.mode    = mode;
+  boot_mode_apply_request.pending = true;
+  return true;
+}
+#endif
+
 #if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
 usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
                                                         uint32_t      measured_delta_us,
@@ -224,8 +247,31 @@ usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
 }
 #endif
 
+#ifdef BOOTMODE_ENABLE
+static void usbProcessBootModeApply(void)
+{
+  if (boot_mode_apply_request.pending == false)
+  {
+    return;
+  }
+
+  UsbBootMode_t req_mode = boot_mode_apply_request.mode;
+  boot_mode_apply_request.pending = false;
+
+  if (req_mode >= USB_BOOT_MODE_MAX)
+  {
+    return;
+  }
+
+  if (usbBootModeSaveAndReset(req_mode) != true)
+  {
+    logPrintf("[!] USB BootMode apply 실패\n");
+  }
+}
+#endif
+
 #if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
-void usbProcess(void)                                                                  // V250924R3 USB 안정성 이벤트 처리 루프
+static void usbProcessBootModeDowngrade(void)                                                                  // V250924R3 USB 안정성 이벤트 처리 루프
 {
   if (boot_mode_request.stage == USB_BOOT_MODE_REQ_STAGE_IDLE)                         // V250924R3 비활성 시 오버헤드 방지
   {
@@ -274,11 +320,17 @@ void usbProcess(void)                                                           
       break;
   }
 }
-#else
+#endif
+
 void usbProcess(void)
 {
-}
+#ifdef BOOTMODE_ENABLE
+  usbProcessBootModeApply();
 #endif
+#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
+  usbProcessBootModeDowngrade();
+#endif
+}
 
 #ifdef USB_MONITOR_ENABLE
 static bool usb_instability_enabled = true;                               // V251108R1: VIA USB 모니터 토글 캐시

@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251108R2"   // V251108R2: VIA BootMode 선택 오류/재부팅 동작 보강
+#define _DEF_FIRMWATRE_VERSION      "V251108R3"   // V251108R3: VIA BootMode Apply를 메인 루프에서 처리하도록 변경
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

@@ -5,7 +5,7 @@
 #include "usb.h"
 #include "via.h"
 
-// V251108R2: VIA 선택값을 리셋 전까지 보류, Apply 시에만 EEPROM/리셋 수행
+// V251108R3: VIA 선택값을 리셋 전까지 보류하고 Apply 요청은 메인 루프에서 처리
 static UsbBootMode_t pending_boot_mode = USB_BOOT_MODE_HS_8K;
 static bool          pending_boot_mode_init = false;
 
@@ -62,7 +62,7 @@ void via_qmk_usb_bootmode_command(uint8_t *data, uint8_t length)
         {
           if (pending_boot_mode != usbBootModeGet())
           {
-            usbBootModeSaveAndReset(pending_boot_mode);  // V251108R2: 실제 적용은 CLI와 동일하게 EEPROM 저장 후 리셋
+            usbBootModeScheduleApply(pending_boot_mode);  // V251108R3: 인터럽트 문맥에서는 리셋을 예약만 수행
           }
         }
         value_data[0] = 0U;
