@@ -32,6 +32,9 @@
   - `decay_interval_us` / `slow_decay_interval_us`: 각각 빠른/느린 점수 감쇠 주기. HS는 4ms/12ms, FS는 20ms/60ms로 설정됩니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L523-L544】
   - `slow_score`, `slow_degrade_threshold`: 장기적인 드롭 빈도를 추적해 3~4회 이상 반복되면 다운그레이드를 보강합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L493-L557】
   - `no_sof_deadline_us`: 마지막 SOF 이후 허용되는 최대 간격(HS 8ms, FS 64ms). 초과 시 백그라운드 타이머가 강제 평가합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L495-L556】
+  - `speed_change_count/suspend_count`, `speed_change_window_us/suspend_window_us`: 2초 창 내 재협상·서스펜드 발생 횟수를 기록해 과도한 변동을 감지합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L493-L556】
+  - `persistent_score`, `persistent_threshold`: 속도/서스펜드 이벤트로 누적된 영속 점수를 추적해 임계(4점)를 넘으면 SOF 데이터가 초기화된 상황에서도 다운그레이드를 요청합니다.
+  - `warmup_grace_active`, `warmup_grace_deadline_us`: 워밍업 완료 직후 100ms 이내에 변동이 발생하면 목표 프레임 수를 절반으로 낮춰 감시 재개까지 대기 시간을 줄입니다.
   - `degrade_threshold`: 빠른 점수 임계. HS 10점, FS 5점입니다.
   - `active_speed`: 현재 USB 속도 캐시.
 - **상태 전이 이벤트**
@@ -41,6 +44,7 @@
   4. **감쇠**: `decay_interval_us`마다 점수를 1씩 낮춥니다.
   5. **임계 도달**: `degrade_threshold` 또는 `slow_degrade_threshold` 이상이면 다운그레이드 큐에 요청을 보냅니다.
   6. **SOF 타임아웃**: SOF 인터럽트가 끊기면 백그라운드 훅(`usbHidMonitorBackgroundTick`)이 `no_sof_deadline_us`를 기준으로 지연을 점수화합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1393-L1540】
+  7. **속도/서스펜드 누적**: `speed_change_count`와 `suspend_count`가 각각 4회/5회를 넘으면 `persistent_score`를 증가시켜 SOF 점수 초기화와 무관하게 다운그레이드를 유도합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1513-L1665】
 
 ### 3.3 `usb_enumeration_monitor_t`
 - **필드**
@@ -54,7 +58,12 @@
   2. `fail_score >= USB_ENUM_MONITOR_FAIL_THRESHOLD`가 되면 즉시 다운그레이드 큐에 이벤트를 전파합니다.
   3. `CONFIGURED` 상태가 1초 이상 유지되면 `fail_score`를 1 감소시켜 정상 복구 시 과도한 다운그레이드를 방지합니다.
   4. VIA 토글 등으로 모니터가 비활성화되어도 열거 추적은 계속 진행되며, 실제 다운그레이드는 모니터가 활성화된 경우에만 수행됩니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1513-L1603】
-  5. `usbHidMonitorBackgroundTick()`이 항상 먼저 열거 상태를 처리하므로, 시나리오 1(초기화 실패 반복)에서도 펌웨어만으로 안정적인 다운그레이드 판단이 가능합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1605-L1646】
+  5. `usbHidMonitorBackgroundTick()`이 항상 먼저 열거 상태를 처리하므로, 시나리오 1(초기화 실패 반복)에서도 펌웨어만으로 안정적인 다운그레이드 판단이 가능합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1605-L1698】
+
+### 3.4 속도/서스펜드 열화 감시
+- `usbHidMonitorHandleSpeedChange()`는 HS↔FS 변동이 2초 윈도우 내 4회를 넘으면 `persistent_score`를 올리고 워밍업 그레이스 모드를 켭니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1578-L1635】
+- `usbHidMonitorHandleSuspend()`는 Selective Suspend가 2초 내 5회 이상 발생하면 동일하게 `persistent_score`를 증가시키며, `slow_score`는 1씩만 감소해 장기 누적을 보존합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1538-L1655】
+- `persistent_score`가 임계(`persistent_threshold`)에 도달하면 다운그레이드 이벤트 유형(`sof/enum/speed/suspend`)이 `usbHidMonitorCommitDowngrade()`에 전달되어 로그에서 원인을 즉시 확인할 수 있습니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1546-L1615】
 
 ### 3.2 `usb_boot_mode_request_t`
 - **필드**

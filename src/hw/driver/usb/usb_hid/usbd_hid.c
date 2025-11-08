@@ -94,13 +94,19 @@ static uint32_t usbHidBackupTimerOffsetUs(void);                       // V25101
 static void usbHidMonitorSof(uint32_t now_us);                          // V250924R2 SOF 안정성 추적
 static void usbHidMonitorProcessDelta(uint32_t now_us, uint32_t delta_us);  // V251108R9 SOF 간격 평가
 static void usbHidMonitorPrimeTimeout(uint32_t now_us);                 // V251108R9 SOF 누락 타임아웃 갱신
-static bool usbHidMonitorCommitDowngrade(uint32_t now_us,
-                                         uint32_t delta_us,
-                                         uint32_t expected_us);         // V251109R1 공통 다운그레이드 처리
+static bool usbHidMonitorCommitDowngrade(uint32_t      now_us,
+                                         uint32_t      delta_us,
+                                         uint32_t      expected_us,
+                                         usb_monitor_event_t event);    // V251109R2 공통 다운그레이드 처리
 static void usbHidMonitorTrackEnumeration(uint32_t now_us,
                                           bool     monitor_enabled);    // V251109R1 열거 실패 감시
+static void usbHidMonitorHandleSpeedChange(uint32_t now_us);            // V251109R2 속도 변동 감시
+static void usbHidMonitorHandleSuspend(uint32_t now_us);                // V251109R2 서스펜드 감시
+static void usbHidMonitorBumpPersistent(uint32_t now_us, usb_monitor_event_t event); // V251109R2 persistent 점수
+static void usbHidMonitorRefreshEventWindows(uint32_t now_us);          // V251109R2 이벤트 윈도우 만료 처리
 static UsbBootMode_t usbHidResolveDowngradeTarget(void);                // V250924R2 다운그레이드 대상 계산
 void usbHidMonitorBackgroundTick(uint32_t now_us);                      // V251108R9 SOF 중단 감시
+static const char *usbHidMonitorEventLabel(usb_monitor_event_t event);  // V251109R2 이벤트 문자열
 #endif
 
 
@@ -125,6 +131,14 @@ typedef struct
 
 static USBD_SetupReqTypedef ep0_req;
 static uint8_t ep0_req_buf[USB_MAX_EP0_SIZE];
+
+typedef enum                                                // V251109R2 다운그레이드 이벤트 구분
+{
+  USB_MONITOR_EVENT_SOF = 0,
+  USB_MONITOR_EVENT_ENUM,
+  USB_MONITOR_EVENT_SPEED,
+  USB_MONITOR_EVENT_SUSPEND
+} usb_monitor_event_t;
 
 static qbuffer_t             via_report_q;
 static via_report_info_t     via_report_q_buf[128];
@@ -496,6 +510,12 @@ enum
   USB_ENUM_MONITOR_FAIL_THRESHOLD     = 3U,                                               // V251109R1 열거 실패 다운그레이드 임계
   USB_ENUM_MONITOR_SCORE_CAP          = 5U,                                               // V251109R1 열거 실패 점수 상한
   USB_ENUM_MONITOR_RECOVERY_MS        = 1000U,                                            // V251109R1 열거 안정 여부 감쇠(ms)
+  USB_SOF_MONITOR_SPEED_WINDOW_US     = 2000U * 1000UL,                                   // V251109R2 속도 변동 감시 윈도우(us)
+  USB_SOF_MONITOR_SPEED_THRESHOLD     = 4U,                                               // V251109R2 속도 변동 허용 횟수
+  USB_SOF_MONITOR_SUSPEND_WINDOW_US   = 2000U * 1000UL,                                   // V251109R2 서스펜드 감시 윈도우(us)
+  USB_SOF_MONITOR_SUSPEND_THRESHOLD   = 5U,                                               // V251109R2 서스펜드 허용 횟수
+  USB_SOF_MONITOR_PERSISTENT_THRESHOLD = 4U,                                              // V251109R2 영구 점수 임계
+  USB_SOF_MONITOR_WARMUP_GRACE_US     = 100U * 1000UL,                                    // V251109R2 워밍업 완화 기간(us)
   USB_BOOT_MONITOR_CONFIRM_DELAY_US   = USB_BOOT_MONITOR_CONFIRM_DELAY_MS * 1000UL          // 다운그레이드 확인 대기(us)
 };
 
@@ -514,6 +534,9 @@ typedef struct
   uint32_t stable_threshold_us;                                   // V250924R4 정상 범위 상한(us)
   uint32_t decay_interval_us;                                     // 점수 감쇠 주기(us)
   uint32_t slow_decay_interval_us;                                // V251108R9 느린 점수 감쇠 주기(us)
+  uint32_t speed_change_window_us;                                // V251109R2 속도 변동 감시 윈도우(us)
+  uint32_t suspend_window_us;                                     // V251109R2 서스펜드 감시 윈도우(us)
+  uint32_t warmup_grace_deadline_us;                              // V251109R2 워밍업 완화 기한(us)
   uint16_t warmup_good_frames;                                    // V250924R3 누적 정상 프레임 수
   uint16_t warmup_target_frames;                                  // V250924R3 요구되는 정상 프레임 한계
   uint8_t  degrade_threshold;                                     // V250924R4 다운그레이드 임계 점수
@@ -522,11 +545,17 @@ typedef struct
   uint8_t  active_speed;                                          // V250924R4 캐시된 USB 속도 코드
   uint8_t  score;                                                 // V250924R2 누적 불안정 점수
   uint8_t  slow_score;                                            // V251108R9 느린 불안정 점수
+  uint8_t  speed_change_count;                                    // V251109R2 속도 변동 누적
+  uint8_t  suspend_count;                                         // V251109R2 서스펜드 누적
+  uint8_t  persistent_score;                                      // V251109R2 속도/서스펜드 전용 점수
+  uint8_t  persistent_threshold;                                  // V251109R2 persistent 다운그레이드 임계
   bool     warmup_complete;                                       // V250924R3 워밍업 완료 여부
+  bool     warmup_grace_active;                                   // V251109R2 워밍업 완화 적용 여부
 } usb_sof_monitor_t;
 
 static usb_sof_monitor_t sof_monitor = {0};                       // V250924R2 SOF 안정성 상태
 static uint8_t           sof_prev_dev_state = USBD_STATE_DEFAULT; // V250924R2 마지막 USB 장치 상태
+static bool              sof_prev_suspended = false;              // V251109R2 직전 서스펜드 상태
 
 typedef struct                                             // V251109R1 USB 열거 실패 감시 상태
 {
@@ -553,6 +582,7 @@ static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 �
       sof_monitor.degrade_threshold  = 10U;
       sof_monitor.slow_degrade_threshold = 4U;
       sof_monitor.event_score_cap    = 6U;
+      sof_monitor.persistent_threshold = USB_SOF_MONITOR_PERSISTENT_THRESHOLD;
       sof_monitor.warmup_target_frames = USB_SOF_MONITOR_WARMUP_FRAMES_HS;
       break;
     case USBD_SPEED_FULL:
@@ -563,6 +593,7 @@ static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 �
       sof_monitor.degrade_threshold  = 5U;
       sof_monitor.slow_degrade_threshold = 3U;
       sof_monitor.event_score_cap    = 4U;
+      sof_monitor.persistent_threshold = USB_SOF_MONITOR_PERSISTENT_THRESHOLD;
       sof_monitor.warmup_target_frames = USB_SOF_MONITOR_WARMUP_FRAMES_FS;
       break;
     default:
@@ -573,6 +604,7 @@ static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 �
       sof_monitor.slow_decay_interval_us = 0U;
       sof_monitor.slow_degrade_threshold = 0U;
       sof_monitor.event_score_cap    = 0U;
+      sof_monitor.persistent_threshold = 0U;
       sof_monitor.warmup_target_frames = 0U;
       break;
   }
@@ -1327,6 +1359,13 @@ static void usbHidMonitorSof(uint32_t now_us)
     sof_monitor.warmup_complete    = false;
     usbHidSofMonitorApplySpeedParams((pdev->dev_state == USBD_STATE_CONFIGURED) ? pdev->dev_speed : 0xFFU);
     usbHidMonitorPrimeTimeout(now_us);
+    sof_monitor.speed_change_count     = 0U;
+    sof_monitor.suspend_count          = 0U;
+    sof_monitor.persistent_score       = 0U;
+    sof_monitor.speed_change_window_us = now_us;
+    sof_monitor.suspend_window_us      = now_us;
+    sof_monitor.warmup_grace_active    = false;
+    sof_monitor.warmup_grace_deadline_us = 0U;
     sof_prev_dev_state             = pdev->dev_state;
   }
 
@@ -1343,14 +1382,29 @@ static void usbHidMonitorSof(uint32_t now_us)
     sof_monitor.warmup_complete    = false;
     usbHidSofMonitorApplySpeedParams(0xFFU);
     usbHidMonitorPrimeTimeout(now_us);
+    sof_monitor.speed_change_count     = 0U;
+    sof_monitor.suspend_count          = 0U;
+    sof_monitor.persistent_score       = 0U;
+    sof_monitor.warmup_grace_active    = false;
+    sof_monitor.warmup_grace_deadline_us = 0U;
     return;
   }
 
-  if (USBD_is_suspended())
+  bool is_suspended = USBD_is_suspended();
+
+  if (is_suspended)
   {
+    if (sof_prev_suspended == false)
+    {
+      usbHidMonitorHandleSuspend(now_us);
+    }
+    sof_prev_suspended = true;
     sof_monitor.prev_tick_us        = now_us;
     sof_monitor.score               = 0U;
-    sof_monitor.slow_score          = 0U;
+    if (sof_monitor.slow_score > 0U)
+    {
+      sof_monitor.slow_score--;
+    }
     sof_monitor.holdoff_end_us      = now_us + USB_SOF_MONITOR_RESUME_HOLDOFF_US;
     sof_monitor.warmup_deadline_us  = now_us + USB_SOF_MONITOR_WARMUP_TIMEOUT_US;
     sof_monitor.warmup_good_frames  = 0U;
@@ -1360,6 +1414,10 @@ static void usbHidMonitorSof(uint32_t now_us)
     usbHidSofMonitorApplySpeedParams(pdev->dev_speed);
     usbHidMonitorPrimeTimeout(now_us);
     return;
+  }
+  else
+  {
+    sof_prev_suspended = false;
   }
 
   if (pdev->dev_speed != USBD_SPEED_HIGH && pdev->dev_speed != USBD_SPEED_FULL)
@@ -1379,9 +1437,13 @@ static void usbHidMonitorSof(uint32_t now_us)
 
   if (pdev->dev_speed != sof_monitor.active_speed)
   {
+    usbHidMonitorHandleSpeedChange(now_us);
     usbHidSofMonitorApplySpeedParams(pdev->dev_speed);
     sof_monitor.score              = 0U;
-    sof_monitor.slow_score         = 0U;
+    if (sof_monitor.slow_score > 0U)
+    {
+      sof_monitor.slow_score--;
+    }
     sof_monitor.last_decay_us      = now_us;
     sof_monitor.slow_last_decay_us = now_us;
     sof_monitor.holdoff_end_us     = now_us + USB_SOF_MONITOR_CONFIG_HOLDOFF_US;
@@ -1415,6 +1477,7 @@ static void usbHidMonitorProcessDelta(uint32_t now_us, uint32_t delta_us)
   uint8_t  degrade_threshold      = sof_monitor.degrade_threshold;
   uint8_t  slow_degrade_threshold = sof_monitor.slow_degrade_threshold;
   uint8_t  event_score_cap        = sof_monitor.event_score_cap;
+  uint16_t warmup_target_frames   = sof_monitor.warmup_target_frames;
 
   if (expected_us == 0U)
   {
@@ -1432,9 +1495,25 @@ static void usbHidMonitorProcessDelta(uint32_t now_us, uint32_t delta_us)
 
   if (sof_monitor.warmup_complete == false)
   {
+    if (sof_monitor.warmup_grace_active)
+    {
+      if (now_us <= sof_monitor.warmup_grace_deadline_us)
+      {
+        warmup_target_frames = (uint16_t)(warmup_target_frames / 2U);
+        if (warmup_target_frames == 0U)
+        {
+          warmup_target_frames = 1U;
+        }
+      }
+      else
+      {
+        sof_monitor.warmup_grace_active = false;
+      }
+    }
+
     if (delta_us < stable_threshold)
     {
-      if (sof_monitor.warmup_good_frames < sof_monitor.warmup_target_frames)
+      if (sof_monitor.warmup_good_frames < warmup_target_frames)
       {
         sof_monitor.warmup_good_frames++;
       }
@@ -1444,11 +1523,12 @@ static void usbHidMonitorProcessDelta(uint32_t now_us, uint32_t delta_us)
       sof_monitor.warmup_good_frames = 0U;
     }
 
-    if (sof_monitor.warmup_good_frames >= sof_monitor.warmup_target_frames || now_us >= sof_monitor.warmup_deadline_us)
+    if (sof_monitor.warmup_good_frames >= warmup_target_frames || now_us >= sof_monitor.warmup_deadline_us)
     {
       sof_monitor.warmup_complete   = true;
       sof_monitor.last_decay_us     = now_us;
       sof_monitor.slow_last_decay_us = now_us;
+      sof_monitor.warmup_grace_active = false;
     }
     else
     {
@@ -1540,12 +1620,13 @@ static void usbHidMonitorProcessDelta(uint32_t now_us, uint32_t delta_us)
     return;
   }
 
-  (void)usbHidMonitorCommitDowngrade(now_us, delta_us, expected_us);
+  (void)usbHidMonitorCommitDowngrade(now_us, delta_us, expected_us, USB_MONITOR_EVENT_SOF);
 }
 
-static bool usbHidMonitorCommitDowngrade(uint32_t now_us,
-                                         uint32_t delta_us,
-                                         uint32_t expected_us)
+static bool usbHidMonitorCommitDowngrade(uint32_t      now_us,
+                                         uint32_t      delta_us,
+                                         uint32_t      expected_us,
+                                         usb_monitor_event_t event)
 {
   bool downgrade_requested = false;
   UsbBootMode_t next_mode = usbHidResolveDowngradeTarget();
@@ -1575,8 +1656,150 @@ static bool usbHidMonitorCommitDowngrade(uint32_t now_us,
 
   sof_monitor.score      = 0U;
   sof_monitor.slow_score = 0U;
+  sof_monitor.persistent_score = 0U;
+  sof_monitor.speed_change_count = 0U;
+  sof_monitor.suspend_count = 0U;
+  sof_monitor.speed_change_window_us = now_us;
+  sof_monitor.suspend_window_us = now_us;
+  sof_monitor.warmup_grace_active = false;
+#if HW_USB_LOG == 1
+  if (downgrade_requested)
+  {
+    logPrintf("[!] USB Monitor downgrade (%s)\n", usbHidMonitorEventLabel(event));
+  }
+#endif
 
   return downgrade_requested;
+}
+
+static const char *usbHidMonitorEventLabel(usb_monitor_event_t event)
+{
+  switch (event)
+  {
+    case USB_MONITOR_EVENT_ENUM:
+      return "enum";
+    case USB_MONITOR_EVENT_SPEED:
+      return "speed";
+    case USB_MONITOR_EVENT_SUSPEND:
+      return "suspend";
+    case USB_MONITOR_EVENT_SOF:
+    default:
+      return "sof";
+  }
+}
+
+static void usbHidMonitorBumpPersistent(uint32_t now_us, usb_monitor_event_t event)
+{
+  if (sof_monitor.persistent_score < 0xFFU)
+  {
+    sof_monitor.persistent_score++;
+  }
+
+  if (sof_monitor.persistent_threshold == 0U)
+  {
+    return;
+  }
+
+  if (sof_monitor.persistent_score >= sof_monitor.persistent_threshold)
+  {
+    uint32_t expected_us = (sof_monitor.expected_us > 0U) ? sof_monitor.expected_us : 125U;
+    uint32_t delta_us = USB_ENUM_MONITOR_ATTEMPT_TIMEOUT_US;
+
+    if (event == USB_MONITOR_EVENT_SPEED)
+    {
+      delta_us = USB_SOF_MONITOR_SPEED_WINDOW_US;
+    }
+    else if (event == USB_MONITOR_EVENT_SUSPEND)
+    {
+      delta_us = USB_SOF_MONITOR_SUSPEND_WINDOW_US;
+    }
+
+    (void)usbHidMonitorCommitDowngrade(now_us, delta_us, expected_us, event);
+  }
+}
+
+static void usbHidMonitorHandleSpeedChange(uint32_t now_us)
+{
+  if (sof_monitor.warmup_target_frames == 0U)
+  {
+    sof_monitor.speed_change_count = 0U;
+    return;
+  }
+
+  if (sof_monitor.speed_change_count > 0U && now_us >= sof_monitor.speed_change_window_us)
+  {
+    sof_monitor.speed_change_count = 0U;
+  }
+
+  if (sof_monitor.warmup_complete)
+  {
+    sof_monitor.warmup_grace_active = true;
+    sof_monitor.warmup_grace_deadline_us = now_us + USB_SOF_MONITOR_WARMUP_GRACE_US;
+  }
+
+  if (sof_monitor.speed_change_count < 0xFFU)
+  {
+    sof_monitor.speed_change_count++;
+  }
+
+  sof_monitor.speed_change_window_us = now_us + USB_SOF_MONITOR_SPEED_WINDOW_US;
+
+  if (sof_monitor.speed_change_count >= USB_SOF_MONITOR_SPEED_THRESHOLD)
+  {
+    sof_monitor.speed_change_count = 0U;
+    usbHidMonitorBumpPersistent(now_us, USB_MONITOR_EVENT_SPEED);
+  }
+}
+
+static void usbHidMonitorHandleSuspend(uint32_t now_us)
+{
+  if (sof_monitor.warmup_target_frames == 0U)
+  {
+    sof_monitor.suspend_count = 0U;
+    return;
+  }
+
+  if (sof_monitor.suspend_count > 0U && now_us >= sof_monitor.suspend_window_us)
+  {
+    sof_monitor.suspend_count = 0U;
+  }
+
+  if (sof_monitor.warmup_complete)
+  {
+    sof_monitor.warmup_grace_active = true;
+    sof_monitor.warmup_grace_deadline_us = now_us + USB_SOF_MONITOR_WARMUP_GRACE_US;
+  }
+
+  if (sof_monitor.suspend_count < 0xFFU)
+  {
+    sof_monitor.suspend_count++;
+  }
+
+  sof_monitor.suspend_window_us = now_us + USB_SOF_MONITOR_SUSPEND_WINDOW_US;
+
+  if (sof_monitor.suspend_count >= USB_SOF_MONITOR_SUSPEND_THRESHOLD)
+  {
+    sof_monitor.suspend_count = 0U;
+    usbHidMonitorBumpPersistent(now_us, USB_MONITOR_EVENT_SUSPEND);
+  }
+}
+
+static void usbHidMonitorRefreshEventWindows(uint32_t now_us)
+{
+  if (sof_monitor.speed_change_count > 0U && now_us >= sof_monitor.speed_change_window_us)
+  {
+    sof_monitor.speed_change_count = 0U;
+  }
+
+  if (sof_monitor.suspend_count > 0U && now_us >= sof_monitor.suspend_window_us)
+  {
+    sof_monitor.suspend_count = 0U;
+  }
+
+  if (sof_monitor.warmup_grace_active && now_us >= sof_monitor.warmup_grace_deadline_us)
+  {
+    sof_monitor.warmup_grace_active = false;
+  }
 }
 
 static void usbHidMonitorTrackEnumeration(uint32_t now_us,
@@ -1632,15 +1855,10 @@ static void usbHidMonitorTrackEnumeration(uint32_t now_us,
       if (monitor_enabled && enum_monitor.fail_score >= USB_ENUM_MONITOR_FAIL_THRESHOLD)
       {
         uint32_t expected_us = (sof_monitor.expected_us > 0U) ? sof_monitor.expected_us : 125U;
-        bool downgrade_ok = usbHidMonitorCommitDowngrade(now_us,
-                                                         USB_ENUM_MONITOR_ATTEMPT_TIMEOUT_US,
-                                                         expected_us);
-#if HW_USB_LOG == 1
-        logPrintf("[!] USB Enum Fail (%u/%u) -> downgrade %s\n",
-                  enum_monitor.fail_score,
-                  (uint32_t)USB_ENUM_MONITOR_FAIL_THRESHOLD,
-                  downgrade_ok ? "request" : "rejected");
-#endif
+        (void)usbHidMonitorCommitDowngrade(now_us,
+                                           USB_ENUM_MONITOR_ATTEMPT_TIMEOUT_US,
+                                           expected_us,
+                                           USB_MONITOR_EVENT_ENUM);
         enum_monitor.fail_score     = 0U;
         enum_monitor.waiting_config = false;
         enum_monitor.pending_state  = dev_state;
@@ -1656,6 +1874,8 @@ static void usbHidMonitorTrackEnumeration(uint32_t now_us,
 
 void usbHidMonitorBackgroundTick(uint32_t now_us)                    // V251108R9 SOF 중단 감시
 {
+  usbHidMonitorRefreshEventWindows(now_us);
+
   bool monitor_enabled = usbInstabilityIsEnabled();
   usbHidMonitorTrackEnumeration(now_us, monitor_enabled);
 
