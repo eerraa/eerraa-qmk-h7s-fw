@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251109R4"   // V251109R4: VIA 리셋 유예 적용
+#define _DEF_FIRMWATRE_VERSION      "V251109R5"   // V251109R5: VIA BootMode Apply 응답 정합 수정
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
