@@ -75,7 +75,7 @@
 - **동작**
   1. `usbRequestBootModeDowngrade()`가 IDLE 상태에서 호출되면 `ARMED`로 진입하고 확인 지연 타이머를 설정합니다.
   2. `usbProcess()`가 주기적으로 호출되어 타이머를 확인하고, 지연이 끝나면 `COMMIT` 단계로 상승합니다.
-  3. `COMMIT` 단계에서 `usbBootModeSaveAndReset()`이 실행되어 EEPROM 저장 후 시스템을 리셋합니다.
+  3. `COMMIT` 단계에서 `usbBootModeSaveAndReset()`이 실행되어 EEPROM 저장 후 약 40ms 유예를 거쳐 시스템을 리셋합니다. <!-- V251109R4 -->
   4. 실패하거나 타임아웃이면 큐가 초기화되고 경고 로그가 출력됩니다.
 
 ## 4. 속도별 파라미터 테이블
@@ -102,6 +102,8 @@ apMainLoop()
        ├─ stage == ARMED → 확인 지연 경과 확인, 최초 로그 출력
        └─ stage == COMMIT → usbBootModeSaveAndReset()
 ```
+
+- // V251109R4: COMMIT 단계에서 스케줄된 리셋은 VIA 응답 전송을 보장하기 위해 최소 40ms 지연됩니다.
 
 ## 6. CLI & 로그
 | 메시지 | 발생 지점 | 의미 |

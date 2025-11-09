@@ -15,6 +15,9 @@
 #include "qmk/port/platforms/eeprom.h"
 #include "qmk/port/usb_monitor_via.h"                                  // V251108R1: USB 모니터 VIA 스토리지 연동
 
+#define USB_VIA_RESET_GRACE_MS_DEFAULT  (40U)                          // V251109R4: VIA 응답 송신 보장을 위한 최소 유예
+#define USB_BOOTMODE_APPLY_GRACE_MS     USB_VIA_RESET_GRACE_MS_DEFAULT // V251109R4: BootMode 적용 시 동일 유예 사용
+
 
 #ifdef _USE_HW_USB
 #include "usbd_cmp.h"
@@ -35,6 +38,7 @@ static const char *const usb_boot_mode_name[USB_BOOT_MODE_MAX] = {          // V
 };
 
 static const char *usbBootModeLabel(UsbBootMode_t mode);                     // V250923R1 helpers
+bool usbRequestGraceReset(uint32_t delay_ms);                                // V251109R4: VIA 응답 송신 보장용 리셋 요청
 #ifdef BOOTMODE_ENABLE
 bool usbBootModeStore(UsbBootMode_t mode);
 #endif
@@ -45,6 +49,12 @@ static volatile struct
   UsbBootMode_t mode;
 } boot_mode_apply_request = {false, USB_BOOT_MODE_HS_8K};
 #endif
+
+static volatile struct
+{
+  bool     pending;                                                        // V251109R4: VIA 응답 송신을 보장하기 위한 리셋 큐
+  uint32_t ready_ms;
+} usb_reset_request = {false, 0U};
 
 #if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
 typedef enum
@@ -185,8 +195,7 @@ bool usbBootModeSaveAndReset(UsbBootMode_t mode)
     return false;
   }
 
-  resetToReset();
-  return true;
+  return usbRequestGraceReset(USB_BOOTMODE_APPLY_GRACE_MS);               // V251109R4: VIA 응답 송신 후 리셋
 }
 #endif
 
@@ -208,6 +217,29 @@ bool usbBootModeScheduleApply(UsbBootMode_t mode)
   return true;
 }
 #endif
+
+bool usbRequestGraceReset(uint32_t delay_ms)                               // V251109R4: VIA 응답을 보장하기 위한 리셋 유예 API
+{
+  if (delay_ms == 0U)
+  {
+    delay_ms = USB_VIA_RESET_GRACE_MS_DEFAULT;
+  }
+
+  uint32_t ready_ms = millis() + delay_ms;
+
+  if (usb_reset_request.pending == true)
+  {
+    if ((int32_t)(usb_reset_request.ready_ms - ready_ms) > 0)
+    {
+      usb_reset_request.ready_ms = ready_ms;
+    }
+    return true;
+  }
+
+  usb_reset_request.pending = true;
+  usb_reset_request.ready_ms = ready_ms;
+  return true;
+}
 
 #if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
 usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
@@ -327,6 +359,22 @@ static void usbProcessBootModeDowngrade(void)                                   
 }
 #endif
 
+static void usbProcessDeferredReset(void)
+{
+  if (usb_reset_request.pending == false)
+  {
+    return;
+  }
+
+  if ((int32_t)(millis() - usb_reset_request.ready_ms) < 0)
+  {
+    return;
+  }
+
+  usb_reset_request.pending = false;
+  resetToReset();                                                        // V251109R4: VIA 응답 송신 이후에만 리셋 실행
+}
+
 void usbProcess(void)
 {
 #if defined(BOOTMODE_ENABLE)
@@ -339,14 +387,16 @@ void usbProcess(void)
 #else
   const bool has_monitor_request = false;
 #endif
+  bool has_reset_request = usb_reset_request.pending;
 
   if (has_apply_request == false
 #if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
       && has_monitor_request == false
 #endif
+      && has_reset_request == false
   )
   {
-    return;  // V251108R8: 대기 중 요청이 없으면 즉시 복귀해 메인 루프 부하를 최소화
+    return;  // V251109R4: 처리할 큐가 없을 때는 즉시 복귀해 메인 루프 부하 최소화
   }
 
 #ifdef BOOTMODE_ENABLE
@@ -361,6 +411,10 @@ void usbProcess(void)
     usbProcessBootModeDowngrade();
   }
 #endif
+  if (has_reset_request)
+  {
+    usbProcessDeferredReset();
+  }
 }
 
 #ifdef USB_MONITOR_ENABLE

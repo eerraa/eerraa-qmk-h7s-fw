@@ -62,7 +62,7 @@ cliBoot "set <mode>"
 | 명령/로그 | 위치 | 설명 |
 | --- | --- | --- |
 | `boot info` | `usb.c` CLI | 저장된 모드와 레이블을 출력합니다. |
-| `boot set {8k|4k|2k|1k}` | `usb.c` CLI | 모드를 저장하고 즉시 리셋을 트리거합니다. |
+| `boot set {8k|4k|2k|1k}` | `usb.c` CLI | 모드를 저장하고 응답 송신을 보장한 뒤(약 40ms) 리셋을 트리거합니다. |  <!-- V251109R4 -->
 | `[USB] boot-mode HS 8K` | `usbBegin()` | 초기화가 완료될 때 현재 모드를 기록합니다. |
 | `[!] usbBootModeLoad Fail` | `usb.c` | EEPROM에서 유효한 값을 읽지 못했을 때 경고합니다. |
 
@@ -73,7 +73,7 @@ cliBoot "set <mode>"
 
 ## 8. Codex 작업 체크리스트
 1. `usbBootModeGetHsInterval()`을 호출하는 신규 엔드포인트는 FS 모드에서 `HID_FS_BINTERVAL`을 유지하는지 확인합니다.
-2. CLI 확장 시 `usbBootModeSaveAndReset()`이 즉시 리셋을 수행하므로 사용자 메시지를 리셋 전에 모두 출력합니다.
+2. CLI 확장 시 `usbBootModeSaveAndReset()`이 응답을 플러시한 뒤 약 40ms 후 리셋되므로, 리셋 전 사용자 메시지를 출력할 시간은 유예 기간 내에 확보해야 합니다.  <!-- V251109R4 -->
 3. EEPROM 슬롯 변경이 필요하면 `port.h`와 `usbBootModeLoad()` 기본값을 함께 수정합니다.
 4. HS/FS 파라미터를 조정하면 `usbd_conf.c`, HID/Composite 엔드포인트, CLI 도움말 문자열을 동일하게 업데이트합니다.
 
