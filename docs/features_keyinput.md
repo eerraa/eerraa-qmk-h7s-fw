@@ -1,105 +1,126 @@
-# 키 입력 경로 가이드
+# 키 입력 기능 Codex 레퍼런스
 
-## 1. 목적과 범위
-- STM32H7S + QMK 포팅 계층에서 8 kHz 스캔 → 디바운스 → 액션 → HID 전송까지의 모든 단계를 정리합니다.
-- DMA 기반 하드웨어 스캐너, QMK 매트릭스/퀀텀 계층, VIA RAW HID 경로, USB HID 드라이버가 공유하는 API·데이터 구조를 빠르게 파악할 수 있도록 구성했습니다.
-- 대상 모듈: `src/hw/driver/keys.c`, `src/ap/modules/qmk/port/matrix.c`, `src/ap/modules/qmk/quantum/keyboard.c`, `src/ap/modules/qmk/qmk.c`, `src/ap/modules/qmk/port/via_hid.c`, `src/ap/modules/qmk/port/protocol/host.c`, `src/hw/driver/usb/usb_hid/usbd_hid.c`.
+## 1. 기능 개요
+- **목표**: 스위치 매트릭스를 8kHz 루프에서 스캔하고, 디바운스/고스트 검출을 거쳐 HID 리포트까지 전달하는 STM32H7S 포팅 경로를 한눈에 파악합니다.
+- **동작 요약**:
+  1. GPDMA가 열 버퍼(`col_rd_buf`)를 지속적으로 채우고, QMK 포팅층이 DMA 버퍼를 직접 참조해 매트릭스를 구성합니다.
+  2. `matrix_task()`가 변화 행을 선별하고 고스트를 차단한 뒤, `action_exec()`/`send_keyboard_report()` 흐름으로 키 이벤트를 전달합니다.
+  3. `host_keyboard_send()` → `usbHidSendReport()` 체인이 HID IN 엔드포인트를 전송하거나 큐잉하며, USB 시간/큐 진단값을 업데이트합니다.
+- **현재 펌웨어 버전**: `V251108R8`.【F:src/hw/hw_def.h†L9-L20】
 
-## 2. 계층별 파일 맵
-| 계층 | 경로 | 주요 역할 |
+## 2. 파일 토폴로지 & 책임
+| 경로 | 핵심 심볼/함수 | 역할 |
 | --- | --- | --- |
-| **하드웨어 스캐너** | `src/hw/driver/keys.c` | TIM16 + GPDMA로 열/행 버퍼를 자동 순환하며 `col_rd_buf`에 최신 상태를 저장합니다.
-| **매트릭스 브리지** | `src/ap/modules/qmk/port/matrix.c` | DMA 버퍼를 `matrix_row_t` 배열로 투명하게 노출하고 디바운스 및 CLI 훅을 제공합니다.
-| **QMK 퀀텀** | `src/ap/modules/qmk/quantum/keyboard.c` | `matrix_task()`에서 변화 행을 선별하고 `action_exec()` 체인으로 전달합니다.
-| **포팅 메인 루프** | `src/ap/modules/qmk/qmk.c` | `qmkUpdate()`에서 VIA RX → `keyboard_task()` → EEPROM → idle 순으로 호출합니다.
-| **USB 호스트 래퍼** | `src/ap/modules/qmk/port/protocol/host.c` | `host_keyboard_send()`가 QMK 리포트를 `usbHidSendReport()`에 전달합니다.
-| **USB HID 드라이버** | `src/hw/driver/usb/usb_hid/usbd_hid.c` | HID IN 엔드포인트 전송/큐, VIA RAW HID 응답, 폴링 계측을 처리합니다.
-| **VIA RAW HID** | `src/ap/modules/qmk/port/via_hid.c` | ISR에서 수집한 패킷을 qbuffer에 저장하고 메인 루프에서 처리합니다.
+| `src/ap/modules/qmk/qmk.c` | `qmkInit()`, `qmkUpdate()` | QMK 초기화와 메인 루프를 등록하고 `keyboard_task()`를 주기적으로 호출합니다. |
+| `src/ap/modules/qmk/port/matrix.c` | `matrix_scan()`, `matrix_info()` | DMA 버퍼를 `keysPeekColsBuf()`로 직접 읽어 QMK 매트릭스를 갱신하고, CLI/진단 훅을 제공합니다. |
+| `src/hw/driver/keys.c` | `keysInit()`, `keysPeekColsBuf()` | 키 스캔 GPDMA 노드를 구성하고, `.non_cache` 버퍼를 `const volatile` 포인터로 노출해 추가 복사를 제거합니다. |
+| `src/ap/modules/qmk/quantum/keyboard.c` | `matrix_task()`, `generate_tick_event()`, `keyboard_task()` | 행 변화 탐지, 고스트 필터링, 이벤트 타임스탬프 공유, 1kHz Tick 이벤트 생성을 담당합니다. |
+| `src/ap/modules/qmk/quantum/action.c` & `action_util.c` | `action_exec()`, `send_keyboard_report()` | 키 이벤트를 탭/홀드·레이어·콤보 처리 후 HID 리포트 구조체로 직렬화합니다. |
+| `src/ap/modules/qmk/port/protocol/host.c` | `host_keyboard_send()`, `host_nkro_send()` | 포팅층 호스트 드라이버와 USB HID 래퍼를 연결하며, 블루투스 경로와 LED 상태를 관리합니다. |
+| `src/hw/driver/usb/usb_hid/usbd_hid.c` | `usbHidSendReport()`, `usbHidSendReportEXK()` | HID IN 전송/큐잉, 폴링 계측(`usbHidSetTimeLog`, 큐 깊이 스냅샷)과 원격 웨이크업을 처리합니다. |
+| `src/ap/modules/qmk/port/via_hid.c`<br>`src/hw/driver/usb/usb_hid/usbd_hid.c` | `via_hid_task()`, `usbHidEnqueueViaResponse()` | // V251108R8: VIA RAW HID 명령을 메인 루프 큐에서 처리하고 SOF ISR은 응답 송신만 담당합니다.【F:src/ap/modules/qmk/port/via_hid.c†L1-L117】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1074-L1109】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1152-L1175】 |
 
-## 3. API 레퍼런스
-### 3.1 하드웨어/매트릭스
-| 함수 | 위치 | 설명 |
-| --- | --- | --- |
-| `bool keysInit(void)` | `src/hw/driver/keys.c` | GPIO/DMA/TIM16을 순서대로 초기화하고 8 kHz 스캔을 시작합니다.
-| `bool keysInitGpio/Dma/Timer(void)` | `src/hw/driver/keys.c` | 행 출력, DMA 노드, 타이머 설정을 세분화해 유지보수를 쉽게 합니다.
-| `const volatile uint16_t *keysPeekColsBuf(void)` | `src/hw/driver/keys.c` | `.non_cache`에 위치한 DMA 버퍼를 추가 복사 없이 읽을 수 있도록 노출합니다.
-| `bool keysReadColsBuf(uint16_t *dst, uint32_t rows)` | `src/hw/driver/keys.c` | 필요 시 안전 복사 경로로 폴백합니다.
-| `void matrix_init(void)` | `src/ap/modules/qmk/port/matrix.c` | `raw_matrix`, `matrix` 배열을 초기화하고 CLI 명령을 등록합니다.
-| `uint8_t matrix_scan(void)` | `src/ap/modules/qmk/port/matrix.c` | DMA 버퍼를 순회하여 변화 행을 추적하고 디바운스 후 결과를 반환합니다.
-| `matrix_row_t matrix_get_row(uint8_t row)` | `src/ap/modules/qmk/port/matrix.c` | 퀀텀 계층이 디바운스된 행을 직접 읽을 수 있게 합니다.
-| `void matrixInstrumentation*()` | `src/ap/modules/qmk/port/matrix.c` + `matrix_instrumentation.*` | 스캔 시작 시간/지터를 기록하여 USB HID 계측과 공유합니다.
+- // V251108R8: `qmkUpdate()`는 `keyboard_task()` 이전에 `via_hid_task()`를 호출해 USB 인터럽트가 전달한 RAW HID 패킷을 메인 루프에서 처리하고, 응답은 `usbHidEnqueueViaResponse()`를 통해 SOF 큐에 적재합니다.【F:src/ap/modules/qmk/qmk.c†L33-L38】【F:src/ap/modules/qmk/port/via_hid.c†L58-L117】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1152-L1175】
+- VIA RX 큐 오버플로 로그는 ISR 대신 `via_hid_task()`에서만 출력되므로, `USBD_HID_DataOut()`/`USBD_HID_SOF()` 인터럽트 경로는 큐 복사와 전송에만 집중합니다.【F:src/ap/modules/qmk/port/via_hid.c†L69-L117】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1034-L1109】
+## 3. 입력 데이터 획득 계층
+### 3.1 DMA 기반 행/열 버퍼
+- `keysInit()`은 `col_rd_buf`를 대상으로 하는 GPDMA 링크드 리스트를 구성해 스캔 결과를 자동 적재합니다. `.non_cache` 영역에 위치하여 CPU 캐시 동기화가 필요 없습니다.【F:src/hw/driver/keys.c†L240-L318】
+- `keysPeekColsBuf()`는 `const volatile uint16_t *`를 반환해 매트릭스 레이어가 DMA 버퍼를 직접 조회하되, 컴파일러가 값을 캐시하지 못하도록 보장합니다.【F:src/hw/driver/keys.c†L301-L304】【F:src/common/hw/include/keys.h†L15-L19】
+- 기존 `keysReadColsBuf()` 경로도 유지되어 필요 시 안전 복사 기반 접근이 가능합니다.【F:src/hw/driver/keys.c†L295-L299】
 
-### 3.2 QMK 퀀텀 & 액션
-| 함수 | 위치 | 설명 |
-| --- | --- | --- |
-| `bool matrix_task(void)` | `src/ap/modules/qmk/quantum/keyboard.c` | 변동 행이 없으면 바로 tick 이벤트만 생성하고, 변화가 있으면 고스트 필터링 → `action_exec()`을 호출합니다.
-| `void generate_tick_event(void)` | `src/ap/modules/qmk/quantum/keyboard.c` | 1 kHz tick을 키 이벤트로 주입하여 오토 리핏/타이머 의존 기능을 유지합니다.
-| `void keyboard_task(void)` | `src/ap/modules/qmk/quantum/keyboard.c` | `matrix_task()` 결과를 기반으로 퀀텀·RGB·포인팅 디바이스 등 후속 작업을 호출합니다.
-| `void qmkUpdate(void)` | `src/ap/modules/qmk/qmk.c` | `via_hid_task()` → `keyboard_task()` → `eeprom_task()` → `idle_task()` 순으로 호출합니다.
-| `void action_exec(keyevent_t event)` | `src/ap/modules/qmk/quantum/action.c` | 탭/홀드, 레이어, 콤보 해석 후 `send_keyboard_report()`로 직렬화합니다.
-| `void host_keyboard_send(report_keyboard_t *report)` | `src/ap/modules/qmk/port/protocol/host.c` | QMK 호스트 인터페이스를 포팅 계층으로 연결하고, 필요 시 NKRO/LED 상태를 갱신합니다.
+### 3.2 QMK 매트릭스 브리지 (`port/matrix.c`)
+- `matrix_scan()`은 DMA 버퍼를 `matrix_row_t` 배열과 1:1 매핑하여 변화가 있는 행만 `raw_matrix`에 반영하고, QMK 디바운스(`debounce()`)를 거쳐 `matrix[]`를 확정합니다. 폴백 복사 경로는 V251009R3에서 제거되어 DMA 경로만 유지됩니다.【F:src/ap/modules/qmk/port/matrix.c†L55-L99】
+- 스캔 시작 시각과 변화 여부가 USB 진단에 전달되어 HID 폴링 초과 시간을 추적합니다 (`usbHidSetTimeLog`).【F:src/ap/modules/qmk/port/matrix.c†L96-L101】
+- `matrix_can_read()`는 현재는 상시 true를 반환하지만, 전력/안전 모드에서 스캔을 차단하고 tick 이벤트만 생성하는 훅으로 확장 가능합니다.【F:src/ap/modules/qmk/port/matrix.c†L41-L58】
+- `matrix_info()` CLI는 1초 주기 스캔/폴링 속도, 큐 심도, 스캔 소요 시간을 로그로 출력하도록 설계돼 있습니다.【F:src/ap/modules/qmk/port/matrix.c†L101-L125】
 
-### 3.3 USB HID & VIA
-| 함수 | 위치 | 설명 |
-| --- | --- | --- |
-| `bool usbHidSendReport(uint8_t *data, uint16_t len)` | `src/hw/driver/usb/usb_hid/usbd_hid.c` | 즉시 전송 또는 큐잉을 수행하며 계측 훅을 갱신합니다.
-| `bool usbHidEnqueueViaResponse(const uint8_t *data, uint8_t len)` | `src/hw/driver/usb/usb_hid/usbd_hid.c` | VIA RAW HID 응답을 SOF 큐에 적재합니다.
-| `bool usbHidSetTimeLog(uint16_t idx, uint32_t time_us)` | `src/hw/driver/usb/usb_hid_instrumentation.c` | 매트릭스 스캔 시각을 HID 계측 버퍼에 전달합니다.
-| `bool usbHidGetRateInfo(usb_hid_rate_info_t *info)` | `src/hw/driver/usb/usb_hid_instrumentation.c` | 폴링 주기, 지연, 큐 깊이 통계를 제공합니다.
-| `void via_hid_init(void)` | `src/ap/modules/qmk/port/via_hid.c` | RX 큐(qbuffer)를 초기화하고 USB ISR 콜백을 등록합니다.
-| `void via_hid_task(void)` | `src/ap/modules/qmk/port/via_hid.c` | 메인 루프에서 RX 큐를 비우고 `raw_hid_receive()`를 호출한 뒤 응답을 큐잉합니다.
-| `void usbHidSetViaReceiveFunc(void (*func)(uint8_t *, uint8_t))` | `src/hw/driver/usb/usb_hid/usbd_hid.c` | RAW HID OUT 엔드포인트와 VIA 큐를 연결합니다.
+## 4. 매트릭스 태스크 & 이벤트 준비 (`quantum/keyboard.c`)
+### 4.1 진입 조건과 진단
+1. `matrix_task()`는 `matrix_can_read()`를 확인하고, 스캔 불가 시 1kHz tick 이벤트만 생성합니다.【F:src/ap/modules/qmk/quantum/keyboard.c†L615-L633】
+2. `matrix_scan_perf_task()`는 `_DEF_ENABLE_MATRIX_TIMING_PROBE`가 1인 빌드에서 초당 스캔 횟수를 수집해 CLI/로그에 제공할 수 있습니다.【F:src/ap/modules/qmk/quantum/keyboard.c†L206-L231】
 
-## 4. 데이터 구조
-| 구조체 / 버퍼 | 위치 | 설명 |
-| --- | --- | --- |
-| `row_wr_buf[6]` | `src/hw/driver/keys.c` | TIM16 CH1 DMA가 순차적으로 행을 활성화할 때 사용하는 비트 패턴입니다.
-| `col_rd_buf[MATRIX_ROWS]` | `src/hw/driver/keys.c` | `.non_cache` 섹션에 위치한 16비트 배열. DMA가 열 입력을 주기적으로 채우며 `volatile`로 선언되어 최신 값을 유지합니다.
-| `matrix_row_t raw_matrix/matrix` | `src/ap/modules/qmk/port/matrix.c` | 디바운스 전/후 상태를 저장하는 QMK 표준 배열. `matrix_get_row()`를 통해 접근합니다.
-| `matrix_previous[]` | `src/ap/modules/qmk/quantum/keyboard.c` | `matrix_task()`가 이전 스캔과 diff를 계산할 때 사용하는 캐시.
-| `via_hid_packet_t` | `src/ap/modules/qmk/port/via_hid.c` | 길이 + 32바이트 버퍼를 포함하여 RAW HID 패킷을 큐에 저장합니다.
-| `qbuffer_t via_hid_rx_q` | `src/ap/modules/qmk/port/via_hid.c` | VIA RX 패킷을 FIFO로 관리하며 오버플로우 카운터를 제공합니다.
-| `usb_hid_rate_info_t` | `src/hw/driver/usb/usb_hid/usbd_hid.h` | 폴링 주파수, 최대/최소 간격, 초과 시간, 큐 깊이를 기록합니다.
-| `usb_hid_time_log` (내부 배열) | `src/hw/driver/usb/usb_hid_instrumentation.c` | 매트릭스 스캔 시작 시간을 기록해 Poll Rate 지터를 재현합니다.
+### 4.2 변화 행 탐지 & 고스트 제어
+- `matrix_scan()` 결과 또는 이전 고스트 잔재(`ghost_pending`)가 있는 경우에만 행 루프를 실행하여 빈 스캔 비용을 줄입니다.【F:src/ap/modules/qmk/quantum/keyboard.c†L642-L661】
+- 고스트 판정은 두 단계로 최적화돼 있습니다.
+  1. 물리 비트수가 0/1이면 조기 탈출해 키맵 조회를 생략합니다 (`V250924R8`).【F:src/ap/modules/qmk/quantum/keyboard.c†L252-L270】
+  2. 고스트 후보 행은 `get_cached_real_keys()`로 동적 키맵 필터 결과를 캐시해 동일 스캔에서 반복 계산을 피합니다 (`V251001R4`).【F:src/ap/modules/qmk/quantum/keyboard.c†L232-L249】【F:src/ap/modules/qmk/quantum/keyboard.c†L667-L696】
 
-## 5. 제어 흐름
-```
-TIM16 → DMA (row_wr_buf → GPIOA ODR)
-TIM16 → DMA (GPIOB IDR → col_rd_buf)
-  ↓
-keysPeekColsBuf()
-  ↓
-matrix_scan() → debounce()
-  ↓
-matrix_task()
-   ├─ 고스트 검사 / switch_events()
-   ├─ action_exec() → send_keyboard_report()
-   └─ usbHidSetTimeLog() (선택)
-  ↓
-host_keyboard_send()
-  ↓
-usbHidSendReport() / 큐잉
-```
-- VIA RAW HID OUT 패킷은 `USBD_HID_DataOut()` → `usbHidSetViaReceiveFunc()` → `via_hid_receive()` → `via_hid_task()` → `raw_hid_receive()` 순서로 처리됩니다.
-- VIA 응답은 `via_hid_task()`에서 `usbHidEnqueueViaResponse()`로 큐잉되며, SOF ISR이 전송을 담당합니다.
+### 4.3 이벤트 타임스탬프 공유
+- 첫 변화 행에서만 `sync_timer_read32()`를 호출해 32비트 타임스탬프를 확보하고, 하위 16비트를 키 이벤트 시간으로 재사용합니다 (`V251001R3`).【F:src/ap/modules/qmk/quantum/keyboard.c†L671-L676】
+- `pending_matrix_activity_time`를 통해 `last_matrix_activity_trigger()`가 동일 시각을 활용하도록 공유하여, 활동/입력 타이머 동기화를 유지합니다.【F:src/ap/modules/qmk/quantum/keyboard.c†L139-L170】【F:src/ap/modules/qmk/quantum/keyboard.c†L720-L741】
 
-## 6. 계측 및 진단
-- `_DEF_ENABLE_MATRIX_TIMING_PROBE=1`이면 `matrixInstrumentationCaptureStart()`가 타임스탬프를 기록하고 CLI `matrix info`에서 스캔 속도를 확인할 수 있습니다.
-- `_DEF_ENABLE_USB_HID_TIMING_PROBE=1`일 때 `usbHidGetRateInfo()`가 의미 있는 값을 반환하며, `Poll Rate : ...` 로그가 활성화됩니다.
-- `usbHidSetTimeLog()` 호출 시 HID 계측 모듈이 키 전송 지연을 히스토그램으로 축적합니다.
-- VIA 큐 오버플로우는 ISR에서 카운터만 증가시키고, `via_hid_task()`가 `[!] VIA RX queue overflow : <n>` 로그를 출력합니다.
+### 4.4 행·열 순회와 이벤트 생성
+- `row_changes`가 존재할 때만 열 루프에 진입하며, `__builtin_ctz()`와 `pending_changes &= pending_changes - 1` 패턴으로 set 비트만 순회합니다 (`V250924R7`).【F:src/ap/modules/qmk/quantum/keyboard.c†L697-L719】
+- 첫 실제 이벤트가 확정된 순간에만 `should_process_keypress()`를 호출해 마스터 키보드 여부를 확인하고, 고스트만 존재하는 스캔에서는 불필요한 함수 호출·타이머 접근을 배제합니다 (`V251001R2`).【F:src/ap/modules/qmk/quantum/keyboard.c†L678-L695】
+- `switch_events()`는 LED/RGB 매트릭스 등 키 전기 이벤트 기반 모듈을 호출하며, `action_exec()`는 QMK 고수준 키 처리로 연결됩니다.【F:src/ap/modules/qmk/quantum/keyboard.c†L703-L719】【F:src/ap/modules/qmk/quantum/keyboard.c†L612-L614】【F:src/ap/modules/qmk/quantum/action.c†L73-L120】
+- 루프 종료 후 `matrix_previous`를 최신 상태로 동기화하고, 고스트 발생 여부에 따라 `ghost_pending`을 유지합니다.【F:src/ap/modules/qmk/quantum/keyboard.c†L720-L741】
 
-## 7. 운영 체크리스트
-1. 매트릭스 행/열 수를 바꾸면 `row_wr_buf` 패턴과 DMA `DataSize`를 함께 수정해야 합니다.
-2. `matrix_task()`에 신규 기능을 추가할 때는 고스트 검사를 통과한 뒤에만 `action_exec()`을 호출하도록 순서를 유지하십시오.
-3. `host_keyboard_send()`에서 BT/CDC 경로를 추가하려면 `usbIsConnect()` 상태를 먼저 확인하고, HID 큐에 백업되었을 때의 처리 전략을 마련해야 합니다.
-4. VIA RAW HID 기능을 비활성화하려면 `via_hid_task()` 호출을 `qmkUpdate()`에서 조건부로 감싸고, USB HID 엔드포인트에서 RX 콜백 등록을 해제해야 합니다.
-5. USB 모니터나 계측을 켠 빌드에서는 `micros()` 호출이 많아지므로, `qmkUpdate()` 루프 내에서 블로킹 호출(예: 긴 CLI 출력)을 피해야 8 kHz 스캔 주기가 유지됩니다.
+### 4.5 Tick 이벤트 & 하우스키핑
+- 스캔이 없을 때도 `generate_tick_event()`가 1kHz 빈도로 `action_exec(TICK_EVENT)`을 호출해 타임 기반 상태머신(탭댄스, 오토시프트 등)을 구동합니다 (`V251001R1`).【F:src/ap/modules/qmk/quantum/keyboard.c†L562-L613】
+- `keyboard_task()`는 `matrix_task()` 결과에 따라 활동 타임스탬프를 갱신하고, `quantum_task()`·RGB·인코더·포인팅 디바이스 등 후속 태스크를 순차 실행합니다.【F:src/ap/modules/qmk/quantum/keyboard.c†L742-L857】
 
-## 8. 트러블슈팅 가이드
-- **특정 열이 항상 눌림 상태**: `keysInitGpio()`에서 해당 핀의 Pull 설정을 확인하고, `col_rd_buf`를 CLI에서 직접 덤프(필요 시 임시 명령 추가)하여 DMA 버퍼 값이 실제로 잘못되었는지 점검합니다.
-- **디바운스 미적용**: `debounce()` 호출 이후 `matrixInstrumentationPropagate()` 로깅이 비정상인지 확인하고, `DEBOUNCE` 매크로가 기대값인지 재확인합니다.
-- **HID 리포트가 지연됨**: `usbHidGetRateInfo()`의 `time_excess_max`, `queue_depth_max`를 확인하여 큐가 가득 차는지 판단하고, 필요 시 `usbHidSendReport()` 바로 앞에 있는 `usbHidInstrumentationOnImmediateSendSuccess()` 로그를 분석합니다.
-- **VIA 명령 누락**: `[!] VIA RX queue overflow` 로그가 나타나면 `VIA_HID_RX_QUEUE_DEPTH`를 늘리거나 `qmkUpdate()` 내 다른 작업을 비동기로 옮겨 메인 루프를 가볍게 해야 합니다.
+## 5. 키 이벤트 처리 & HID 리포트 구성
+### 5.1 `action_exec()` 파이프라인
+- 이벤트는 탭/홀드, 오토시프트, 콤보, 키 오버라이드 등을 통과하며 필요 시 oneshot·모드 상태를 업데이트합니다.【F:src/ap/modules/qmk/quantum/action.c†L73-L138】【F:src/ap/modules/qmk/quantum/action.c†L139-L210】
+- 최종적으로 `process_record()`가 키코드별 처리기를 실행하고, 키 상태 변화 시 `send_keyboard_report()` 또는 NKRO 전송을 요청합니다.【F:src/ap/modules/qmk/quantum/action.c†L211-L344】【F:src/ap/modules/qmk/quantum/action_util.c†L240-L323】
 
-> **팁**: 스캔/폴링 타이밍을 동시에 확인하려면 `_DEF_ENABLE_MATRIX_TIMING_PROBE=1`, `_DEF_ENABLE_USB_HID_TIMING_PROBE=1`, `USB_MONITOR_ENABLE=1`로 빌드한 뒤 `matrix info on` 명령을 사용하세요. 매 초마다 스캔/폴링/큐 지표가 한꺼번에 출력됩니다.
+### 5.2 리포트 최적화
+- 6KRO 경로(`send_6kro_report()`)는 마지막으로 전송한 리포트와 비교해 변경이 있을 때만 `host_keyboard_send()`를 호출합니다.【F:src/ap/modules/qmk/quantum/action_util.c†L272-L311】
+- NKRO (`send_nkro_report()`)도 동일한 메모이제이션을 적용하여 불필요한 USB 트래픽을 줄입니다.【F:src/ap/modules/qmk/quantum/action_util.c†L312-L323】
+
+## 6. HID 전송 계층
+### 6.1 포팅 드라이버 (`port/protocol/host.c`)
+- `host_keyboard_send()`는 USB가 깨어있으면 즉시 `usbHidSendReport()`를 호출하고, 포팅된 호스트 드라이버가 존재할 경우 동기화된 리포트를 다시 전달합니다. 블루투스 전환 시에는 RF 경로로 우선 송신합니다.【F:src/ap/modules/qmk/port/protocol/host.c†L71-L117】
+- 시스템/컨슈머/조이스틱 리포트도 동일 패턴으로 EXK 엔드포인트에 전달되며, 마지막으로 송신한 usage 값을 저장해 중복 송신을 방지합니다.【F:src/ap/modules/qmk/port/protocol/host.c†L151-L213】
+
+### 6.2 USB HID 레이어 (`usbd_hid.c`)
+- `usbHidSendReport()`는 USBD가 활성 상태면 DMA 버퍼를 HID 엔드포인트에 제출하고, 실패 시 내부 큐(`report_q`)에 적재해 재시도합니다. 성공 시 폴링 계측 플래그와 큐 깊이 스냅샷을 기록합니다 (`V250928R3`).【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1158-L1189】
+- 디바이스가 절전 상태일 경우 원격 웨이크업을 시도하며, EXK 경로(`usbHidSendReportEXK()`)도 동일한 계측 루틴을 공유합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1137-L1174】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1191-L1234】
+
+## 7. 활동 타임스탬프 & 상태 추적
+- `last_matrix_activity_trigger()`는 `matrix_task()`가 기록한 32비트 타임스탬프를 소비해 행/입력 활동 시간을 동기화하며, 예외적으로 공유 값이 없을 때만 `sync_timer_read32()`를 재호출합니다 (`V251001R3`).【F:src/ap/modules/qmk/quantum/keyboard.c†L139-L170】
+- 인코더·포인팅 디바이스 활동도 별도 타임스탬프를 유지하지만, `last_input_modification_time`과 최대값을 공유해 OLED 타임아웃 등 입력 기반 기능이 모든 소스에 반응하도록 합니다.【F:src/ap/modules/qmk/quantum/keyboard.c†L77-L134】
+
+## 8. 진단 & 확장 포인트
+- `_DEF_ENABLE_MATRIX_TIMING_PROBE`가 1인 빌드에서는 `matrix_info` CLI를 통해 스캔 주기, 폴링 주파수, 큐 잔량, 스캔 시간(us)을 실시간으로 확인할 수 있습니다.【F:src/ap/modules/qmk/port/matrix.c†L101-L144】
+- `matrix info on/off` 하위 명령은 주기 로그를 토글하고, 비활성화 시 `matrixInstrumentationReset()`으로 누적 데이터를 초기화합니다.【F:src/ap/modules/qmk/port/matrix.c†L115-L189】
+- `matrix_can_read()`와 `should_process_keypress()`는 저전력 모드(슬레이브 반쪽, USB 절전 등)에서 스캔/이벤트 생성을 제한하기 위한 훅입니다.【F:src/ap/modules/qmk/port/matrix.c†L41-L58】【F:src/ap/modules/qmk/quantum/keyboard.c†L410-L442】
+- `switch_events()`는 LED/RGB 매트릭스 동기화를 담당하는 확장 지점이며, 필요 시 다른 전기 이벤트 소비자를 추가할 수 있습니다.【F:src/ap/modules/qmk/quantum/keyboard.c†L527-L541】
+
+## 9. 계측 컴파일 매크로 & 빌드 시나리오
+- `_DEF_ENABLE_MATRIX_TIMING_PROBE`와 `_DEF_ENABLE_USB_HID_TIMING_PROBE`는 `hw_def.h`에서 기본 0으로 정의되어 릴리스 빌드에서 계측 호출이 제거됩니다.【F:src/hw/hw_def.h†L9-L18】
+- // V251108R1: Brick60는 `config.h`에서 `USB_MONITOR_ENABLE`/`BOOTMODE_ENABLE`을 토글하여 SOF 모니터와 VIA USB 메뉴 포함 여부를 결정합니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/config.h†L42-L49】
+- `matrixInstrumentationCaptureStart()`와 `matrixInstrumentationPropagate()`는 매크로 조합이 활성화된 경우에만 `micros()` 호출과 HID 타임스탬프 전달을 수행합니다.【F:src/ap/modules/qmk/port/matrix_instrumentation.h†L13-L45】【F:src/ap/modules/qmk/port/matrix.c†L50-L78】
+- HID 계층은 `_DEF_ENABLE_USB_HID_TIMING_PROBE`가 0이면 인라인 스텁으로 축소되지만, `USB_MONITOR_ENABLE`이 정의된 빌드에서는 `usbHidInstrumentationNow()`가 `micros()`를 유지해 SOF 모니터와 Poll Rate 계측이 같은 타임스탬프를 공유합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.h†L26-L68】
+- **릴리스 기본(S1)**: 두 계측 매크로 0, `USB_MONITOR_ENABLE`이 켜진 구성으로 SOF 모니터만 실행되어 Poll Rate 통계 누적이 비활성화됩니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/config.h†L42-L49】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1198-L1412】
+- **풀 계측(S5)**: 두 계측 매크로를 1로 설정하면 매트릭스 타임스탬프가 HID 계층에 전달되고, `usbHidMeasurePollRate()`가 큐 깊이와 폴링 초과 시간을 집계합니다.【F:src/ap/modules/qmk/port/matrix_instrumentation.h†L13-L45】【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1145-L1210】
+
+## 10. Poll/HID 계측 연동 흐름
+1. `matrix_scan()`이 시작될 때 `matrixInstrumentationCaptureStart()`가 활성 계측 조합에 한해 `micros()`를 읽습니다.【F:src/ap/modules/qmk/port/matrix.c†L50-L78】【F:src/ap/modules/qmk/port/matrix_instrumentation.h†L13-L33】
+2. 스캔 결과가 변경되면 `matrixInstrumentationPropagate()`가 HID 계층에 타임스탬프를 전달해 Poll Rate 분석의 기준 시각을 공유합니다.【F:src/ap/modules/qmk/port/matrix.c†L72-L78】【F:src/ap/modules/qmk/port/matrix_instrumentation.h†L35-L45】
+3. `usbHidSendReport()`는 계측이 켜져 있을 때만 리포트 시작 시각과 큐 깊이 스냅샷을 저장하여 후속 통계에 활용합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1145-L1159】
+4. SOF 인터럽트마다 `usbHidMeasurePollRate()`가 폴링 간격, 초과 시간, 큐 최대치를 누적하고 필요 시 다운그레이드 로직을 호출합니다.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1182-L1412】
+5. `matrix_info()` CLI는 `usbHidGetRateInfo()`에서 누적된 통계를 가져와 Scan/Poll Rate와 큐 최대 깊이를 출력합니다.【F:src/ap/modules/qmk/port/matrix.c†L92-L144】
+
+## 11. 버전 히스토리 (주요 변경)
+- **V250924R5**: DMA 버퍼 직접 참조(`keysPeekColsBuf()`), `volatile` 지정으로 최신 스캔 확보.【F:src/ap/modules/qmk/port/matrix.c†L55-L83】【F:src/hw/driver/keys.c†L309-L312】
+- **V250924R6**: `ghost_pending` 도입으로 고스트 해소 전까지 행 비교 유지.【F:src/ap/modules/qmk/quantum/keyboard.c†L633-L661】
+- **V250924R7**: 열 비트 스캔(`__builtin_ctz`)으로 행 변화 처리 비용 축소.【F:src/ap/modules/qmk/quantum/keyboard.c†L697-L719】
+- **V250924R8**: 고스트 판정 전 물리 비트 수로 조기 종료하여 키맵 필터 재계산 최소화.【F:src/ap/modules/qmk/quantum/keyboard.c†L252-L270】
+- **V250928R3**: HID 큐 깊이/폴링 초과 계측을 `usbHidSendReport()`에 추가.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1167-L1189】
+- **V251001R1**: Tick 이벤트가 스캔 시각 타임스탬프를 재사용하여 타이머 호출을 통합.【F:src/ap/modules/qmk/quantum/keyboard.c†L562-L613】
+- **V251001R2**: `should_process_keypress()` 지연 호출로 고스트 반복 시 낭비 제거.【F:src/ap/modules/qmk/quantum/keyboard.c†L678-L695】
+- **V251001R3**: 행 변화 시 32비트 타임스탬프 공유 및 활동 타이머 동기화.【F:src/ap/modules/qmk/quantum/keyboard.c†L139-L170】【F:src/ap/modules/qmk/quantum/keyboard.c†L671-L741】
+- **V251001R4**: 고스트 판정용 행 캐시 도입으로 키맵 필터 재계산 제거.【F:src/ap/modules/qmk/quantum/keyboard.c†L232-L249】【F:src/ap/modules/qmk/quantum/keyboard.c†L667-L696】
+- **V251009R1**: `keysUpdate()` API 제거 및 DMA 스냅샷 기반 경로만 유지.【F:src/common/hw/include/keys.h†L13-L19】【F:src/hw/driver/keys.c†L32-L304】【F:src/ap/modules/qmk/port/matrix.c†L55-L99】
+- **V251009R2**: DMA 자동 갱신에 중복되던 `keys` CLI 명령 제거, 진단 흐름을 QMK `matrix info`로 통합.【F:src/hw/driver/keys.c†L32-L330】【F:src/ap/modules/qmk/port/matrix.c†L101-L144】
+- **V251009R3**: `matrix.c` 폴백 블록 제거로 DMA 전용 경로를 확정하고 유지보수 범위를 축소.【F:src/ap/modules/qmk/port/matrix.c†L55-L99】
+- **V251009R7**: HID 전송 계층의 계측 진입점을 `_DEF_ENABLE_USB_HID_TIMING_PROBE` 가드로 묶어 큐 깊이 스냅샷과 타임스탬프 기록을 조건부 실행.【F:src/hw/driver/usb/usb_hid/usbd_hid.c†L1145-L1159】
+- **V251009R9**: `matrix_instrumentation.h`를 도입해 매트릭스 계측 호출을 인라인 스텁으로 정리하고 컴파일 타임 제어를 일원화.【F:src/ap/modules/qmk/port/matrix_instrumentation.h†L9-L45】
+- **V251010R3/R4**: `matrix info` CLI 로그를 단일 빌드 가드로 통합하고, 계측 비활성 빌드에서는 `disabled` 안내를 출력.【F:src/ap/modules/qmk/port/matrix.c†L83-L144】
+
+## 12. Codex 작업 체크리스트
+1. DMA/매트릭스 계층을 수정할 때는 `keysPeekColsBuf()`가 여전히 `volatile` 포인터를 반환하고, `matrix_scan()`이 `debounce()`와 USB 시간 로그를 호출하는지 확인합니다.
+2. `matrix_task()` 변경 시 `event_time_32`와 `pending_matrix_activity_time` 공유가 유지되는지, `generate_tick_event()` 호출이 누락되지 않았는지 검증합니다.
+3. HID 리포트 구조를 확장할 경우 `host_keyboard_send()`뿐 아니라 `usbHidSendReport()` 큐 계측과 `send_6kro_report()`의 변경 감지 로직을 함께 점검합니다.
+4. 슬레이브 분기/저전력 모드를 추가할 때는 `matrix_can_read()`·`should_process_keypress()`를 함께 조정하여 tick 이벤트와 활동 타이머가 기대대로 작동하는지 확인합니다.

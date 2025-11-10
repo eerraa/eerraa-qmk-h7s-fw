@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251109R9"   // V251109R9: VIA 리셋 경로 및 큐 리팩터링
+#define _DEF_FIRMWATRE_VERSION      "V251109R3"   // V251109R3: 속도/서스펜드 이벤트 창 고정화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
@@ -21,7 +21,7 @@
 #define _USE_HW_MICROS
 // #define _USE_HW_QSPI
 #define _USE_HW_FLASH
-// #define _USE_HW_VCOM
+#define _USE_HW_VCOM
 
 
 #define _USE_HW_LED

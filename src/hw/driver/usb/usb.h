@@ -163,7 +163,6 @@ static inline bool usbInstabilityIsEnabled(void)
 #endif
 
 void usbProcess(void);                                  // V250924R2 USB 안정성 모니터 서비스 루프
-bool usbScheduleGraceReset(uint32_t delay_ms);          // V251109R4 VIA 응답 송신 보장용 리셋 요청
 
 bool usbInit(void);
 bool usbBegin(UsbMode_t usb_mode);
