@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251109R7"   // V251109R7: VIA 리셋 디태치 지연
+#define _DEF_FIRMWATRE_VERSION      "V251109R9"   // V251109R9: VIA 리셋 경로 및 큐 리팩터링
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

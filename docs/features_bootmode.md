@@ -92,4 +92,4 @@ cliBoot "set <mode>"
 - // V251108R8: `via_custom_value_command_kb()`는 channel 13 분기를 `via_handle_usb_polling_channel()`로 위임해 BootMode/VIA 토글 관련 분기와 가드를 한 곳에서 유지합니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/port/via_port.c†L1-L95】
 - `BRICK60-H7S-VIA.JSON`의 "USB POLLING" 블록은 `BOOTMODE_ENABLE`/`USB_MONITOR_ENABLE`이 비활성화된 빌드에서는 파일에서 제거해야 하며, 기본 JSON은 해당 의존성을 라벨에 명시합니다.【F:src/ap/modules/qmk/keyboards/era/sirind/brick60/json/BRICK60-H7S-VIA.JSON†L248-L292】
 - // V251109R5: VIA `id_custom_set_value` Apply 패킷은 요청 바이트를 그대로 에코하고, 버튼 초기화는 `id_custom_get_value` 경로에서만 수행해 VIA의 응답 검증을 통과합니다.【F:src/ap/modules/qmk/port/usb_bootmode_via.c†L41-L75】
-- // V251109R7: BootMode/EEPROM 등 VIA 리셋 경로는 `USBD_Stop()`/`USBD_DeInit()` 후 약 100ms 지연을 두고 리셋하여 호스트가 디바이스 분리를 확실히 감지하도록 합니다.【F:src/hw/driver/usb/usb.c†L362-L377】
+- // V251109R9: BootMode/EEPROM 등 VIA 리셋 경로는 `USBD_Stop()`/`USBD_DeInit()` 후 `USB_RESET_DETACH_DELAY_MS`(기본 100ms) 동안 대기한 뒤 리셋해 호스트가 디바이스 분리를 확실히 감지하도록 합니다.【F:src/hw/driver/usb/usb.c†L362-L383】

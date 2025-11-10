@@ -15,8 +15,9 @@
 #include "qmk/port/platforms/eeprom.h"
 #include "qmk/port/usb_monitor_via.h"                                  // V251108R1: USB 모니터 VIA 스토리지 연동
 
-#define USB_VIA_RESET_GRACE_MS_DEFAULT  (40U)                          // V251109R4: VIA 응답 송신 보장을 위한 최소 유예
-#define USB_BOOTMODE_APPLY_GRACE_MS     USB_VIA_RESET_GRACE_MS_DEFAULT // V251109R4: BootMode 적용 시 동일 유예 사용
+#define USB_RESET_RESPONSE_GRACE_MS   (40U)                           // V251109R4: VIA 응답 송신 보장을 위한 최소 유예
+#define USB_BOOTMODE_APPLY_GRACE_MS   USB_RESET_RESPONSE_GRACE_MS     // V251109R4: BootMode 적용 시 동일 유예 사용
+#define USB_RESET_DETACH_DELAY_MS     (100U)                          // V251109R7: 호스트가 디태치를 감지할 최소 시간
 
 
 #ifdef _USE_HW_USB
@@ -38,7 +39,7 @@ static const char *const usb_boot_mode_name[USB_BOOT_MODE_MAX] = {          // V
 };
 
 static const char *usbBootModeLabel(UsbBootMode_t mode);                     // V250923R1 helpers
-bool usbRequestGraceReset(uint32_t delay_ms);                                // V251109R4: VIA 응답 송신 보장용 리셋 요청
+bool usbScheduleGraceReset(uint32_t delay_ms);                               // V251109R4: VIA 응답 송신 보장용 리셋 요청
 #ifdef BOOTMODE_ENABLE
 bool usbBootModeStore(UsbBootMode_t mode);
 #endif
@@ -195,7 +196,7 @@ bool usbBootModeSaveAndReset(UsbBootMode_t mode)
     return false;
   }
 
-  return usbRequestGraceReset(USB_BOOTMODE_APPLY_GRACE_MS);               // V251109R4: VIA 응답 송신 후 리셋
+  return usbScheduleGraceReset(USB_BOOTMODE_APPLY_GRACE_MS);              // V251109R4: VIA 응답 송신 후 리셋
 }
 #endif
 
@@ -218,11 +219,11 @@ bool usbBootModeScheduleApply(UsbBootMode_t mode)
 }
 #endif
 
-bool usbRequestGraceReset(uint32_t delay_ms)                               // V251109R4: VIA 응답을 보장하기 위한 리셋 유예 API
+bool usbScheduleGraceReset(uint32_t delay_ms)                              // V251109R4: VIA 응답을 보장하기 위한 리셋 유예 API
 {
   if (delay_ms == 0U)
   {
-    delay_ms = USB_VIA_RESET_GRACE_MS_DEFAULT;
+    delay_ms = USB_RESET_RESPONSE_GRACE_MS;
   }
 
   uint32_t ready_ms = millis() + delay_ms;
@@ -378,9 +379,21 @@ static void usbProcessDeferredReset(void)
   is_init     = false;                                                  // V251109R6: 재부팅 이후 usbBegin()을 강제하도록 초기화 상태 리셋
   is_usb_mode = USB_NON_MODE;
 
-  delay(100);                                                            // V251109R7: 호스트가 디태치를 감지할 시간을 제공
+  delay(USB_RESET_DETACH_DELAY_MS);                                      // V251109R7: 호스트가 디태치를 감지할 시간을 제공
 
   resetToReset();                                                        // V251109R4: VIA 응답 송신 이후에만 리셋 실행
+}
+
+static bool usbHasPendingService(bool has_apply_request, bool has_monitor_request, bool has_reset_request)
+{
+#if defined(BOOTMODE_ENABLE) && !defined(USB_MONITOR_ENABLE)
+  (void)has_monitor_request;
+#endif
+  return has_apply_request
+#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
+         || has_monitor_request
+#endif
+         || has_reset_request;
 }
 
 void usbProcess(void)
@@ -397,12 +410,7 @@ void usbProcess(void)
 #endif
   bool has_reset_request = usb_reset_request.pending;
 
-  if (has_apply_request == false
-#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
-      && has_monitor_request == false
-#endif
-      && has_reset_request == false
-  )
+  if (!usbHasPendingService(has_apply_request, has_monitor_request, has_reset_request))
   {
     return;  // V251109R4: 처리할 큐가 없을 때는 즉시 복귀해 메인 루프 부하 최소화
   }

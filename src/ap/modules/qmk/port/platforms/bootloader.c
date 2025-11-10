@@ -14,7 +14,7 @@ void mcu_reset(void)
     eeprom_update();
   }
 #ifdef _USE_HW_USB
-  if (usbRequestGraceReset(0U) == true)
+  if (usbScheduleGraceReset(0U) == true)
   {
     return;             // V251109R4: VIA 응답 송신까지 리셋을 보류
   }
