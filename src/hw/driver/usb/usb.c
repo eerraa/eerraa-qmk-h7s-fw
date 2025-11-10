@@ -378,6 +378,8 @@ static void usbProcessDeferredReset(void)
   is_init     = false;                                                  // V251109R6: 재부팅 이후 usbBegin()을 강제하도록 초기화 상태 리셋
   is_usb_mode = USB_NON_MODE;
 
+  delay(100);                                                            // V251109R7: 호스트가 디태치를 감지할 시간을 제공
+
   resetToReset();                                                        // V251109R4: VIA 응답 송신 이후에만 리셋 실행
 }
 
