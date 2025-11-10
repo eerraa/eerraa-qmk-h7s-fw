@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251109R5"   // V251109R5: VIA BootMode Apply 응답 정합 수정
+#define _DEF_FIRMWATRE_VERSION      "V251109R6"   // V251109R6: VIA 리셋 시 USB 강제 디태치
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

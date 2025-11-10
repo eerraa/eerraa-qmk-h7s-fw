@@ -372,6 +372,12 @@ static void usbProcessDeferredReset(void)
   }
 
   usb_reset_request.pending = false;
+
+  USBD_Stop(&USBD_Device);                                               // V251109R6: 리셋 전에 USB를 강제 분리
+  USBD_DeInit(&USBD_Device);
+  is_init     = false;                                                  // V251109R6: 재부팅 이후 usbBegin()을 강제하도록 초기화 상태 리셋
+  is_usb_mode = USB_NON_MODE;
+
   resetToReset();                                                        // V251109R4: VIA 응답 송신 이후에만 리셋 실행
 }
 
