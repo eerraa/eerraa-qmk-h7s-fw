@@ -53,11 +53,12 @@ void via_qmk_usb_bootmode_command(uint8_t *data, uint8_t length)
       }
       else if (*value_id == id_qmk_usb_bootmode_apply)
       {
-        if (value_data[0] == 1U)
+        uint8_t request = value_data[0];                                  // V251109R5: VIA echo 유지
+        if (request != 0U)
         {
           usbBootModeScheduleApply(pending_boot_mode);  // V251108R6: 동일 값이라도 Apply 요청 시 재부팅
         }
-        value_data[0] = 0U;
+        value_data[0] = request;
       }
       break;
     }
