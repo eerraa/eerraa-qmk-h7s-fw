@@ -22,8 +22,8 @@
 ## 4. 설계 제안
 
 ### 4.1 빌드 제어 매크로
-- `hw_def.h` 또는 상위 CMake 옵션에 `AUTO_EEPROM_CLEAR_ENABLE`를 정의합니다.
-- `AUTO_EEPROM_CLEAR_COOKIE`는 **필수** 매크로로, 32비트 정수 하나를 빌드 파이프라인에서 생성해 주입합니다. 권장 방식은 `_DEF_FIRMWATRE_VERSION`을 4바이트 “V + YYMM” ASCII로 인코딩하거나, 버전 SHA-1 상위 32비트를 사용하는 것입니다. 예) `V2512` → `0x56323531`.
+- `hw_def.h` 또는 상위 CMake 옵션에 `AUTO_EEPROM_CLEAR_ENABLE`를 정의합니다. 기본값은 0이며, 단계 1에서 전역 매크로로 추가되었습니다.
+- `AUTO_EEPROM_CLEAR_COOKIE`는 **필수** 매크로입니다. 현재 구현(V251112R1)은 `_DEF_FIRMWATRE_VERSION`이 따르는 `VYYMMDDRn` 포맷을 그대로 BCD(YY|MM|DD|Rn)로 변환해 기본 쿠키(`0xYYMMDDRn`)를 생성하며, 빌드 옵션으로 재정의할 수도 있습니다. 예) `V251112R1` → `0x25111201`, `V251112R2` → `0x25111202`.
 
 ### 4.2 센티넬 슬롯 설계
 | 심볼 | 오프셋 제안 | 크기 | 의미 |
@@ -65,10 +65,10 @@ hwInit()
 4. **마이그레이션 확장**: 쿠키 슬롯을 복수 개로 확장하면 BootMode, Indicator, VIA JSON 등 개별 서브시스템의 마이그레이션 상태도 동일 메커니즘으로 추적할 수 있습니다.
 
 ## 5. 구현 단계 체크리스트
-### 5.1 단계 1 – 빌드 심볼 및 슬롯 준비
-1. `src/hw/hw_def.h`에 `AUTO_EEPROM_CLEAR_ENABLE`, `AUTO_EEPROM_CLEAR_COOKIE` 기본값, 플래그/쿠키 상수(`AUTO_EEPROM_CLEAR_COOKIE_DEFAULT` 등)를 선언합니다.
-2. `src/ap/modules/qmk/port/port.h`에 `EECONFIG_USER_EEPROM_CLEAR_FLAG`/`COOKIE` 매크로를 추가하고, Brick60 USER 슬롯 전체 맵을 최신 상태로 정리합니다.
-3. CMake/빌드 스크립트에서 쿠키 값을 넘겨줄 수 있도록 `-DAUTO_EEPROM_CLEAR_COOKIE=0x...` 옵션을 마련하거나, `_DEF_FIRMWATRE_VERSION` 기반으로 자동 생성하는 헬퍼를 작성합니다.
+### 5.1 단계 1 – 빌드 심볼 및 슬롯 준비 (완료: V251112R1)
+1. `src/hw/hw_def.h`에 `AUTO_EEPROM_CLEAR_ENABLE`, 자동 초기화 플래그 매직, `_DEF_FIRMWATRE_VERSION` 기반 기본 쿠키 생성 매크로(`AUTO_EEPROM_CLEAR_COOKIE_DEFAULT`)를 선언했습니다.
+2. `src/ap/modules/qmk/port/port.h`에 `EECONFIG_USER_EEPROM_CLEAR_FLAG`/`COOKIE` 매크로를 추가해 USER 데이터 블록에 슬롯을 예약했습니다.
+3. 향후 필요 시 `-DAUTO_EEPROM_CLEAR_COOKIE=0x...` 옵션으로 기본 쿠키를 덮어쓸 수 있으며, 현재 구현은 `_DEF_FIRMWATRE_VERSION`을 BCD로 변환하는 헬퍼로 자동 생성합니다.
 
 ### 5.2 단계 2 – 센티넬 로직 및 헬퍼 구현
 1. `src/hw/driver/eeprom/` 또는 `src/hw/` 레벨에 `bool eepromAutoClearCheck(void)` (이름 가칭) 함수를 추가합니다.
