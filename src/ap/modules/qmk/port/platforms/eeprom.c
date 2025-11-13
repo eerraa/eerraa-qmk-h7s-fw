@@ -63,6 +63,7 @@ void eeprom_task(void)
 
   if (is_req_clean)
   {
+    eeprom_flush_pending();                                     // V251112R5: 기본 초기화 전에 큐 비우기
   #ifdef BOOTMODE_ENABLE
     usbBootModeApplyDefaults();
   #endif

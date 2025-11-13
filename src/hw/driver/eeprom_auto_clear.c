@@ -88,6 +88,7 @@ bool eepromAutoClearCheck(void)
 #if (EECONFIG_USER_DATA_SIZE) > 0
   eeconfig_init_user_datablock();
 #endif
+  eeprom_flush_pending();                                      // V251112R5: 초기화 큐를 비워 커스텀 기본값이 덮어쓰이지 않도록 함
 #ifdef BOOTMODE_ENABLE
   usbBootModeApplyDefaults();                        // V251112R5: BootMode 슬롯 기본값 기록
 #endif
