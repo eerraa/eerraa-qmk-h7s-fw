@@ -57,7 +57,16 @@ hwInit()
    - `eeconfig_init_kb_datablock()`/`eeconfig_init_user_datablock()`를 호출하여 512B 사용자 슬롯을 0으로 초기화합니다.
    - Indicator, USB monitor 등 `EECONFIG_DEBOUNCE_HELPER` 기반 모듈은 `eeconfig_init_*()`와 `eeconfig_flush_*()`를 통해 기본값을 다시 써 줍니다.
 6. **플래그/쿠키 기록**: 초기화 성공 시 `0x56434C52`(“VCLR”)와 현재 빌드의 `AUTO_EEPROM_CLEAR_COOKIE` 값을 함께 기록합니다. 이 과정에서 쿠키 쓰기가 실패하면 플래그도 0으로 되돌려 다음 부팅에서 재시도하게 합니다.
-7. **로그**: `logPrintf("[  ] EEPROM auto clear : DONE (cookie=0x%08X)\n");` 형태로 결과를 남깁니다.
+7. **로그 & 리셋**: `logPrintf("[  ] EEPROM auto clear : DONE (cookie=0x%08X)\n");` 로그를 남긴 뒤 즉시 `resetToReset()`으로 하드 리셋을 트리거하여, VIA 경로와 동일하게 USB 세션을 초기화합니다.
+
+### 4.6 기본값 보장 대상 (참고)
+| 기능 | 기본값 경로 | 비고 |
+| --- | --- | --- |
+| RGB / Indicator | `eeconfig_init()`의 `EECONFIG_RGBLIGHT`, `indicator_port.c:68-94` | 사용자 슬롯이 0이면 `indicator_apply_defaults()` 호출 |
+| KKUK | `kkuk.c:43-74` | `eeconfig_init_kkuk()` → mode/enable/delay/repeat 기본값 기록 |
+| Kill Switch | `kill_switch.c:44-98` | LR/UD 각각 `eeconfig_init_kill_switch_*()` 후 기본값 체크 |
+| BootMode | `usbBootModeLoad()` + `usbBootModeStore()` 경로 | 데이터가 범위 밖이면 HS 8K로 복원 |
+| USB 불안정 모니터 | `usb_monitor_via.c:25-44` | `eeconfig_init_usb_monitor()` 호출 시 ON/OFF 기본값 적용 |
 
 ### 4.5 쿠키 기반 반복 초기화 전략
 1. **릴리스별 고유 쿠키**: 빌드 스크립트가 `_DEF_FIRMWATRE_VERSION`과 동기화된 쿠키를 자동으로 생성하면, 버전 문자열만 바꿔도 새로운 쿠키가 주입되어 초기화가 보장됩니다.
@@ -78,9 +87,9 @@ hwInit()
 4. 플래그·쿠키는 `eepromWrite()`로 직접 기록하며, 실패 시 플래그를 0으로 되돌리고 `[!] EEPROM auto clear` 로그를 남긴 뒤 false를 반환합니다.
 5. 정상 완료 시 `[  ] EEPROM auto clear : success (cookie=0xXXXXXXXX)` 로그를 출력해 이후 단계(부팅 경로 통합)에서 재사용할 수 있는 상태 코드를 제공합니다.
 
-### 5.3 단계 3 – 부팅 경로 통합 및 로깅 (완료: V251112R3)
+### 5.3 단계 3 – 부팅 경로 통합 및 로깅 (완료: V251112R4)
 1. `src/hw/hw.c`의 `hwInit()`에서 `eeprom_init()` 직후 `eepromAutoClearCheck()`를 호출하도록 연결했습니다. 반환값은 `(void)` 처리해 릴리스/디버그 빌드 모두에서 경고가 발생하지 않습니다.
-2. 성공/실패 로그는 `eepromAutoClearCheck()` 내부에서 출력되며(`"[  ] EEPROM auto clear : success..."`, `"[!] ... fail"`), `AUTO_EEPROM_CLEAR_ENABLE`이 0인 빌드에서는 함수가 즉시 true를 반환해 추가 로그가 남지 않습니다.
+2. 성공/실패 로그는 `eepromAutoClearCheck()` 내부에서 출력되며, AUTO 경로가 실행되면 마지막에 `resetToReset()`을 호출해 VIA 경로와 동일하게 하드 리셋을 수행합니다. `AUTO_EEPROM_CLEAR_ENABLE`이 0인 빌드에서는 함수가 즉시 true를 반환해 추가 로그/리셋이 없습니다.
 3. BootMode/USB Monitor 등 EEPROM 소비자 호출 순서를 점검해, 모두 자동 초기화 이후에 실행되도록 유지했습니다. (현재 호출 순서는 `eepromAutoClearCheck()` → `usbBootModeLoad()` → `usbInstabilityLoad()` 순서로 보장됩니다.)
 
 ### 5.4 단계 4 – 모듈 후처리 및 개발자 도구

@@ -7,6 +7,7 @@
 #if AUTO_EEPROM_CLEAR_ENABLE
 #include "log.h"
 #include "eeprom.h"
+#include "reset.h"
 #include "qmk/quantum/eeconfig.h"
 #include "qmk/port/port.h"
 #include "qmk/port/platforms/eeprom.h"
@@ -99,6 +100,9 @@ bool eepromAutoClearCheck(void)
   }
 
   logPrintf("[  ] EEPROM auto clear : success (cookie=0x%08X)\n", AUTO_EEPROM_CLEAR_COOKIE);
+  logPrintf("[  ] EEPROM auto clear : scheduling reset\n");
+  delay(10);
+  resetToReset();
   return true;
 #else
   return true;
