@@ -52,6 +52,7 @@ bool hwInit(void)
   i2cInit();
   eepromInit();
   eeprom_init();                                              // V250923R1 Sync QMK EEPROM image before USB init
+  bool eeprom_clear_ok = eepromAutoClearCheck();              // V251112R3: AUTO_EEPROM_CLEAR_ENABLE 빌드에서 강제 초기화
 #ifdef BOOTMODE_ENABLE
   if (usbBootModeLoad() != true)                              // V250923R1 Apply stored USB boot mode preference
   {
@@ -64,6 +65,7 @@ bool hwInit(void)
     logPrintf("[!] usbInstabilityLoad Fail\n");
   }
 #endif
+  (void)eeprom_clear_ok;
   #ifdef _USE_HW_QSPI
   qspiInit();
   #endif

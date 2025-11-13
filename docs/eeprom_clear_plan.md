@@ -78,10 +78,10 @@ hwInit()
 4. 플래그·쿠키는 `eepromWrite()`로 직접 기록하며, 실패 시 플래그를 0으로 되돌리고 `[!] EEPROM auto clear` 로그를 남긴 뒤 false를 반환합니다.
 5. 정상 완료 시 `[  ] EEPROM auto clear : success (cookie=0xXXXXXXXX)` 로그를 출력해 이후 단계(부팅 경로 통합)에서 재사용할 수 있는 상태 코드를 제공합니다.
 
-### 5.3 단계 3 – 부팅 경로 통합 및 로깅
-1. `src/hw/hw.c`의 `hwInit()`에서 `eeprom_init()` 직후 `eepromAutoClearCheck()`를 호출합니다.
-2. 결과에 따라 `[  ] EEPROM auto clear : DONE (cookie=0x%08X)` 또는 `[!] EEPROM auto clear fail` 로그를 남기고, 필요 시 `logBoot()`/CLI에서도 확인할 수 있도록 상태를 저장합니다.
-3. BootMode, USB monitor, VIA 등 EEPROM 소비 함수가 모두 `eepromAutoClearCheck()` 이후에 호출되는지 재검토하고 순서를 보정합니다.
+### 5.3 단계 3 – 부팅 경로 통합 및 로깅 (완료: V251112R3)
+1. `src/hw/hw.c`의 `hwInit()`에서 `eeprom_init()` 직후 `eepromAutoClearCheck()`를 호출하도록 연결했습니다. 반환값은 `(void)` 처리해 릴리스/디버그 빌드 모두에서 경고가 발생하지 않습니다.
+2. 성공/실패 로그는 `eepromAutoClearCheck()` 내부에서 출력되며(`"[  ] EEPROM auto clear : success..."`, `"[!] ... fail"`), `AUTO_EEPROM_CLEAR_ENABLE`이 0인 빌드에서는 함수가 즉시 true를 반환해 추가 로그가 남지 않습니다.
+3. BootMode/USB Monitor 등 EEPROM 소비자 호출 순서를 점검해, 모두 자동 초기화 이후에 실행되도록 유지했습니다. (현재 호출 순서는 `eepromAutoClearCheck()` → `usbBootModeLoad()` → `usbInstabilityLoad()` 순서로 보장됩니다.)
 
 ### 5.4 단계 4 – 모듈 후처리 및 개발자 도구
 1. Indicator, USB monitor, BootMode 등의 `eeconfig_init_*()` 호출부를 점검해 자동 초기화 직후 기본값이 즉시 반영되도록 보완합니다. 필요하면 각 모듈에 “auto-clear hook”을 추가합니다.

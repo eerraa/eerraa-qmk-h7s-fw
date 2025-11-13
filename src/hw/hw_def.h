@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251112R2"   // V251112R2: EEPROM 자동 초기화 단계 2 (센티넬 로직)
+#define _DEF_FIRMWATRE_VERSION      "V251112R3"   // V251112R3: EEPROM 자동 초기화 단계 3 (부팅 경로)
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 #ifndef AUTO_EEPROM_CLEAR_ENABLE
