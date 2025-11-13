@@ -6,9 +6,33 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251109R9"   // V251109R9: VIA 리셋 경로 및 큐 리팩터링
+#define _DEF_FIRMWATRE_VERSION      "V251112R1"   // V251112R1: EEPROM 자동 초기화 단계 1 사전 정의
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
+#ifndef AUTO_EEPROM_CLEAR_ENABLE
+#define AUTO_EEPROM_CLEAR_ENABLE    0              // V251112R1: 자동 EEPROM 초기화 빌드 가드 기본 비활성화
+#endif
+
+#define AUTO_EEPROM_CLEAR_FLAG_MAGIC   0x56434C52U  // V251112R1: "VCLR"
+#define AUTO_EEPROM_CLEAR_FLAG_RESET   0x00000000U  // V251112R1: 플래그 초기값
+
+#define __EE_BCD_BYTE(a, b) \
+  ((uint32_t)((((a) - '0') & 0x0F) << 4) | (((b) - '0') & 0x0F))
+
+#define __EE_REV_CHAR(idx)                                                     \
+  (((idx) < (sizeof(_DEF_FIRMWATRE_VERSION) - 1) && _DEF_FIRMWATRE_VERSION[idx] != '\0') \
+     ? _DEF_FIRMWATRE_VERSION[idx]                                             \
+     : '0')
+
+#define AUTO_EEPROM_CLEAR_COOKIE_DEFAULT                                      \
+  ( (__EE_BCD_BYTE(_DEF_FIRMWATRE_VERSION[1], _DEF_FIRMWATRE_VERSION[2]) << 24) | \
+    (__EE_BCD_BYTE(_DEF_FIRMWATRE_VERSION[3], _DEF_FIRMWATRE_VERSION[4]) << 16) | \
+    (__EE_BCD_BYTE(_DEF_FIRMWATRE_VERSION[5], _DEF_FIRMWATRE_VERSION[6]) << 8)  | \
+    (__EE_BCD_BYTE(__EE_REV_CHAR(8), __EE_REV_CHAR(9)) << 0) )
+
+#ifndef AUTO_EEPROM_CLEAR_COOKIE
+#define AUTO_EEPROM_CLEAR_COOKIE    AUTO_EEPROM_CLEAR_COOKIE_DEFAULT  // V251112R1: 펌웨어 버전 기반 기본 쿠키
+#endif
 
 #ifndef _DEF_ENABLE_MATRIX_TIMING_PROBE
 #define _DEF_ENABLE_MATRIX_TIMING_PROBE   0  // V251010R4: 기본값은 비활성화, 필요 시 보드/빌드에서 재정의
