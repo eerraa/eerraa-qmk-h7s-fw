@@ -42,6 +42,19 @@ void eeprom_update(void)
   }
 }
 
+bool eeprom_is_pending(void)
+{
+  return qbufferAvailable(&write_q) > 0;
+}
+
+void eeprom_flush_pending(void)
+{
+  while (eeprom_is_pending())
+  {
+    eeprom_update();
+  }
+}
+
 void eeprom_task(void)
 {
   eeprom_update();

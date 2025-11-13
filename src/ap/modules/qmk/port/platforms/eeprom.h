@@ -9,6 +9,8 @@
 
 void     eeprom_init(void);
 void     eeprom_update(void);
+bool     eeprom_is_pending(void);
+void     eeprom_flush_pending(void);
 void     eeprom_task(void);
 void     eeprom_req_clean(void);
 uint8_t  eeprom_read_byte(const uint8_t *addr);

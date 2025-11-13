@@ -99,6 +99,7 @@ bool eepromAutoClearCheck(void)
     return false;
   }
 
+  eeprom_flush_pending();                                      // V251112R4: 모든 비동기 쓰기 완료 후 리셋
   logPrintf("[  ] EEPROM auto clear : success (cookie=0x%08X)\n", AUTO_EEPROM_CLEAR_COOKIE);
   logPrintf("[  ] EEPROM auto clear : scheduling reset\n");
   delay(10);
