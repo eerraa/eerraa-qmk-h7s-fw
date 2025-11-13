@@ -28,7 +28,7 @@
 static bool      is_init = false;
 static UsbMode_t is_usb_mode = USB_NON_MODE;
 #ifdef BOOTMODE_ENABLE
-static UsbBootMode_t usb_boot_mode = USB_BOOT_MODE_HS_8K;                    // V250923R1 Current USB boot mode target
+static UsbBootMode_t usb_boot_mode = USB_BOOT_MODE_FS_1K;                    // V251112R5: 기본값을 FS 1K로 조정
 #endif
 
 static const char *const usb_boot_mode_name[USB_BOOT_MODE_MAX] = {          // V250923R1 Mode labels for logging/CLI
@@ -49,7 +49,7 @@ static volatile struct
 {
   bool          pending;                                                   // V251108R3: VIA에서 요청된 BootMode 적용 큐
   UsbBootMode_t mode;
-} boot_mode_apply_request = {false, USB_BOOT_MODE_HS_8K};
+} boot_mode_apply_request = {false, USB_BOOT_MODE_FS_1K};
 #endif
 
 static volatile struct
@@ -131,7 +131,8 @@ bool usbBootModeLoad(void)
 
   if (raw_mode >= USB_BOOT_MODE_MAX)
   {
-    raw_mode = USB_BOOT_MODE_FS_1K;                               // V251112R5: 기본값을 FS 1K로 변경
+    usbBootModeApplyDefaults();                                   // V251112R5: 슬롯이 손상되면 즉시 기본값을 기록
+    raw_mode = USB_BOOT_MODE_FS_1K;
   }
 
   usb_boot_mode = (UsbBootMode_t)raw_mode;
