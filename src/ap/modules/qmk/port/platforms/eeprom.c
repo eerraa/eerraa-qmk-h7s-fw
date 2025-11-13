@@ -1,6 +1,7 @@
 #include "quantum.h"
 #include "usb.h"                                   // V251112R5: VIA EEPROM 클리어 시 BootMode 기본값 적용
 #include "qmk/port/usb_monitor.h"                  // V251112R5: USB 모니터 기본값 적용
+#include "qmk/port/port.h"
 
 
 #define EEPROM_WRITE_Q_BUF_MAX  (TOTAL_EEPROM_BYTE_COUNT + 1)
@@ -17,13 +18,13 @@ static qbuffer_t      write_q;
 static eeprom_write_t write_buf[EEPROM_WRITE_Q_BUF_MAX];
 static bool           is_req_clean = false;
 
-#if AUTO_EEPROM_CLEAR_ENABLE
 static void eeprom_restore_auto_clear_sentinel(void)
 {
+#if defined(AUTO_EEPROM_CLEAR_FLAG_MAGIC) && defined(AUTO_EEPROM_CLEAR_COOKIE)
   eeprom_write_dword((uint32_t *)EECONFIG_USER_EEPROM_CLEAR_FLAG, AUTO_EEPROM_CLEAR_FLAG_MAGIC);
   eeprom_write_dword((uint32_t *)EECONFIG_USER_EEPROM_CLEAR_COOKIE, AUTO_EEPROM_CLEAR_COOKIE);
-}
 #endif
+}
 
 
 void eeprom_init(void)
@@ -81,10 +82,8 @@ void eeprom_task(void)
     eeprom_flush_pending();                                     // V251112R5: 기존 큐 비우기
     eeconfig_disable();
     eeprom_flush_pending();                                     // V251112R5: Magic OFF 기록 보장
-#if AUTO_EEPROM_CLEAR_ENABLE
     eeprom_restore_auto_clear_sentinel();                        // V251113R1: VIA 클리어 후 자동 초기화 센티넬 복구
     eeprom_flush_pending();                                     // V251113R1: 플래그/쿠키 기록 보장
-#endif
     soft_reset_keyboard();
   }
 }
