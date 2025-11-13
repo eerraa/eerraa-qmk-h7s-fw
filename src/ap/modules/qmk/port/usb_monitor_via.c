@@ -8,9 +8,8 @@
 #include "usb.h"
 #include "via.h"
 
-// V251108R1: USB 모니터 구성은 기본적으로 활성화 상태로 시작
 usb_monitor_config_t usb_monitor_config = {
-  .enable   = 1U,
+  .enable   = 0U,                                               // V251112R5: 기본값을 OFF로 변경
   .reserved = {0},
 };
 
@@ -18,7 +17,7 @@ EECONFIG_DEBOUNCE_HELPER(usb_monitor, EECONFIG_USER_USB_INSTABILITY, usb_monitor
 
 static void usb_monitor_apply_defaults(void)
 {
-  usb_monitor_config.enable = 1U;
+  usb_monitor_config.enable = 0U;                               // V251112R5: 기본값 OFF
   memset(usb_monitor_config.reserved, 0, sizeof(usb_monitor_config.reserved));
 }
 

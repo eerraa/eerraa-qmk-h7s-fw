@@ -131,7 +131,7 @@ bool usbBootModeLoad(void)
 
   if (raw_mode >= USB_BOOT_MODE_MAX)
   {
-    raw_mode = USB_BOOT_MODE_HS_8K;
+    raw_mode = USB_BOOT_MODE_FS_1K;                               // V251112R5: 기본값을 FS 1K로 변경
   }
 
   usb_boot_mode = (UsbBootMode_t)raw_mode;
@@ -233,7 +233,7 @@ static bool usbBootModeWriteRaw(UsbBootMode_t mode)
 
 void usbBootModeApplyDefaults(void)
 {
-  (void)usbBootModeWriteRaw(USB_BOOT_MODE_HS_8K);                           // V251112R5: BootMode EEPROM 기본값 적용
+  (void)usbBootModeWriteRaw(USB_BOOT_MODE_FS_1K);                           // V251112R5: BootMode 기본값을 FS 1K로 기록
 }
 #endif
 
