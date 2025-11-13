@@ -6,8 +6,10 @@
 #include "via.h"
 
 // V251108R3: VIA 선택값을 리셋 전까지 보류하고 Apply 요청은 메인 루프에서 처리
-static UsbBootMode_t pending_boot_mode = USB_BOOT_MODE_HS_8K;
+static UsbBootMode_t pending_boot_mode = USB_BOOT_MODE_FS_1K;
 static bool          pending_boot_mode_init = false;
+static uint8_t       bootmode_encode_via_value(UsbBootMode_t mode);          // V251113R1: VIA JSON과 열거형 간 값 변환
+static UsbBootMode_t bootmode_decode_via_value(uint8_t via_value);
 
 static void bootmode_sync_pending(void)
 {
@@ -44,12 +46,12 @@ void via_qmk_usb_bootmode_command(uint8_t *data, uint8_t length)
     {
       if (*value_id == id_qmk_usb_bootmode_select)
       {
-        UsbBootMode_t req_mode = (UsbBootMode_t)value_data[0];
+        UsbBootMode_t req_mode = bootmode_decode_via_value(value_data[0]);      // V251113R1: VIA 옵션 순서와 열거형 순서를 분리
         if (req_mode < USB_BOOT_MODE_MAX)
         {
           pending_boot_mode = req_mode;  // V251108R1: 값만 보류, 실제 적용은 Apply 토글 시점
         }
-        value_data[0] = (uint8_t)pending_boot_mode;
+        value_data[0] = bootmode_encode_via_value(pending_boot_mode);
       }
       else if (*value_id == id_qmk_usb_bootmode_apply)
       {
@@ -67,7 +69,7 @@ void via_qmk_usb_bootmode_command(uint8_t *data, uint8_t length)
     {
       if (*value_id == id_qmk_usb_bootmode_select)
       {
-        value_data[0] = (uint8_t)pending_boot_mode;
+        value_data[0] = bootmode_encode_via_value(pending_boot_mode);  // V251113R1
       }
       else if (*value_id == id_qmk_usb_bootmode_apply)
       {
@@ -84,6 +86,39 @@ void via_qmk_usb_bootmode_command(uint8_t *data, uint8_t length)
     default:
       *command_id = id_unhandled;
       break;
+  }
+}
+
+static uint8_t bootmode_encode_via_value(UsbBootMode_t mode)
+{
+  switch (mode)
+  {
+    case USB_BOOT_MODE_HS_8K:
+      return 0U;
+    case USB_BOOT_MODE_HS_4K:
+      return 1U;
+    case USB_BOOT_MODE_HS_2K:
+      return 2U;
+    case USB_BOOT_MODE_FS_1K:
+    default:
+      return 3U;
+  }
+}
+
+static UsbBootMode_t bootmode_decode_via_value(uint8_t via_value)
+{
+  switch (via_value)
+  {
+    case 0U:
+      return USB_BOOT_MODE_HS_8K;
+    case 1U:
+      return USB_BOOT_MODE_HS_4K;
+    case 2U:
+      return USB_BOOT_MODE_HS_2K;
+    case 3U:
+      return USB_BOOT_MODE_FS_1K;
+    default:
+      return USB_BOOT_MODE_MAX;
   }
 }
 

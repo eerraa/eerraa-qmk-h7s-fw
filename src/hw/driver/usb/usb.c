@@ -32,10 +32,10 @@ static UsbBootMode_t usb_boot_mode = USB_BOOT_MODE_DEFAULT_VALUE;               
 #endif
 
 static const char *const usb_boot_mode_name[USB_BOOT_MODE_MAX] = {          // V250923R1 Mode labels for logging/CLI
-  "HS 8K",
-  "HS 4K",
-  "HS 2K",
   "FS 1K",
+  "HS 2K",
+  "HS 4K",
+  "HS 8K",
 };
 
 static const char *usbBootModeLabel(UsbBootMode_t mode);                     // V250923R1 helpers
@@ -105,7 +105,7 @@ static void usbBootModeRequestReset(void)
 {
   boot_mode_request.stage      = USB_BOOT_MODE_REQ_STAGE_IDLE;
   boot_mode_request.log_pending = false;
-  boot_mode_request.next_mode  = USB_BOOT_MODE_HS_8K;
+  boot_mode_request.next_mode  = USB_BOOT_MODE_FS_1K;
   boot_mode_request.delta_us   = 0U;
   boot_mode_request.expected_us = 0U;
   boot_mode_request.ready_ms   = 0U;

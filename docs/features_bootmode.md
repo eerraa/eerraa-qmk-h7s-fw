@@ -86,6 +86,7 @@ apMain() 루프
   - value ID 2 = Apply 토글. 1로 쓰면 `usbBootModeScheduleApply()`가 호출되고, 응답 패킷은 원본 값을 그대로 에코합니다.
   - `id_custom_save` 명령은 no-op 처리하여 VIA UI에서 저장 버튼을 눌러도 오류가 발생하지 않습니다.
 - JSON (`BRICK60-H7S-VIA.JSON`)의 "USB POLLING" 블록은 `BOOTMODE_ENABLE` 또는 `USB_MONITOR_ENABLE`이 꺼진 빌드에서는 제거해야 합니다.
+- V251113R1: VIA JSON은 8k→4k→2k→1k 순으로 값을 전송하지만 펌웨어 열거형은 1k→2k→4k→8k 순서이므로 `via_qmk_usb_bootmode_command()` 내부에서 `bootmode_encode/bootmode_decode_via_value()` 헬퍼로 자동 매핑합니다. JSON 순서를 바꿀 필요가 없습니다.
 
 ## 7. 운영 체크리스트
 1. 새로운 HID 엔드포인트를 추가할 때는 반드시 `usbBootModeGetHsInterval()`을 사용하여 `bInterval`을 결정합니다.

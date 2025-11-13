@@ -60,10 +60,10 @@ typedef enum UsbType
 
 typedef enum UsbBootMode                               // V250923R1 Persisted USB polling profile
 {
-  USB_BOOT_MODE_HS_8K = 0,
-  USB_BOOT_MODE_HS_4K,
+  USB_BOOT_MODE_FS_1K = 0,
   USB_BOOT_MODE_HS_2K,
-  USB_BOOT_MODE_FS_1K,
+  USB_BOOT_MODE_HS_4K,
+  USB_BOOT_MODE_HS_8K,
   USB_BOOT_MODE_MAX,
 } UsbBootMode_t;
 

@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251112R6"   // V251112R6: BootMode/USB 모니터 기본값 구조 정비
+#define _DEF_FIRMWATRE_VERSION      "V251113R1"   // V251113R1: BootMode VIA 값 변환 레이어 추가
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 #ifndef AUTO_EEPROM_CLEAR_ENABLE
