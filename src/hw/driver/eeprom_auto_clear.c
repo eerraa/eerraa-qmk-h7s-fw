@@ -8,6 +8,8 @@
 #include "log.h"
 #include "eeprom.h"
 #include "reset.h"
+#include "usb.h"                                    // V251112R5: BootMode EEPROM 초기화
+#include "qmk/port/usb_monitor_via.h"               // V251112R5: USB 모니터 초기화
 #include "qmk/quantum/eeconfig.h"
 #include "qmk/port/port.h"
 #include "qmk/port/platforms/eeprom.h"
@@ -85,6 +87,12 @@ bool eepromAutoClearCheck(void)
 #endif
 #if (EECONFIG_USER_DATA_SIZE) > 0
   eeconfig_init_user_datablock();
+#endif
+#ifdef BOOTMODE_ENABLE
+  usbBootModeApplyDefaults();                        // V251112R5: BootMode 슬롯 기본값 기록
+#endif
+#ifdef USB_MONITOR_ENABLE
+  usb_monitor_storage_apply_defaults();              // V251112R5: USB 모니터 슬롯 기본값 기록
 #endif
 
   eeprom_flush_pending();                                      // V251112R4: 기본값 쓰기를 확정 후 센티넬 기록

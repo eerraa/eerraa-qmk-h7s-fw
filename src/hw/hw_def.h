@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251112R4"   // V251112R4: EEPROM 자동 초기화 리셋 경로 정합
+#define _DEF_FIRMWATRE_VERSION      "V251112R5"   // V251112R5: VIA EEPROM 클리어 플러시 보강
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 #ifndef AUTO_EEPROM_CLEAR_ENABLE

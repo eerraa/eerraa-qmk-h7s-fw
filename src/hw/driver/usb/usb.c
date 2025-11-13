@@ -41,6 +41,7 @@ static const char *const usb_boot_mode_name[USB_BOOT_MODE_MAX] = {          // V
 static const char *usbBootModeLabel(UsbBootMode_t mode);                     // V250923R1 helpers
 bool usbScheduleGraceReset(uint32_t delay_ms);                               // V251109R4: VIA 응답 송신 보장용 리셋 요청
 #ifdef BOOTMODE_ENABLE
+static bool usbBootModeWriteRaw(UsbBootMode_t mode);                         // V251112R5: EEPROM 직접 갱신 헬퍼
 bool usbBootModeStore(UsbBootMode_t mode);
 #endif
 #ifdef BOOTMODE_ENABLE
@@ -167,9 +168,6 @@ uint8_t usbBootModeGetHsInterval(void)
 
 bool usbBootModeStore(UsbBootMode_t mode)
 {
-  uint32_t raw_mode = (uint32_t)mode;
-  uint32_t addr     = (uint32_t)EECONFIG_USER_BOOTMODE;
-
   if (mode >= USB_BOOT_MODE_MAX)
   {
     return false;
@@ -180,13 +178,7 @@ bool usbBootModeStore(UsbBootMode_t mode)
     return true;
   }
 
-  if (eepromWrite(addr, (uint8_t *)&raw_mode, sizeof(raw_mode)) == true)
-  {
-    usb_boot_mode = mode;
-    return true;
-  }
-
-  return false;
+  return usbBootModeWriteRaw(mode);
 }
 
 bool usbBootModeSaveAndReset(UsbBootMode_t mode)
@@ -216,6 +208,32 @@ bool usbBootModeScheduleApply(UsbBootMode_t mode)
   boot_mode_apply_request.mode    = mode;
   boot_mode_apply_request.pending = true;
   return true;
+}
+#endif
+
+#ifdef BOOTMODE_ENABLE
+static bool usbBootModeWriteRaw(UsbBootMode_t mode)
+{
+  uint32_t raw_mode = (uint32_t)mode;
+  uint32_t addr     = (uint32_t)EECONFIG_USER_BOOTMODE;
+
+  if (mode >= USB_BOOT_MODE_MAX)
+  {
+    return false;
+  }
+
+  if (eepromWrite(addr, (uint8_t *)&raw_mode, sizeof(raw_mode)) == true)
+  {
+    usb_boot_mode = mode;
+    return true;
+  }
+
+  return false;
+}
+
+void usbBootModeApplyDefaults(void)
+{
+  (void)usbBootModeWriteRaw(USB_BOOT_MODE_HS_8K);                           // V251112R5: BootMode EEPROM 기본값 적용
 }
 #endif
 

@@ -49,6 +49,13 @@ bool usb_monitor_storage_is_enabled(void)
   return usb_monitor_config.enable != 0U;
 }
 
+void usb_monitor_storage_apply_defaults(void)
+{
+  usb_monitor_apply_defaults();                                        // V251112R5: EEPROM 초기화 시 기본값 재적용
+  eeconfig_flag_usb_monitor(true);
+  eeconfig_flush_usb_monitor(true);
+}
+
 void via_qmk_usb_monitor_command(uint8_t *data, uint8_t length)
 {
   if (length < 4 || data == NULL)

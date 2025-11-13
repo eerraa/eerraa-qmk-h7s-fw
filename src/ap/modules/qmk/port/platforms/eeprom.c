@@ -1,4 +1,6 @@
 #include "quantum.h"
+#include "usb.h"                                   // V251112R5: VIA EEPROM 클리어 시 BootMode 기본값 적용
+#include "qmk/port/usb_monitor_via.h"              // V251112R5: USB 모니터 기본값 적용
 
 
 #define EEPROM_WRITE_Q_BUF_MAX  (TOTAL_EEPROM_BYTE_COUNT + 1)
@@ -61,7 +63,15 @@ void eeprom_task(void)
 
   if (is_req_clean)
   {
+  #ifdef BOOTMODE_ENABLE
+    usbBootModeApplyDefaults();
+  #endif
+  #ifdef USB_MONITOR_ENABLE
+    usb_monitor_storage_apply_defaults();
+  #endif
+    eeprom_flush_pending();                                     // V251112R5: 기존 큐 비우기
     eeconfig_disable();
+    eeprom_flush_pending();                                     // V251112R5: Magic OFF 기록 보장
     soft_reset_keyboard();
   }
 }

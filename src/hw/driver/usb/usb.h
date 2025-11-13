@@ -82,6 +82,7 @@ UsbBootMode_t usbBootModeGet(void);                     // V250923R1 Query activ
 bool          usbBootModeIsFullSpeed(void);             // V250923R1 Check if FS (1 kHz) mode is requested
 uint8_t       usbBootModeGetHsInterval(void);           // V250923R1 Retrieve HS polling interval encoding
 bool          usbBootModeStore(UsbBootMode_t mode);     // V251108R1 VIA BootMode 저장 공개
+void          usbBootModeApplyDefaults(void);           // V251112R5 EEPROM 초기화용 기본값 적용
 bool          usbBootModeSaveAndReset(UsbBootMode_t mode);
 bool          usbBootModeScheduleApply(UsbBootMode_t mode);  // V251108R3: 인터럽트 문맥에서 리셋을 defer
 usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
@@ -113,6 +114,10 @@ static inline bool usbBootModeStore(UsbBootMode_t mode)
 {
   (void)mode;
   return false;
+}
+
+static inline void usbBootModeApplyDefaults(void)
+{
 }
 
 static inline bool usbBootModeSaveAndReset(UsbBootMode_t mode)

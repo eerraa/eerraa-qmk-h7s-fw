@@ -16,6 +16,7 @@ void usb_monitor_storage_init(void);
 void usb_monitor_storage_set_enable(bool enable);
 void usb_monitor_storage_flush(bool force);
 bool usb_monitor_storage_is_enabled(void);
+void usb_monitor_storage_apply_defaults(void);                 // V251112R5: EEPROM 기본값 적용 헬퍼
 #else
 static inline void via_qmk_usb_monitor_command(uint8_t *data, uint8_t length)
 {
@@ -40,5 +41,9 @@ static inline void usb_monitor_storage_flush(bool force)
 static inline bool usb_monitor_storage_is_enabled(void)
 {
   return false;
+}
+
+static inline void usb_monitor_storage_apply_defaults(void)
+{
 }
 #endif
