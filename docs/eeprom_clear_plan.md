@@ -56,8 +56,8 @@ hwInit()
    - `eeconfig_disable()` → `eeconfig_init()`.
    - `eeconfig_init_kb_datablock()`/`eeconfig_init_user_datablock()`를 호출하여 512B 사용자 슬롯을 0으로 초기화합니다.
    - Indicator, USB monitor 등 `EECONFIG_DEBOUNCE_HELPER` 기반 모듈은 `eeconfig_init_*()`와 `eeconfig_flush_*()`를 통해 기본값을 다시 써 줍니다.
-6. **플래그/쿠키 기록**: 초기화 성공 시 `0x56434C52`(“VCLR”)와 현재 빌드의 `AUTO_EEPROM_CLEAR_COOKIE` 값을 함께 기록합니다. 이 과정에서 쿠키 쓰기가 실패하면 플래그도 0으로 되돌려 다음 부팅에서 재시도하게 합니다.
-7. **로그 & 리셋**: `eeprom_flush_pending()`으로 비동기 쓰기 큐를 모두 비운 뒤, `logPrintf("[  ] EEPROM auto clear : DONE (cookie=0x%08X)\n");` 로그를 남기고 `resetToReset()`으로 하드 리셋을 트리거해 VIA 경로와 동일하게 USB 세션을 초기화합니다.
+6. **플러시 & 플래그/쿠키 기록**: `eeprom_flush_pending()`으로 `eeconfig_init_*()`가 남긴 비동기 쓰기를 먼저 확정한 뒤, `0x56434C52`(“VCLR”)와 현재 빌드의 `AUTO_EEPROM_CLEAR_COOKIE` 값을 순서대로 기록합니다. 쿠키 쓰기가 실패하면 플래그를 0으로 되돌려 다음 부팅에서 재시도하게 합니다.
+7. **로그 & 리셋**: 센티넬 기록 후 다시 `eeprom_flush_pending()`으로 큐를 비우고, `logPrintf("[  ] EEPROM auto clear : DONE (cookie=0x%08X)\n");` 로그를 남긴 뒤 `resetToReset()`으로 하드 리셋을 트리거해 VIA 경로와 동일하게 USB 세션을 초기화합니다.
 
 ### 4.6 기본값 보장 대상 (참고)
 | 기능 | 기본값 경로 | 비고 |

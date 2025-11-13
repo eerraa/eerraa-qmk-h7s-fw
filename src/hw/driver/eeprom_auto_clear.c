@@ -87,6 +87,8 @@ bool eepromAutoClearCheck(void)
   eeconfig_init_user_datablock();
 #endif
 
+  eeprom_flush_pending();                                      // V251112R4: 기본값 쓰기를 확정 후 센티넬 기록
+
   if (eepromWriteFlag(flag_addr, AUTO_EEPROM_CLEAR_FLAG_MAGIC) != true)
   {
     return false;
