@@ -11,6 +11,7 @@
 
 extern usb_monitor_config_t usb_monitor_config;
 
+void usb_monitor_init(void);                                   // V251112R6: USB 모니터 기본값 초기화 진입점
 void via_qmk_usb_monitor_command(uint8_t *data, uint8_t length);
 void usb_monitor_storage_init(void);
 void usb_monitor_storage_set_enable(bool enable);
@@ -22,6 +23,10 @@ static inline void via_qmk_usb_monitor_command(uint8_t *data, uint8_t length)
 {
   (void)data;
   (void)length;
+}
+
+static inline void usb_monitor_init(void)
+{
 }
 
 static inline void usb_monitor_storage_init(void)

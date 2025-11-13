@@ -8,16 +8,13 @@
 #include "usb.h"
 #include "via.h"
 
-usb_monitor_config_t usb_monitor_config = {
-  .enable   = 0U,                                               // V251112R5: 기본값을 OFF로 변경
-  .reserved = {0},
-};
+usb_monitor_config_t usb_monitor_config = {0};                  // V251112R6: 기본값은 usb_monitor_init()에서만 정의
 
 EECONFIG_DEBOUNCE_HELPER(usb_monitor, EECONFIG_USER_USB_INSTABILITY, usb_monitor_config);
 
-static void usb_monitor_apply_defaults(void)
+void usb_monitor_init(void)
 {
-  usb_monitor_config.enable = 0U;                               // V251112R5: 기본값 OFF
+  usb_monitor_config.enable = 0U;                               // V251112R6: USB 모니터 기본값 OFF
   memset(usb_monitor_config.reserved, 0, sizeof(usb_monitor_config.reserved));
 }
 
@@ -27,7 +24,7 @@ void usb_monitor_storage_init(void)
 
   if (usb_monitor_config.enable > 1U)
   {
-    usb_monitor_apply_defaults();
+    usb_monitor_init();
     eeconfig_flush_usb_monitor(true);
   }
 }
@@ -50,7 +47,7 @@ bool usb_monitor_storage_is_enabled(void)
 
 void usb_monitor_storage_apply_defaults(void)
 {
-  usb_monitor_apply_defaults();                                        // V251112R5: EEPROM 초기화 시 기본값 재적용
+  usb_monitor_init();                                        // V251112R6: EEPROM 초기화 시 기본값 재적용
   eeconfig_flag_usb_monitor(true);
   eeconfig_flush_usb_monitor(true);
 }

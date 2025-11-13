@@ -28,7 +28,7 @@
 static bool      is_init = false;
 static UsbMode_t is_usb_mode = USB_NON_MODE;
 #ifdef BOOTMODE_ENABLE
-static UsbBootMode_t usb_boot_mode = USB_BOOT_MODE_FS_1K;                    // V251112R5: 기본값을 FS 1K로 조정
+static UsbBootMode_t usb_boot_mode = USB_BOOT_MODE_DEFAULT_VALUE;                    // V251112R6: 보드별 기본값을 매크로로 분리
 #endif
 
 static const char *const usb_boot_mode_name[USB_BOOT_MODE_MAX] = {          // V250923R1 Mode labels for logging/CLI
@@ -49,7 +49,7 @@ static volatile struct
 {
   bool          pending;                                                   // V251108R3: VIA에서 요청된 BootMode 적용 큐
   UsbBootMode_t mode;
-} boot_mode_apply_request = {false, USB_BOOT_MODE_FS_1K};
+} boot_mode_apply_request = {false, USB_BOOT_MODE_DEFAULT_VALUE};          // V251112R6: 보드별 기본값 사용
 #endif
 
 static volatile struct
@@ -125,6 +125,11 @@ static const char *usbBootModeLabel(UsbBootMode_t mode)
 }
 
 #ifdef BOOTMODE_ENABLE
+void bootmode_init(void)
+{
+  usb_boot_mode = USB_BOOT_MODE_DEFAULT_VALUE;                              // V251112R6: BootMode 기본값 초기화 진입점
+}
+
 bool usbBootModeLoad(void)
 {
   uint32_t raw_mode = eeprom_read_dword((const uint32_t *)EECONFIG_USER_BOOTMODE);
@@ -132,7 +137,7 @@ bool usbBootModeLoad(void)
   if (raw_mode >= USB_BOOT_MODE_MAX)
   {
     usbBootModeApplyDefaults();                                   // V251112R5: 슬롯이 손상되면 즉시 기본값을 기록
-    raw_mode = USB_BOOT_MODE_FS_1K;
+    raw_mode = USB_BOOT_MODE_DEFAULT_VALUE;                        // V251112R6: 보드별 기본값 적용
   }
 
   usb_boot_mode = (UsbBootMode_t)raw_mode;
@@ -234,7 +239,7 @@ static bool usbBootModeWriteRaw(UsbBootMode_t mode)
 
 void usbBootModeApplyDefaults(void)
 {
-  (void)usbBootModeWriteRaw(USB_BOOT_MODE_FS_1K);                           // V251112R5: BootMode 기본값을 FS 1K로 기록
+  (void)usbBootModeWriteRaw(USB_BOOT_MODE_DEFAULT_VALUE);                   // V251112R6: 보드 기본값으로 EEPROM 초기화
 }
 #endif
 

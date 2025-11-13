@@ -1,5 +1,6 @@
 #include "hw.h"
 #include "qmk/port/platforms/eeprom.h"  // V250923R1 Preload QMK EEPROM services
+#include "qmk/port/usb_monitor_via.h"    // V251112R6: USB 모니터 초기화 진입점
 
 
 
@@ -52,6 +53,12 @@ bool hwInit(void)
   i2cInit();
   eepromInit();
   eeprom_init();                                              // V250923R1 Sync QMK EEPROM image before USB init
+#ifdef BOOTMODE_ENABLE
+  bootmode_init();                                            // V251112R6: BootMode 기본값 초기화
+#endif
+#ifdef USB_MONITOR_ENABLE
+  usb_monitor_init();                                         // V251112R6: USB 모니터 기본값 초기화
+#endif
   bool eeprom_clear_ok = eepromAutoClearCheck();              // V251112R3: AUTO_EEPROM_CLEAR_ENABLE 빌드에서 강제 초기화
 #ifdef BOOTMODE_ENABLE
   if (usbBootModeLoad() != true)                              // V250923R1 Apply stored USB boot mode preference

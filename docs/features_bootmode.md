@@ -10,12 +10,14 @@
 | --- | --- | --- |
 | `src/ap/modules/qmk/port/port.h` | `EECONFIG_USER_BOOTMODE` | EEPROM 사용자 데이터 블록 +28 바이트 슬롯을 BootMode 저장소로 예약합니다.
 | `src/hw/hw.c` | `usbBootModeLoad()` | `hwInit()` 초기에 EEPROM → RAM 동기화와 부트 로그를 수행합니다.
-| `src/hw/driver/usb/usb.h` | `UsbBootMode_t`, `usb_boot_downgrade_result_t` | 열거형/상수, API 프로토타입, 다운그레이드 인터페이스를 선언합니다.
+| `src/hw/driver/usb/usb.h` | `UsbBootMode_t`, `USB_BOOT_MODE_DEFAULT_VALUE`, `bootmode_init()` | 열거형/상수, 기본값 매크로·초기화 진입점, 다운그레이드 인터페이스를 선언합니다. `USB_BOOT_MODE_DEFAULT_VALUE`는 기본적으로 FS 1kHz이며 보드에서 재정의할 수 있습니다. |
 | `src/hw/driver/usb/usb.c` | `usbBootMode*`, `usbRequestBootModeDowngrade()`, `usbProcess()` | 저장/적용/큐 상태 머신과 CLI, 로그, 리셋 지연 제어를 담당합니다.
 | `src/hw/driver/usb/usbd_conf.c` | `usbBootModeIsFullSpeed()` 사용 | PCD 속도를 `PCD_SPEED_HIGH_IN_FULL`로 강제하거나 HS 모드를 유지합니다.
 | `src/hw/driver/usb/usb_hid/usbd_hid.c` | `usbHidResolveDowngradeTarget()` | 모니터에서 폴링 모드 전환 목표를 결정하고 다운그레이드를 요청합니다.
 | `src/ap/modules/qmk/port/usb_bootmode_via.c` | `via_qmk_usb_bootmode_command()` | VIA channel 13 value ID 1/2를 BootMode API와 동기화합니다.
 | `src/ap/ap.c` | `usbProcess()` 호출 | 메인 루프에서 BootMode Apply 큐·다운그레이드 큐·리셋 큐를 서비스합니다.
+
+> 현재 전역 기본 부트 모드는 FS 1kHz이며, 다른 보드는 `USB_BOOT_MODE_DEFAULT_VALUE`를 자신에게 맞는 `UsbBootMode_t` 값으로 재정의해 사용합니다.
 
 > **빌드 가드**
 > - `BOOTMODE_ENABLE`이 꺼지면 모든 API가 스텁으로 치환되고, VIA/CLI에서도 BootMode 관련 항목을 노출하지 않습니다.
@@ -56,7 +58,7 @@
 - `REJECTED/ARMED/CONFIRMED` 세 단계를 구분하여 모니터가 이벤트를 중복 보고하지 않도록 합니다.
 
 ### 4.4 EEPROM 슬롯 (`EECONFIG_USER_BOOTMODE`)
-- 4바이트 `uint32_t`로 저장하며, 범위 밖 값은 `USB_BOOT_MODE_HS_8K`로 복구합니다.
+- 4바이트 `uint32_t`로 저장하며, 범위 밖 값은 `USB_BOOT_MODE_DEFAULT_VALUE`(기본 FS 1kHz)로 복구합니다.
 - VIA/CLI/모니터는 항상 `usbBootModeStore()` 경유로 쓰기 때문에 별도의 CRC는 사용하지 않습니다.
 
 ## 5. 제어 흐름
