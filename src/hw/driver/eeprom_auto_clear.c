@@ -9,7 +9,7 @@
 #include "eeprom.h"
 #include "reset.h"
 #include "usb.h"                                    // V251112R5: BootMode EEPROM 초기화
-#include "qmk/port/usb_monitor_via.h"               // V251112R5: USB 모니터 초기화
+#include "qmk/port/usb_monitor.h"                   // V251112R5: USB 모니터 초기화
 #include "qmk/quantum/eeconfig.h"
 #include "qmk/port/port.h"
 #include "qmk/port/platforms/eeprom.h"

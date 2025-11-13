@@ -1,4 +1,4 @@
-#include "usb_bootmode_via.h"
+#include "bootmode.h"
 
 #ifdef BOOTMODE_ENABLE
 
@@ -9,7 +9,7 @@
 static UsbBootMode_t pending_boot_mode = USB_BOOT_MODE_HS_8K;
 static bool          pending_boot_mode_init = false;
 
-static void usb_bootmode_via_sync_pending(void)
+static void bootmode_sync_pending(void)
 {
   if (pending_boot_mode_init == false)
   {
@@ -26,7 +26,7 @@ void via_qmk_usb_bootmode_command(uint8_t *data, uint8_t length)
     return;
   }
 
-  usb_bootmode_via_sync_pending();
+  bootmode_sync_pending();
 
   uint8_t *command_id = &(data[0]);
 

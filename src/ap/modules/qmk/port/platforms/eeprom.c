@@ -1,6 +1,6 @@
 #include "quantum.h"
 #include "usb.h"                                   // V251112R5: VIA EEPROM 클리어 시 BootMode 기본값 적용
-#include "qmk/port/usb_monitor_via.h"              // V251112R5: USB 모니터 기본값 적용
+#include "qmk/port/usb_monitor.h"                  // V251112R5: USB 모니터 기본값 적용
 
 
 #define EEPROM_WRITE_Q_BUF_MAX  (TOTAL_EEPROM_BYTE_COUNT + 1)

@@ -3,7 +3,7 @@
 ## 1. 목적과 범위
 - STM32H7S HS PHY 기반 펌웨어에서 USB 폴링 주기를 명시적으로 고정하고, EEPROM/VIA/CLI/USB 모니터가 같은 진실 소스를 바라보도록 보장합니다.
 - HS 8k/4k/2kHz와 FS 1kHz 모드 간 전환뿐 아니라, 모니터에 의해 자동 다운그레이드가 예약될 때의 확인 절차까지 설명합니다.
-- 대상 모듈: `src/hw/driver/usb/usb.[ch]`, `src/hw/hw.c`, `src/hw/driver/usb/usb_hid/usbd_hid.c`, `src/ap/modules/qmk/port/{port.h,usb_bootmode_via.c}`, `src/ap/ap.c`.
+- 대상 모듈: `src/hw/driver/usb/usb.[ch]`, `src/hw/hw.c`, `src/hw/driver/usb/usb_hid/usbd_hid.c`, `src/ap/modules/qmk/port/{port.h,bootmode.c}`, `src/ap/ap.c`.
 
 ## 2. 구성 파일 & 빌드 매크로
 | 경로 | 주요 심볼 | 책임 |
@@ -14,7 +14,7 @@
 | `src/hw/driver/usb/usb.c` | `usbBootMode*`, `usbRequestBootModeDowngrade()`, `usbProcess()` | 저장/적용/큐 상태 머신과 CLI, 로그, 리셋 지연 제어를 담당합니다.
 | `src/hw/driver/usb/usbd_conf.c` | `usbBootModeIsFullSpeed()` 사용 | PCD 속도를 `PCD_SPEED_HIGH_IN_FULL`로 강제하거나 HS 모드를 유지합니다.
 | `src/hw/driver/usb/usb_hid/usbd_hid.c` | `usbHidResolveDowngradeTarget()` | 모니터에서 폴링 모드 전환 목표를 결정하고 다운그레이드를 요청합니다.
-| `src/ap/modules/qmk/port/usb_bootmode_via.c` | `via_qmk_usb_bootmode_command()` | VIA channel 13 value ID 1/2를 BootMode API와 동기화합니다.
+| `src/ap/modules/qmk/port/bootmode.c` | `via_qmk_usb_bootmode_command()` | VIA channel 13 value ID 1/2를 BootMode API와 동기화합니다.
 | `src/ap/ap.c` | `usbProcess()` 호출 | 메인 루프에서 BootMode Apply 큐·다운그레이드 큐·리셋 큐를 서비스합니다.
 
 > 현재 전역 기본 부트 모드는 FS 1kHz이며, 다른 보드는 `USB_BOOT_MODE_DEFAULT_VALUE`를 자신에게 맞는 `UsbBootMode_t` 값으로 재정의해 사용합니다.
@@ -36,7 +36,7 @@
 | `bool usbBootModeScheduleApply(UsbBootMode_t mode)` | `src/hw/driver/usb/usb.c` | 인터럽트 문맥에서 Apply 요청을 큐에 적재하고, 메인 루프에서만 리셋을 실행하도록 합니다.
 | `usb_boot_downgrade_result_t usbRequestBootModeDowngrade(...)` | `src/hw/driver/usb/usb.c` | 모니터가 측정한 SOF 간격과 목표 모드를 바탕으로 ARM/COMMIT 단계를 제어합니다.
 | `void usbProcess(void)` | `src/hw/driver/usb/usb.c` | BootMode Apply, 다운그레이드, 지연 리셋 큐 중 처리할 항목이 있을 때만 상태 머신을 실행합니다.
-| `void via_qmk_usb_bootmode_command(uint8_t *data, uint8_t length)` | `src/ap/modules/qmk/port/usb_bootmode_via.c` | VIA channel 13 value ID 1(선택)과 2(Apply)를 BootMode API로 라우팅합니다.
+| `void via_qmk_usb_bootmode_command(uint8_t *data, uint8_t length)` | `src/ap/modules/qmk/port/bootmode.c` | VIA channel 13 value ID 1(선택)과 2(Apply)를 BootMode API로 라우팅합니다.
 | `bool usbScheduleGraceReset(uint32_t delay_ms)` | `src/hw/driver/usb/usb.c` | CLI/VIA 응답이 송신될 수 있도록 지연 리셋을 요청합니다.
 
 ## 4. 핵심 데이터 구조

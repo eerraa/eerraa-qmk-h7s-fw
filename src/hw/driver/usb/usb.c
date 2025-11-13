@@ -13,7 +13,7 @@
 #include "eeprom.h"
 #include "qmk/port/port.h"
 #include "qmk/port/platforms/eeprom.h"
-#include "qmk/port/usb_monitor_via.h"                                  // V251108R1: USB 모니터 VIA 스토리지 연동
+#include "qmk/port/usb_monitor.h"                                      // V251108R1: USB 모니터 스토리지 연동
 
 #define USB_RESET_RESPONSE_GRACE_MS   (40U)                           // V251109R4: VIA 응답 송신 보장을 위한 최소 유예
 #define USB_BOOTMODE_APPLY_GRACE_MS   USB_RESET_RESPONSE_GRACE_MS     // V251109R4: BootMode 적용 시 동일 유예 사용
@@ -50,6 +50,18 @@ static volatile struct
   bool          pending;                                                   // V251108R3: VIA에서 요청된 BootMode 적용 큐
   UsbBootMode_t mode;
 } boot_mode_apply_request = {false, USB_BOOT_MODE_DEFAULT_VALUE};          // V251112R6: 보드별 기본값 사용
+#endif
+
+#ifdef BOOTMODE_ENABLE
+static void bootmode_ensure_default_persisted(void)
+{
+  uint32_t raw_mode = eeprom_read_dword((const uint32_t *)EECONFIG_USER_BOOTMODE);
+
+  if (raw_mode >= USB_BOOT_MODE_MAX)
+  {
+    usbBootModeApplyDefaults();                                             // V251112R6: EEPROM이 비어 있으면 즉시 기본값 기록
+  }
+}
 #endif
 
 static volatile struct
@@ -127,6 +139,7 @@ static const char *usbBootModeLabel(UsbBootMode_t mode)
 #ifdef BOOTMODE_ENABLE
 void bootmode_init(void)
 {
+  bootmode_ensure_default_persisted();                                      // V251112R6: EEPROM 기본값 동기화
   usb_boot_mode = USB_BOOT_MODE_DEFAULT_VALUE;                              // V251112R6: BootMode 기본값 초기화 진입점
 }
 

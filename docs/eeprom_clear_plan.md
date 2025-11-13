@@ -66,7 +66,7 @@ hwInit()
 | KKUK | `kkuk.c:43-74` | `eeconfig_init_kkuk()` → mode/enable/delay/repeat 기본값 기록 |
 | Kill Switch | `kill_switch.c:44-98` | LR/UD 각각 `eeconfig_init_kill_switch_*()` 후 기본값 체크 |
 | BootMode | `usbBootModeLoad()` + `usbBootModeStore()` 경로 | 데이터가 범위 밖이면 FS 1K(`USB_BOOT_MODE_DEFAULT_VALUE`)로 복원 |
-| USB 불안정 모니터 | `usb_monitor_via.c:25-44` | `eeconfig_init_usb_monitor()` 호출 시 ON/OFF 기본값 적용 |
+| USB 불안정 모니터 | `usb_monitor.c:25-44` | `eeconfig_init_usb_monitor()` 호출 시 ON/OFF 기본값 적용 |
 | VIA System Clear | `eeprom_req_clean()` → `eeprom_task()` | 큐를 `eeprom_flush_pending()`으로 비운 뒤 `eeconfig_disable()` → 리셋, AUTO 경로와 동일하게 동작 |
 
 ### 4.5 쿠키 기반 반복 초기화 전략

@@ -3,13 +3,13 @@
 ## 1. 목적과 범위
 - HS 8 kHz를 기본 정책으로 유지하되, 마이크로프레임 누락·속도 재협상·열거 실패·서스펜드 남용을 감지하여 BootMode 다운그레이드를 자동 수행합니다.
 - 모니터는 `USB_MONITOR_ENABLE` 매크로가 정의된 빌드에서만 컴파일되며, VIA channel 13 토글과 EEPROM 저장소를 통해 런타임 제어가 가능합니다.
-- 대상 모듈: `src/hw/driver/usb/usb_hid/usbd_hid.c`, `src/hw/driver/usb/usb.c`, `src/ap/ap.c`, `src/ap/modules/qmk/port/{port.h,usb_monitor_via.c}`.
+- 대상 모듈: `src/hw/driver/usb/usb_hid/usbd_hid.c`, `src/hw/driver/usb/usb.c`, `src/ap/ap.c`, `src/ap/modules/qmk/port/{port.h,usb_monitor.c}`.
 
 ## 2. 구성 파일 & 빌드 매크로
 | 경로 | 핵심 심볼 | 설명 |
 | --- | --- | --- |
 | `src/ap/modules/qmk/port/port.h` | `EECONFIG_USER_USB_INSTABILITY`, `usb_monitor_config_t` | 4바이트 EEPROM 슬롯(+32)과 구성 구조체를 정의합니다.
-| `src/ap/modules/qmk/port/usb_monitor_via.c` | `EECONFIG_DEBOUNCE_HELPER`, `via_qmk_usb_monitor_command()` | VIA channel 13 value ID 3 토글을 EEPROM과 동기화합니다.
+| `src/ap/modules/qmk/port/usb_monitor.c` | `EECONFIG_DEBOUNCE_HELPER`, `via_qmk_usb_monitor_command()` | VIA channel 13 value ID 3 토글을 EEPROM과 동기화합니다.
 | `src/hw/driver/usb/usb.h` | `usbInstabilityLoad/Store/IsEnabled` | 모니터 토글 API 선언과 빌드 가드를 제공합니다.
 | `src/hw/driver/usb/usb.c` | `usbInstability*`, `usbRequestBootModeDowngrade()`, `usbProcess()` | VIA 토글 캐시, 다운그레이드 큐, 메인 루프 상태 머신을 구현합니다.
 | `src/hw/driver/usb/usb_hid/usbd_hid.c` | `usbHidMonitor*`, `usbHidResolveDowngradeTarget()` | SOF/열거/속도/서스펜드 이벤트를 측정하고 점수를 계산합니다.
@@ -26,8 +26,8 @@
 | `bool usbInstabilityLoad(void)` | `src/hw/driver/usb/usb.c` | EEPROM 값을 읽어 캐시하고 현재 상태를 로그로 출력합니다.
 | `bool usbInstabilityStore(bool enable)` | `src/hw/driver/usb/usb.c` | 토글 값을 갱신하고 EEPROM 플러시를 예약한 뒤 로그를 남깁니다.
 | `bool usbInstabilityIsEnabled(void)` | `src/hw/driver/usb/usb.c` | 인터럽트/메인 루프에서 모니터 활성 여부를 빠르게 확인합니다.
-| `void usb_monitor_storage_*()` | `src/ap/modules/qmk/port/usb_monitor_via.c` | `EECONFIG_DEBOUNCE_HELPER`로 생성된 init/flag/flush 헬퍼 함수군입니다.
-| `void via_qmk_usb_monitor_command(uint8_t *data, uint8_t length)` | `src/ap/modules/qmk/port/usb_monitor_via.c` | VIA channel 13 value ID 3 요청을 토글 API와 연결합니다.
+| `void usb_monitor_storage_*()` | `src/ap/modules/qmk/port/usb_monitor.c` | `EECONFIG_DEBOUNCE_HELPER`로 생성된 init/flag/flush 헬퍼 함수군입니다.
+| `void via_qmk_usb_monitor_command(uint8_t *data, uint8_t length)` | `src/ap/modules/qmk/port/usb_monitor.c` | VIA channel 13 value ID 3 요청을 토글 API와 연결합니다.
 | `void usbHidMonitorSof(uint32_t now_us)` | `src/hw/driver/usb/usb_hid/usbd_hid.c` | SOF ISR에서 호출되어 프레임 간격, 워밍업, 점수 감쇠를 계산합니다.
 | `void usbHidMonitorProcessDelta(uint32_t now_us, uint32_t delta_us)` | `src/hw/driver/usb/usb_hid/usbd_hid.c` | HS/FS별 허용 오차와 비교해 점수를 누적하고 타임아웃을 갱신합니다.
 | `void usbHidMonitorPrimeTimeout(uint32_t now_us)` | `src/hw/driver/usb/usb_hid/usbd_hid.c` | SOF 누락 감시 타임아웃과 holdoff 타이머를 갱신합니다.

@@ -1,4 +1,4 @@
-#include "usb_monitor_via.h"
+#include "usb_monitor.h"
 
 #ifdef USB_MONITOR_ENABLE
 
@@ -12,21 +12,27 @@ usb_monitor_config_t usb_monitor_config = {0};                  // V251112R6: �
 
 EECONFIG_DEBOUNCE_HELPER(usb_monitor, EECONFIG_USER_USB_INSTABILITY, usb_monitor_config);
 
-void usb_monitor_init(void)
+static void usb_monitor_apply_defaults_locked(void)
 {
   usb_monitor_config.enable = 0U;                               // V251112R6: USB 모니터 기본값 OFF
   memset(usb_monitor_config.reserved, 0, sizeof(usb_monitor_config.reserved));
+  eeconfig_flag_usb_monitor(true);
+  eeconfig_flush_usb_monitor(true);
 }
 
-void usb_monitor_storage_init(void)
+void usb_monitor_init(void)
 {
   eeconfig_init_usb_monitor();
 
   if (usb_monitor_config.enable > 1U)
   {
-    usb_monitor_init();
-    eeconfig_flush_usb_monitor(true);
+    usb_monitor_apply_defaults_locked();                        // V251112R6: 손상된 데이터 복원
   }
+}
+
+void usb_monitor_storage_init(void)
+{
+  usb_monitor_init();                                           // V251112R6: KillSwitch/KKUK과 동일한 초기화 경로
 }
 
 void usb_monitor_storage_set_enable(bool enable)
@@ -47,9 +53,7 @@ bool usb_monitor_storage_is_enabled(void)
 
 void usb_monitor_storage_apply_defaults(void)
 {
-  usb_monitor_init();                                        // V251112R6: EEPROM 초기화 시 기본값 재적용
-  eeconfig_flag_usb_monitor(true);
-  eeconfig_flush_usb_monitor(true);
+  usb_monitor_apply_defaults_locked();                           // V251112R6: EEPROM 초기화 시 기본값 재적용
 }
 
 void via_qmk_usb_monitor_command(uint8_t *data, uint8_t length)

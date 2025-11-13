@@ -1,6 +1,6 @@
 #include "hw.h"
 #include "qmk/port/platforms/eeprom.h"  // V250923R1 Preload QMK EEPROM services
-#include "qmk/port/usb_monitor_via.h"    // V251112R6: USB 모니터 초기화 진입점
+#include "qmk/port/usb_monitor.h"    // V251112R6: USB 모니터 초기화 진입점
 
 
 
