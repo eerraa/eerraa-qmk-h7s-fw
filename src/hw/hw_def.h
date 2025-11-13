@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251112R1"   // V251112R1: EEPROM 자동 초기화 단계 1 사전 정의
+#define _DEF_FIRMWATRE_VERSION      "V251112R2"   // V251112R2: EEPROM 자동 초기화 단계 2 (센티넬 로직)
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 #ifndef AUTO_EEPROM_CLEAR_ENABLE
@@ -19,16 +19,16 @@
 #define __EE_BCD_BYTE(a, b) \
   ((uint32_t)((((a) - '0') & 0x0F) << 4) | (((b) - '0') & 0x0F))
 
-#define __EE_REV_CHAR(idx)                                                     \
-  (((idx) < (sizeof(_DEF_FIRMWATRE_VERSION) - 1) && _DEF_FIRMWATRE_VERSION[idx] != '\0') \
-     ? _DEF_FIRMWATRE_VERSION[idx]                                             \
-     : '0')
+#define __EE_VERSION_LEN        (sizeof(_DEF_FIRMWATRE_VERSION) - 1)
+#define __EE_SAFE_CHAR(idx)     (((idx) < __EE_VERSION_LEN) ? _DEF_FIRMWATRE_VERSION[idx] : '0')
+#define __EE_REV_HIGH_CHAR()    ((__EE_VERSION_LEN > 9) ? _DEF_FIRMWATRE_VERSION[8] : '0')
+#define __EE_REV_LOW_CHAR()     ((__EE_VERSION_LEN > 9) ? _DEF_FIRMWATRE_VERSION[9] : (__EE_VERSION_LEN > 8 ? _DEF_FIRMWATRE_VERSION[8] : '0'))
 
 #define AUTO_EEPROM_CLEAR_COOKIE_DEFAULT                                      \
-  ( (__EE_BCD_BYTE(_DEF_FIRMWATRE_VERSION[1], _DEF_FIRMWATRE_VERSION[2]) << 24) | \
-    (__EE_BCD_BYTE(_DEF_FIRMWATRE_VERSION[3], _DEF_FIRMWATRE_VERSION[4]) << 16) | \
-    (__EE_BCD_BYTE(_DEF_FIRMWATRE_VERSION[5], _DEF_FIRMWATRE_VERSION[6]) << 8)  | \
-    (__EE_BCD_BYTE(__EE_REV_CHAR(8), __EE_REV_CHAR(9)) << 0) )
+  ( (__EE_BCD_BYTE(__EE_SAFE_CHAR(1), __EE_SAFE_CHAR(2)) << 24) | \
+    (__EE_BCD_BYTE(__EE_SAFE_CHAR(3), __EE_SAFE_CHAR(4)) << 16) | \
+    (__EE_BCD_BYTE(__EE_SAFE_CHAR(5), __EE_SAFE_CHAR(6)) << 8)  | \
+    (__EE_BCD_BYTE(__EE_REV_HIGH_CHAR(), __EE_REV_LOW_CHAR()) << 0) )
 
 #ifndef AUTO_EEPROM_CLEAR_COOKIE
 #define AUTO_EEPROM_CLEAR_COOKIE    AUTO_EEPROM_CLEAR_COOKIE_DEFAULT  // V251112R1: 펌웨어 버전 기반 기본 쿠키

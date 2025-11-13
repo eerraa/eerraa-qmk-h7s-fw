@@ -23,7 +23,7 @@
 
 ### 4.1 빌드 제어 매크로
 - `hw_def.h` 또는 상위 CMake 옵션에 `AUTO_EEPROM_CLEAR_ENABLE`를 정의합니다. 기본값은 0이며, 단계 1에서 전역 매크로로 추가되었습니다.
-- `AUTO_EEPROM_CLEAR_COOKIE`는 **필수** 매크로입니다. 현재 구현(V251112R1)은 `_DEF_FIRMWATRE_VERSION`이 따르는 `VYYMMDDRn` 포맷을 그대로 BCD(YY|MM|DD|Rn)로 변환해 기본 쿠키(`0xYYMMDDRn`)를 생성하며, 빌드 옵션으로 재정의할 수도 있습니다. 예) `V251112R1` → `0x25111201`, `V251112R2` → `0x25111202`.
+- `AUTO_EEPROM_CLEAR_COOKIE`는 **필수** 매크로입니다. 현재 구현(V251112R2)은 `_DEF_FIRMWATRE_VERSION`이 따르는 `VYYMMDDRn` 포맷을 그대로 BCD(YY|MM|DD|Rn)로 변환해 기본 쿠키(`0xYYMMDDRn`)를 생성하며, 빌드 옵션으로 재정의할 수도 있습니다. 예) `V251112R1` → `0x25111201`, `V251112R2` → `0x25111202`.
 
 ### 4.2 센티넬 슬롯 설계
 | 심볼 | 오프셋 제안 | 크기 | 의미 |
@@ -51,12 +51,13 @@ hwInit()
 1. **빌드 조건 확인**: `#ifdef AUTO_EEPROM_CLEAR_ENABLE` 경로에서만 함수 본문을 유지합니다.
 2. **센티넬 판독**: `eepromRead()`로 플래그와 쿠키를 읽습니다. 값이 `0x56434C52`가 아니거나 쿠키가 일치하지 않으면 초기화를 예약합니다.
 3. **저수준 포맷**: `eepromFormat()`을 호출해 물리 EEPROM 전역을 삭제합니다. 실패 시 로그를 `[!] EEPROM format fail` 형태로 남깁니다.
-4. **QMK EEconfig 재설정**:
+4. **버퍼 재동기화**: 포맷 이후 `eeprom_init()`을 다시 호출해 QMK EEPROM 미러 버퍼와 하드웨어 상태를 0으로 맞춥니다. 이렇게 해야 이후 `eeconfig_init_*()`가 동일한 기준에서 동작합니다.
+5. **QMK EEconfig 재설정**:
    - `eeconfig_disable()` → `eeconfig_init()`.
    - `eeconfig_init_kb_datablock()`/`eeconfig_init_user_datablock()`를 호출하여 512B 사용자 슬롯을 0으로 초기화합니다.
    - Indicator, USB monitor 등 `EECONFIG_DEBOUNCE_HELPER` 기반 모듈은 `eeconfig_init_*()`와 `eeconfig_flush_*()`를 통해 기본값을 다시 써 줍니다.
-5. **플래그/쿠키 기록**: 초기화 성공 시 `0x56434C52`(“VCLR”)와 현재 빌드의 `AUTO_EEPROM_CLEAR_COOKIE` 값을 함께 기록합니다. 이 과정에서 쿠키 쓰기가 실패하면 플래그도 0으로 되돌려 다음 부팅에서 재시도하게 합니다.
-6. **로그**: `logPrintf("[  ] EEPROM auto clear : DONE (cookie=0x%08X)\n");` 형태로 결과를 남깁니다.
+6. **플래그/쿠키 기록**: 초기화 성공 시 `0x56434C52`(“VCLR”)와 현재 빌드의 `AUTO_EEPROM_CLEAR_COOKIE` 값을 함께 기록합니다. 이 과정에서 쿠키 쓰기가 실패하면 플래그도 0으로 되돌려 다음 부팅에서 재시도하게 합니다.
+7. **로그**: `logPrintf("[  ] EEPROM auto clear : DONE (cookie=0x%08X)\n");` 형태로 결과를 남깁니다.
 
 ### 4.5 쿠키 기반 반복 초기화 전략
 1. **릴리스별 고유 쿠키**: 빌드 스크립트가 `_DEF_FIRMWATRE_VERSION`과 동기화된 쿠키를 자동으로 생성하면, 버전 문자열만 바꿔도 새로운 쿠키가 주입되어 초기화가 보장됩니다.
@@ -70,17 +71,12 @@ hwInit()
 2. `src/ap/modules/qmk/port/port.h`에 `EECONFIG_USER_EEPROM_CLEAR_FLAG`/`COOKIE` 매크로를 추가해 USER 데이터 블록에 슬롯을 예약했습니다.
 3. 향후 필요 시 `-DAUTO_EEPROM_CLEAR_COOKIE=0x...` 옵션으로 기본 쿠키를 덮어쓸 수 있으며, 현재 구현은 `_DEF_FIRMWATRE_VERSION`을 BCD로 변환하는 헬퍼로 자동 생성합니다.
 
-### 5.2 단계 2 – 센티넬 로직 및 헬퍼 구현
-1. `src/hw/driver/eeprom/` 또는 `src/hw/` 레벨에 `bool eepromAutoClearCheck(void)` (이름 가칭) 함수를 추가합니다.
-2. 함수 내부에서
-   - 빌드 가드 확인 (`#ifdef AUTO_EEPROM_CLEAR_ENABLE`)
-   - 플래그·쿠키 읽기 (`eepromRead()`/`eeprom_read_block()`)
-   - 쿠키 불일치 시 플래그를 0으로 재설정
-   - `eepromFormat()` 실행 및 오류 처리
-   - `eeconfig_disable()` → `eeconfig_init()` → `eeconfig_init_kb_datablock()`/`user_datablock()` 호출
-   - Indicator, USB monitor 등 필수 모듈의 `eeconfig_init_*()`/`eeconfig_flush_*()`를 호출하거나 이후 단계에서 트리거할 수 있는 콜백을 마련
-   - 플래그/쿠키 기록 및 로그 출력
-3. 실패 시에는 `false`를 반환하고 로그를 남겨, 추후 단계에서 재시도를 쉽게 합니다.
+### 5.2 단계 2 – 센티넬 로직 및 헬퍼 구현 (완료: V251112R2)
+1. `src/hw/driver/eeprom_auto_clear.c`/`.h`에 `bool eepromAutoClearCheck(void)`를 추가했습니다. `AUTO_EEPROM_CLEAR_ENABLE`이 1일 때만 전체 로직이 컴파일되며, 기본값(0)에서는 즉시 true를 반환합니다.
+2. 함수는 플래그/쿠키를 `eepromRead()`로 읽어 비교하고, 쿠키 불일치 시 즉시 플래그를 `AUTO_EEPROM_CLEAR_FLAG_RESET`으로 돌려 다음 부팅에서도 재시작할 수 있게 합니다.
+3. 포맷 단계는 `eepromFormat()` → `eeprom_init()` 순으로 진행해 하드웨어/버퍼 상태를 동기화한 뒤 `eeconfig_disable()`/`eeconfig_init()`/`eeconfig_init_{kb,user}_datablock()`를 호출합니다.
+4. 플래그·쿠키는 `eepromWrite()`로 직접 기록하며, 실패 시 플래그를 0으로 되돌리고 `[!] EEPROM auto clear` 로그를 남긴 뒤 false를 반환합니다.
+5. 정상 완료 시 `[  ] EEPROM auto clear : success (cookie=0xXXXXXXXX)` 로그를 출력해 이후 단계(부팅 경로 통합)에서 재사용할 수 있는 상태 코드를 제공합니다.
 
 ### 5.3 단계 3 – 부팅 경로 통합 및 로깅
 1. `src/hw/hw.c`의 `hwInit()`에서 `eeprom_init()` 직후 `eepromAutoClearCheck()`를 호출합니다.
