@@ -59,7 +59,7 @@ bool hwInit(void)
 #ifdef USB_MONITOR_ENABLE
   usb_monitor_init();                                         // V251112R6: USB 모니터 기본값 초기화
 #endif
-  bool eeprom_clear_ok = eepromAutoClearCheck();              // V251112R3: AUTO_EEPROM_CLEAR_ENABLE 빌드에서 강제 초기화
+  bool factory_reset_ok = eepromAutoFactoryResetCheck();      // V251112R3: AUTO_FACTORY_RESET_ENABLE 빌드에서 강제 초기화
 #ifdef BOOTMODE_ENABLE
   if (usbBootModeLoad() != true)                              // V250923R1 Apply stored USB boot mode preference
   {
@@ -72,7 +72,7 @@ bool hwInit(void)
     logPrintf("[!] usbInstabilityLoad Fail\n");
   }
 #endif
-  (void)eeprom_clear_ok;
+  (void)factory_reset_ok;
   #ifdef _USE_HW_QSPI
   qspiInit();
   #endif

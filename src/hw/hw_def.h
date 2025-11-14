@@ -9,12 +9,12 @@
 #define _DEF_FIRMWATRE_VERSION      "V251112R3"   // V251112R3: EEPROM 공용 초기화 경로 통합 및 계측 유지
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
-#ifndef AUTO_EEPROM_CLEAR_ENABLE
-#define AUTO_EEPROM_CLEAR_ENABLE    0              // V251112R1: 자동 EEPROM 초기화 빌드 가드 기본 비활성화
+#ifndef AUTO_FACTORY_RESET_ENABLE
+#define AUTO_FACTORY_RESET_ENABLE    0             // V251112R3: 자동 팩토리 리셋 빌드 가드 기본 비활성화
 #endif
 
-#define AUTO_EEPROM_CLEAR_FLAG_MAGIC   0x56434C52U  // V251112R1: "VCLR"
-#define AUTO_EEPROM_CLEAR_FLAG_RESET   0x00000000U  // V251112R1: 플래그 초기값
+#define AUTO_FACTORY_RESET_FLAG_MAGIC   0x56434C52U  // V251112R3: "VCLR"
+#define AUTO_FACTORY_RESET_FLAG_RESET   0x00000000U  // V251112R3: 플래그 초기값
 
 #define __EE_BCD_BYTE(a, b) \
   ((uint32_t)((((a) - '0') & 0x0F) << 4) | (((b) - '0') & 0x0F))
@@ -24,14 +24,14 @@
 #define __EE_REV_HIGH_CHAR()    ((__EE_VERSION_LEN > 9) ? _DEF_FIRMWATRE_VERSION[8] : '0')
 #define __EE_REV_LOW_CHAR()     ((__EE_VERSION_LEN > 9) ? _DEF_FIRMWATRE_VERSION[9] : (__EE_VERSION_LEN > 8 ? _DEF_FIRMWATRE_VERSION[8] : '0'))
 
-#define AUTO_EEPROM_CLEAR_COOKIE_DEFAULT                                      \
+#define AUTO_FACTORY_RESET_COOKIE_DEFAULT                                      \
   ( (__EE_BCD_BYTE(__EE_SAFE_CHAR(1), __EE_SAFE_CHAR(2)) << 24) | \
     (__EE_BCD_BYTE(__EE_SAFE_CHAR(3), __EE_SAFE_CHAR(4)) << 16) | \
     (__EE_BCD_BYTE(__EE_SAFE_CHAR(5), __EE_SAFE_CHAR(6)) << 8)  | \
     (__EE_BCD_BYTE(__EE_REV_HIGH_CHAR(), __EE_REV_LOW_CHAR()) << 0) )
 
-#ifndef AUTO_EEPROM_CLEAR_COOKIE
-#define AUTO_EEPROM_CLEAR_COOKIE    AUTO_EEPROM_CLEAR_COOKIE_DEFAULT  // V251112R1: 펌웨어 버전 기반 기본 쿠키
+#ifndef AUTO_FACTORY_RESET_COOKIE
+#define AUTO_FACTORY_RESET_COOKIE    AUTO_FACTORY_RESET_COOKIE_DEFAULT  // V251112R3: 펌웨어 버전 기반 기본 쿠키
 #endif
 
 #ifndef _DEF_ENABLE_MATRIX_TIMING_PROBE

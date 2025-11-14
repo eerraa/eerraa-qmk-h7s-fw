@@ -1,6 +1,6 @@
 #include "quantum.h"
 #include "usb.h"                                   // V251112R5: VIA EEPROM 클리어 시 BootMode 기본값 적용
-#include "qmk/quantum/eeconfig.h"                  // V251112R3: AUTO_CLEAR/VIA 공용 초기화 루틴
+#include "qmk/quantum/eeconfig.h"                  // V251112R3: AUTO_FACTORY_RESET/VIA 공용 초기화 루틴
 #include "qmk/port/usb_monitor.h"                  // V251112R5: USB 모니터 기본값 적용
 #include "qmk/port/port.h"
 
@@ -34,11 +34,11 @@ static void eeprom_update_queue_watermark(void)
   }
 }
 
-static void eeprom_restore_auto_clear_sentinel(void)
+static void eeprom_restore_auto_factory_reset_sentinel(void)
 {
-#if defined(AUTO_EEPROM_CLEAR_FLAG_MAGIC) && defined(AUTO_EEPROM_CLEAR_COOKIE)
-  eeprom_write_dword((uint32_t *)EECONFIG_USER_EEPROM_CLEAR_FLAG, AUTO_EEPROM_CLEAR_FLAG_MAGIC);
-  eeprom_write_dword((uint32_t *)EECONFIG_USER_EEPROM_CLEAR_COOKIE, AUTO_EEPROM_CLEAR_COOKIE);
+#if defined(AUTO_FACTORY_RESET_FLAG_MAGIC) && defined(AUTO_FACTORY_RESET_COOKIE)
+  eeprom_write_dword((uint32_t *)EECONFIG_USER_EEPROM_CLEAR_FLAG, AUTO_FACTORY_RESET_FLAG_MAGIC);
+  eeprom_write_dword((uint32_t *)EECONFIG_USER_EEPROM_CLEAR_COOKIE, AUTO_FACTORY_RESET_COOKIE);
 #endif
 }
 
@@ -90,7 +90,7 @@ void eeprom_flush_pending(void)
   }
 }
 
-bool eeprom_apply_factory_defaults(bool restore_auto_clear_sentinel)
+bool eeprom_apply_factory_defaults(bool restore_factory_reset_sentinel)
 {
   eeprom_flush_pending();                                      // V251112R3: 초기화 전 대기열 제거
 
@@ -112,9 +112,9 @@ bool eeprom_apply_factory_defaults(bool restore_auto_clear_sentinel)
 #endif
   eeprom_flush_pending();
 
-  if (restore_auto_clear_sentinel)
+  if (restore_factory_reset_sentinel)
   {
-    eeprom_restore_auto_clear_sentinel();                      // V251112R3: 공용 초기화 루틴에서 센티넬 복구
+    eeprom_restore_auto_factory_reset_sentinel();              // V251112R3: 공용 초기화 루틴에서 센티넬 복구
     eeprom_flush_pending();
   }
 
@@ -127,7 +127,7 @@ void eeprom_task(void)
 
   if (is_req_clean)
   {
-    (void)eeprom_apply_factory_defaults(true);                  // V251112R3: VIA/AUTO_CLEAR 공용 초기화 경로 사용
+    (void)eeprom_apply_factory_defaults(true);                  // V251112R3: VIA/AUTO_FACTORY_RESET 공용 초기화 경로 사용
     is_req_clean = false;
     soft_reset_keyboard();
   }

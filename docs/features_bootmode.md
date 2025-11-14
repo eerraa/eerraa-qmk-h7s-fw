@@ -24,7 +24,7 @@ hwInit()
   ↳ eepromInit() / eeprom_init()                  // QMK EEPROM 베이스라인
   ↳ bootmode_init()                              // EEPROM 범위 밖 값은 즉시 기본값으로 갱신
   ↳ usb_monitor_init()
-  ↳ eepromAutoClearCheck() (선택)                // AUTO_EEPROM_CLEAR_ENABLE일 때만
+  ↳ eepromAutoFactoryResetCheck() (선택)                // AUTO_FACTORY_RESET_ENABLE일 때만
   ↳ usbBootModeLoad()                            // EEPROM → RAM 캐시
   ↳ usbInstabilityLoad()
   ↳ usbInit()/usbBegin()
@@ -63,7 +63,7 @@ apMain()
 | 위치 | 책임 |
 | --- | --- |
 | `src/ap/modules/qmk/port/eeconfig_port.c` | USER 데이터가 재초기화될 때 `usbBootModeApplyDefaults()`를 호출해 슬롯을 기본값으로 채우고, 플래그/쿠키도 갱신합니다. |
-| `src/hw/driver/eeprom_auto_clear.c` | AUTO_EEPROM_CLEAR_ENABLE 빌드에서 EEPROM을 포맷한 뒤 `usbBootModeApplyDefaults()`를 호출합니다. |
+| `src/hw/driver/eeprom_auto_factory_reset.c` | AUTO_FACTORY_RESET_ENABLE 빌드에서 EEPROM을 포맷한 뒤 `usbBootModeApplyDefaults()`를 호출합니다. |
 
 ## 5. 데이터 구조
 ### 5.1 `UsbBootMode_t` ( `src/hw/driver/usb/usb.h` )

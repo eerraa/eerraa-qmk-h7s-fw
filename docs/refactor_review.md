@@ -1,14 +1,14 @@
 # EEPROM 시스템 리팩토링 재검토 (GPT5.1)
 
 ## 1. 검토 전제와 절차
-- Codex GPT5.1 환경에서 EEPROM 경로 전체를 다시 읽고, 이전 문서의 주장과 실제 코드(`src/ap/modules/qmk/port/platforms/eeprom.c`, `src/hw/driver/eeprom/*`, `src/hw/driver/usb/usb.c`, `src/ap/modules/qmk/port/sys_port.c`, `src/hw/driver/eeprom_auto_clear.c`)를 교차 확인했습니다.
+- Codex GPT5.1 환경에서 EEPROM 경로 전체를 다시 읽고, 이전 문서의 주장과 실제 코드(`src/ap/modules/qmk/port/platforms/eeprom.c`, `src/hw/driver/eeprom/*`, `src/hw/driver/usb/usb.c`, `src/ap/modules/qmk/port/sys_port.c`, `src/hw/driver/eeprom_auto_factory_reset.c`)를 교차 확인했습니다.
 - 검토 목적은 **오버헤드/인터럽트 감소, 코드 간략화, 유지보수성 향상**이며, HS 8 kHz 스케줄과 USB Instability Monitor 정책을 해치지 않는지 우선 확인했습니다.
 - 의도치 않은 대규모 변경을 피하기 위해, **성능 이득이 명확하고 부작용이 관리 가능한 항목만 “필수 조치”로 분류**했습니다. 개선 제안마다 판단 근거와 예상 부작용을 병기했습니다.
 
 ## 2. 범위
-- 하드웨어 EEPROM 드라이버: `src/hw/driver/eeprom/*`, `src/hw/driver/eeprom_auto_clear.c`.
+- 하드웨어 EEPROM 드라이버: `src/hw/driver/eeprom/*`, `src/hw/driver/eeprom_auto_factory_reset.c`.
 - QMK 포팅 계층: `src/ap/modules/qmk/port/platforms/eeprom.c`, VIA 시스템 포트(`src/ap/modules/qmk/port/sys_port.c`), USB Monitor 저장 경로(`src/ap/modules/qmk/port/usb_monitor.c`).
-- EEPROM을 사용하는 부트모드 및 USB 모니터: `src/hw/driver/usb/usb.c`, 관련 문서(`docs/features_auto_eeprom_clear.md`, `docs/features_bootmode.md`, `docs/features_instability_monitor.md`).
+- EEPROM을 사용하는 부트모드 및 USB 모니터: `src/hw/driver/usb/usb.c`, 관련 문서(`docs/features_auto_factory_reset.md`, `docs/features_bootmode.md`, `docs/features_instability_monitor.md`).
 
 ## 3. 판단 기준 및 부작용 고려 프레임
 1. **성능/오버헤드**: 8 kHz 루프에서 추가 대기나 인터럽트 마스킹이 발생하면 필수 조치 후보로 올렸습니다.
@@ -35,7 +35,7 @@
    - 판단: 스택 오버런 리스크가 크므로 **필수 수정**.
 
 4. **VIA 초기화 로직 중복 및 장기 블로킹 (필수 → V251112R3에서 해결)**  
-   - 증상: `eeprom_task()`가 `is_req_clean`일 때 `eeprom_flush_pending()`을 여러 번 호출하여 큐가 빌 때까지 루프를 점유했고, 동일 동작이 `eeprom_auto_clear`와 중복 구현되어 유지보수가 어려웠습니다.  
+- 증상: `eeprom_task()`가 `is_req_clean`일 때 `eeprom_flush_pending()`을 여러 번 호출하여 큐가 빌 때까지 루프를 점유했고, 동일 동작이 `eeprom_auto_factory_reset`와 중복 구현되어 유지보수가 어려웠습니다.  
    - 해결: `eeprom_apply_factory_defaults()` 공용 헬퍼 도입으로 AUTO_CLEAR와 VIA 초기화가 동일 경로를 공유하며, 실제 측정에서도 두 경로가 모두 `queue max = 13`, `queue ofl = 0`으로 수렴했습니다.  
    - 잔여 리스크: 초기화 중 플러시가 반복 호출되는 구조는 그대로이므로, 향후 비동기 알림 방식으로 전환할 때 리셋 타이밍을 재조정해야 합니다.
 
@@ -60,14 +60,14 @@
    - 부작용 고려: 멀티바이트 API 도입 시 오류 롤백 처리가 복잡해지나, 상위 큐가 이미 순서를 보장합니다.  
    - 판단: 기존 Clean-up 문제를 해결한 뒤 접근해도 늦지 않아 **권장**으로 둡니다.
 
-### 4.3 BootMode & 자동 초기화 (`src/hw/driver/usb/usb.c`, `src/hw/driver/eeprom_auto_clear.c`)
+### 4.3 BootMode & 자동 초기화 (`src/hw/driver/usb/usb.c`, `src/hw/driver/eeprom_auto_factory_reset.c`)
 1. **BootMode 직접 쓰기 → 미러 불일치 (필수)**  
    - 증상: `usbBootModeWriteRaw()`가 `eepromWrite()`를 호출하고 `eeprom_buf`를 갱신하지 않습니다(라인 234-256). 그 결과 `eeprom_read_dword()`가 여전히 오래된 값을 반환하여, QMK 계층의 동작이 실제 저장값과 어긋납니다.  
    - 부작용 고려: BootMode 저장을 `eeprom_update_dword()`로 바꾸면 큐를 타게 되어 적용 지연이 발생할 수 있습니다. 따라서 BootMode 저장 후 즉시 `eeprom_buf`를 직접 갱신하거나, `eeprom_update_dword()` 사용 시 “즉시 재부팅 시큐언스” 앞에서 플러시 확인을 넣어야 합니다.  
    - 판단: 설정 불일치는 장애로 간주 → **필수**.
 
-2. **AUTO_EEPROM_CLEAR와 VIA 클린 경로의 중복 (권장)**  
-   - 증상: 두 경로 모두 BootMode/USB 모니터 기본값과 센티넬을 각각 기록합니다(`src/hw/driver/eeprom_auto_clear.c` 58-110, `src/ap/modules/qmk/port/platforms/eeprom.c` 60-86).  
+2. **AUTO_FACTORY_RESET와 VIA 클린 경로의 중복 (권장)**  
+   - 증상: 두 경로 모두 BootMode/USB 모니터 기본값과 센티넬을 각각 기록합니다(`src/hw/driver/eeprom_auto_factory_reset.c` 58-110, `src/ap/modules/qmk/port/platforms/eeprom.c` 60-86).  
    - 부작용 고려: 공용 헬퍼 생성 시 리셋 시점이 바뀔 수 있으니, “센티넬 → 사용자 데이터 → 리셋” 순서를 유지하도록 주의해야 합니다.  
    - 판단: 유지보수성 향상을 위해 권장하나, 기능 결함은 아니므로 **권장**.
 
@@ -89,7 +89,7 @@
 ## 6. 테스트 및 회귀 대비 제안
 - `cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/sirind/brick60' && cmake --build build -j10`으로 기본 빌드 후, VIA를 통한 대량 EEPROM 쓰기를 최소 3회 반복해 큐 길이/에러 카운터를 확인합니다.
 - BootMode HS↔FS 전환 + 즉시 리셋 시나리오를 실행해, 미러가 즉시 갱신되는지 로그(`usbBootModeLabel`)를 확인합니다.
-- AUTO_EEPROM_CLEAR 플래그를 강제로 손상시킨 뒤 전원이 켜질 때까지의 총 지연 시간을 측정해 Clean-up 비동기화 효과를 검증합니다.
+- AUTO_FACTORY_RESET 플래그를 강제로 손상시킨 뒤 전원이 켜질 때까지의 총 지연 시간을 측정해 Clean-up 비동기화 효과를 검증합니다.
 
 ## 7. 기존 함수 재활용 검토 결과
 - **큐 신뢰성/처리량 개선**: `qbufferWrite()`의 반환값과 `qbufferAvailable()`(src/common/core/qbuffer.h)만 활용하면 큐 가득 참 감지와 다중 항목 플러시가 가능하므로, 새로운 큐 API 없이도 재시도·슬라이스 로직을 구현할 수 있습니다.
@@ -111,13 +111,13 @@
 
 ### 단계 2: BootMode 및 VIA 클린 경로 정합성
 1. `usbBootModeWriteRaw()`를 `eeprom_update_dword()` 또는 `eeprom_write_block()`으로 전환하고, 저장 직후 `eeprom_buf`를 직접 갱신합니다.  
-2. `eeprom_task()`의 `is_req_clean` 처리와 `eeprom_auto_clear`의 초기화 루틴에서 공용 헬퍼(예: `eeprom_apply_factory_defaults()`)를 호출하도록 리팩토링하되, 기존 함수들과 동순서를 유지합니다.
+2. `eeprom_task()`의 `is_req_clean` 처리와 `eeprom_auto_factory_reset` 초기화 루틴에서 공용 헬퍼(예: `eeprom_apply_factory_defaults()`)를 호출하도록 리팩토링하되, 기존 함수들과 동순서를 유지합니다.
 3. `eeprom_flush_pending()` 호출은 “최대 대기시간 + 재시도” 로직으로 바꾸어, 루프가 장기 점유되지 않도록 합니다.
 
 **테스트 절차**  
 - BootMode HS↔FS 전환 후 즉시 `usbBootModeLoad()`를 호출해 값이 유지되는지 UART 로그로 확인합니다.  
 - VIA EEPROM 초기화 명령을 수행하고, UART 로그에서 BootMode/USB 모니터 기본값이 직후에 기록되는지, 그리고 장시간 정지 없이 소프트 리셋이 트리거되는지 확인합니다.  
-- AUTO_EEPROM_CLEAR가 활성화된 빌드에서 플래그를 비정상 값으로 덮어쓴 뒤 전원을 재투입하여 초기화→리셋까지 걸린 시간을 측정합니다.
+- AUTO_FACTORY_RESET가 활성화된 빌드에서 플래그를 비정상 값으로 덮어쓴 뒤 전원을 재투입하여 초기화→리셋까지 걸린 시간을 측정합니다.
 
 ### 단계 3: 플래시 에뮬 Clean-up 비동기화
 1. `eepromWriteByte()`에서 96비트 API 대신 8비트 API(주석 처리된 `EE_Read/WriteVariable8bits`)를 복구하거나, 최소한 `qbufferWrite()`로 받아온 바이트를 12바이트 캐시에 누적 후 한 번에 `EE_WriteVariable96bits`를 호출합니다.

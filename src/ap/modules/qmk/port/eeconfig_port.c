@@ -17,9 +17,9 @@ void eeconfig_init_user_datablock(void)
 #ifdef USB_MONITOR_ENABLE
   usb_monitor_storage_apply_defaults();                       // V251113R2: USB 모니터 슬롯 기본값 기록
 #endif
-#if defined(AUTO_EEPROM_CLEAR_FLAG_MAGIC) && defined(AUTO_EEPROM_CLEAR_COOKIE)
-  eeprom_update_dword((uint32_t *)EECONFIG_USER_EEPROM_CLEAR_FLAG, AUTO_EEPROM_CLEAR_FLAG_MAGIC);
-  eeprom_update_dword((uint32_t *)EECONFIG_USER_EEPROM_CLEAR_COOKIE, AUTO_EEPROM_CLEAR_COOKIE);
+#if defined(AUTO_FACTORY_RESET_FLAG_MAGIC) && defined(AUTO_FACTORY_RESET_COOKIE)
+  eeprom_update_dword((uint32_t *)EECONFIG_USER_EEPROM_CLEAR_FLAG, AUTO_FACTORY_RESET_FLAG_MAGIC);
+  eeprom_update_dword((uint32_t *)EECONFIG_USER_EEPROM_CLEAR_COOKIE, AUTO_FACTORY_RESET_COOKIE);
 #endif
 }
 #endif
