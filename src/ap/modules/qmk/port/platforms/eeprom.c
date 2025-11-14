@@ -4,7 +4,10 @@
 #include "qmk/port/port.h"
 
 
-#define EEPROM_WRITE_Q_BUF_MAX  (TOTAL_EEPROM_BYTE_COUNT + 1)
+#define EEPROM_WRITE_Q_BUF_MAX         (TOTAL_EEPROM_BYTE_COUNT + 1)
+#define EEPROM_WRITE_SLICE_MAX_COUNT   8           // V251112R2: SOF 주기당 최대 8건만 실 플래시에 반영
+#define EEPROM_WRITE_QUEUE_WAIT_MS     2           // V251112R2: 큐 가득 참 재시도 대기 시간
+#define EEPROM_UPDATE_BLOCK_CHUNK      64          // V251112R2: 고정 버퍼로 블록 비교
 
 
 typedef struct
@@ -16,7 +19,19 @@ typedef struct
 static uint8_t        eeprom_buf[TOTAL_EEPROM_BYTE_COUNT];
 static qbuffer_t      write_q;
 static eeprom_write_t write_buf[EEPROM_WRITE_Q_BUF_MAX];
-static bool           is_req_clean = false;
+static bool           is_req_clean      = false;
+static uint32_t       write_q_high_water = 0;
+static uint32_t       write_q_overflow   = 0;
+
+static void eeprom_update_queue_watermark(void)
+{
+  uint32_t pending = qbufferAvailable(&write_q);
+
+  if (pending > write_q_high_water)
+  {
+    write_q_high_water = pending;
+  }
+}
 
 static void eeprom_restore_auto_clear_sentinel(void)
 {
@@ -36,8 +51,9 @@ void eeprom_init(void)
 void eeprom_update(void)
 {
   eeprom_write_t write_byte;
+  uint32_t       processed = 0;
 
-  if (qbufferAvailable(&write_q) > 0)
+  while (qbufferAvailable(&write_q) > 0)
   {
     qbufferRead(&write_q, (uint8_t *)&write_byte, 1);
     if (eepromWriteByte(write_byte.addr, write_byte.data))
@@ -49,6 +65,13 @@ void eeprom_update(void)
     else
     {
       logPrintf("eepromWriteByte() Fail\n");
+      break;
+    }
+
+    processed++;
+    if (processed >= EEPROM_WRITE_SLICE_MAX_COUNT)
+    {
+      break;
     }
   }
 }
@@ -134,12 +157,43 @@ void eeprom_read_block(void *buf, const void *addr, uint32_t len)
 void eeprom_write_byte(uint8_t *addr, uint8_t value)
 {
   eeprom_write_t write_byte;
+  uint32_t       pre_time;
+  bool           is_enqueued = false;
 
   eeprom_buf[(uint32_t)addr] = value;
 
   write_byte.addr = (uint32_t)addr;
   write_byte.data = value;
-  qbufferWrite(&write_q, (uint8_t *)&write_byte, 1);
+
+  pre_time = millis();
+  while (is_enqueued != true)
+  {
+    if (qbufferWrite(&write_q, (uint8_t *)&write_byte, 1))
+    {
+      is_enqueued = true;
+      eeprom_update_queue_watermark();                                 // V251112R2: 큐 하이워터 추적
+      break;
+    }
+
+    eeprom_update();                                                   // V251112R2: 큐가 가득 찼다면 즉시 비우기
+    if (millis()-pre_time >= EEPROM_WRITE_QUEUE_WAIT_MS)
+    {
+      break;
+    }
+  }
+
+  if (is_enqueued != true)
+  {
+    write_q_overflow++;
+    if (eepromWriteByte(write_byte.addr, write_byte.data) != true)
+    {
+      logPrintf("[!] EEPROM write queue overflow (addr=%lu) direct-write fail\n", write_byte.addr); // V251112R2 큐 오버플로 감시
+    }
+    else
+    {
+      logPrintf("[ ] EEPROM write queue overflow (addr=%lu) flushed inline\n", write_byte.addr);     // V251112R2 큐 오버플로 감시
+    }
+  }
 }
 
 void eeprom_write_word(uint16_t *addr, uint16_t value)
@@ -197,10 +251,40 @@ void eeprom_update_dword(uint32_t *addr, uint32_t value)
 
 void eeprom_update_block(const void *buf, void *addr, size_t len)
 {
-  uint8_t read_buf[len];
-  eeprom_read_block(read_buf, addr, len);
-  if (memcmp(buf, read_buf, len) != 0)
+  const uint8_t *src  = (const uint8_t *)buf;
+  uint8_t       *dest = (uint8_t *)addr;
+  uint8_t        read_buf[EEPROM_UPDATE_BLOCK_CHUNK];
+
+  while (len > 0)
   {
-    eeprom_write_block(buf, addr, len);
+    size_t chunk = len > EEPROM_UPDATE_BLOCK_CHUNK ? EEPROM_UPDATE_BLOCK_CHUNK : len;
+
+    eeprom_read_block(read_buf, dest, chunk);
+    for (size_t i = 0; i < chunk; i++)
+    {
+      if (src[i] != read_buf[i])
+      {
+        eeprom_write_byte(dest + i, src[i]);
+      }
+    }
+
+    len  -= chunk;
+    src  += chunk;
+    dest += chunk;
   }
+}
+
+uint32_t eeprom_get_write_pending_count(void)
+{
+  return qbufferAvailable(&write_q);
+}
+
+uint32_t eeprom_get_write_pending_max(void)
+{
+  return write_q_high_water;
+}
+
+uint32_t eeprom_get_write_overflow_count(void)
+{
+  return write_q_overflow;
 }

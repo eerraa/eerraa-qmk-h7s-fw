@@ -1,5 +1,8 @@
 #include "eeprom.h"
 #include "cli.h"
+#if defined(QMK_KEYMAP_CONFIG_H)
+#include "qmk/port/platforms/eeprom.h"                 // V251112R2: QMK EEPROM 큐 상태 출력
+#endif
 
 
 #if defined(_USE_HW_EEPROM) && defined(EEPROM_CHIP_EMUL)
@@ -279,6 +282,11 @@ void cliEeprom(cli_args_t *args)
     {
       cliPrintf("eeprom init   : %d\n", eepromIsInit());
       cliPrintf("eeprom length : %d bytes\n", eepromGetLength());
+#if defined(QMK_KEYMAP_CONFIG_H)
+      cliPrintf("eeprom queue cur : %lu entries\n", (unsigned long)eeprom_get_write_pending_count());   // V251112R2: QMK 큐 계측
+      cliPrintf("eeprom queue max : %lu entries\n", (unsigned long)eeprom_get_write_pending_max());     // V251112R2: 최고 사용량
+      cliPrintf("eeprom queue ofl : %lu events\n", (unsigned long)eeprom_get_write_overflow_count());  // V251112R2: 직접 쓰기 횟수
+#endif
     }
     else if(args->isStr(0, "format") == true)
     {

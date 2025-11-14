@@ -1,0 +1,139 @@
+# EEPROM 시스템 리팩토링 재검토 (GPT5.1)
+
+## 1. 검토 전제와 절차
+- Codex GPT5.1 환경에서 EEPROM 경로 전체를 다시 읽고, 이전 문서의 주장과 실제 코드(`src/ap/modules/qmk/port/platforms/eeprom.c`, `src/hw/driver/eeprom/*`, `src/hw/driver/usb/usb.c`, `src/ap/modules/qmk/port/sys_port.c`, `src/hw/driver/eeprom_auto_clear.c`)를 교차 확인했습니다.
+- 검토 목적은 **오버헤드/인터럽트 감소, 코드 간략화, 유지보수성 향상**이며, HS 8 kHz 스케줄과 USB Instability Monitor 정책을 해치지 않는지 우선 확인했습니다.
+- 의도치 않은 대규모 변경을 피하기 위해, **성능 이득이 명확하고 부작용이 관리 가능한 항목만 “필수 조치”로 분류**했습니다. 개선 제안마다 판단 근거와 예상 부작용을 병기했습니다.
+
+## 2. 범위
+- 하드웨어 EEPROM 드라이버: `src/hw/driver/eeprom/*`, `src/hw/driver/eeprom_auto_clear.c`.
+- QMK 포팅 계층: `src/ap/modules/qmk/port/platforms/eeprom.c`, VIA 시스템 포트(`src/ap/modules/qmk/port/sys_port.c`), USB Monitor 저장 경로(`src/ap/modules/qmk/port/usb_monitor.c`).
+- EEPROM을 사용하는 부트모드 및 USB 모니터: `src/hw/driver/usb/usb.c`, 관련 문서(`docs/features_auto_eeprom_clear.md`, `docs/features_bootmode.md`, `docs/features_instability_monitor.md`).
+
+## 3. 판단 기준 및 부작용 고려 프레임
+1. **성능/오버헤드**: 8 kHz 루프에서 추가 대기나 인터럽트 마스킹이 발생하면 필수 조치 후보로 올렸습니다.
+2. **데이터 신뢰성**: EEPROM 큐 누락·미러 불일치처럼 즉시 사용자 설정에 영향을 주는 항목은 보수적으로 “반드시 수정”으로 분류했습니다.
+3. **메모리 안전성**: 스택 VLA, 장시간 폴링 등은 펌웨어 다운타임을 유발하므로 높은 우선순위입니다.
+4. **부작용 평가**: 각 개선안에 대해 스케줄러 장기 점유, 리셋 타이밍 변화 등 잠재 리스크를 나열하고, 완화 가능 여부를 정리했습니다.
+
+## 4. 세부 진단 및 판단
+
+### 4.1 QMK EEPROM 비동기 계층 (`src/ap/modules/qmk/port/platforms/eeprom.c`)
+1. **큐 오버플로 시 데이터 손실 (필수)**  
+   - 증상: `eeprom_write_byte()`가 `qbufferWrite()` 반환값을 무시합니다(라인 134-143). 큐 최대치(총 4 KB +1) 도달 시 추가 기록이 조용히 드롭됩니다.  
+   - 부작용 고려: 실패 시 즉시 플러시하거나 호출 스레드를 잠시 대기시키면 루프 시간이 늘어날 수 있으나, 현재도 1바이트 처리라 영향이 미미합니다.  
+   - 판단: 사용자 설정 손실은 허용 불가 → **반드시 수정**. 재시도 루프에 타임아웃을 두고, 실패 시 로그를 남겨 추적성을 확보해야 합니다.
+
+2. **플러시 처리량 제한(1바이트)으로 인한 큐 적체 (필수)**  
+   - 증상: `eeprom_update()`가 루프마다 1바이트만 쓰며, `eeprom_task()`는 SOF마다 한 번 호출됩니다. VIA에서 수백 바이트 블록을 쓰면 큐가 쉽게 포화되고 USB 모니터 루틴까지 지연됩니다.  
+   - 부작용 고려: 한 루프에서 과도하게 많은 바이트를 비우면 8000 Hz 타이밍을 해칠 수 있으므로, “최대 N바이트/최대 M us”와 같은 슬라이스 한도를 두어야 합니다.  
+   - 판단: 처리량 향상 없이는 큐 드롭 버그도 해결되지 않으므로 **동시에 개선**해야 합니다.
+
+3. **VLA 기반 `eeprom_update_block()` (필수)**  
+   - 증상: `uint8_t read_buf[len];` (라인 198 이하)이 사용자 입력 길이만큼 스택을 잠식합니다. VIA RAW HID 명령이 최대 4 KB까지 len을 밀어 넣을 수 있어 ISR/USB 스택과 충돌합니다.  
+   - 부작용 고려: 고정 버퍼를 도입하면 반복 비교가 늘어나지만, chunk 비교 방식으로 분기하면 추가 오버헤드는 DMA/I2C 대기보다 작습니다.  
+   - 판단: 스택 오버런 리스크가 크므로 **필수 수정**.
+
+4. **VIA 초기화 로직 중복 및 장기 블로킹 (필수)**  
+   - 증상: `eeprom_task()`가 `is_req_clean`일 때 `eeprom_flush_pending()`을 여러 번 호출(라인 61-85)하여 큐가 빌 때까지 루프를 점유합니다. 동일 동작이 `eeprom_auto_clear`와 중복 구현되어 유지보수가 어렵습니다.  
+   - 부작용 고려: 비동기 콜백으로 전환하면 초기화 완료/리셋 타이밍을 다시 정리해야 합니다. 다만 현재 구조는 수백 ms 동안 USB 루프를 멈추는 명백한 회귀를 이미 유발하고 있어, 개선이 더 안전합니다.  
+   - 판단: 공용 초기화 헬퍼를 두고, 플러시 완료 이벤트 기반으로 분리하는 방향을 **필수**로 제안합니다.
+
+### 4.2 하드웨어 EEPROM 드라이버 (`src/hw/driver/eeprom/emul.c`, `src/hw/driver/eeprom/zd24c128.c`)
+1. **플래시 에뮬 96비트 연산 남용 (필수)**  
+   - 증상: `eepromReadByte()`/`eepromWriteByte()`가 각각 `EE_ReadVariable96bits`/`EE_WriteVariable96bits`를 호출(라인 86-143)하면서 실제로는 1바이트만 사용합니다.  
+   - 부작용 고려: 8비트 API를 복구하거나 12바이트 캐시를 두면 코드 복잡도가 소폭 증가하지만, HAL Unlock/Lock 빈도가 감소해 전체 루프 대기 시간이 줄어듭니다.  
+   - 판단: 쓰기당 최대 수백 µs 절감과 플래시 마모 감소 효과가 확실하므로 **필수**.
+
+2. **Clean-up 대기 500 ms 바쁜 루프 (필수)**  
+   - 증상: `EE_CleanUp_IT()` 후 `is_erasing`이 false가 될 때까지 최대 500 ms 대기(라인 123-138)하며, 그동안 USB 폴링이 멈춥니다.  
+   - 부작용 고려: 비동기화 시 마지막 몇 바이트가 실패할 수 있으므로 `eeprom_update()`에서 `is_erasing`을 감지해 재시도하도록 설계해야 합니다.  
+   - 판단: 인터럽트/USB 모니터를 동시에 중단하는 현재 구조는 위험 → **필수** 개선.
+
+3. **ZD24C128 단일 바이트 쓰기 (권장)**  
+   - 증상: `i2cWriteA16Bytes()` 호출 후 100 ms까지 `i2cIsDeviceReady()`를 폴링(라인 93-118). 장시간 덮어쓰기 시 루프 지연이 커집니다.  
+   - 부작용 고려: 페이지 쓰기는 버퍼 관리가 추가 필요하며, VIA가 비정렬 주소로 쓰는 경우 파편화될 수 있습니다.  
+   - 판단: HS USB 기판에서 외부 I2C EEPROM을 쓰는 SKU가 제한적이라면 후순위 가능. **권장이지만 필수는 아님**으로 분류했습니다.
+
+4. **`eepromWrite()` 루프 내부 Unlock/Lock 반복 (권장)**  
+   - 증상: 다중 바이트 쓰기에서 바이트마다 Unlock/Lock을 반복합니다(라인 167-181, 139-152).  
+   - 부작용 고려: 멀티바이트 API 도입 시 오류 롤백 처리가 복잡해지나, 상위 큐가 이미 순서를 보장합니다.  
+   - 판단: 기존 Clean-up 문제를 해결한 뒤 접근해도 늦지 않아 **권장**으로 둡니다.
+
+### 4.3 BootMode & 자동 초기화 (`src/hw/driver/usb/usb.c`, `src/hw/driver/eeprom_auto_clear.c`)
+1. **BootMode 직접 쓰기 → 미러 불일치 (필수)**  
+   - 증상: `usbBootModeWriteRaw()`가 `eepromWrite()`를 호출하고 `eeprom_buf`를 갱신하지 않습니다(라인 234-256). 그 결과 `eeprom_read_dword()`가 여전히 오래된 값을 반환하여, QMK 계층의 동작이 실제 저장값과 어긋납니다.  
+   - 부작용 고려: BootMode 저장을 `eeprom_update_dword()`로 바꾸면 큐를 타게 되어 적용 지연이 발생할 수 있습니다. 따라서 BootMode 저장 후 즉시 `eeprom_buf`를 직접 갱신하거나, `eeprom_update_dword()` 사용 시 “즉시 재부팅 시큐언스” 앞에서 플러시 확인을 넣어야 합니다.  
+   - 판단: 설정 불일치는 장애로 간주 → **필수**.
+
+2. **AUTO_EEPROM_CLEAR와 VIA 클린 경로의 중복 (권장)**  
+   - 증상: 두 경로 모두 BootMode/USB 모니터 기본값과 센티넬을 각각 기록합니다(`src/hw/driver/eeprom_auto_clear.c` 58-110, `src/ap/modules/qmk/port/platforms/eeprom.c` 60-86).  
+   - 부작용 고려: 공용 헬퍼 생성 시 리셋 시점이 바뀔 수 있으니, “센티넬 → 사용자 데이터 → 리셋” 순서를 유지하도록 주의해야 합니다.  
+   - 판단: 유지보수성 향상을 위해 권장하나, 기능 결함은 아니므로 **권장**.
+
+3. **Flush-then-reset 패턴의 장기 점유 (필수)**  
+   - 증상: VIA 클린, AUTO_CLEAR 모두 `eeprom_flush_pending()`을 호출한 뒤 즉시 리셋을 예약합니다. 큐가 길어지면 워치독 없이 소프트락에 빠질 수 있습니다.  
+   - 부작용 고려: 비동기 콜백으로 옮기면 리셋이 지연될 수 있으므로, “최대 대기시간 + 진행률 로그”를 추가해 사용자가 대기 상태를 인지하도록 해야 합니다.  
+   - 판단: 현재 구조도 장기 대기 시 USB 다운으로 이어져 **필수**.
+
+### 4.4 관측 및 테스트 갭
+- 큐 길이, `is_erasing` 지속 시간, BootMode 쓰기 지연을 관찰할 수 있는 CLI/로깅이 없습니다. 개선 후 리그레션을 방지하려면 최소한 `eeprom_task()`에 처리 통계를 추가해야 합니다.
+- VIA 전체 키맵 덮어쓰기 + USB instability monitor 활성화 조합을 자동화한 스트레스 테스트가 없어 부작용을 빠르게 발견하기 어렵습니다. 이 항목은 **권장**입니다.
+
+## 5. 권장 수정 우선순위
+1. **큐 신뢰성 및 처리량 개선**: `qbufferWrite()` 실패 처리, 슬라이스형 `eeprom_update()`, VLA 제거를 한 묶음으로 처리합니다.
+2. **BootMode/클린 경로 정합성**: BootMode 저장을 큐/미러와 동기화하고, `eeprom_flush_pending()` 동작을 비차단 구조로 바꿉니다.
+3. **플래시 에뮬 Clean-up 비동기화**: 96비트 API 축소와 Clean-up 대기 개선을 동시에 진행해 루프 블로킹을 제거합니다.
+4. **하드웨어 성능 최적화/관측치 추가**: I2C 페이지 쓰기, Unlock/Lock 최소화, 큐 메트릭 로그 출력을 순차적으로 적용합니다.
+
+## 6. 테스트 및 회귀 대비 제안
+- `cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/sirind/brick60' && cmake --build build -j10`으로 기본 빌드 후, VIA를 통한 대량 EEPROM 쓰기를 최소 3회 반복해 큐 길이/에러 카운터를 확인합니다.
+- BootMode HS↔FS 전환 + 즉시 리셋 시나리오를 실행해, 미러가 즉시 갱신되는지 로그(`usbBootModeLabel`)를 확인합니다.
+- AUTO_EEPROM_CLEAR 플래그를 강제로 손상시킨 뒤 전원이 켜질 때까지의 총 지연 시간을 측정해 Clean-up 비동기화 효과를 검증합니다.
+
+## 7. 기존 함수 재활용 검토 결과
+- **큐 신뢰성/처리량 개선**: `qbufferWrite()`의 반환값과 `qbufferAvailable()`(src/common/core/qbuffer.h)만 활용하면 큐 가득 참 감지와 다중 항목 플러시가 가능하므로, 새로운 큐 API 없이도 재시도·슬라이스 로직을 구현할 수 있습니다.
+- **VLA 제거**: `eeprom_read_block()`(src/ap/modules/qmk/port/platforms/eeprom.c:112-125)을 반복 호출하면 고정 크기 버퍼만으로 블록 비교가 가능하여 추가 헬퍼가 필요 없습니다.
+- **BootMode 미러 일치**: 현재도 제공되는 `eeprom_update_dword()`와 `eeprom_write_block()`(src/ap/modules/qmk/port/platforms/eeprom.c:150-196)을 호출하면 별도 BootMode 전용 함수 없이 미러 갱신을 보장할 수 있습니다.
+- **Clean-up 비차단 처리**: `is_erasing` 플래그와 `eeprom_is_pending()`/`eeprom_flush_pending()`을 조합해, 기존 인터럽트 콜백(`EE_EndOfCleanup_UserCallback`)만으로도 대기 루프를 제거할 수 있어 신규 인터페이스가 필요하지 않습니다.
+- **AUTO_CLEAR/VIA 공용화**: 두 경로 모두 이미 `eeconfig_*`와 `usbBootModeApplyDefaults()`/`usb_monitor_storage_apply_defaults()`를 호출하므로, 이 함수들을 재사용해 호출 순서만 정리하면 추가 기능 없이 중복 제거가 가능합니다.
+
+## 8. 단계별 구현 계획과 검증 절차
+### 단계 1: QMK 큐 신뢰성 및 처리량 개선
+1. 기존 `eeprom_write_byte()`에 `qbufferWrite()` 반환값 점검·재시도 루프를 추가하고, `qbufferAvailable()`로 큐 여유 공간을 확인합니다.
+2. `eeprom_update()`는 한 번 호출 시 `min(qbufferAvailable(), 슬라이스 한도)` 만큼 반복 처리하도록 수정하되, 루프 내에서 `millis()` 기반 경과 시간을 체크해 8 kHz 루프 범위를 벗어나지 않도록 합니다.
+3. `eeprom_update_block()`의 VLA를 제거하고, 고정 크기(예: 64B) 버퍼로 `eeprom_read_block()`을 반복해 비교한 뒤 변경된 조각만 `eeprom_write_block()`으로 밀어 넣습니다.
+
+**테스트 절차**  
+- `cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/sirind/brick60' && cmake --build build -j10`으로 전체 빌드.  
+- VIA에서 전체 레이아웃 덮어쓰기(최소 4 KB) 요청을 3회 반복하면서 UART 로그에 “큐 드롭” 메시지가 없는지 확인하고, `qbufferAvailable()`를 CLI나 임시 로그로 출력해 포화가 해소되는지 확인합니다.  
+- 키 입력 지연이 없는지 확인하기 위해, 테스트 중에도 기본 키 입력/USB 응답을 체크합니다.
+
+### 단계 2: BootMode 및 VIA 클린 경로 정합성
+1. `usbBootModeWriteRaw()`를 `eeprom_update_dword()` 또는 `eeprom_write_block()`으로 전환하고, 저장 직후 `eeprom_buf`를 직접 갱신합니다.  
+2. `eeprom_task()`의 `is_req_clean` 처리와 `eeprom_auto_clear`의 초기화 루틴에서 공용 헬퍼(예: `eeprom_apply_factory_defaults()`)를 호출하도록 리팩토링하되, 기존 함수들과 동순서를 유지합니다.
+3. `eeprom_flush_pending()` 호출은 “최대 대기시간 + 재시도” 로직으로 바꾸어, 루프가 장기 점유되지 않도록 합니다.
+
+**테스트 절차**  
+- BootMode HS↔FS 전환 후 즉시 `usbBootModeLoad()`를 호출해 값이 유지되는지 UART 로그로 확인합니다.  
+- VIA EEPROM 초기화 명령을 수행하고, UART 로그에서 BootMode/USB 모니터 기본값이 직후에 기록되는지, 그리고 장시간 정지 없이 소프트 리셋이 트리거되는지 확인합니다.  
+- AUTO_EEPROM_CLEAR가 활성화된 빌드에서 플래그를 비정상 값으로 덮어쓴 뒤 전원을 재투입하여 초기화→리셋까지 걸린 시간을 측정합니다.
+
+### 단계 3: 플래시 에뮬 Clean-up 비동기화
+1. `eepromWriteByte()`에서 96비트 API 대신 8비트 API(주석 처리된 `EE_Read/WriteVariable8bits`)를 복구하거나, 최소한 `qbufferWrite()`로 받아온 바이트를 12바이트 캐시에 누적 후 한 번에 `EE_WriteVariable96bits`를 호출합니다.
+2. `EE_CleanUp_IT()` 호출 후 바쁜 대기 대신, `is_erasing`이 true일 때 `eeprom_update()`가 쓰기를 잠시 건너뛰도록 조정합니다. 기존 `EE_EndOfCleanup_UserCallback()`을 재사용합니다.
+
+**테스트 절차**  
+- `eepromWriteByte()` 경로를 강제 실행하기 위해 VIA에서 1 KB 이상 덮어쓰고, UART 타임스탬프와 `millis()`를 비교해 Clean-up 중에도 루프가 진행되는지 확인합니다.  
+- `cli eeprom write` 명령으로 연속 쓰기를 수행하며, 이전 대비 평균 처리 시간이 감소했는지 측정합니다.  
+- Clean-up 도중 USB Instability Monitor가 동작하는 시나리오를 재현하여 다운그레이드 큐가 정상 처리되는지 확인합니다.
+
+### 단계 4: 하드웨어 성능 및 관측치 강화
+1. ZD24C128 경로에 32바이트 페이지 버퍼를 추가하되, 기존 `i2cWriteA16Bytes()`/`i2cReadA16Bytes()` API만으로 구현합니다. 비정렬 쓰기는 페이지 정렬 루프에서 처리합니다.
+2. `eepromWrite()`에서 Unlock/Lock 호출을 블록 단위로 묶고, 진행 상태를 `logPrintf()`나 CLI에 노출합니다.
+3. `eeprom_task()`에 처리량/대기시간 통계를 추가하고, `cli eeprom info` 명령으로 큐 길이와 최근 Clean-up 상태를 출력할 수 있게 합니다.
+
+**테스트 절차**  
+- 외부 EEPROM 보드를 연결한 상태에서 페이지 정렬 쓰기 테스트 스크립트를 실행해, I2C 대기시간이 100 ms를 넘지 않는지 확인합니다.  
+- `cli eeprom info`를 여러 번 호출하여 통계가 증가하는지, Clean-up 진행 상황이 노출되는지 점검합니다.  
+- 전체 통합 테스트: `cmake` 빌드 후 VIA 레이아웃 덮어쓰기, BootMode 전환, AUTO_CLEAR 유도 시나리오를 연속 실행하면서 로그에 오류가 없는지 확인합니다.
