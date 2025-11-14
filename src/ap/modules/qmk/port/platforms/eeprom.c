@@ -1,5 +1,6 @@
 #include "quantum.h"
 #include "usb.h"                                   // V251112R5: VIA EEPROM 클리어 시 BootMode 기본값 적용
+#include "qmk/quantum/eeconfig.h"                  // V251112R3: AUTO_CLEAR/VIA 공용 초기화 루틴
 #include "qmk/port/usb_monitor.h"                  // V251112R5: USB 모니터 기본값 적용
 #include "qmk/port/port.h"
 
@@ -89,24 +90,45 @@ void eeprom_flush_pending(void)
   }
 }
 
+bool eeprom_apply_factory_defaults(bool restore_auto_clear_sentinel)
+{
+  eeprom_flush_pending();                                      // V251112R3: 초기화 전 대기열 제거
+
+  eeconfig_disable();
+  eeconfig_init();
+#if (EECONFIG_KB_DATA_SIZE) > 0
+  eeconfig_init_kb_datablock();
+#endif
+#if (EECONFIG_USER_DATA_SIZE) > 0
+  eeconfig_init_user_datablock();
+#endif
+  eeprom_flush_pending();
+
+#ifdef BOOTMODE_ENABLE
+  usbBootModeApplyDefaults();
+#endif
+#ifdef USB_MONITOR_ENABLE
+  usb_monitor_storage_apply_defaults();
+#endif
+  eeprom_flush_pending();
+
+  if (restore_auto_clear_sentinel)
+  {
+    eeprom_restore_auto_clear_sentinel();                      // V251112R3: 공용 초기화 루틴에서 센티넬 복구
+    eeprom_flush_pending();
+  }
+
+  return true;
+}
+
 void eeprom_task(void)
 {
   eeprom_update();
 
   if (is_req_clean)
   {
-    eeprom_flush_pending();                                     // V251112R5: 기본 초기화 전에 큐 비우기
-  #ifdef BOOTMODE_ENABLE
-    usbBootModeApplyDefaults();
-  #endif
-  #ifdef USB_MONITOR_ENABLE
-    usb_monitor_storage_apply_defaults();
-  #endif
-    eeprom_flush_pending();                                     // V251112R5: 기존 큐 비우기
-    eeconfig_disable();
-    eeprom_flush_pending();                                     // V251112R5: Magic OFF 기록 보장
-    eeprom_restore_auto_clear_sentinel();                        // V251113R1: VIA 클리어 후 자동 초기화 센티넬 복구
-    eeprom_flush_pending();                                     // V251113R1: 플래그/쿠키 기록 보장
+    (void)eeprom_apply_factory_defaults(true);                  // V251112R3: VIA/AUTO_CLEAR 공용 초기화 경로 사용
+    is_req_clean = false;
     soft_reset_keyboard();
   }
 }

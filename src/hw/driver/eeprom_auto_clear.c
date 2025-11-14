@@ -80,37 +80,12 @@ bool eepromAutoClearCheck(void)
 
   eeprom_init();  // V251112R2: 하드웨어/버퍼 재동기화
 
-  eeconfig_disable();
-  eeconfig_init();
-#if (EECONFIG_KB_DATA_SIZE) > 0
-  eeconfig_init_kb_datablock();
-#endif
-#if (EECONFIG_USER_DATA_SIZE) > 0
-  eeconfig_init_user_datablock();
-#endif
-  eeprom_flush_pending();                                      // V251112R5: 초기화 큐를 비워 커스텀 기본값이 덮어쓰이지 않도록 함
-#ifdef BOOTMODE_ENABLE
-  usbBootModeApplyDefaults();                        // V251112R5: BootMode 슬롯 기본값 기록
-#endif
-#ifdef USB_MONITOR_ENABLE
-  usb_monitor_storage_apply_defaults();              // V251112R5: USB 모니터 슬롯 기본값 기록
-#endif
-
-  eeprom_flush_pending();                                      // V251112R4: 기본값 쓰기를 확정 후 센티넬 기록
-
-  if (eepromWriteFlag(flag_addr, AUTO_EEPROM_CLEAR_FLAG_MAGIC) != true)
+  if (eeprom_apply_factory_defaults(true) != true)              // V251112R3: VIA와 동일한 공용 초기화 경로
   {
+    logPrintf("[!] EEPROM auto clear : factory defaults fail\n");
     return false;
   }
 
-  if (eepromWriteU32(cookie_addr, AUTO_EEPROM_CLEAR_COOKIE) != true)
-  {
-    (void)eepromWriteFlag(flag_addr, AUTO_EEPROM_CLEAR_FLAG_RESET);
-    logPrintf("[!] EEPROM auto clear : cookie write fail\n");
-    return false;
-  }
-
-  eeprom_flush_pending();                                      // V251112R4: 모든 비동기 쓰기 완료 후 리셋
   logPrintf("[  ] EEPROM auto clear : success (cookie=0x%08X)\n", AUTO_EEPROM_CLEAR_COOKIE);
   logPrintf("[  ] EEPROM auto clear : scheduling reset\n");
   delay(10);

@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251112R2"   // V251112R2: EEPROM 큐/CLI 계측 및 처리량 개선
+#define _DEF_FIRMWATRE_VERSION      "V251112R3"   // V251112R3: EEPROM 공용 초기화 경로 통합 및 계측 유지
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 #ifndef AUTO_EEPROM_CLEAR_ENABLE
