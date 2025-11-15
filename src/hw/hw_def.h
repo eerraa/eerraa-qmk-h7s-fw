@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251112R5"   // V251112R5: EEPROM 페이지 쓰기 및 1MHz FastMode Plus 처리량 향상
+#define _DEF_FIRMWATRE_VERSION      "V251112R6"   // V251112R6: I2C FastMode Plus 계측 로그 및 HAL 오류 모니터링
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 #ifndef AUTO_FACTORY_RESET_ENABLE

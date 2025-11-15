@@ -1,4 +1,5 @@
 #include "i2c.h"
+#include "log.h"
 
 
 
@@ -17,6 +18,8 @@
 
 static uint32_t i2cGetTimming(uint32_t freq_khz);
 static void delayUs(uint32_t us);
+static int8_t i2cGetChannelFromHandle(I2C_HandleTypeDef *hi2c);
+static void i2cLogTimingOnce(uint8_t ch, I2C_HandleTypeDef *hi2c);
 #if CLI_USE(HW_I2C)
 static void cliI2C(cli_args_t *args);
 #endif
@@ -26,6 +29,7 @@ static void cliI2C(cli_args_t *args);
 static uint32_t i2c_timeout[I2C_MAX_CH];
 static uint32_t i2c_errcount[I2C_MAX_CH];
 static uint32_t i2c_freq[I2C_MAX_CH];
+static bool     i2c_timing_logged[I2C_MAX_CH];
 
 static bool is_init = false;
 static bool is_begin[I2C_MAX_CH];
@@ -53,6 +57,36 @@ static i2c_tbl_t i2c_tbl[I2C_MAX_CH] =
         { I2C3, &hi2c3, GPIOA, GPIO_PIN_8,  GPIOA, GPIO_PIN_9},
     };
 
+static int8_t i2cGetChannelFromHandle(I2C_HandleTypeDef *hi2c)
+{
+  for (int ch = 0; ch < I2C_MAX_CH; ch++)
+  {
+    if (i2c_tbl[ch].p_hi2c == hi2c)
+    {
+      return ch;
+    }
+  }
+
+  return -1;
+}
+
+static void i2cLogTimingOnce(uint8_t ch, I2C_HandleTypeDef *hi2c)
+{
+  if (ch >= I2C_MAX_CH)
+  {
+    return;
+  }
+
+  if (i2c_timing_logged[ch] != true)
+  {
+    i2c_timing_logged[ch] = true;
+    logPrintf("[I2C] ch%d TIMING=0x%08lX freq=%lukHz\n",
+              ch + 1,
+              (unsigned long)hi2c->Init.Timing,
+              (unsigned long)i2c_freq[ch]);
+  }
+}
+
 
 
 
@@ -70,6 +104,7 @@ bool i2cInit(void)
     i2c_timeout[i] = 10;
     i2c_errcount[i] = 0;
     is_begin[i] = false;
+    i2c_timing_logged[i] = false;
   }
 
 #if CLI_USE(HW_I2C)
@@ -102,6 +137,7 @@ bool i2cBegin(uint8_t ch, uint32_t freq_khz)
     case _DEF_I2C1:
     case _DEF_I2C2:
       i2c_freq[ch] = freq_khz;
+      i2c_timing_logged[ch] = false;
 
       p_handle->Instance             = i2c_tbl[ch].p_i2c;
       p_handle->Init.Timing          = i2cGetTimming(freq_khz);
@@ -121,11 +157,16 @@ bool i2cBegin(uint8_t ch, uint32_t freq_khz)
       if (freq_khz >= 1000)
       {
         HAL_I2CEx_ConfigFastModePlus(p_handle, I2C_FASTMODEPLUS_ENABLE);   // V251112R5: 1 MHz FastMode Plus
+        logPrintf("[I2C] ch%d FastModePlus TIMING=0x%08lX freq=%lukHz\n",
+                  ch + 1,
+                  (unsigned long)p_handle->Init.Timing,
+                  (unsigned long)freq_khz);
       }
       else
       {
         HAL_I2CEx_ConfigFastModePlus(p_handle, I2C_FASTMODEPLUS_DISABLE);
       }
+      i2c_errcount[ch] = 0;
 
       /* Enable the Analog I2C Filter */
       HAL_I2CEx_ConfigAnalogFilter(p_handle,I2C_ANALOGFILTER_ENABLE);
@@ -370,6 +411,8 @@ bool i2cWriteA16Bytes(uint8_t ch, uint16_t dev_addr, uint16_t reg_addr, uint8_t 
     return false;
   }
 
+  i2cLogTimingOnce(ch, p_handle);
+
   lock();
   i2c_ret = HAL_I2C_Mem_Write(p_handle, (uint16_t)(dev_addr << 1), reg_addr, I2C_MEMADD_SIZE_16BIT, p_data, length, timeout);
   unLock();
@@ -396,6 +439,8 @@ bool i2cWriteData(uint8_t ch, uint16_t dev_addr, uint8_t *p_data, uint32_t lengt
   {
     return false;
   }
+
+  i2cLogTimingOnce(ch, p_handle);
 
   lock();
   i2c_ret = HAL_I2C_Master_Transmit(p_handle, (uint16_t)(dev_addr << 1), p_data, length, timeout);
@@ -449,8 +494,21 @@ void delayUs(uint32_t us)
 
 void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
 {
-  UNUSED(hi2c);
+  int8_t ch = i2cGetChannelFromHandle(hi2c);
+  uint32_t err = HAL_I2C_GetError(hi2c);
 
+  if (ch >= 0)
+  {
+    i2c_errcount[ch]++;
+  }
+
+  logPrintf("[!] I2C error ch=%d code=0x%08lX (BERR:%d ARLO:%d AF:%d OVR:%d)\n",
+            (int)(ch >= 0 ? ch + 1 : -1),
+            (unsigned long)err,
+            (err & HAL_I2C_ERROR_BERR) ? 1 : 0,
+            (err & HAL_I2C_ERROR_ARLO) ? 1 : 0,
+            (err & HAL_I2C_ERROR_AF)   ? 1 : 0,
+            (err & HAL_I2C_ERROR_OVR)  ? 1 : 0);
 }
 
 

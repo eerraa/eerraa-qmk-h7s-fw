@@ -124,13 +124,21 @@
 2. `EEPROM_WRITE_SLICE_MAX_COUNT`를 시간 기반 상한으로 전환하고(예: `EEPROM_WRITE_SLICE_MAX_US`), `eeprom_update()`가 `micros()`를 참고해 8 kHz 루프 한 주기(125 µs) 안에서 가능한 많은 페이지를 처리하도록 조정합니다. 기존 CLI 계측(`eeprom queue max/ofl`)을 유지해 슬라이스 확대가 실제 처리량 증가로 이어지는지 검증합니다. *(V251112R5 적용 — 100 µs 슬라이스 + 버스트 모드)* 
 3. 외부 EEPROM이 연결된 I2C 채널을 FastMode Plus(1 MHz)까지 끌어올리거나, 다른 센서와 버스를 분리해 충돌을 줄입니다. `hw/driver/i2c.c`의 클럭 설정을 수정한 뒤, 버스 주인이 바뀐다면 `i2cRead/WriteA16Bytes()` 호출부에 새로운 타임아웃을 도입해 오류 복구를 단순화합니다. *(V251112R5 적용 — 1 MHz Fm+ + ST 타이밍 재보정)* 
 4. 대량 쓰기 중에는 `eeprom_task()` 호출 빈도를 일시적으로 높여 큐를 빠르게 소모하도록 하고, 큐가 비워지면 원래 SOF당 1회 호출 패턴으로 되돌립니다. 이를 위해 `qmkUpdate()`에서 “burst 모드” 상태를 확인해 `eeprom_update()`를 추가 호출합니다. *(V251112R5 적용 — `eeprom_get_burst_extra_calls()` + `qmkUpdate()` 보조 호출)* 
-  - **V251112R5 확인 예정**: `docs/brick60.layout.json` 전체를 VIA로 덮어쓰며 큐 최대치·오버플로 카운터 변화를 재측정하고, 1 MHz FastMode Plus 타이밍(`0x00722425`)이 DS15138의 `tLOW/tHIGH/tSU;DAT` 범위를 만족하는지 로직 애널라이저로 검증할 계획입니다.
+  - **V251112R5 확인 예정**: `docs/brick60.layout.json` 전체를 VIA로 덮어쓰며 큐 최대치·오버플로 카운터 변화를 재측정하고, 1 MHz FastMode Plus 타이밍(`0x00722425`)이 DS15138의 `tLOW/tHIGH/tSU;DAT` 범위를 만족하는지 로직 애널라이저로 검증할 계획입니다.  
+  - **V251112R6 보조 계측**: 로직 애널라이저 없이도 검증할 수 있도록 `HAL_I2C_ErrorCallback()`이 오류 코드를 로그로 출력하며, `i2cBegin()`이 FastMode Plus 활성화 시 TIMING/Freq 값을 1회 로그합니다.
 
 **테스트 절차**  
 - `docs/brick60.layout.json`을 VIA로 업로드하면서 `cli eeprom info`를 반복 실행해 큐가 1500엔트리 이상으로 치솟지 않는지, 페이지 쓰기 도입 후 완료 시간이 줄었는지 측정합니다.  
 - 로직 애널라이저(또는 HAL 로그)의 I2C SCL 파형을 확인해 1 MHz 설정이 실제로 적용됐는지, NACK/버스 충돌이 없는지 검증합니다.  
 - I2C 버스에 다른 장치가 공유되는 빌드(예: RGB, 센서)가 있다면 동일 시점에 CLI 폴링을 돌려 장애가 없는지 확인합니다.  
 - 큐 슬라이스 확대가 USB Instability Monitor에 영향을 주지 않는지, 대량 쓰기 중에도 `usbHidMonitorBackgroundTick()` 로그가 정상 주기로 출력되는지 확인합니다.
+
+**로직 애널라이저 부재 시 대체 절차**  
+1. `hw/driver/i2c.c`의 `HAL_I2C_ErrorCallback()`을 확장해 `HAL_I2C_GetError()` 반환값과 타임스탬프를 `logPrintf()`로 남깁니다. NACK(`HAL_I2C_ERROR_AF`), 버스 충돌(`HAL_I2C_ERROR_BERR`), Arbitration Lost(`HAL_I2C_ERROR_ARLO`) 각각을 식별하도록 메시지를 구분합니다.  
+2. `i2cWriteA16Bytes()`/`i2cReadA16Bytes()` 진입 시점에 `logPrintf("I2C timing 0x%08lX, freq=%lukHz\n", hi2c->Init.Timing, i2c_freq[ch])`를 한 번 출력해 실제 TIMINGR 값을 확인합니다.  
+3. VIA 대량 쓰기와 동시에 CLI에서 `log list i2c`(또는 UART 로그)로 에러 콜백이 발생하는지 관찰합니다. 로그가 비어 있으면 NACK/충돌이 없는 것으로 간주합니다.  
+4. 필요하면 `i2cIsDeviceReady()` 루프에 진입/탈출 시점을 로그로 찍어 디바이스 응답 지연을 추적합니다.  
+위 절차로 파형 계측 장비 없이도 Fm+ 타이밍(0x00722425) 적용 여부와 오류 발생 여부를 추적할 수 있습니다.
 
 ### 단계 4: 플래시 에뮬/클린업 경로 최적화
 1. `eeprom/emul.c`에서 주석 처리된 `EE_Read/WriteVariable8bits()` API를 복구하거나, 12바이트 캐시를 두고 96비트 엔트리를 한 번에 쓰도록 변경해 Unlock/Lock 사이클을 최소화합니다.
