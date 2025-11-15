@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251112R7"   // V251112R7: I2C Ready 폴링/에러 타임스탬프 로그 보강
+#define _DEF_FIRMWATRE_VERSION      "V251112R8"   // V251112R8: EEPROM 클린업 비동기화/계측 반영
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 #ifndef AUTO_FACTORY_RESET_ENABLE

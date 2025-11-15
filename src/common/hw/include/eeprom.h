@@ -21,6 +21,7 @@ bool     eepromWritePage(uint32_t addr, uint8_t const *p_data, uint32_t length);
 bool     eepromRead(uint32_t addr, uint8_t *p_data, uint32_t length);
 bool     eepromWrite(uint32_t addr, uint8_t *p_data, uint32_t length);
 uint32_t eepromGetLength(void);
+bool     eepromIsErasing(void);                               // V251112R8: 플래시 에뮬 클린업 진행 여부
 bool     eepromFormat(void);
 
 

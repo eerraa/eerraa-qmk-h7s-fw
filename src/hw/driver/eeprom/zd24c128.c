@@ -185,6 +185,11 @@ uint32_t eepromGetLength(void)
   return EEPROM_MAX_SIZE;
 }
 
+bool eepromIsErasing(void)
+{
+  return false;                                                     // V251112R8: 외부 EEPROM은 클린업 개념 없음
+}
+
 bool eepromFormat(void)
 {
   return true;

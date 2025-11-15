@@ -29,6 +29,21 @@ static uint32_t       write_q_high_water = 0;
 static uint32_t       write_q_overflow   = 0;
 static uint8_t        page_batch_buf[EEPROM_WRITE_PAGE_SIZE];       // V251112R5: 페이지 단위 버퍼
 
+static bool eeprom_peek_queue_entry(uint32_t offset, eeprom_write_t *out_entry)
+{
+  uint32_t pending = qbufferAvailable(&write_q);
+
+  if (offset >= pending)
+  {
+    return false;
+  }
+
+  uint32_t slot = (write_q.out + offset) % write_q.len;
+
+  *out_entry = write_buf[slot];                                      // V251112R8: 큐 엔트리를 안전하게 참조
+  return true;
+}
+
 static void eeprom_update_queue_watermark(void)
 {
   uint32_t pending = qbufferAvailable(&write_q);
@@ -60,32 +75,36 @@ void eeprom_update(void)
 
   while (qbufferAvailable(&write_q) > 0)
   {
+    if (eepromIsErasing() == true)
+    {
+      break;                                                          // V251112R8: 클린업 중이면 큐 제거 보류
+    }
+
     if ((uint32_t)(micros() - slice_begin) >= EEPROM_WRITE_SLICE_MAX_US)
     {
       break;
     }
 
-    eeprom_write_t write_byte;
-    if (qbufferRead(&write_q, (uint8_t *)&write_byte, 1) != true)
+    eeprom_write_t first_entry;
+    if (eeprom_peek_queue_entry(0, &first_entry) != true)
     {
       break;
     }
 
-    uint32_t chunk_addr     = write_byte.addr;
-    uint32_t page_end_addr  = ((chunk_addr / EEPROM_WRITE_PAGE_SIZE) * EEPROM_WRITE_PAGE_SIZE) + EEPROM_WRITE_PAGE_SIZE;
-    uint8_t  chunk_len      = 0;
+    uint32_t chunk_addr    = first_entry.addr;
+    uint32_t page_end_addr = ((chunk_addr / EEPROM_WRITE_PAGE_SIZE) * EEPROM_WRITE_PAGE_SIZE) + EEPROM_WRITE_PAGE_SIZE;
+    uint32_t pending       = qbufferAvailable(&write_q);
+    uint8_t  chunk_len     = 0;
 
-    page_batch_buf[chunk_len++] = write_byte.data;
-
-    while (qbufferAvailable(&write_q) > 0)
+    while (chunk_len < pending && chunk_len < EEPROM_WRITE_PAGE_SIZE)
     {
-      eeprom_write_t *peek = (eeprom_write_t *)qbufferPeekRead(&write_q);
-      if (peek == NULL)
+      eeprom_write_t entry;
+      if (eeprom_peek_queue_entry(chunk_len, &entry) != true)
       {
         break;
       }
 
-      if (peek->addr != (chunk_addr + chunk_len))
+      if (entry.addr != (chunk_addr + chunk_len))
       {
         break;
       }
@@ -94,15 +113,24 @@ void eeprom_update(void)
         break;
       }
 
-      page_batch_buf[chunk_len++] = peek->data;
-      qbufferRead(&write_q, NULL, 1);
+      page_batch_buf[chunk_len++] = entry.data;
+    }
+
+    if (chunk_len == 0)
+    {
+      break;
     }
 
     if (eepromWritePage(chunk_addr, page_batch_buf, chunk_len) != true)
     {
-      logPrintf("[!] eepromWritePage() fail addr=%lu len=%u\n", (unsigned long)chunk_addr, chunk_len);   // V251112R5: 페이지 쓰기 오류 감시
+      if (eepromIsErasing() != true)
+      {
+        logPrintf("[!] eepromWritePage() fail addr=%lu len=%u\n", (unsigned long)chunk_addr, chunk_len);   // V251112R5: 페이지 쓰기 오류 감시
+      }
       break;
     }
+
+    qbufferRead(&write_q, NULL, chunk_len);
   }
 }
 
