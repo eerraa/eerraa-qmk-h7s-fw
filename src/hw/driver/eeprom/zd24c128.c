@@ -15,13 +15,18 @@ void cliEeprom(cli_args_t *args);
 #endif
 
 
-#define EEPROM_MAX_SIZE   (16*1024)
+#define EEPROM_MAX_SIZE                (16*1024)
+#define EEPROM_PAGE_SIZE               32                          // V251112R5: ZD24C128 페이지 크기
+#define EEPROM_WRITE_I2C_TIMEOUT_MS    10                          // V251112R5: 페이지 쓰기 I2C 타임아웃
+#define EEPROM_WRITE_READY_TIMEOUT_MS  100                         // V251112R5: 페이지 쓰기 완료 확인 제한 시간
 
 
 static bool is_init = false;
 static uint8_t i2c_ch = _DEF_I2C1;
 static uint8_t i2c_addr = 0x50;
+static uint8_t page_write_buf[EEPROM_PAGE_SIZE];                   // V251112R5: I2C 페이지 버퍼
 
+static bool eepromWaitReady(uint32_t timeout_ms);
 
 
 
@@ -30,7 +35,7 @@ bool eepromInit()
   bool ret;
 
 
-  ret = i2cBegin(i2c_ch, 400);
+  ret = i2cBegin(i2c_ch, 1000);                                    // V251112R5: FastMode Plus 1 MHz
 
 
   if (ret == true)
@@ -93,32 +98,44 @@ bool eepromReadByte(uint32_t addr, uint8_t *p_data)
   return ret;
 }
 
-bool eepromWriteByte(uint32_t addr, uint8_t data_in)
+bool eepromWritePage(uint32_t addr, uint8_t const *p_data, uint32_t length)
 {
-  uint32_t pre_time;
-  bool ret;
+  // V251112R5: 큐에서 전달된 연속 구간을 32바이트 페이지로 전송
+  bool ret = true;
+  uint32_t page_offset;
 
-  if (addr >= EEPROM_MAX_SIZE)
+  if (length == 0)
+  {
+    return true;
+  }
+  if (addr >= EEPROM_MAX_SIZE || (addr + length) > EEPROM_MAX_SIZE)
   {
     return false;
   }
 
-  ret = i2cWriteA16Bytes(i2c_ch, i2c_addr, addr, &data_in, 1, 10);
-
-
-  pre_time = millis();
-  while(millis()-pre_time < 100)
+  page_offset = addr % EEPROM_PAGE_SIZE;
+  if ((page_offset + length) > EEPROM_PAGE_SIZE)
   {
-
-    ret = i2cIsDeviceReady(i2c_ch, i2c_addr);
-    if (ret == true)
-    {
-      break;
-    }
-    delay(1);
+    return false;
   }
 
-  return ret;
+  for (uint32_t i = 0; i < length; i++)
+  {
+    page_write_buf[i] = p_data[i];
+  }
+
+  ret = i2cWriteA16Bytes(i2c_ch, i2c_addr, addr, page_write_buf, length, EEPROM_WRITE_I2C_TIMEOUT_MS);
+  if (ret != true)
+  {
+    return false;
+  }
+
+  return eepromWaitReady(EEPROM_WRITE_READY_TIMEOUT_MS);
+}
+
+bool eepromWriteByte(uint32_t addr, uint8_t data_in)
+{
+  return eepromWritePage(addr, &data_in, 1);
 }
 
 bool eepromRead(uint32_t addr, uint8_t *p_data, uint32_t length)
@@ -142,16 +159,22 @@ bool eepromRead(uint32_t addr, uint8_t *p_data, uint32_t length)
 bool eepromWrite(uint32_t addr, uint8_t *p_data, uint32_t length)
 {
   bool ret = false;
-  uint32_t i;
 
-
-  for (i=0; i<length; i++)
+  while (length > 0)
   {
-    ret = eepromWriteByte(addr + i, p_data[i]);
+    uint32_t page_space = EEPROM_PAGE_SIZE - (addr % EEPROM_PAGE_SIZE);
+    uint32_t chunk      = length < page_space ? length : page_space;
+
+    // V251112R5: 페이지 단위로 잘라내어 쓰기 지연 최소화
+    ret = eepromWritePage(addr, p_data, chunk);
     if (ret == false)
     {
       break;
     }
+
+    addr   += chunk;
+    p_data += chunk;
+    length -= chunk;
   }
 
   return ret;
@@ -165,6 +188,23 @@ uint32_t eepromGetLength(void)
 bool eepromFormat(void)
 {
   return true;
+}
+
+static bool eepromWaitReady(uint32_t timeout_ms)
+{
+  // V251112R5: FastMode Plus에서 완료 여부를 짧게 폴링
+  uint32_t pre_time = millis();
+
+  while (millis()-pre_time < timeout_ms)
+  {
+    if (i2cIsDeviceReady(i2c_ch, i2c_addr) == true)
+    {
+      return true;
+    }
+    delay(1);
+  }
+
+  return false;
 }
 
 

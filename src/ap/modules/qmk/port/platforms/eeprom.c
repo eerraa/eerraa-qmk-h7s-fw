@@ -8,9 +8,12 @@
 
 
 #define EEPROM_WRITE_Q_BUF_MAX         (TOTAL_EEPROM_BYTE_COUNT + 1)
-#define EEPROM_WRITE_SLICE_MAX_COUNT   8           // V251112R2: SOF 주기당 최대 8건만 실 플래시에 반영
+#define EEPROM_WRITE_PAGE_SIZE         32          // V251112R5: 외부 EEPROM 페이지 크기
+#define EEPROM_WRITE_SLICE_MAX_US      100         // V251112R5: 8 kHz 루프당 100us 안에서만 실 기록
 #define EEPROM_WRITE_QUEUE_WAIT_MS     2           // V251112R2: 큐 가득 참 재시도 대기 시간
 #define EEPROM_UPDATE_BLOCK_CHUNK      64          // V251112R2: 고정 버퍼로 블록 비교
+#define EEPROM_WRITE_BURST_THRESHOLD   512         // V251112R5: 버스트 모드 진입 임계값(엔트리)
+#define EEPROM_WRITE_BURST_EXTRA_CALLS 2           // V251112R5: 버스트 모드 시 추가 실행 횟수
 
 
 typedef struct
@@ -24,6 +27,7 @@ static qbuffer_t      write_q;
 static eeprom_write_t write_buf[EEPROM_WRITE_Q_BUF_MAX];
 static uint32_t       write_q_high_water = 0;
 static uint32_t       write_q_overflow   = 0;
+static uint8_t        page_batch_buf[EEPROM_WRITE_PAGE_SIZE];       // V251112R5: 페이지 단위 버퍼
 
 static void eeprom_update_queue_watermark(void)
 {
@@ -52,27 +56,51 @@ void eeprom_init(void)
 
 void eeprom_update(void)
 {
-  eeprom_write_t write_byte;
-  uint32_t       processed = 0;
+  uint32_t slice_begin = micros();
 
   while (qbufferAvailable(&write_q) > 0)
   {
-    qbufferRead(&write_q, (uint8_t *)&write_byte, 1);
-    if (eepromWriteByte(write_byte.addr, write_byte.data))
+    if ((uint32_t)(micros() - slice_begin) >= EEPROM_WRITE_SLICE_MAX_US)
     {
-      #if 0
-      logPrintf("eepromWriteByte() OK %d:0x%02X\n", write_byte.addr, write_byte.data);
-      #endif
-    }
-    else
-    {
-      logPrintf("eepromWriteByte() Fail\n");
       break;
     }
 
-    processed++;
-    if (processed >= EEPROM_WRITE_SLICE_MAX_COUNT)
+    eeprom_write_t write_byte;
+    if (qbufferRead(&write_q, (uint8_t *)&write_byte, 1) != true)
     {
+      break;
+    }
+
+    uint32_t chunk_addr     = write_byte.addr;
+    uint32_t page_end_addr  = ((chunk_addr / EEPROM_WRITE_PAGE_SIZE) * EEPROM_WRITE_PAGE_SIZE) + EEPROM_WRITE_PAGE_SIZE;
+    uint8_t  chunk_len      = 0;
+
+    page_batch_buf[chunk_len++] = write_byte.data;
+
+    while (qbufferAvailable(&write_q) > 0)
+    {
+      eeprom_write_t *peek = (eeprom_write_t *)qbufferPeekRead(&write_q);
+      if (peek == NULL)
+      {
+        break;
+      }
+
+      if (peek->addr != (chunk_addr + chunk_len))
+      {
+        break;
+      }
+      if ((chunk_addr + chunk_len) >= page_end_addr)
+      {
+        break;
+      }
+
+      page_batch_buf[chunk_len++] = peek->data;
+      qbufferRead(&write_q, NULL, 1);
+    }
+
+    if (eepromWritePage(chunk_addr, page_batch_buf, chunk_len) != true)
+    {
+      logPrintf("[!] eepromWritePage() fail addr=%lu len=%u\n", (unsigned long)chunk_addr, chunk_len);   // V251112R5: 페이지 쓰기 오류 감시
       break;
     }
   }
@@ -315,4 +343,14 @@ uint32_t eeprom_get_write_pending_max(void)
 uint32_t eeprom_get_write_overflow_count(void)
 {
   return write_q_overflow;
+}
+
+bool eeprom_is_burst_mode_active(void)
+{
+  return qbufferAvailable(&write_q) >= EEPROM_WRITE_BURST_THRESHOLD;     // V251112R5: 버스트 모드 임계값 비교
+}
+
+uint8_t eeprom_get_burst_extra_calls(void)
+{
+  return eeprom_is_burst_mode_active() ? EEPROM_WRITE_BURST_EXTRA_CALLS : 0;  // V251112R5: 추가 실행 횟수 산출
 }

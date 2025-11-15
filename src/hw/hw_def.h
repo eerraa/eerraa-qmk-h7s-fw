@@ -6,7 +6,7 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251112R4"   // V251112R4: VIA/AUTO EEPROM 초기화 경로 통합 및 즉시 리셋 UX 반영
+#define _DEF_FIRMWATRE_VERSION      "V251112R5"   // V251112R5: EEPROM 페이지 쓰기 및 1MHz FastMode Plus 처리량 향상
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 #ifndef AUTO_FACTORY_RESET_ENABLE

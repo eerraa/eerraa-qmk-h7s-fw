@@ -17,6 +17,7 @@ bool     eepromIsInit(void);
 bool     eepromValid(uint32_t addr);
 bool     eepromReadByte(uint32_t addr, uint8_t *p_data);
 bool     eepromWriteByte(uint32_t addr, uint8_t data_in);
+bool     eepromWritePage(uint32_t addr, uint8_t const *p_data, uint32_t length);  // V251112R5: 32바이트 페이지 쓰기 API
 bool     eepromRead(uint32_t addr, uint8_t *p_data, uint32_t length);
 bool     eepromWrite(uint32_t addr, uint8_t *p_data, uint32_t length);
 uint32_t eepromGetLength(void);

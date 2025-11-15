@@ -118,6 +118,14 @@ bool i2cBegin(uint8_t ch, uint32_t freq_khz)
       if(HAL_I2C_Init(p_handle) != HAL_OK)
       {
       }
+      if (freq_khz >= 1000)
+      {
+        HAL_I2CEx_ConfigFastModePlus(p_handle, I2C_FASTMODEPLUS_ENABLE);   // V251112R5: 1 MHz FastMode Plus
+      }
+      else
+      {
+        HAL_I2CEx_ConfigFastModePlus(p_handle, I2C_FASTMODEPLUS_DISABLE);
+      }
 
       /* Enable the Analog I2C Filter */
       HAL_I2CEx_ConfigAnalogFilter(p_handle,I2C_ANALOGFILTER_ENABLE);
@@ -145,6 +153,10 @@ uint32_t i2cGetTimming(uint32_t freq_khz)
 
     case 400:
       ret = 0x00E063FF;
+      break;
+
+    case 1000:
+      ret = 0x00722425;      // V251112R5: PCLK1=75MHz 기준 tLOW=0.506us/tHIGH=0.493us로 Fm+ 최소 규격 충족
       break;
 
     default:
@@ -467,7 +479,7 @@ void HAL_I2C_MspInit(I2C_HandleTypeDef* i2cHandle)
     GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;  // V251112R5: FastMode Plus에서 스위칭 에지 확보
     GPIO_InitStruct.Alternate = GPIO_AF4_I2C3;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 

@@ -149,6 +149,23 @@ bool eepromWriteByte(uint32_t addr, uint8_t data_in)
   return ret;
 }
 
+bool eepromWritePage(uint32_t addr, uint8_t const *p_data, uint32_t length)
+{
+  // V251112R5: 실 칩 드라이버와 동일한 API 형식을 유지하기 위한 래퍼
+  bool ret = true;
+
+  while (length-- > 0)
+  {
+    if (eepromWriteByte(addr++, *p_data++) != true)
+    {
+      ret = false;
+      break;
+    }
+  }
+
+  return ret;
+}
+
 bool eepromRead(uint32_t addr, uint8_t *p_data, uint32_t length)
 {
   bool ret = true;
@@ -169,20 +186,7 @@ bool eepromRead(uint32_t addr, uint8_t *p_data, uint32_t length)
 
 bool eepromWrite(uint32_t addr, uint8_t *p_data, uint32_t length)
 {
-  bool ret = false;
-  uint32_t i;
-
-
-  for (i=0; i<length; i++)
-  {
-    ret = eepromWriteByte(addr + i, p_data[i]);
-    if (ret == false)
-    {
-      break;
-    }
-  }
-
-  return ret;
+  return eepromWritePage(addr, p_data, length);  // V251112R5: 페이지 API를 그대로 사용
 }
 
 uint32_t eepromGetLength(void)

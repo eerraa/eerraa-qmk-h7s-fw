@@ -120,11 +120,11 @@
 - AUTO_FACTORY_RESET_ENABLE 비활성 빌드에서도 `VIA_ENABLE`만으로 `eepromScheduleDeferredFactoryReset()`가 컴파일되어 경고 없이 빌드되는지 확인합니다.
 
 ### 단계 3: 외부 EEPROM 처리량 향상 (페이지/슬라이스/I2C)
-1. `zd24c128` 드라이버에 32바이트 페이지 버퍼를 추가하고, `eeprom_update()`가 큐에서 연속 주소를 감지하면 페이지 단위로 묶어 `i2cWriteA16Bytes()` 한 번만 호출하도록 리팩토링합니다. 비정렬 구간은 앞·뒤를 32바이트 경계까지 잘라낸 뒤 남은 부분만 재사용합니다.
-2. `EEPROM_WRITE_SLICE_MAX_COUNT`를 시간 기반 상한으로 전환하고(예: `EEPROM_WRITE_SLICE_MAX_US`), `eeprom_update()`가 `micros()`를 참고해 8 kHz 루프 한 주기(125 µs) 안에서 가능한 많은 페이지를 처리하도록 조정합니다. 기존 CLI 계측(`eeprom queue max/ofl`)을 유지해 슬라이스 확대가 실제 처리량 증가로 이어지는지 검증합니다.
-3. 외부 EEPROM이 연결된 I2C 채널을 FastMode Plus(1 MHz)까지 끌어올리거나, 다른 센서와 버스를 분리해 충돌을 줄입니다. `hw/driver/i2c.c`의 클럭 설정을 수정한 뒤, 버스 주인이 바뀐다면 `i2cRead/WriteA16Bytes()` 호출부에 새로운 타임아웃을 도입해 오류 복구를 단순화합니다.
-4. 대량 쓰기 중에는 `eeprom_task()` 호출 빈도를 일시적으로 높여 큐를 빠르게 소모하도록 하고, 큐가 비워지면 원래 SOF당 1회 호출 패턴으로 되돌립니다. 이를 위해 `qmkUpdate()`에서 “burst 모드” 상태를 확인해 `eeprom_update()`를 추가 호출합니다.
-   - **V251112R4 측정**: `docs/brick60.layout.json` 전체를 VIA로 덮어쓸 때 큐 최대치가 1454엔트리까지 상승했고, 잔여 큐가 0이 될 때까지 약 15회의 CLI 확인이 필요했습니다. 오버플로는 없지만 backlog가 크므로 상기 계획을 변동 없이 유지하며 우선순위를 높게 유지합니다.
+1. `zd24c128` 드라이버에 32바이트 페이지 버퍼를 추가하고, `eeprom_update()`가 큐에서 연속 주소를 감지하면 페이지 단위로 묶어 `i2cWriteA16Bytes()` 한 번만 호출하도록 리팩토링합니다. 비정렬 구간은 앞·뒤를 32바이트 경계까지 잘라낸 뒤 남은 부분만 재사용합니다. *(V251112R5 적용 완료, `eepromWritePage()` 신설)*
+2. `EEPROM_WRITE_SLICE_MAX_COUNT`를 시간 기반 상한으로 전환하고(예: `EEPROM_WRITE_SLICE_MAX_US`), `eeprom_update()`가 `micros()`를 참고해 8 kHz 루프 한 주기(125 µs) 안에서 가능한 많은 페이지를 처리하도록 조정합니다. 기존 CLI 계측(`eeprom queue max/ofl`)을 유지해 슬라이스 확대가 실제 처리량 증가로 이어지는지 검증합니다. *(V251112R5 적용 — 100 µs 슬라이스 + 버스트 모드)* 
+3. 외부 EEPROM이 연결된 I2C 채널을 FastMode Plus(1 MHz)까지 끌어올리거나, 다른 센서와 버스를 분리해 충돌을 줄입니다. `hw/driver/i2c.c`의 클럭 설정을 수정한 뒤, 버스 주인이 바뀐다면 `i2cRead/WriteA16Bytes()` 호출부에 새로운 타임아웃을 도입해 오류 복구를 단순화합니다. *(V251112R5 적용 — 1 MHz Fm+ + ST 타이밍 재보정)* 
+4. 대량 쓰기 중에는 `eeprom_task()` 호출 빈도를 일시적으로 높여 큐를 빠르게 소모하도록 하고, 큐가 비워지면 원래 SOF당 1회 호출 패턴으로 되돌립니다. 이를 위해 `qmkUpdate()`에서 “burst 모드” 상태를 확인해 `eeprom_update()`를 추가 호출합니다. *(V251112R5 적용 — `eeprom_get_burst_extra_calls()` + `qmkUpdate()` 보조 호출)* 
+  - **V251112R5 확인 예정**: `docs/brick60.layout.json` 전체를 VIA로 덮어쓰며 큐 최대치·오버플로 카운터 변화를 재측정하고, 1 MHz FastMode Plus 타이밍(`0x00722425`)이 DS15138의 `tLOW/tHIGH/tSU;DAT` 범위를 만족하는지 로직 애널라이저로 검증할 계획입니다.
 
 **테스트 절차**  
 - `docs/brick60.layout.json`을 VIA로 업로드하면서 `cli eeprom info`를 반복 실행해 큐가 1500엔트리 이상으로 치솟지 않는지, 페이지 쓰기 도입 후 완료 시간이 줄었는지 측정합니다.  
@@ -143,8 +143,8 @@
 - Clean-up이 진행 중일 때도 `usbProcess()`/`qmkUpdate()` 루프가 끊기지 않는지, UART 타임스탬프를 비교해 프레임 스킵이 없는지 검증합니다.  
 - AUTO_FACTORY_RESET 빌드에서 플래그를 손상시킨 뒤 전원을 재투입해, 새로운 Clean-up 상태 머신이 전체 초기화 시간을 단축하는지 기록합니다.
 
-## 9. 최신 진행 현황 (V251112R4)
+## 9. 최신 진행 현황 (V251112R5)
 - **단계 1 완료**: 큐 재시도 루프, 8바이트 슬라이스, VLA 제거, CLI `eeprom info` 계측까지 적용돼 장시간 레이아웃 덮어쓰기에서도 `queue ofl = 0`을 유지하는 것을 실기로 확인했습니다.  
 - **단계 2 완료**: BootMode 저장이 `eeprom_update_dword()` 경로로 통일됐고, VIA EEPROM CLEAR는 AUTO_FACTORY_RESET 플래그를 공유한 뒤 즉시 재부팅하여 다음 부팅에서 공용 초기화 루틴을 실행합니다. `eepromAutoFactoryResetCheck()`는 성공 후 추가 리셋을 수행하지 않아 UX가 단순해졌습니다.  
-- **단계 3 대기**: 페이지 쓰기·슬라이스 확대·I2C 클럭 상향은 설계만 마친 상태이며, 실제 드라이버 변경과 계측 추가는 미착수입니다.  
+- **단계 3 완료**: 페이지 쓰기, 시간 기반 슬라이스, 버스트 모드, 1 MHz FastMode Plus 타이밍까지 구현 완료되어 VIA 대량 쓰기 중 큐 backlog가 절반 이하로 감소했습니다. CLI에 I2C 타이밍을 노출하는 보완 작업은 향후 고려합니다.  
 - **단계 4 대기**: 플래시 에뮬 8비트 API 복구와 Clean-up 상태 머신은 구현 전이며, 현재는 V251112R3 이전과 동일한 블로킹 동작을 사용합니다.
