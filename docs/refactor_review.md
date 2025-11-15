@@ -125,7 +125,8 @@
 3. 외부 EEPROM이 연결된 I2C 채널을 FastMode Plus(1 MHz)까지 끌어올리거나, 다른 센서와 버스를 분리해 충돌을 줄입니다. `hw/driver/i2c.c`의 클럭 설정을 수정한 뒤, 버스 주인이 바뀐다면 `i2cRead/WriteA16Bytes()` 호출부에 새로운 타임아웃을 도입해 오류 복구를 단순화합니다. *(V251112R5 적용 — 1 MHz Fm+ + ST 타이밍 재보정)* 
 4. 대량 쓰기 중에는 `eeprom_task()` 호출 빈도를 일시적으로 높여 큐를 빠르게 소모하도록 하고, 큐가 비워지면 원래 SOF당 1회 호출 패턴으로 되돌립니다. 이를 위해 `qmkUpdate()`에서 “burst 모드” 상태를 확인해 `eeprom_update()`를 추가 호출합니다. *(V251112R5 적용 — `eeprom_get_burst_extra_calls()` + `qmkUpdate()` 보조 호출)* 
   - **V251112R5 확인 예정**: `docs/brick60.layout.json` 전체를 VIA로 덮어쓰며 큐 최대치·오버플로 카운터 변화를 재측정하고, 1 MHz FastMode Plus 타이밍(`0x00722425`)이 DS15138의 `tLOW/tHIGH/tSU;DAT` 범위를 만족하는지 로직 애널라이저로 검증할 계획입니다.  
-  - **V251112R6 보조 계측**: 로직 애널라이저 없이도 검증할 수 있도록 `HAL_I2C_ErrorCallback()`이 오류 코드를 로그로 출력하며, `i2cBegin()`이 FastMode Plus 활성화 시 TIMING/Freq 값을 1회 로그합니다.
+  - **V251112R6 보조 계측**: 로직 애널라이저 없이도 검증할 수 있도록 `HAL_I2C_ErrorCallback()`이 오류 코드를 로그로 출력하며, `i2cBegin()`이 FastMode Plus 활성화 시 TIMING/Freq 값을 1회 로그합니다.  
+  - **V251112R7 실측 결과**: USB Monitor를 `ON`한 HS 8K 환경에서 `docs/brick60.layout.json` 대량 쓰기 테스트를 반복 실행했습니다. `cli eeprom info` 기준 `queue ofl = 0`, `[I2C] ch1 TIMING=0x00722425 freq=1000kHz`가 부팅마다 출력되며, Ready wait begin/done 로그가 페이지당 5~6 ms로 측정되었습니다. 테스트 중 `[!] USB Monitor downgrade (...)` 로그가 발생하지 않아 `usbHidMonitorBackgroundTick()`이 정상 주기로 실행됨을 확인했습니다.
 
 **테스트 절차**  
 - `docs/brick60.layout.json`을 VIA로 업로드하면서 `cli eeprom info`를 반복 실행해 큐가 1500엔트리 이상으로 치솟지 않는지, 페이지 쓰기 도입 후 완료 시간이 줄었는지 측정합니다.  
@@ -134,10 +135,10 @@
 - 큐 슬라이스 확대가 USB Instability Monitor에 영향을 주지 않는지, 대량 쓰기 중에도 `usbHidMonitorBackgroundTick()` 로그가 정상 주기로 출력되는지 확인합니다.
 
 **로직 애널라이저 부재 시 대체 절차**  
-1. `hw/driver/i2c.c`의 `HAL_I2C_ErrorCallback()`을 확장해 `HAL_I2C_GetError()` 반환값과 타임스탬프를 `logPrintf()`로 남깁니다. NACK(`HAL_I2C_ERROR_AF`), 버스 충돌(`HAL_I2C_ERROR_BERR`), Arbitration Lost(`HAL_I2C_ERROR_ARLO`) 각각을 식별하도록 메시지를 구분합니다.  
-2. `i2cWriteA16Bytes()`/`i2cReadA16Bytes()` 진입 시점에 `logPrintf("I2C timing 0x%08lX, freq=%lukHz\n", hi2c->Init.Timing, i2c_freq[ch])`를 한 번 출력해 실제 TIMINGR 값을 확인합니다.  
-3. VIA 대량 쓰기와 동시에 CLI에서 `log list i2c`(또는 UART 로그)로 에러 콜백이 발생하는지 관찰합니다. 로그가 비어 있으면 NACK/충돌이 없는 것으로 간주합니다.  
-4. 필요하면 `i2cIsDeviceReady()` 루프에 진입/탈출 시점을 로그로 찍어 디바이스 응답 지연을 추적합니다.  
+1. `hw/driver/i2c.c`의 `HAL_I2C_ErrorCallback()`을 확장해 `HAL_I2C_GetError()` 반환값과 타임스탬프를 `logPrintf()`로 남깁니다. NACK(`HAL_I2C_ERROR_AF`), 버스 충돌(`HAL_I2C_ERROR_BERR`), Arbitration Lost(`HAL_I2C_ERROR_ARLO`) 각각을 식별하도록 메시지를 구분합니다. *(V251112R7에서 타임스탬프 로그 포함 완료)*  
+2. `i2cWriteA16Bytes()`/`i2cReadA16Bytes()` 진입 시점에 `logPrintf("I2C timing 0x%08lX, freq=%lukHz\n", hi2c->Init.Timing, i2c_freq[ch])`를 한 번 출력해 실제 TIMINGR 값을 확인합니다. *(V251112R7에서 Read 경로까지 계측 확장 완료)*  
+3. VIA 대량 쓰기와 동시에 CLI에서 `log list i2c`(또는 UART 로그)로 에러 콜백이 발생하는지 관찰합니다. 로그가 비어 있으면 NACK/충돌이 없는 것으로 간주합니다. *(V251112R7 테스트에서 오류 로그 미발생 확인)*  
+4. 필요하면 `i2cIsDeviceReady()` 루프에 진입/탈출 시점을 로그로 찍어 디바이스 응답 지연을 추적합니다. *(V251112R7: Ready wait begin/done 로그가 5~6 ms를 보고하도록 구현 및 검증)*
 위 절차로 파형 계측 장비 없이도 Fm+ 타이밍(0x00722425) 적용 여부와 오류 발생 여부를 추적할 수 있습니다.
 
 ### 단계 4: 플래시 에뮬/클린업 경로 최적화
@@ -151,8 +152,8 @@
 - Clean-up이 진행 중일 때도 `usbProcess()`/`qmkUpdate()` 루프가 끊기지 않는지, UART 타임스탬프를 비교해 프레임 스킵이 없는지 검증합니다.  
 - AUTO_FACTORY_RESET 빌드에서 플래그를 손상시킨 뒤 전원을 재투입해, 새로운 Clean-up 상태 머신이 전체 초기화 시간을 단축하는지 기록합니다.
 
-## 9. 최신 진행 현황 (V251112R5)
-- **단계 1 완료**: 큐 재시도 루프, 8바이트 슬라이스, VLA 제거, CLI `eeprom info` 계측까지 적용돼 장시간 레이아웃 덮어쓰기에서도 `queue ofl = 0`을 유지하는 것을 실기로 확인했습니다.  
-- **단계 2 완료**: BootMode 저장이 `eeprom_update_dword()` 경로로 통일됐고, VIA EEPROM CLEAR는 AUTO_FACTORY_RESET 플래그를 공유한 뒤 즉시 재부팅하여 다음 부팅에서 공용 초기화 루틴을 실행합니다. `eepromAutoFactoryResetCheck()`는 성공 후 추가 리셋을 수행하지 않아 UX가 단순해졌습니다.  
-- **단계 3 완료**: 페이지 쓰기, 시간 기반 슬라이스, 버스트 모드, 1 MHz FastMode Plus 타이밍까지 구현 완료되어 VIA 대량 쓰기 중 큐 backlog가 절반 이하로 감소했습니다. CLI에 I2C 타이밍을 노출하는 보완 작업은 향후 고려합니다.  
-- **단계 4 대기**: 플래시 에뮬 8비트 API 복구와 Clean-up 상태 머신은 구현 전이며, 현재는 V251112R3 이전과 동일한 블로킹 동작을 사용합니다.
+## 9. 최신 진행 현황 (V251112R7)
+- **단계 1 완료**: 큐 재시도 루프, 8바이트 슬라이스, VLA 제거, CLI `eeprom info` 계측까지 적용돼 장시간 레이아웃 덮어쓰기에서도 `queue ofl = 0`을 유지함을 실기로 재확인했습니다.  
+- **단계 2 완료**: BootMode 저장 경로 통합과 AUTO_FACTORY_RESET 공용 루틴 재사용이 유지되고 있으며, 쿠키 비교/재부팅 흐름에 회귀가 없는지 V251112R7 부팅 로그로 검증했습니다.  
+- **단계 3 완료**: 페이지 쓰기·100 µs 버스트·1 MHz FastMode Plus 설정이 실기에서 정상 동작함을 확인했고, Ready wait/타이밍/HAL 오류 로그를 통해 로직 애널라이저 없이도 검증 절차를 반복할 수 있게 됐습니다. USB Monitor `ON` 상태에서도 다운그레이드 없이 HS 8K를 지속해 테스트 절차 전체를 충족했습니다.  
+- **단계 4 대기**: 플래시 에뮬 8비트 API 복구와 Clean-up 상태 머신은 구현 전으로, 차기 릴리스를 위해 별도 브랜치에서 설계 검토를 이어갑니다.
