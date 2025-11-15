@@ -38,12 +38,12 @@ hwInit()
           ↳ usbBootModeApplyDefaults() / usb_monitor_storage_apply_defaults()
           ↳ AUTO_FACTORY_RESET 센티넬(플래그/쿠키) 재기록
           ↳ eeprom_flush_pending()
-      ↳ resetToReset() (성공 시 자동 리셋)
+      ↳ 성공 시 곧바로 부팅 지속
   ↳ usbBootModeLoad()
   ↳ usbInstabilityLoad()
 ```
 - 자동 초기화는 BootMode/USB monitor 로드 전에 완료되며, 실패하더라도 `false`를 반환하지 않고 단순히 경고 로그만 남깁니다.
-- 성공 시 `[  ] EEPROM auto factory reset : success ...` 로그 뒤 10 ms 지연 후 소프트 리셋을 실행합니다.
+- 성공 시 `[  ] EEPROM auto factory reset : success ...` 로그만 출력하고 추가 지연/재부팅 없이 다음 초기화 단계로 넘어갑니다.
 
 ## 5. 알고리즘 세부 절차 (`eepromAutoFactoryResetCheck`)
 1. **센티넬 판독** : `flag_addr`와 `cookie_addr`에서 32비트 값을 읽습니다. 플래그가 매직 값이고 쿠키가 현재 빌드 쿠키와 같으면 아무 작업도 하지 않습니다.
@@ -51,11 +51,11 @@ hwInit()
 3. **EEPROM 포맷** : `eepromFormat()` 실패 시 경고 로그 후 false를 반환합니다.
 4. **버퍼 재동기화 및 공용 초기화** : `eeprom_init()`를 호출해 QMK EEPROM 미러를 재설정한 뒤, `eeprom_apply_factory_defaults(true)`를 통해 아래 세 단계를 한 번에 수행합니다. (a) `eeconfig_disable()`/`eeconfig_init()`/`eeconfig_init_*()` (b) `usbBootModeApplyDefaults()`/`usb_monitor_storage_apply_defaults()` (c) `eeprom_restore_auto_factory_reset_sentinel()`로 플래그/쿠키 재기록.
 5. **센티넬 갱신** : 공용 초기화 루틴이 플래그와 쿠키를 모두 최신 빌드 쿠키로 덮어쓰고, 내부에서 `eeprom_flush_pending()`을 반복 호출해 비동기 큐를 소진합니다.
-6. **리셋 예약** : 모든 쓰기가 끝나면 `[  ] EEPROM auto factory reset : scheduling reset` 로그 후 `resetToReset()`을 호출합니다.
+6. **부팅 지속** : 모든 쓰기가 끝나면 `[  ] EEPROM auto factory reset : success ...` 로그만 남기고 곧바로 다음 초기화 단계로 넘어갑니다. VIA 경로가 예약한 경우에도 동일한 흐름을 사용합니다.
 
 ## 6. BootMode & USB Monitor 연동
 - USER 데이터가 플래시에서 지워지면 `eeconfig_init_user_datablock()`이 호출되어 BootMode/USB monitor 기본값을 즉시 기록합니다. 자동 초기화 루틴도 동일한 함수를 이용하므로, 별도의 버전 마이그레이션 코드를 중복 작성할 필요가 없습니다.
-- VIA에서 제공하는 EEPROM 초기화 명령(`eeprom_req_clean()`) 또한 `eeprom_apply_factory_defaults(true)`를 호출하므로, AUTO_FACTORY_RESET과 완전히 동일한 쓰기 순서와 큐 사용량을 갖습니다.
+- VIA에서 제공하는 EEPROM 초기화 명령(`eeprom_req_clean()`)은 `eepromScheduleDeferredFactoryReset()`을 호출해 AUTO_FACTORY_RESET 플래그/쿠키를 지우고 즉시 `resetToReset()`으로 재부팅합니다. 다음 부팅 시 `eepromAutoFactoryResetCheck()`가 동일 공용 루틴(`eeprom_apply_factory_defaults`)을 수행하므로, VIA/AUTO 경로가 완전히 일치합니다.
 - BootMode 동작 전체는 `docs/features_bootmode.md`, USB monitor 동작은 `docs/features_instability_monitor.md`를 참고하십시오.
 
 ## 7. 사용 방법
@@ -70,7 +70,7 @@ hwInit()
 | `[!] EEPROM auto factory reset : sentinel read fail` | EEPROM 드라이버에서 값을 읽지 못했습니다. I2C/Flash 구성을 확인하십시오. |
 | `[!] EEPROM auto factory reset : format fail` | `eepromFormat()` 실패. 재시도 시에도 실패하면 AUTO_FACTORY_RESET 옵션을 비활성화하고 원인을 조사합니다. |
 | `[!] EEPROM auto factory reset : cookie write fail` | 쿠키 저장 실패. 플래그를 0으로 되돌린 뒤 경고를 출력하므로 다음 부팅에서 다시 시도됩니다. |
-| `[  ] EEPROM auto factory reset : scheduling reset` | 초기화가 성공적으로 끝났으며 곧 소프트 리셋이 실행됩니다. |
+| `[  ] EEPROM auto factory reset : deferred clear scheduled` | VIA 또는 다른 경로에서 센티넬을 리셋했고, 다음 부팅에서 자동 초기화가 실행될 예정입니다. |
 
 > 자동 초기화 빌드를 테스트할 때는, 한 번 부팅해 로그를 확인한 뒤 다시 부팅해 플래그/쿠키가 유지되어 재초기화가 발생하지 않는지 검증해야 합니다.
 > VIA CLI에서도 `eeprom info`를 호출하면 AUTO_FACTORY_RESET 및 VIA 초기화 공용 루틴의 큐 최댓값/오버플로 카운터를 확인할 수 있습니다.

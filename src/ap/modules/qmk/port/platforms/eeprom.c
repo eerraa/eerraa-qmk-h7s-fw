@@ -1,5 +1,7 @@
 #include "quantum.h"
 #include "usb.h"                                   // V251112R5: VIA EEPROM 클리어 시 BootMode 기본값 적용
+#include "reset.h"                                 // V251112R4: VIA EEPROM CLEAR 즉시 리셋 UX
+#include "eeprom_auto_factory_reset.h"             // V251112R4: AUTO_FACTORY_RESET/VIA 센티넬 공용화
 #include "qmk/quantum/eeconfig.h"                  // V251112R3: AUTO_FACTORY_RESET/VIA 공용 초기화 루틴
 #include "qmk/port/usb_monitor.h"                  // V251112R5: USB 모니터 기본값 적용
 #include "qmk/port/port.h"
@@ -20,7 +22,6 @@ typedef struct
 static uint8_t        eeprom_buf[TOTAL_EEPROM_BYTE_COUNT];
 static qbuffer_t      write_q;
 static eeprom_write_t write_buf[EEPROM_WRITE_Q_BUF_MAX];
-static bool           is_req_clean      = false;
 static uint32_t       write_q_high_water = 0;
 static uint32_t       write_q_overflow   = 0;
 
@@ -123,19 +124,24 @@ bool eeprom_apply_factory_defaults(bool restore_factory_reset_sentinel)
 
 void eeprom_task(void)
 {
-  eeprom_update();
-
-  if (is_req_clean)
-  {
-    (void)eeprom_apply_factory_defaults(true);                  // V251112R3: VIA/AUTO_FACTORY_RESET 공용 초기화 경로 사용
-    is_req_clean = false;
-    soft_reset_keyboard();
-  }
+  eeprom_update();                                              // V251112R4: VIA 초기화는 부팅 시 AUTO_FACTORY_RESET 경로로 처리
 }
 
 void eeprom_req_clean(void)
 {
-  is_req_clean = true;
+#if AUTO_FACTORY_RESET_ENABLE || defined(VIA_ENABLE)
+  logPrintf("[  ] VIA EEPROM clear : scheduling deferred factory reset\n");    // V251112R4: VIA와 AUTO_FACTORY_RESET 경로 통일
+  if (eepromScheduleDeferredFactoryReset() != true)
+  {
+    logPrintf("[!] VIA EEPROM clear : sentinel write fail\n");
+    return;
+  }
+
+  logPrintf("[  ] VIA EEPROM clear : rebooting to apply defaults\n");
+  resetToReset();
+#else
+  logPrintf("[!] VIA EEPROM clear : AUTO_FACTORY_RESET support disabled\n");
+#endif
 }
 
 uint8_t  eeprom_read_byte(const uint8_t *addr)

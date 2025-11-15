@@ -4,15 +4,15 @@
 
 #include "hw_def.h"
 
-#if AUTO_FACTORY_RESET_ENABLE
+#if AUTO_FACTORY_RESET_ENABLE || defined(VIA_ENABLE)
 #include "log.h"
 #include "eeprom.h"
-#include "reset.h"
 #include "qmk/quantum/eeconfig.h"
 #include "qmk/port/port.h"
 #include "qmk/port/platforms/eeprom.h"
+#endif
 
-
+#if AUTO_FACTORY_RESET_ENABLE || defined(VIA_ENABLE)
 static bool eepromReadU32(uint32_t addr, uint32_t *value)
 {
   return eepromRead(addr, (uint8_t *)value, sizeof(uint32_t));
@@ -32,7 +32,37 @@ static bool eepromWriteFlag(uint32_t addr, uint32_t value)
   }
   return true;
 }
+#endif  // AUTO_FACTORY_RESET_ENABLE || VIA_ENABLE
+
+
+bool eepromScheduleDeferredFactoryReset(void)
+{
+#if AUTO_FACTORY_RESET_ENABLE || defined(VIA_ENABLE)
+  const uint32_t flag_addr   = (uint32_t)((uintptr_t)EECONFIG_USER_EEPROM_CLEAR_FLAG);
+  const uint32_t cookie_addr = (uint32_t)((uintptr_t)EECONFIG_USER_EEPROM_CLEAR_COOKIE);
+  bool           flag_ok     = eepromWriteFlag(flag_addr, AUTO_FACTORY_RESET_FLAG_RESET);      // V251112R4: VIA/AUTO 공용 초기화 플래그
+  bool           cookie_ok   = true;
+
+  if (flag_ok)
+  {
+    cookie_ok = eepromWriteU32(cookie_addr, AUTO_FACTORY_RESET_FLAG_RESET);
+    if (cookie_ok != true)
+    {
+      logPrintf("[!] EEPROM auto factory reset : cookie write fail\n");
+    }
+  }
+
+  if (flag_ok && cookie_ok)
+  {
+    logPrintf("[  ] EEPROM auto factory reset : deferred clear scheduled\n");
+    return true;
+  }
+
+  return false;
+#else
+  return false;
 #endif
+}
 
 
 bool eepromAutoFactoryResetCheck(void)
@@ -84,10 +114,7 @@ bool eepromAutoFactoryResetCheck(void)
     return false;
   }
 
-  logPrintf("[  ] EEPROM auto factory reset : success (cookie=0x%08X)\n", AUTO_FACTORY_RESET_COOKIE);
-  logPrintf("[  ] EEPROM auto factory reset : scheduling reset\n");
-  delay(10);
-  resetToReset();
+  logPrintf("[  ] EEPROM auto factory reset : success (cookie=0x%08X)\n", AUTO_FACTORY_RESET_COOKIE);  // V251112R4: 초기화 직후 추가 리셋 없이 부팅 지속
   return true;
 #else
   return true;

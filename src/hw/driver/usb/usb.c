@@ -241,13 +241,9 @@ static bool usbBootModeWriteRaw(UsbBootMode_t mode)
     return false;
   }
 
-  if (eepromWrite(addr, (uint8_t *)&raw_mode, sizeof(raw_mode)) == true)
-  {
-    usb_boot_mode = mode;
-    return true;
-  }
-
-  return false;
+  eeprom_update_dword((uint32_t *)addr, raw_mode);                         // V251112R4: QMK EEPROM 큐 경로로 BootMode 저장
+  usb_boot_mode = mode;
+  return true;
 }
 
 void usbBootModeApplyDefaults(void)

@@ -109,21 +109,22 @@
 - VIA에서 전체 레이아웃 덮어쓰기(최소 4 KB) 요청을 3회 반복하면서 UART 로그에 “큐 드롭” 메시지가 없는지 확인하고, `qbufferAvailable()`를 CLI나 임시 로그로 출력해 포화가 해소되는지 확인합니다.  
 - 키 입력 지연이 없는지 확인하기 위해, 테스트 중에도 기본 키 입력/USB 응답을 체크합니다.
 
-### 단계 2: BootMode 및 VIA 클린 경로 정합성
-1. `usbBootModeWriteRaw()`를 `eeprom_update_dword()` 또는 `eeprom_write_block()`으로 전환하고, 저장 직후 `eeprom_buf`를 직접 갱신합니다.  
-2. `eeprom_task()`의 `is_req_clean` 처리와 `eeprom_auto_factory_reset` 초기화 루틴에서 공용 헬퍼(예: `eeprom_apply_factory_defaults()`)를 호출하도록 리팩토링하되, 기존 함수들과 동순서를 유지합니다.
-3. `eeprom_flush_pending()` 호출은 “최대 대기시간 + 재시도” 로직으로 바꾸어, 루프가 장기 점유되지 않도록 합니다.
+### 단계 2: BootMode 및 VIA 클린 경로 정합성 **(완료)**
+1. `usbBootModeWriteRaw()`가 `eeprom_update_dword()`를 사용하도록 바뀌어, BootMode 저장이 항상 QMK EEPROM 큐/미러와 동기화됩니다.  
+2. `eeprom_req_clean()`은 `eepromScheduleDeferredFactoryReset()`을 호출해 AUTO_FACTORY_RESET 플래그/쿠키를 0으로 만들고 즉시 `resetToReset()`을 트리거합니다. 다음 부팅에서 `eepromAutoFactoryResetCheck()`가 동일 공용 초기화 루틴(`eeprom_apply_factory_defaults`)을 실행하므로 VIA/AUTO 경로가 완전히 통합되었습니다.  
+3. `eepromAutoFactoryResetCheck()`가 성공 후 추가 리셋을 수행하지 않아, VIA가 예약한 초기화도 한 번의 재부팅만으로 완료됩니다. 로그에는 `[  ] EEPROM auto factory reset : deferred clear scheduled`와 성공 로그만 남습니다.
 
 **테스트 절차**  
-- BootMode HS↔FS 전환 후 즉시 `usbBootModeLoad()`를 호출해 값이 유지되는지 UART 로그로 확인합니다.  
-- VIA EEPROM 초기화 명령을 수행하고, UART 로그에서 BootMode/USB 모니터 기본값이 직후에 기록되는지, 그리고 장시간 정지 없이 소프트 리셋이 트리거되는지 확인합니다.  
-- AUTO_FACTORY_RESET가 활성화된 빌드에서 플래그를 비정상 값으로 덮어쓴 뒤 전원을 재투입하여 초기화→리셋까지 걸린 시간을 측정합니다.
+- VIA에서 EEPROM CLEAR를 실행하면 즉시 포인트 장치가 재부팅되는지, 그리고 다음 부팅에서 AUTO_FACTORY_RESET 로그가 1회만 출력되는지 확인합니다.  
+- BootMode HS↔FS 전환 후 `cli eeprom info`를 호출해 큐 오버플로가 발생하지 않는지와 EEPROM 값이 즉시 반영되는지 점검합니다.  
+- AUTO_FACTORY_RESET_ENABLE 비활성 빌드에서도 `VIA_ENABLE`만으로 `eepromScheduleDeferredFactoryReset()`가 컴파일되어 경고 없이 빌드되는지 확인합니다.
 
 ### 단계 3: 외부 EEPROM 처리량 향상 (페이지/슬라이스/I2C)
 1. `zd24c128` 드라이버에 32바이트 페이지 버퍼를 추가하고, `eeprom_update()`가 큐에서 연속 주소를 감지하면 페이지 단위로 묶어 `i2cWriteA16Bytes()` 한 번만 호출하도록 리팩토링합니다. 비정렬 구간은 앞·뒤를 32바이트 경계까지 잘라낸 뒤 남은 부분만 재사용합니다.
 2. `EEPROM_WRITE_SLICE_MAX_COUNT`를 시간 기반 상한으로 전환하고(예: `EEPROM_WRITE_SLICE_MAX_US`), `eeprom_update()`가 `micros()`를 참고해 8 kHz 루프 한 주기(125 µs) 안에서 가능한 많은 페이지를 처리하도록 조정합니다. 기존 CLI 계측(`eeprom queue max/ofl`)을 유지해 슬라이스 확대가 실제 처리량 증가로 이어지는지 검증합니다.
 3. 외부 EEPROM이 연결된 I2C 채널을 FastMode Plus(1 MHz)까지 끌어올리거나, 다른 센서와 버스를 분리해 충돌을 줄입니다. `hw/driver/i2c.c`의 클럭 설정을 수정한 뒤, 버스 주인이 바뀐다면 `i2cRead/WriteA16Bytes()` 호출부에 새로운 타임아웃을 도입해 오류 복구를 단순화합니다.
 4. 대량 쓰기 중에는 `eeprom_task()` 호출 빈도를 일시적으로 높여 큐를 빠르게 소모하도록 하고, 큐가 비워지면 원래 SOF당 1회 호출 패턴으로 되돌립니다. 이를 위해 `qmkUpdate()`에서 “burst 모드” 상태를 확인해 `eeprom_update()`를 추가 호출합니다.
+   - **V251112R4 측정**: `docs/brick60.layout.json` 전체를 VIA로 덮어쓸 때 큐 최대치가 1454엔트리까지 상승했고, 잔여 큐가 0이 될 때까지 약 15회의 CLI 확인이 필요했습니다. 오버플로는 없지만 backlog가 크므로 상기 계획을 변동 없이 유지하며 우선순위를 높게 유지합니다.
 
 **테스트 절차**  
 - `docs/brick60.layout.json`을 VIA로 업로드하면서 `cli eeprom info`를 반복 실행해 큐가 1500엔트리 이상으로 치솟지 않는지, 페이지 쓰기 도입 후 완료 시간이 줄었는지 측정합니다.  
@@ -135,14 +136,15 @@
 1. `eeprom/emul.c`에서 주석 처리된 `EE_Read/WriteVariable8bits()` API를 복구하거나, 12바이트 캐시를 두고 96비트 엔트리를 한 번에 쓰도록 변경해 Unlock/Lock 사이클을 최소화합니다.
 2. `EE_CleanUp_IT()` 이후에는 바쁜 대기를 없애고, `is_erasing`이 true일 동안 `eeprom_update()`가 큐를 잠시 유지하도록 상태 머신을 구성합니다. `EE_EndOfCleanup_UserCallback()`을 활용해 클린업 종료 시점을 알리고, 종료 후 누락된 쓰기를 즉시 재개합니다.
 3. 플래시 에뮬 전용 `cli eeprom info` 필드를 추가해 최근 클린업 소요 시간과 대기 중인 항목 수를 노출합니다. 이 값으로 V251112R3 대비 지연이 감소했는지 정량 비교합니다.
+   - **V251112R4 관찰**: VIA에서 EEPROM CLEAR 후 `"[  ] EEPROM auto factory reset : begin"` 로그가 4초가량 지속되며, 현재 eepromFormat()·Clean-up 경로가 루프를 장시간 점유한다는 점이 확인됐습니다. 따라서 단계 4 계획도 변동 없이 유지하고, Clean-up 비동기화를 통해 차기 릴리스에서 부팅 지연을 줄여야 합니다.
 
 **테스트 절차**  
 - `cli eeprom write` 등으로 플래시 에뮬 경로를 집중적으로 호출해 Clean-up 횟수와 평균 시간이 단축됐는지 로그로 확인합니다.  
 - Clean-up이 진행 중일 때도 `usbProcess()`/`qmkUpdate()` 루프가 끊기지 않는지, UART 타임스탬프를 비교해 프레임 스킵이 없는지 검증합니다.  
 - AUTO_FACTORY_RESET 빌드에서 플래그를 손상시킨 뒤 전원을 재투입해, 새로운 Clean-up 상태 머신이 전체 초기화 시간을 단축하는지 기록합니다.
 
-## 9. 최신 진행 현황 (V251112R3)
+## 9. 최신 진행 현황 (V251112R4)
 - **단계 1 완료**: 큐 재시도 루프, 8바이트 슬라이스, VLA 제거, CLI `eeprom info` 계측까지 적용돼 장시간 레이아웃 덮어쓰기에서도 `queue ofl = 0`을 유지하는 것을 실기로 확인했습니다.  
-- **단계 2 진행 중**: `eeprom_apply_factory_defaults()` 공용화로 AUTO_CLEAR/VIA 초기화 흐름을 통합했고 BootMode·USB Monitor 기본값도 동일 루틴을 거치지만, BootMode 직접 쓰기 경로와 플러시 모드 결정(차단/비차단 전환)은 아직 정리 중입니다.  
+- **단계 2 완료**: BootMode 저장이 `eeprom_update_dword()` 경로로 통일됐고, VIA EEPROM CLEAR는 AUTO_FACTORY_RESET 플래그를 공유한 뒤 즉시 재부팅하여 다음 부팅에서 공용 초기화 루틴을 실행합니다. `eepromAutoFactoryResetCheck()`는 성공 후 추가 리셋을 수행하지 않아 UX가 단순해졌습니다.  
 - **단계 3 대기**: 페이지 쓰기·슬라이스 확대·I2C 클럭 상향은 설계만 마친 상태이며, 실제 드라이버 변경과 계측 추가는 미착수입니다.  
 - **단계 4 대기**: 플래시 에뮬 8비트 API 복구와 Clean-up 상태 머신은 구현 전이며, 현재는 V251112R3 이전과 동일한 블로킹 동작을 사용합니다.
