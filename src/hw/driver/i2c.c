@@ -30,6 +30,9 @@ static uint32_t i2c_timeout[I2C_MAX_CH];
 static uint32_t i2c_errcount[I2C_MAX_CH];
 static uint32_t i2c_freq[I2C_MAX_CH];
 static bool     i2c_timing_logged[I2C_MAX_CH];
+static bool     i2c_ready_wait_active[I2C_MAX_CH];       // V251112R7: Ready 폴링 상태 추적
+static uint32_t i2c_ready_wait_start_ms[I2C_MAX_CH];     // V251112R7: Ready 폴링 시작 시각
+static uint8_t  i2c_ready_wait_addr[I2C_MAX_CH];         // V251112R7: Ready 폴링 대상 주소
 
 static bool is_init = false;
 static bool is_begin[I2C_MAX_CH];
@@ -105,6 +108,9 @@ bool i2cInit(void)
     i2c_errcount[i] = 0;
     is_begin[i] = false;
     i2c_timing_logged[i] = false;
+    i2c_ready_wait_active[i] = false;                    // V251112R7: Ready 폴링 로그 초기화
+    i2c_ready_wait_start_ms[i] = 0;                      // V251112R7: Ready 폴링 타이머 초기화
+    i2c_ready_wait_addr[i] = 0;                          // V251112R7: Ready 폴링 주소 초기화
   }
 
 #if CLI_USE(HW_I2C)
@@ -259,6 +265,7 @@ bool i2cIsDeviceReady(uint8_t ch, uint8_t dev_addr)
 {
   bool ret = false;
   I2C_HandleTypeDef *p_handle = i2c_tbl[ch].p_hi2c;
+  bool was_waiting;
 
   lock();
   if (HAL_I2C_IsDeviceReady(p_handle, dev_addr << 1, 10, 10) == HAL_OK)
@@ -267,6 +274,29 @@ bool i2cIsDeviceReady(uint8_t ch, uint8_t dev_addr)
     ret = true;
   }
   unLock();
+
+  was_waiting = i2c_ready_wait_active[ch];               // V251112R7: Ready 폴링 상태 추적
+  if (ret != true)
+  {
+    if (i2c_ready_wait_active[ch] != true)
+    {
+      i2c_ready_wait_active[ch] = true;
+      i2c_ready_wait_start_ms[ch] = millis();
+      i2c_ready_wait_addr[ch] = dev_addr;
+      logPrintf("[I2C] ch%d ready wait begin addr=0x%02X\n",
+                ch + 1,
+                dev_addr);
+    }
+  }
+  else if (was_waiting == true)
+  {
+    uint32_t elapsed = millis() - i2c_ready_wait_start_ms[ch];
+    logPrintf("[I2C] ch%d ready wait done addr=0x%02X elapsed=%lu ms\n",
+              ch + 1,
+              i2c_ready_wait_addr[ch],
+              (unsigned long)elapsed);
+    i2c_ready_wait_active[ch] = false;
+  }
 
   return ret;
 }
@@ -298,6 +328,8 @@ bool i2cReadBytes(uint8_t ch, uint16_t dev_addr, uint16_t reg_addr, uint8_t *p_d
     return false;
   }
 
+  i2cLogTimingOnce(ch, p_handle);                        // V251112R7: Read 경로에서도 I2C 타이밍 로그 출력
+
   lock();
   i2c_ret = HAL_I2C_Mem_Read(p_handle, (uint16_t)(dev_addr << 1), reg_addr, I2C_MEMADD_SIZE_8BIT, p_data, length, timeout);
   unLock();
@@ -324,6 +356,8 @@ bool i2cReadA16Bytes(uint8_t ch, uint16_t dev_addr, uint16_t reg_addr, uint8_t *
   {
     return false;
   }
+
+  i2cLogTimingOnce(ch, p_handle);                        // V251112R7: 16비트 Read 경로 타이밍 계측
 
   lock();
   i2c_ret = HAL_I2C_Mem_Read(p_handle, (uint16_t)(dev_addr << 1), reg_addr, I2C_MEMADD_SIZE_16BIT, p_data, length, timeout);
@@ -496,15 +530,17 @@ void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
 {
   int8_t ch = i2cGetChannelFromHandle(hi2c);
   uint32_t err = HAL_I2C_GetError(hi2c);
+  uint32_t err_time = millis();                          // V251112R7: HAL 오류 타임스탬프 기록
 
   if (ch >= 0)
   {
     i2c_errcount[ch]++;
   }
 
-  logPrintf("[!] I2C error ch=%d code=0x%08lX (BERR:%d ARLO:%d AF:%d OVR:%d)\n",
+  logPrintf("[!] I2C error ch=%d code=0x%08lX t=%lums (BERR:%d ARLO:%d AF:%d OVR:%d)\n",
             (int)(ch >= 0 ? ch + 1 : -1),
             (unsigned long)err,
+            (unsigned long)err_time,
             (err & HAL_I2C_ERROR_BERR) ? 1 : 0,
             (err & HAL_I2C_ERROR_ARLO) ? 1 : 0,
             (err & HAL_I2C_ERROR_AF)   ? 1 : 0,
