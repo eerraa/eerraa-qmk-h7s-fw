@@ -119,26 +119,30 @@
 - VIA EEPROM 초기화 명령을 수행하고, UART 로그에서 BootMode/USB 모니터 기본값이 직후에 기록되는지, 그리고 장시간 정지 없이 소프트 리셋이 트리거되는지 확인합니다.  
 - AUTO_FACTORY_RESET가 활성화된 빌드에서 플래그를 비정상 값으로 덮어쓴 뒤 전원을 재투입하여 초기화→리셋까지 걸린 시간을 측정합니다.
 
-### 단계 3: 플래시 에뮬 Clean-up 비동기화
-1. `eepromWriteByte()`에서 96비트 API 대신 8비트 API(주석 처리된 `EE_Read/WriteVariable8bits`)를 복구하거나, 최소한 `qbufferWrite()`로 받아온 바이트를 12바이트 캐시에 누적 후 한 번에 `EE_WriteVariable96bits`를 호출합니다.
-2. `EE_CleanUp_IT()` 호출 후 바쁜 대기 대신, `is_erasing`이 true일 때 `eeprom_update()`가 쓰기를 잠시 건너뛰도록 조정합니다. 기존 `EE_EndOfCleanup_UserCallback()`을 재사용합니다.
+### 단계 3: 외부 EEPROM 처리량 향상 (페이지/슬라이스/I2C)
+1. `zd24c128` 드라이버에 32바이트 페이지 버퍼를 추가하고, `eeprom_update()`가 큐에서 연속 주소를 감지하면 페이지 단위로 묶어 `i2cWriteA16Bytes()` 한 번만 호출하도록 리팩토링합니다. 비정렬 구간은 앞·뒤를 32바이트 경계까지 잘라낸 뒤 남은 부분만 재사용합니다.
+2. `EEPROM_WRITE_SLICE_MAX_COUNT`를 시간 기반 상한으로 전환하고(예: `EEPROM_WRITE_SLICE_MAX_US`), `eeprom_update()`가 `micros()`를 참고해 8 kHz 루프 한 주기(125 µs) 안에서 가능한 많은 페이지를 처리하도록 조정합니다. 기존 CLI 계측(`eeprom queue max/ofl`)을 유지해 슬라이스 확대가 실제 처리량 증가로 이어지는지 검증합니다.
+3. 외부 EEPROM이 연결된 I2C 채널을 FastMode Plus(1 MHz)까지 끌어올리거나, 다른 센서와 버스를 분리해 충돌을 줄입니다. `hw/driver/i2c.c`의 클럭 설정을 수정한 뒤, 버스 주인이 바뀐다면 `i2cRead/WriteA16Bytes()` 호출부에 새로운 타임아웃을 도입해 오류 복구를 단순화합니다.
+4. 대량 쓰기 중에는 `eeprom_task()` 호출 빈도를 일시적으로 높여 큐를 빠르게 소모하도록 하고, 큐가 비워지면 원래 SOF당 1회 호출 패턴으로 되돌립니다. 이를 위해 `qmkUpdate()`에서 “burst 모드” 상태를 확인해 `eeprom_update()`를 추가 호출합니다.
 
 **테스트 절차**  
-- `eepromWriteByte()` 경로를 강제 실행하기 위해 VIA에서 1 KB 이상 덮어쓰고, UART 타임스탬프와 `millis()`를 비교해 Clean-up 중에도 루프가 진행되는지 확인합니다.  
-- `cli eeprom write` 명령으로 연속 쓰기를 수행하며, 이전 대비 평균 처리 시간이 감소했는지 측정합니다.  
-- Clean-up 도중 USB Instability Monitor가 동작하는 시나리오를 재현하여 다운그레이드 큐가 정상 처리되는지 확인합니다.
+- `docs/brick60.layout.json`을 VIA로 업로드하면서 `cli eeprom info`를 반복 실행해 큐가 1500엔트리 이상으로 치솟지 않는지, 페이지 쓰기 도입 후 완료 시간이 줄었는지 측정합니다.  
+- 로직 애널라이저(또는 HAL 로그)의 I2C SCL 파형을 확인해 1 MHz 설정이 실제로 적용됐는지, NACK/버스 충돌이 없는지 검증합니다.  
+- I2C 버스에 다른 장치가 공유되는 빌드(예: RGB, 센서)가 있다면 동일 시점에 CLI 폴링을 돌려 장애가 없는지 확인합니다.  
+- 큐 슬라이스 확대가 USB Instability Monitor에 영향을 주지 않는지, 대량 쓰기 중에도 `usbHidMonitorBackgroundTick()` 로그가 정상 주기로 출력되는지 확인합니다.
 
-### 단계 4: 하드웨어 성능 및 관측치 강화
-1. ZD24C128 경로에 32바이트 페이지 버퍼를 추가하되, 기존 `i2cWriteA16Bytes()`/`i2cReadA16Bytes()` API만으로 구현합니다. 비정렬 쓰기는 페이지 정렬 루프에서 처리합니다.
-2. `eepromWrite()`에서 Unlock/Lock 호출을 블록 단위로 묶고, 진행 상태를 `logPrintf()`나 CLI에 노출합니다.
-3. `eeprom_task()`에 처리량/대기시간 통계를 추가하고, `cli eeprom info` 명령으로 큐 길이와 최근 Clean-up 상태를 출력할 수 있게 합니다.
+### 단계 4: 플래시 에뮬/클린업 경로 최적화
+1. `eeprom/emul.c`에서 주석 처리된 `EE_Read/WriteVariable8bits()` API를 복구하거나, 12바이트 캐시를 두고 96비트 엔트리를 한 번에 쓰도록 변경해 Unlock/Lock 사이클을 최소화합니다.
+2. `EE_CleanUp_IT()` 이후에는 바쁜 대기를 없애고, `is_erasing`이 true일 동안 `eeprom_update()`가 큐를 잠시 유지하도록 상태 머신을 구성합니다. `EE_EndOfCleanup_UserCallback()`을 활용해 클린업 종료 시점을 알리고, 종료 후 누락된 쓰기를 즉시 재개합니다.
+3. 플래시 에뮬 전용 `cli eeprom info` 필드를 추가해 최근 클린업 소요 시간과 대기 중인 항목 수를 노출합니다. 이 값으로 V251112R3 대비 지연이 감소했는지 정량 비교합니다.
 
 **테스트 절차**  
-- 외부 EEPROM 보드를 연결한 상태에서 페이지 정렬 쓰기 테스트 스크립트를 실행해, I2C 대기시간이 100 ms를 넘지 않는지 확인합니다.  
-- `cli eeprom info`를 여러 번 호출하여 통계가 증가하는지, Clean-up 진행 상황이 노출되는지 점검합니다.  
-- 전체 통합 테스트: `cmake` 빌드 후 VIA 레이아웃 덮어쓰기, BootMode 전환, AUTO_CLEAR 유도 시나리오를 연속 실행하면서 로그에 오류가 없는지 확인합니다.
+- `cli eeprom write` 등으로 플래시 에뮬 경로를 집중적으로 호출해 Clean-up 횟수와 평균 시간이 단축됐는지 로그로 확인합니다.  
+- Clean-up이 진행 중일 때도 `usbProcess()`/`qmkUpdate()` 루프가 끊기지 않는지, UART 타임스탬프를 비교해 프레임 스킵이 없는지 검증합니다.  
+- AUTO_FACTORY_RESET 빌드에서 플래그를 손상시킨 뒤 전원을 재투입해, 새로운 Clean-up 상태 머신이 전체 초기화 시간을 단축하는지 기록합니다.
 
 ## 9. 최신 진행 현황 (V251112R3)
-- **단계 1**: 큐 재시도/슬라이스/VLA 제거 및 CLI 계측을 적용해 `queue ofl`이 0을 유지함을 실 기기에서 확인했습니다.  
-- **단계 2(진행 중)**: `eeprom_apply_factory_defaults()` 공용 초기화 헬퍼로 AUTO_CLEAR/VIA 초기화를 통합했고, BootMode/USB Monitor 기본값도 동일 루틴을 거치도록 정리했습니다. BootMode 직접 쓰기 경로와 플러시 비차단화는 후속 과제로 남아 있습니다.  
-- **단계 3~4**: 하드웨어 드라이버 최적화 및 장기 관측 기능은 시작하지 않았으며, 현재 큐 메트릭을 통해 병목 데이터를 축적하고 있습니다.
+- **단계 1 완료**: 큐 재시도 루프, 8바이트 슬라이스, VLA 제거, CLI `eeprom info` 계측까지 적용돼 장시간 레이아웃 덮어쓰기에서도 `queue ofl = 0`을 유지하는 것을 실기로 확인했습니다.  
+- **단계 2 진행 중**: `eeprom_apply_factory_defaults()` 공용화로 AUTO_CLEAR/VIA 초기화 흐름을 통합했고 BootMode·USB Monitor 기본값도 동일 루틴을 거치지만, BootMode 직접 쓰기 경로와 플러시 모드 결정(차단/비차단 전환)은 아직 정리 중입니다.  
+- **단계 3 대기**: 페이지 쓰기·슬라이스 확대·I2C 클럭 상향은 설계만 마친 상태이며, 실제 드라이버 변경과 계측 추가는 미착수입니다.  
+- **단계 4 대기**: 플래시 에뮬 8비트 API 복구와 Clean-up 상태 머신은 구현 전이며, 현재는 V251112R3 이전과 동일한 블로킹 동작을 사용합니다.
