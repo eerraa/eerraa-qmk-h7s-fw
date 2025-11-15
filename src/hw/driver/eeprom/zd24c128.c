@@ -238,6 +238,10 @@ void cliEeprom(cli_args_t *args)
       cliPrintf("eeprom queue max : %lu entries\n", (unsigned long)eeprom_get_write_pending_max());     // V251112R2: 최고 사용량
       cliPrintf("eeprom queue ofl : %lu events\n", (unsigned long)eeprom_get_write_overflow_count());  // V251112R2: 직접 쓰기 횟수
 #endif
+      cliPrintf("emul cleanup busy : %d\n", eepromIsErasing());                                        // V251112R8: 외부 EEPROM에서도 계측 필드 제공
+      cliPrintf("emul cleanup last : 0ms\n");                                                          // V251112R8: 클린업 미지원 보드 → 고정 0
+      cliPrintf("emul cleanup wait : 0 entries\n");                                                    // V251112R8: 외부 EEPROM은 큐 대기로 전환 없음
+      cliPrintf("emul cleanup cnt  : 0\n");                                                            // V251112R8: 클린업 횟수 개념 없음
     }
     else if(args->isStr(0, "format") == true)
     {

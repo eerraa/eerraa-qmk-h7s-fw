@@ -147,10 +147,13 @@
 3. 플래시 에뮬 전용 `cli eeprom info` 필드를 추가해 최근 클린업 소요 시간과 대기 중인 항목 수를 노출합니다. 이 값으로 V251112R3 대비 지연이 감소했는지 정량 비교합니다.
    - **V251112R4 관찰**: VIA에서 EEPROM CLEAR 후 `"[  ] EEPROM auto factory reset : begin"` 로그가 4초가량 지속되며, 현재 eepromFormat()·Clean-up 경로가 루프를 장시간 점유한다는 점이 확인됐습니다. 따라서 단계 4 계획도 변동 없이 유지하고, Clean-up 비동기화를 통해 차기 릴리스에서 부팅 지연을 줄여야 합니다.
 
-**테스트 절차**  
-- `cli eeprom write` 등으로 플래시 에뮬 경로를 집중적으로 호출해 Clean-up 횟수와 평균 시간이 단축됐는지 로그로 확인합니다.  
-- Clean-up이 진행 중일 때도 `usbProcess()`/`qmkUpdate()` 루프가 끊기지 않는지, UART 타임스탬프를 비교해 프레임 스킵이 없는지 검증합니다.  
-- AUTO_FACTORY_RESET 빌드에서 플래그를 손상시킨 뒤 전원을 재투입해, 새로운 Clean-up 상태 머신이 전체 초기화 시간을 단축하는지 기록합니다.
+**테스트 절차**
+1. `cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/sirind/brick60' && cmake --build build -j10`으로 최신 펌웨어(`V251112R8`)를 빌드하고 보드에 플래시합니다. UART/SWD 로그 캡처와 CLI 접근을 동시에 준비합니다.
+2. 부팅 직후 `cli eeprom info`를 실행해 `emul cleanup busy/last/wait/cnt` 필드가 0으로 초기화되어 있는지 확인합니다. 이 값은 이후 비교 기준으로 기록합니다.
+3. `cli eeprom write [addr] [data]`를 이용하거나 VIA 전체 키맵 업로드를 반복해 최소 2KB 이상을 덮어쓰면서 클린업을 강제로 유도합니다. 테스트 중에는 주기적으로 `cli eeprom info`를 호출해 `queue cur/max`가 감소하고, Clean-up 완료 후 `cleanup cnt`가 증가하는지 확인합니다. 클린업 진행 중에는 `emul cleanup busy : 1`이 유지되고, `eeprom_update()`가 더 이상 바이트를 소모하지 않아 큐 길이가 정체되는지 로그로 검증합니다.
+4. 위 과정에서 USB HID/CLI 로그 타임스탬프를 대조해 `usbProcess()` 호출 주기(HS 8 kHz)가 끊기지 않는지 확인합니다. Clean-up이 완료되면 `[ ] EEPROM emul cleanup ...` 로그와 함께 `cleanup last`가 수십 ms 수준으로 업데이트되는지 기록합니다.
+5. AUTO_FACTORY_RESET 흐름 확인: `cli eeprom write`로 `EECONFIG_USER_EEPROM_CLEAR_FLAG`를 0으로 만든 뒤 전원을 재투입합니다. 부팅 직후 `emul cleanup cnt`가 1 이상으로 증가하고, `VIA EEPROM clear`와 동일한 초기화 루틴이 실행되지만 소프트락 없이 완료되는지 관찰합니다. 이때도 `emul cleanup wait` 값이 초기화 직전 큐 길이와 일치하는지 비교합니다.
+6. 동일한 테스트를 ZD24C128 보드에도 적용해 `emul cleanup busy`가 항상 0으로 유지되는지, 즉 클린업 API가 외부 EEPROM 환경에서 부작용을 일으키지 않는지 확인합니다.
 
 ## 9. 최신 진행 현황 (V251112R7)
 - **단계 1 완료**: 큐 재시도 루프, 8바이트 슬라이스, VLA 제거, CLI `eeprom info` 계측까지 적용돼 장시간 레이아웃 덮어쓰기에서도 `queue ofl = 0`을 유지함을 실기로 재확인했습니다.  
