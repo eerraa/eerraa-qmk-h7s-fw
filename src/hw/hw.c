@@ -34,7 +34,14 @@ bool hwInit(void)
     uartOpen(i, 115200);
   }
 
-  logOpen(HW_LOG_CH, 115200);
+  if (HW_LOG_ENABLE_DEFAULT)                                     // V251113R1: 개발 빌드만 기본적으로 UART 로그를 연다
+  {
+    logOpen(HW_LOG_CH, 115200);
+  }
+  else
+  {
+    logDisable();                                                // V251113R1: 릴리스 빌드는 UART 출력 비활성 상태로 시작
+  }
   logPrintf("\r\n[ Firmware Begin... ]\r\n");
   logPrintf("Booting..Name \t\t: %s\r\n", _DEF_BOARD_NAME);
   logPrintf("Booting..KBD  \t\t: %s\r\n", KBD_NAME);  

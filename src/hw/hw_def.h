@@ -6,8 +6,12 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251112R9"   // V251112R9: EEPROM 로그 경량화 적용
+#define _DEF_FIRMWATRE_VERSION      "V251113R1"   // V251113R1: 릴리스 기본 UART 로그 비활성화
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
+
+#ifndef HW_LOG_ENABLE_DEFAULT
+#define HW_LOG_ENABLE_DEFAULT        0            // V251113R1: 릴리스 빌드는 UART 로그 비활성 상태로 시작
+#endif
 
 #ifndef LOG_LEVEL_VERBOSE
 #define LOG_LEVEL_VERBOSE            0            // V251112R9: 기본 빌드 로그 레벨을 표준으로 유지

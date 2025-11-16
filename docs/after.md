@@ -24,6 +24,11 @@
 | B | `hwInit()` 조건부 초기화 | `logOpen()` 호출을 `if (HW_LOG_ENABLE_DEFAULT)`로 감싸고, CLI 명령이나 `logEnable()` API로 런타임에서도 토글 가능하도록 문서화. |
 | C | 릴리스 빌드 검증 | UART 로그 비활성 상태에서 필수 정보가 모두 USB/CLI로 확인 가능한지 테스트. 필요 로그는 USB CLI나 HID 디버그 채널로 대체. |
 
+### 진행 현황
+- **V251113R1**  
+  - 단계 A: `_DEF_FIRMWATRE_VERSION` 업데이트와 함께 `HW_LOG_ENABLE_DEFAULT` 기본값을 0으로 고정해 릴리스 빌드가 자동으로 UART 로그를 비활성화하도록 반영했습니다.  
+  - 단계 B: `hwInit()`에서 플래그가 1일 때만 `logOpen()`을 호출하도록 분기하고, CLI에 `log enable/disable` 명령을 추가해 필요 시 런타임에서 UART 로그를 다시 열 수 있도록 했습니다.
+
 ## 4. 문서/테스트 업데이트
 - `docs/eeprom.md`: 로그 경량화 적용 후, Ready wait 통계를 어떻게 확인하는지 갱신하고 샘플 로그를 추가합니다.
 - `docs/after.md` (본 문서): 진행 상태를 업데이트하면서 각 단계가 적용된 펌웨어 버전을 기록합니다.

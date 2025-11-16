@@ -190,7 +190,34 @@ void cliCmd(cli_args_t *args)
 {
   bool ret = false;
 
+  if (args->argc == 1 && args->isStr(0, "enable"))
+  {
+    bool open_ok = is_open;
 
+    if (open_ok != true)
+    {
+      open_ok = logOpen(log_ch, log_baud);
+    }
+
+    if (open_ok == true)
+    {
+      logEnable();
+      cliPrintf("[log] UART output enabled (ch=%d baud=%lu)\n",
+                log_ch, (unsigned long)log_baud);                      // V251113R1: CLI에서 UART 로그를 필요 시 활성화
+    }
+    else
+    {
+      cliPrintf("[log] UART open failed (ch=%d)\n", log_ch);            // V251113R1: 활성화 실패 경고
+    }
+    ret = true;
+  }
+
+  if (args->argc == 1 && args->isStr(0, "disable"))
+  {
+    logDisable();
+    cliPrintf("[log] UART output disabled\n");                          // V251113R1: CLI에서 UART 로그 출력 중단
+    ret = true;
+  }
 
   if (args->argc == 1 && args->isStr(0, "info"))
   {
@@ -199,6 +226,11 @@ void cliCmd(cli_args_t *args)
     cliPrintf("\n");
     cliPrintf("list.line_index %d\n", log_buf_list.line_index);
     cliPrintf("list.buf_length %d\n", log_buf_list.buf_length);
+    cliPrintf("\n");
+    cliPrintf("uart.open %d\n", is_open ? 1 : 0);                       // V251113R1: 현재 UART 로그 상태 표시
+    cliPrintf("uart.enable %d\n", is_enable ? 1 : 0);                    // V251113R1: CLI에서 상태 점검
+    cliPrintf("uart.ch %d\n", log_ch);
+    cliPrintf("uart.baud %lu\n", (unsigned long)log_baud);
 
     ret = true;
   }
@@ -260,6 +292,8 @@ void cliCmd(cli_args_t *args)
     cliPrintf("log info\n");
     cliPrintf("log boot\n");
     cliPrintf("log list\n");
+    cliPrintf("log enable\n");                                          // V251113R1: CLI 도움말에 토글 명령 추가
+    cliPrintf("log disable\n");
   }
 }
 #endif
