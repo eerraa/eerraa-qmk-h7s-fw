@@ -84,11 +84,22 @@ bool hwInit(void)
   
   cdcInit();
   usbInit();
-  #if HW_USB_CMP
+#if HW_USB_CMP
   usbBegin(USB_CMP_MODE);
-  #else
+#else
   usbBegin(USB_HID_MODE);
-  #endif
+#endif
+
+#if defined(_USE_HW_I2C)
+  {
+    i2c_ready_wait_stats_t ready_stats;
+    i2cGetReadyWaitStats(_DEF_I2C1, &ready_stats);
+    logPrintf("[I2C] ready wait summary max=%lums count=%lu last=0x%02X\n",
+              (unsigned long)ready_stats.wait_max_ms,
+              (unsigned long)ready_stats.wait_count,
+              ready_stats.wait_last_addr);                       // V251112R9: 부팅 완료 후 한 줄 요약
+  }
+#endif
 
   return true;
 }

@@ -311,10 +311,7 @@ bool i2cIsDeviceReady(uint8_t ch, uint8_t dev_addr)
               i2c_ready_wait_addr[ch],
               (unsigned long)elapsed);
 #else
-    logPrintf("[I2C] ch%d ready wait max=%lums count=%lu\n",
-              ch + 1,
-              (unsigned long)i2c_ready_wait_stats[ch].wait_max_ms,
-              (unsigned long)i2c_ready_wait_stats[ch].wait_count);    // V251112R9: Ready wait 로그 요약
+    // V251112R9: 기본 빌드는 UART 로그 대신 CLI 통계만 사용
 #endif
     i2c_ready_wait_active[ch] = false;
   }

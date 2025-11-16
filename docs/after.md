@@ -7,13 +7,13 @@
 ## 2. EEPROM 로그 경량화 계획
 | 단계 | 작업 내용 | 세부 조치 |
 | --- | --- | --- |
-| 1 | Ready wait 로그 샘플링/요약 | `i2cWriteA16Bytes()` 완료 확인에서 매 페이지마다 `[I2C] ch1 ready wait begin/done`을 찍는 대신, 누적 카운터와 최댓값만 기록하고 완료 시 한 줄로 요약(예: `ready wait max=5ms count=8`). Debug 모드에서는 기존 로그 유지. |
+| 1 | Ready wait 로그 샘플링/요약 | `i2cWriteA16Bytes()` 완료 확인에서 매 페이지마다 `[I2C] ch1 ready wait begin/done`을 찍는 대신, 기본 빌드는 UART 로그를 생략하고 CLI 통계 및 부팅 직후 1줄 요약으로만 확인하도록 변경. Debug 모드에서는 기존 로그 유지. |
 | 2 | AUTO_FACTORY_RESET 진행 로그 축소 | 초기화 과정에서 반복되는 `[  ] EEPROM auto factory reset` 로그를 “시작/완료” 두 줄로 제한하고, 중간 플러시 상태는 CLI 계측으로 대체. 필요 시 `LOG_LEVEL_VERBOSE` 빌드옵션을 통해 확장. |
 | 3 | `cli eeprom info` 보조 지표 활용 | 실시간 로그 대신 CLI 명령으로 큐/클린업/ready wait 통계를 확인하도록 문서(`docs/eeprom.md`)에 절차 추가. 사용자가 로그를 비워두고 CLI로만 관측하도록 안내. |
 
 ### 진행 현황
 - **V251112R9**  
-  - 단계 1: `[I2C] ch# ready wait max=... count=...` 요약 로그로 대체하고, `LOG_LEVEL_VERBOSE`/`DEBUG_LOG_EEPROM` 설정 시 기존 begin/done 로그 복원 가능하도록 분기했습니다.  
+  - 단계 1: 기본 빌드에서는 Ready wait 로그를 출력하지 않고 CLI 통계 + 부팅 직후 요약 1줄로 확인하며, `LOG_LEVEL_VERBOSE`/`DEBUG_LOG_EEPROM` 설정 시 기존 begin/done 로그를 복원하도록 분기했습니다.  
   - 단계 2: `deferred clear scheduled` 알림을 verbose 전용으로 옮겨 부팅 시 “시작/완료”만 출력되게 했습니다.  
   - 단계 3: `cli eeprom info`에 `ready wait count/max/last` 필드를 추가하고, `docs/eeprom.md`에 확인 절차를 갱신했습니다.
 
