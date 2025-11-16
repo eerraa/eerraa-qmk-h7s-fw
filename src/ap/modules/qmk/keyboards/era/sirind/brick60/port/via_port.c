@@ -1,8 +1,8 @@
 #include "indicator_port.h"
 #include "ver_port.h"
 #include "sys_port.h"
-#include "usb_bootmode_via.h"
-#include "usb_monitor_via.h"
+#include "bootmode.h"
+#include "usb_monitor.h"
 
 static void via_handle_usb_polling_channel(uint8_t *data, uint8_t length);  // V251108R8: BootMode/USB 모니터 분기 공통화
 

@@ -1,5 +1,6 @@
 #include "qmk.h"
 #include "qmk/port/port.h"
+#include "qmk/port/platforms/eeprom.h"            // V251112R5: EEPROM 버스트 모드 제어
 
 
 static void cliQmk(cli_args_t *args);
@@ -35,6 +36,11 @@ void qmkUpdate(void)
   via_hid_task();                                                // V251108R8: VIA 명령을 메인 루프에서 처리해 USB ISR 부하 감소
   keyboard_task();
   eeprom_task();
+  uint8_t burst_calls = eeprom_get_burst_extra_calls();          // V251112R5: 큐 적체 시 추가 페이지 플러시
+  while (burst_calls-- > 0 && eeprom_is_pending())
+  {
+    eeprom_update();                                             // V251112R5: 버스트 모드 동안 즉시 추가 처리
+  }
   idle_task();
 }
 

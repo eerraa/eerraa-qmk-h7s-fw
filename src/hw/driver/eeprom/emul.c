@@ -1,5 +1,8 @@
 #include "eeprom.h"
 #include "cli.h"
+#if defined(QMK_KEYMAP_CONFIG_H)
+#include "qmk/port/platforms/eeprom.h"                 // V251112R2: QMK EEPROM 큐 상태 출력
+#endif
 
 
 #if defined(_USE_HW_EEPROM) && defined(EEPROM_CHIP_EMUL)
@@ -22,6 +25,18 @@ static void eepromInitMPU(void);
 
 static bool is_init = false;
 static __IO bool is_erasing = false;
+
+typedef struct
+{
+  uint32_t last_duration_ms;
+  uint32_t wait_entry_snapshot;
+  uint32_t total_count;
+  uint32_t in_progress_begin_ms;
+} eeprom_emul_cleanup_stats_t;                         // V251112R8: 비동기 클린업 계측
+
+static eeprom_emul_cleanup_stats_t cleanup_stats = {0};
+
+static bool eepromScheduleCleanup(void);
 
 
 bool eepromInit()
@@ -84,11 +99,7 @@ bool eepromReadByte(uint32_t addr, uint8_t *p_data)
   ee_addr = addr + 1;
 
   HAL_FLASH_Unlock();
-  // ee_ret = EE_ReadVariable8bits(ee_addr, p_data);
-  uint64_t data[2];
-  
-  ee_ret = EE_ReadVariable96bits(ee_addr, data);
-  p_data[0] = data[0];
+  ee_ret = EE_ReadVariable8bits(ee_addr, p_data);                        // V251112R8: 8비트 API 복구로 낭비 제거
   HAL_FLASH_Lock();
   if (ee_ret != EE_OK)
   {
@@ -105,7 +116,6 @@ bool eepromWriteByte(uint32_t addr, uint8_t data_in)
   bool ret = true;
   EE_Status ee_ret = EE_OK;
   uint16_t ee_addr;
-  uint32_t pre_time = millis();
 
   if (addr >= EEPROM_MAX_SIZE)
     return false;
@@ -115,33 +125,43 @@ bool eepromWriteByte(uint32_t addr, uint8_t data_in)
   ee_addr = addr + 1;
 
   HAL_FLASH_Unlock();
-  uint64_t data[2];
-  
-  data[0] = data_in;
-  data[1] = 0;
-
-  ee_ret = EE_WriteVariable96bits(ee_addr, data);
+  ee_ret = EE_WriteVariable8bits(ee_addr, data_in);                     // V251112R8: 8비트 쓰기로 락/언락 부담 축소
   if (ee_ret != EE_OK)
   {
-    if ((ee_ret & EE_STATUSMASK_CLEANUP) == EE_STATUSMASK_CLEANUP) 
+    if ((ee_ret & EE_STATUSMASK_CLEANUP) == EE_STATUSMASK_CLEANUP)
     {
-      is_erasing = true;
-      ee_ret = EE_CleanUp_IT();
-      while (is_erasing == true) 
-      { 
-        if (millis()-pre_time >= 500)
-        {
-          ret = false;
-          break;
-        }
-      }      
-    }    
+      if (eepromScheduleCleanup() != true)
+      {
+        ret = false;
+      }
+      else
+      {
+        ret = false;                                                    // V251112R8: 비동기 클린업 중이므로 상위 계층 재시도
+      }
+    }
     else
     {
       ret = false;
     }
-  }  
+  }
   HAL_FLASH_Lock();
+
+  return ret;
+}
+
+bool eepromWritePage(uint32_t addr, uint8_t const *p_data, uint32_t length)
+{
+  // V251112R5: 실 칩 드라이버와 동일한 API 형식을 유지하기 위한 래퍼
+  bool ret = true;
+
+  while (length-- > 0)
+  {
+    if (eepromWriteByte(addr++, *p_data++) != true)
+    {
+      ret = false;
+      break;
+    }
+  }
 
   return ret;
 }
@@ -166,25 +186,45 @@ bool eepromRead(uint32_t addr, uint8_t *p_data, uint32_t length)
 
 bool eepromWrite(uint32_t addr, uint8_t *p_data, uint32_t length)
 {
-  bool ret = false;
-  uint32_t i;
+  return eepromWritePage(addr, p_data, length);  // V251112R5: 페이지 API를 그대로 사용
+}
 
-
-  for (i=0; i<length; i++)
+static bool eepromScheduleCleanup(void)
+{
+  if (is_erasing == true)
   {
-    ret = eepromWriteByte(addr + i, p_data[i]);
-    if (ret == false)
-    {
-      break;
-    }
+    return true;
   }
 
-  return ret;
+  cleanup_stats.in_progress_begin_ms = millis();
+#if defined(QMK_KEYMAP_CONFIG_H)
+  cleanup_stats.wait_entry_snapshot = eeprom_get_write_pending_count();
+#else
+  cleanup_stats.wait_entry_snapshot = 0;
+#endif
+
+  is_erasing = true;
+
+  EE_Status clean_ret = EE_CleanUp_IT();
+  if (clean_ret != EE_OK)
+  {
+    is_erasing = false;
+    cleanup_stats.in_progress_begin_ms = 0;
+    logPrintf("[!] EEPROM emul cleanup schedule fail : %d\n", clean_ret);  // V251112R8: 실패 로그
+    return false;
+  }
+
+  return true;
 }
 
 uint32_t eepromGetLength(void)
 {
   return EEPROM_MAX_SIZE;
+}
+
+bool eepromIsErasing(void)
+{
+  return is_erasing;                                                    // V251112R8: 비동기 클린업 진행 여부 노출
 }
 
 bool eepromFormat(void)
@@ -218,6 +258,12 @@ void HAL_FLASH_EndOfOperationCallback(uint32_t ReturnValue)
 
 void EE_EndOfCleanup_UserCallback(void)
 {
+  if (cleanup_stats.in_progress_begin_ms != 0)
+  {
+    cleanup_stats.last_duration_ms = millis() - cleanup_stats.in_progress_begin_ms;  // V251112R8: 마지막 소요 시간 기록
+    cleanup_stats.in_progress_begin_ms = 0;
+  }
+  cleanup_stats.total_count++;
   is_erasing = false;
 }
 
@@ -279,6 +325,15 @@ void cliEeprom(cli_args_t *args)
     {
       cliPrintf("eeprom init   : %d\n", eepromIsInit());
       cliPrintf("eeprom length : %d bytes\n", eepromGetLength());
+#if defined(QMK_KEYMAP_CONFIG_H)
+      cliPrintf("eeprom queue cur : %lu entries\n", (unsigned long)eeprom_get_write_pending_count());   // V251112R2: QMK 큐 계측
+      cliPrintf("eeprom queue max : %lu entries\n", (unsigned long)eeprom_get_write_pending_max());     // V251112R2: 최고 사용량
+      cliPrintf("eeprom queue ofl : %lu events\n", (unsigned long)eeprom_get_write_overflow_count());  // V251112R2: 직접 쓰기 횟수
+#endif
+      cliPrintf("emul cleanup busy : %d\n", eepromIsErasing());                                        // V251112R8: 클린업 진행 여부
+      cliPrintf("emul cleanup last : %lums\n", (unsigned long)cleanup_stats.last_duration_ms);         // V251112R8: 최근 클린업 시간
+      cliPrintf("emul cleanup wait : %lu entries\n", (unsigned long)cleanup_stats.wait_entry_snapshot);// V251112R8: 트리거 당시 대기 엔트리
+      cliPrintf("emul cleanup cnt  : %lu\n", (unsigned long)cleanup_stats.total_count);                // V251112R8: 누적 실행 횟수
     }
     else if(args->isStr(0, "format") == true)
     {

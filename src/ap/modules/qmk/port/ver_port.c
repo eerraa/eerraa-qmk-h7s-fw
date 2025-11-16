@@ -13,7 +13,7 @@ enum via_qmk_ver_item {
 
 static void via_qmk_ver_get_value(uint8_t *data);
 
-static const char *ver_str = _DEF_FIRMWATRE_VERSION;
+static const char *ver_str = _DEF_FIRMWARE_VERSION;
 
 
 

@@ -6,94 +6,84 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251109R9"   // V251109R9: VIA 리셋 경로 및 큐 리팩터링
+// ---------------------------------------------------------------------------
+// 펌웨어/보드 식별 정보
+// ---------------------------------------------------------------------------
+#define _DEF_FIRMWARE_VERSION       "V251114R4"   // V251114R4: 펌웨어 버전 매크로 명칭 오타 수정 및 정의 가이드 정리 완료 (사용자 확인 필요)
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
+// ---------------------------------------------------------------------------
+// 로그 및 디버그 기본값
+// ---------------------------------------------------------------------------
+#ifndef HW_LOG_ENABLE_DEFAULT
+#define HW_LOG_ENABLE_DEFAULT       0             // V251113R1: 릴리스 빌드는 UART 로그 비활성 상태로 시작
+#endif
+
+#ifndef LOG_LEVEL_VERBOSE
+#define LOG_LEVEL_VERBOSE           0             // V251112R9: 기본 빌드 로그 레벨을 표준으로 유지
+#endif
+
+#ifndef DEBUG_LOG_EEPROM
+#define DEBUG_LOG_EEPROM            0             // V251112R9: EEPROM 상세 로그 토글 기본 비활성화
+#endif
+
+
+// ---------------------------------------------------------------------------
+// 자동 팩토리 리셋 및 버전 쿠키
+// ---------------------------------------------------------------------------
+#ifndef AUTO_FACTORY_RESET_ENABLE
+#define AUTO_FACTORY_RESET_ENABLE   0             // V251112R3: 자동 팩토리 리셋 빌드 가드 기본 비활성화
+#endif
+
+#define AUTO_FACTORY_RESET_FLAG_MAGIC   0x56434C52U  // V251112R3: "VCLR"
+#define AUTO_FACTORY_RESET_FLAG_RESET   0x00000000U  // V251112R3: 플래그 초기값
+
+#define __EE_BCD_BYTE(a, b) \
+  ((uint32_t)((((a) - '0') & 0x0F) << 4) | (((b) - '0') & 0x0F))
+
+#define __EE_VERSION_LEN        (sizeof(_DEF_FIRMWARE_VERSION) - 1)
+#define __EE_SAFE_CHAR(idx)     (((idx) < __EE_VERSION_LEN) ? _DEF_FIRMWARE_VERSION[idx] : '0')
+#define __EE_REV_HIGH_CHAR()    ((__EE_VERSION_LEN > 9) ? _DEF_FIRMWARE_VERSION[8] : '0')
+#define __EE_REV_LOW_CHAR()     ((__EE_VERSION_LEN > 9) ? _DEF_FIRMWARE_VERSION[9] : (__EE_VERSION_LEN > 8 ? _DEF_FIRMWARE_VERSION[8] : '0'))
+
+#define AUTO_FACTORY_RESET_COOKIE_DEFAULT                                      \
+  ( (__EE_BCD_BYTE(__EE_SAFE_CHAR(1), __EE_SAFE_CHAR(2)) << 24) | \
+    (__EE_BCD_BYTE(__EE_SAFE_CHAR(3), __EE_SAFE_CHAR(4)) << 16) | \
+    (__EE_BCD_BYTE(__EE_SAFE_CHAR(5), __EE_SAFE_CHAR(6)) << 8)  | \
+    (__EE_BCD_BYTE(__EE_REV_HIGH_CHAR(), __EE_REV_LOW_CHAR()) << 0) )
+
+#ifndef AUTO_FACTORY_RESET_COOKIE
+#define AUTO_FACTORY_RESET_COOKIE   AUTO_FACTORY_RESET_COOKIE_DEFAULT  // V251112R3: 펌웨어 버전 기반 기본 쿠키
+#endif
+
+
+// ---------------------------------------------------------------------------
+// 계측 기능 (보드/빌드 오버라이드 가능)
+// ---------------------------------------------------------------------------
 #ifndef _DEF_ENABLE_MATRIX_TIMING_PROBE
-#define _DEF_ENABLE_MATRIX_TIMING_PROBE   0  // V251010R4: 기본값은 비활성화, 필요 시 보드/빌드에서 재정의
+#define _DEF_ENABLE_MATRIX_TIMING_PROBE   0       // V251010R4: 기본값은 비활성화, 필요 시 보드/빌드에서 재정의
 #endif
+
 #ifndef _DEF_ENABLE_USB_HID_TIMING_PROBE
-#define _DEF_ENABLE_USB_HID_TIMING_PROBE  0  // V251009R5: usbd_hid 계측 기본 비활성화, 필요 시 빌드 옵션으로만 활성화
-#endif
-
-#define _USE_HW_CACHE
-#define _USE_HW_MICROS
-// #define _USE_HW_QSPI
-#define _USE_HW_FLASH
-// #define _USE_HW_VCOM
-
-
-#define _USE_HW_LED
-#define      HW_LED_MAX_CH          1
-
-#define _USE_HW_UART
-#define      HW_UART_MAX_CH         2
-#define      HW_UART_CH_SWD         _DEF_UART1
-#define      HW_UART_CH_USB         _DEF_UART2
-#define      HW_UART_CH_CLI         HW_UART_CH_SWD
-
-#define _USE_HW_CLI
-#define      HW_CLI_CMD_LIST_MAX    32
-#define      HW_CLI_CMD_NAME_MAX    16
-#define      HW_CLI_LINE_HIS_MAX    8
-#define      HW_CLI_LINE_BUF_MAX    64
-
-#define _USE_HW_CLI_GUI
-#define      HW_CLI_GUI_WIDTH       80
-#define      HW_CLI_GUI_HEIGHT      24
-
-#define _USE_HW_LOG
-#define      HW_LOG_CH              HW_UART_CH_SWD
-#define      HW_LOG_BOOT_BUF_MAX    2048
-#define      HW_LOG_LIST_BUF_MAX    4096
-
-#define _USE_HW_I2C
-#define      HW_I2C_MAX_CH          1
-
-#define _USE_HW_EEPROM
-#define         EEPROM_CHIP_ZD24C128
-
-#define _USE_HW_RTC
-#define      HW_RTC_BOOT_MODE       RTC_BKP_DR3
-#define      HW_RTC_RESET_BITS      RTC_BKP_DR4
-
-#define _USE_HW_RESET
-#define      HW_RESET_BOOT          1
-
-#define _USE_HW_KEYS
-#define      HW_KEYS_PRESS_MAX      20
-
-// #define _USE_HW_WS2812
-// #define     HW_WS2812_MAX_CH        45
-
-#define _USE_HW_USB
-#define _USE_HW_CDC
-#ifdef  _USE_HW_VCOM
-#define      HW_USB_LOG             0
-#define      HW_USB_CMP             1
-#define      HW_USB_CDC             1
-#define      HW_USB_MSC             0
-#define      HW_USB_HID             1
-#else
-#define      HW_USB_LOG             0
-#define      HW_USB_CMP             0
-#define      HW_USB_CDC             0
-#define      HW_USB_MSC             0
-#define      HW_USB_HID             1
+#define _DEF_ENABLE_USB_HID_TIMING_PROBE  0       // V251009R5: usbd_hid 계측 기본 비활성화, 필요 시 빌드 옵션으로만 활성화
 #endif
 
 
-//-- CLI
-//
-#define _USE_CLI_HW_EEPROM          1
-#define _USE_CLI_HW_I2C             1
-#define _USE_CLI_HW_QSPI            1
-#define _USE_CLI_HW_FLASH           1
-#define _USE_CLI_HW_RTC             1
-#define _USE_CLI_HW_RESET           1
-#define _USE_CLI_HW_KEYS            1
-#define _USE_CLI_HW_WS2812          1
+// ---------------------------------------------------------------------------
+// 하드웨어 사용 선언 (기능별 분리 헤더)
+// ---------------------------------------------------------------------------
+#include "hw_caps_core.h"
+#include "hw_caps_led.h"
+#include "hw_caps_uart.h"
+#include "hw_caps_i2c.h"
+#include "hw_caps_eeprom.h"
+#include "hw_caps_rtc.h"
+#include "hw_caps_reset.h"
+#include "hw_caps_keys.h"
+#include "hw_caps_usb.h"
+#include "hw_caps_cli.h"
+#include "hw_caps_log.h"
 
 
 #endif

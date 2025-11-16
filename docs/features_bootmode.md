@@ -1,101 +1,125 @@
 # BootMode 서브시스템 가이드
 
 ## 1. 목적과 범위
-- STM32H7S HS PHY 기반 펌웨어에서 USB 폴링 주기를 명시적으로 고정하고, EEPROM/VIA/CLI/USB 모니터가 같은 진실 소스를 바라보도록 보장합니다.
-- HS 8k/4k/2kHz와 FS 1kHz 모드 간 전환뿐 아니라, 모니터에 의해 자동 다운그레이드가 예약될 때의 확인 절차까지 설명합니다.
-- 대상 모듈: `src/hw/driver/usb/usb.[ch]`, `src/hw/hw.c`, `src/hw/driver/usb/usb_hid/usbd_hid.c`, `src/ap/modules/qmk/port/{port.h,usb_bootmode_via.c}`, `src/ap/ap.c`.
+- STM32H7S HS PHY 기반 펌웨어에서 USB 폴링 주기를 강제 고정하고, EEPROM/VIA/CLI/USB 모니터가 동일한 상태를 공유하도록 보장합니다.
+- HS 8k/4k/2kHz 및 FS 1kHz 모드 간 전환, EEPROM 기본값 관리, VIA Apply 큐, USB monitor 다운그레이드 절차를 모두 기술합니다.
+- 대상 모듈: `src/hw/hw.c`, `src/hw/driver/usb/usb.[ch]`, `src/hw/driver/usb/usb_hid/usbd_hid.c`, `src/ap/modules/qmk/port/{bootmode.c,eeconfig_port.c}`, `docs/features_instability_monitor.md`.
 
 ## 2. 구성 파일 & 빌드 매크로
-| 경로 | 주요 심볼 | 책임 |
+| 경로 | 주요 심볼/함수 | 설명 |
 | --- | --- | --- |
-| `src/ap/modules/qmk/port/port.h` | `EECONFIG_USER_BOOTMODE` | EEPROM 사용자 데이터 블록 +28 바이트 슬롯을 BootMode 저장소로 예약합니다.
-| `src/hw/hw.c` | `usbBootModeLoad()` | `hwInit()` 초기에 EEPROM → RAM 동기화와 부트 로그를 수행합니다.
-| `src/hw/driver/usb/usb.h` | `UsbBootMode_t`, `usb_boot_downgrade_result_t` | 열거형/상수, API 프로토타입, 다운그레이드 인터페이스를 선언합니다.
-| `src/hw/driver/usb/usb.c` | `usbBootMode*`, `usbRequestBootModeDowngrade()`, `usbProcess()` | 저장/적용/큐 상태 머신과 CLI, 로그, 리셋 지연 제어를 담당합니다.
-| `src/hw/driver/usb/usbd_conf.c` | `usbBootModeIsFullSpeed()` 사용 | PCD 속도를 `PCD_SPEED_HIGH_IN_FULL`로 강제하거나 HS 모드를 유지합니다.
-| `src/hw/driver/usb/usb_hid/usbd_hid.c` | `usbHidResolveDowngradeTarget()` | 모니터에서 폴링 모드 전환 목표를 결정하고 다운그레이드를 요청합니다.
-| `src/ap/modules/qmk/port/usb_bootmode_via.c` | `via_qmk_usb_bootmode_command()` | VIA channel 13 value ID 1/2를 BootMode API와 동기화합니다.
-| `src/ap/ap.c` | `usbProcess()` 호출 | 메인 루프에서 BootMode Apply 큐·다운그레이드 큐·리셋 큐를 서비스합니다.
+| `src/hw/hw.c` | `bootmode_init()`, `usbBootModeLoad()` | 부팅 초기에 EEPROM과 램 캐시를 동기화하고 기본값을 강제합니다. |
+| `src/hw/driver/usb/usb.h` | `UsbBootMode_t`, `USB_BOOT_MODE_DEFAULT_VALUE`, `bootmode_init()` | 열거형, 기본값 매크로, 다운그레이드 API를 선언합니다. 기본 모드는 FS 1kHz이며 보드에서 재정의할 수 있습니다. |
+| `src/hw/driver/usb/usb.c` | `usbBootMode*`, `boot_mode_apply_request`, `usbRequestBootModeDowngrade()` | EEPROM 저장소, Apply 큐, 다운그레이드 상태 머신, CLI 명령을 구현합니다. |
+| `src/hw/driver/usb/usb_hid/usbd_hid.c` | `usbHidResolveDowngradeTarget()` | 모니터 이벤트를 받으면 8k→4k→2k→1k 순으로 다음 모드를 계산합니다. |
+| `src/ap/modules/qmk/port/bootmode.c` | `via_qmk_usb_bootmode_command()` | VIA channel 13 value ID 1/2를 BootMode API로 연결하고, JSON 값 ↔ 열거형 값을 변환합니다. (V251113R1) |
+| `src/ap/modules/qmk/port/eeconfig_port.c` | `eeconfig_init_user_datablock()` | USER 데이터가 초기화될 때 BootMode/USB monitor 슬롯 기본값을 다시 씁니다. |
+| `src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c` | `usbBootModeIsFullSpeed()` | 모드별 샘플 윈도우/`bInterval`을 결정합니다. |
 
-> **빌드 가드**
-> - `BOOTMODE_ENABLE`이 꺼지면 모든 API가 스텁으로 치환되고, VIA/CLI에서도 BootMode 관련 항목을 노출하지 않습니다.
-> - `USB_MONITOR_ENABLE`이 켜져 있어야 모니터 자동 다운그레이드가 컴파일됩니다. 모니터가 비활성화되면 `usbRequestBootModeDowngrade()` 호출이 스텁으로 치환됩니다.
+> 빌드 시 `BOOTMODE_ENABLE`이 꺼져 있으면 모든 API가 스텁으로 치환되고 VIA/CLI에서도 해당 항목을 노출하지 않습니다.
 
-## 3. API 레퍼런스
-| 함수 / 열거형 | 위치 | 설명 |
-| --- | --- | --- |
-| `UsbBootMode_t` | `src/hw/driver/usb/usb.h` | `HS_8K/4K/2K`, `FS_1K` 값을 제공하고 CLI·VIA·로그에서 동일한 라벨을 재사용합니다.
-| `bool usbBootModeLoad(void)` | `src/hw/driver/usb/usb.c` | EEPROM 값을 읽고 범위 검증 후 RAM/로그를 갱신합니다.
-| `UsbBootMode_t usbBootModeGet(void)` | `src/hw/driver/usb/usb.c` | 현재 RAM 캐시에 저장된 모드를 반환합니다.
-| `bool usbBootModeIsFullSpeed(void)` | `src/hw/driver/usb/usb.c` | FS 1kHz 요청 여부를 확인하여 PCD/엔드포인트 구성에 사용합니다.
-| `uint8_t usbBootModeGetHsInterval(void)` | `src/hw/driver/usb/usb.c` | HID/Composite 엔드포인트 HS `bInterval` 값을 선택합니다.
-| `bool usbBootModeStore(UsbBootMode_t mode)` | `src/hw/driver/usb/usb.c` | EEPROM에 선택값을 기록하고 RAM 캐시를 업데이트합니다.
-| `bool usbBootModeSaveAndReset(UsbBootMode_t mode)` | `src/hw/driver/usb/usb.c` | 저장 후 `usbScheduleGraceReset()`을 호출해 리셋을 예약합니다.
-| `bool usbBootModeScheduleApply(UsbBootMode_t mode)` | `src/hw/driver/usb/usb.c` | 인터럽트 문맥에서 Apply 요청을 큐에 적재하고, 메인 루프에서만 리셋을 실행하도록 합니다.
-| `usb_boot_downgrade_result_t usbRequestBootModeDowngrade(...)` | `src/hw/driver/usb/usb.c` | 모니터가 측정한 SOF 간격과 목표 모드를 바탕으로 ARM/COMMIT 단계를 제어합니다.
-| `void usbProcess(void)` | `src/hw/driver/usb/usb.c` | BootMode Apply, 다운그레이드, 지연 리셋 큐 중 처리할 항목이 있을 때만 상태 머신을 실행합니다.
-| `void via_qmk_usb_bootmode_command(uint8_t *data, uint8_t length)` | `src/ap/modules/qmk/port/usb_bootmode_via.c` | VIA channel 13 value ID 1(선택)과 2(Apply)를 BootMode API로 라우팅합니다.
-| `bool usbScheduleGraceReset(uint32_t delay_ms)` | `src/hw/driver/usb/usb.c` | CLI/VIA 응답이 송신될 수 있도록 지연 리셋을 요청합니다.
+## 3. 런타임 흐름
+```
+hwInit()
+  ↳ eepromInit() / eeprom_init()                  // QMK EEPROM 베이스라인
+  ↳ bootmode_init()                              // EEPROM 범위 밖 값은 즉시 기본값으로 갱신
+  ↳ usb_monitor_init()
+  ↳ eepromAutoFactoryResetCheck() (선택)                // AUTO_FACTORY_RESET_ENABLE일 때만
+  ↳ usbBootModeLoad()                            // EEPROM → RAM 캐시
+  ↳ usbInstabilityLoad()
+  ↳ usbInit()/usbBegin()
 
-## 4. 핵심 데이터 구조
-### 4.1 `usb_boot_mode_request_t` (`src/hw/driver/usb/usb.c`)
-| 필드 | 설명 |
+apMain()
+  ↳ usbProcess()                                 // Apply 큐 및 다운그레이드 큐 처리
+      ↳ usbProcessBootModeApply()
+      ↳ usbProcessBootModeDowngrade()
+      ↳ usbProcessDeferredReset()
+  ↳ usbHidMonitorBackgroundTick()
+  ↳ qmkUpdate()
+```
+- `bootmode_init()`은 `usbBootModeApplyDefaults()`를 호출하지 않고, EEPROM 슬롯이 비어 있거나 손상된 경우에만 기본값을 기록합니다.
+- `usbBootModeLoad()`는 `[  ] USB BootMode : <라벨>` 로그를 출력하여 현재 상태를 CLI 없이도 확인할 수 있습니다.
+
+## 4. API 요약
+### 4.1 코어 API (`src/hw/driver/usb/usb.c`)
+| 함수 | 설명 |
 | --- | --- |
-| `stage` (`usb_boot_mode_request_stage_t`) | `IDLE → ARMED → COMMIT` 상태를 정의합니다.
-| `log_pending` | 단계 전환 시 로그를 한 번만 출력하도록 제어합니다.
-| `next_mode` | 다운그레이드 후 적용할 타깃 모드.
-| `delta_us` / `expected_us` | 모니터가 전달한 실제/기대 SOF 간격.
-| `ready_ms` | 2차 확인(검증 대기) 가능 시각. 기본 `now + USB_BOOT_MONITOR_CONFIRM_DELAY_MS`.
-| `timeout_ms` | 검증 대기가 만료되는 시각. 만료 시 큐를 초기화합니다.
+| `bool usbBootModeLoad(void)` | EEPROM 값을 읽어 `usb_boot_mode` 캐시에 저장하고 로그를 남깁니다. 범위를 벗어나면 즉시 기본값을 기록합니다. |
+| `UsbBootMode_t usbBootModeGet(void)` | 현재 모드를 반환합니다. IRQ/메인 루프 모두에서 호출됩니다. |
+| `bool usbBootModeIsFullSpeed(void)` | FS 1 kHz 모드인지 빠르게 판별합니다. `usbd_conf.c`와 계측 모듈이 사용합니다. |
+| `uint8_t usbBootModeGetHsInterval(void)` | HID/Composite 엔드포인트의 HS `bInterval` 값을 돌려줍니다. |
+| `bool usbBootModeStore(UsbBootMode_t mode)` | EEPROM에 즉시 씁니다. 동일 값이면 조용히 true를 반환합니다. |
+| `bool usbBootModeSaveAndReset(UsbBootMode_t mode)` | 저장 후 `usbScheduleGraceReset()`을 호출해 최소 40ms의 응답 유예 후 리셋을 예약합니다. |
+| `bool usbBootModeScheduleApply(UsbBootMode_t mode)` | 인터럽트 문맥에서도 호출 가능한 Apply 큐. 메인 루프에서만 저장/리셋이 발생합니다. |
+| `usb_boot_downgrade_result_t usbRequestBootModeDowngrade(...)` | USB monitor가 호출하는 상태 머신. `IDLE → ARMED → COMMIT`를 통해 로그와 저장을 제어합니다. |
 
-### 4.2 `boot_mode_apply_request`
-- `pending`, `mode` 필드만을 가지는 `static volatile` 구조체로, 인터럽트에서 Apply 요청을 기록한 뒤 메인 루프가 단일 항목만 처리하도록 합니다.
-- 동일 모드 중복 요청은 큐를 새로 만들지 않고 true를 반환해 불필요한 리셋을 방지합니다.
+### 4.2 VIA/CLI 래퍼
+| 위치 | 함수 | 설명 |
+| --- | --- | --- |
+| `src/ap/modules/qmk/port/bootmode.c` | `via_qmk_usb_bootmode_command()` | channel 13 value ID 1/2 요청을 BootMode API로 포워딩. JSON 값(8k→4k→2k→1k)을 `bootmode_decode_via_value()`로 열거형에 맞춥니다. |
+| `src/hw/driver/usb/usb.c` | `cliBoot()` | `boot info`, `boot set {8k|4k|2k|1k}` 명령을 제공하며 Apply 직후 자동 리셋을 예약합니다. |
 
-### 4.3 `usb_boot_downgrade_result_t`
-- `REJECTED/ARMED/CONFIRMED` 세 단계를 구분하여 모니터가 이벤트를 중복 보고하지 않도록 합니다.
+### 4.3 저장/기본값 훅
+| 위치 | 책임 |
+| --- | --- |
+| `src/ap/modules/qmk/port/eeconfig_port.c` | USER 데이터가 재초기화될 때 `usbBootModeApplyDefaults()`를 호출해 슬롯을 기본값으로 채우고, 플래그/쿠키도 갱신합니다. |
+| `src/hw/driver/eeprom_auto_factory_reset.c` | AUTO_FACTORY_RESET_ENABLE 빌드에서 EEPROM을 포맷한 뒤 `usbBootModeApplyDefaults()`를 호출합니다. |
 
-### 4.4 EEPROM 슬롯 (`EECONFIG_USER_BOOTMODE`)
-- 4바이트 `uint32_t`로 저장하며, 범위 밖 값은 `USB_BOOT_MODE_HS_8K`로 복구합니다.
-- VIA/CLI/모니터는 항상 `usbBootModeStore()` 경유로 쓰기 때문에 별도의 CRC는 사용하지 않습니다.
+## 5. 데이터 구조
+### 5.1 `UsbBootMode_t` ( `src/hw/driver/usb/usb.h` )
+| 열거형 값 | 의미 | 비고 |
+| --- | --- | --- |
+| `USB_BOOT_MODE_FS_1K` | HS PHY + FS 1 kHz 폴링. 기본값. |
+| `USB_BOOT_MODE_HS_2K` | HS 2 kHz. |
+| `USB_BOOT_MODE_HS_4K` | HS 4 kHz. |
+| `USB_BOOT_MODE_HS_8K` | HS 8 kHz. |
+| `USB_BOOT_MODE_MAX` | 범위 검사용. |
 
-## 5. 제어 흐름
-```
-reset → hwInit()
-  ↳ usbBootModeLoad()
-  ↳ usbInit()/usbBegin()               // 초기 모드 로그
-      ↳ usb_hid/usbd_conf : HS/FS 파라미터 구성
+### 5.2 VIA 인코딩 (V251113R1)
+| VIA dropdown 값 | 표시 문자열 | 변환 결과 |
+| --- | --- | --- |
+| `0` | "8 kHz (HS)" | `USB_BOOT_MODE_HS_8K` |
+| `1` | "4 kHz (HS)" | `USB_BOOT_MODE_HS_4K` |
+| `2` | "2 kHz (HS)" | `USB_BOOT_MODE_HS_2K` |
+| `3` | "1 kHz (FS)" | `USB_BOOT_MODE_FS_1K` |
 
-apMain() 루프
-  ↳ usbProcess()
-      ↳ usbProcessBootModeApply()      // VIA/CLI Apply 요청 처리
-      ↳ usbProcessBootModeDowngrade()  // 모니터 큐 (ARMED/COMMIT)
-      ↳ usbProcessDeferredReset()      // 응답 송신 후 리셋
-```
-- CLI `boot info/set` → `usbBootModeStore()` → `usbScheduleGraceReset()` 순으로 동작하며, 최소 40ms의 응답 송신 유예를 둡니다.
-- 모니터는 `usbRequestBootModeDowngrade()`가 `COMMIT`을 반환했을 때만 `usbBootModeSaveAndReset()`을 호출하고, 실패 시 로그를 남깁니다.
-- VIA channel 13 value ID 2는 **무조건** `usbBootModeScheduleApply()`를 호출하여 현재 값과 동일하더라도 리셋이 이루어집니다.
+`bootmode_encode_via_value()`가 RAM 캐시 → VIA 응답, `bootmode_decode_via_value()`가 VIA 설정 → 열거형으로 변환하여 JSON 순서를 바꾸지 않고도 호환됩니다.
+
+### 5.3 Apply 큐 (`boot_mode_apply_request`)
+- `pending`, `mode` 필드만 가지는 `static volatile` 구조체입니다.
+- 인터럽트(예: VIA RAW HID)에서 Apply를 요청하면 큐에 기록하고, `usbProcessBootModeApply()`가 메인 루프에서 한 번만 처리합니다.
+- 동일 모드가 이미 대기 중이면 true만 반환하여 불필요한 리셋을 막습니다.
+
+### 5.4 다운그레이드 큐 (`usb_boot_mode_request_t`)
+| 필드 | 역할 |
+| --- | --- |
+| `stage` | `IDLE/ARMED/COMMIT`. ARM 상태에서는 로그를 한 번만 출력하고, 일정 시간이 지나면 COMMIT으로 승격됩니다. |
+| `next_mode` | 다운그레이드가 확정될 때 적용할 타깃 모드. |
+| `delta_us` / `expected_us` | USB monitor가 보고한 실제/기대 SOF 간격. 로그 출력과 조건 비교에 사용됩니다. |
+| `ready_ms` / `timeout_ms` | ARM ↔ COMMIT 시점 관리. 2초 지연(`USB_BOOT_MONITOR_CONFIRM_DELAY_MS`)을 기준으로 동작합니다. |
+
+### 5.5 EEPROM 슬롯 ( `EECONFIG_USER_BOOTMODE` )
+- USER 데이터 블록 +28바이트 위치에 32비트 값으로 저장합니다. 범위를 벗어나면 즉시 `USB_BOOT_MODE_DEFAULT_VALUE`로 복원합니다.
+- EEPROM 자동 초기화나 USER 데이터 리셋이 일어나면 `usbBootModeApplyDefaults()`가 호출되어 기본값을 다시 씁니다.
 
 ## 6. CLI & VIA 상호작용
-- `boot info` : 현재 모드 라벨을 출력.
-- `boot set {8k|4k|2k|1k}` : 문자열을 파싱하여 `UsbBootMode_t` 값으로 변환한 뒤 저장/리셋을 예약합니다.
-- VIA channel 13:
-  - value ID 1 = BootMode 선택. EEPROM에는 즉시 쓰지 않고 `pending_boot_mode`로만 캐시합니다.
-  - value ID 2 = Apply 토글. 1로 쓰면 `usbBootModeScheduleApply()`가 호출되고, 응답 패킷은 원본 값을 그대로 에코합니다.
-  - `id_custom_save` 명령은 no-op 처리하여 VIA UI에서 저장 버튼을 눌러도 오류가 발생하지 않습니다.
-- JSON (`BRICK60-H7S-VIA.JSON`)의 "USB POLLING" 블록은 `BOOTMODE_ENABLE` 또는 `USB_MONITOR_ENABLE`이 꺼진 빌드에서는 제거해야 합니다.
+- CLI `boot info`는 현재 라벨을 출력합니다. `boot set Xk` 명령은 문자열을 열거형으로 매핑한 뒤 저장/리셋을 예약합니다.
+- VIA channel 13 value ID 1은 선택 UI이며, EEPROM에는 쓰지 않고 `pending_boot_mode` 캐시만 갱신합니다.
+- VIA value ID 2 (Apply 토글)는 1을 쓰는 순간 `usbBootModeScheduleApply()`가 호출되어 동일 값이라도 리셋이 예약됩니다. 응답 패킷은 요청 값을 그대로 돌려줍니다.
+- VIA value ID 3은 USB monitor 토글이므로 BootMode와 동일 채널에서 처리되지만, `via_handle_usb_polling_channel()`에서 BootMode/Monitor를 분기합니다.
 
-## 7. 운영 체크리스트
-1. 새로운 HID 엔드포인트를 추가할 때는 반드시 `usbBootModeGetHsInterval()`을 사용하여 `bInterval`을 결정합니다.
-2. `usbProcess()`에 로직을 추가할 경우, 큐가 모두 비어 있으면 즉시 반환해야 메인 루프 주기가 유지됩니다.
-3. EEPROM 슬롯 레이아웃을 변경하면 `port.h`, `usbBootModeLoad()`, VIA JSON 문서까지 동시에 업데이트합니다.
-4. 모니터와 연동되는 코드를 건드렸다면 `USB_BOOT_MONITOR_CONFIRM_DELAY_MS` 및 HS/FS 샘플 윈도우가 기대대로 유지되는지 확인합니다.
-5. 리셋 전에 반드시 `USBD_Stop()`/`USBD_DeInit()` → `USB_RESET_DETACH_DELAY_MS` 지연 순서를 지켜야 호스트가 안전하게 디바이스 분리를 감지합니다.
+## 7. USB 모니터 연동
+- 모니터가 이벤트를 감지하면 `usbHidResolveDowngradeTarget()`으로 현 모드보다 낮은 모드를 계산합니다. 순서는 8k→4k→2k→1k입니다.
+- `usbRequestBootModeDowngrade()`는 ARM 단계에서 한 번, COMMIT 단계에서 한 번 로그를 출력합니다. COMMIT 단계에서 `usbBootModeSaveAndReset()`을 호출하며 실패 시 `[!] USB Poll 모드 저장 실패`가 발생합니다.
+- 다운그레이드 후에는 `usbBootModeRequestReset()`으로 큐를 비우고 다음 이벤트를 기다립니다.
 
 ## 8. 로그 & 트러블슈팅
-- `[  ] USB BootMode : HS 8K` : EEPROM 로드 성공.
-- `[!] USB Poll 불안정 감지 ... (검증 대기)` : 모니터가 ARMED 상태에 들어갔음을 의미합니다. 같은 메시지에서 `next_mode`를 확인할 수 있습니다.
-- `[!] USB Poll 모드 저장 실패` : EEPROM 쓰기 실패. 전원이 불안정한지, I2C 잠금을 확인해야 합니다.
-- `[!] USB BootMode apply 실패` : `usbBootModeSaveAndReset()`이 false를 반환한 케이스. 주로 EEPROM 오류 또는 리셋 스케줄러 고장입니다.
+| 로그 | 의미/대응 |
+| --- | --- |
+| `[  ] USB BootMode : HS 8K` | EEPROM 로드 성공. VIA/CLI 없이도 현재 모드를 확인할 수 있습니다. |
+| `[!] USB Poll 불안정 감지 : 기대 ...` | USB monitor가 ARM 상태로 진입했습니다. 네트워크/케이블 상태를 확인하세요. |
+| `[!] USB Poll 모드 다운그레이드 -> HS 4K` | 실제 저장 및 리셋이 예약되었습니다. |
+| `[!] USB BootMode apply 실패` | EEPROM 쓰기 또는 리셋 예약 실패. EEPROM 드라이버 로그를 확인합니다. |
+| `[!] usbBootModeLoad Fail` | EEPROM에서 값을 읽지 못했습니다. `eepromInit()` 또는 하드웨어 문제 가능성이 높습니다.
 
-> **팁**: BootMode 경로를 수정한 후에는 `cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/sirind/brick60' && cmake --build build -j10` 로 빌드하여 `_DEF_FIRMWATRE_VERSION`과 로그 문자열이 일치하는지 확인한 뒤 `rm -rf build`로 정리하십시오.
+> BootMode 관련 변경 후에는 `cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/sirind/brick60' && cmake --build build -j10` 로 빌드하여 `_DEF_FIRMWARE_VERSION`과 로그 문자열이 일치하는지 확인하십시오.

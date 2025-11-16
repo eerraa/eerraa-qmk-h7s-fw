@@ -13,7 +13,7 @@
 #include "eeprom.h"
 #include "qmk/port/port.h"
 #include "qmk/port/platforms/eeprom.h"
-#include "qmk/port/usb_monitor_via.h"                                  // V251108R1: USB 모니터 VIA 스토리지 연동
+#include "qmk/port/usb_monitor.h"                                      // V251108R1: USB 모니터 스토리지 연동
 
 #define USB_RESET_RESPONSE_GRACE_MS   (40U)                           // V251109R4: VIA 응답 송신 보장을 위한 최소 유예
 #define USB_BOOTMODE_APPLY_GRACE_MS   USB_RESET_RESPONSE_GRACE_MS     // V251109R4: BootMode 적용 시 동일 유예 사용
@@ -28,19 +28,20 @@
 static bool      is_init = false;
 static UsbMode_t is_usb_mode = USB_NON_MODE;
 #ifdef BOOTMODE_ENABLE
-static UsbBootMode_t usb_boot_mode = USB_BOOT_MODE_HS_8K;                    // V250923R1 Current USB boot mode target
+static UsbBootMode_t usb_boot_mode = USB_BOOT_MODE_DEFAULT_VALUE;                    // V251112R6: 보드별 기본값을 매크로로 분리
 #endif
 
 static const char *const usb_boot_mode_name[USB_BOOT_MODE_MAX] = {          // V250923R1 Mode labels for logging/CLI
-  "HS 8K",
-  "HS 4K",
-  "HS 2K",
   "FS 1K",
+  "HS 2K",
+  "HS 4K",
+  "HS 8K",
 };
 
 static const char *usbBootModeLabel(UsbBootMode_t mode);                     // V250923R1 helpers
 bool usbScheduleGraceReset(uint32_t delay_ms);                               // V251109R4: VIA 응답 송신 보장용 리셋 요청
 #ifdef BOOTMODE_ENABLE
+static bool usbBootModeWriteRaw(UsbBootMode_t mode);                         // V251112R5: EEPROM 직접 갱신 헬퍼
 bool usbBootModeStore(UsbBootMode_t mode);
 #endif
 #ifdef BOOTMODE_ENABLE
@@ -48,7 +49,19 @@ static volatile struct
 {
   bool          pending;                                                   // V251108R3: VIA에서 요청된 BootMode 적용 큐
   UsbBootMode_t mode;
-} boot_mode_apply_request = {false, USB_BOOT_MODE_HS_8K};
+} boot_mode_apply_request = {false, USB_BOOT_MODE_DEFAULT_VALUE};          // V251112R6: 보드별 기본값 사용
+#endif
+
+#ifdef BOOTMODE_ENABLE
+static void bootmode_ensure_default_persisted(void)
+{
+  uint32_t raw_mode = eeprom_read_dword((const uint32_t *)EECONFIG_USER_BOOTMODE);
+
+  if (raw_mode >= USB_BOOT_MODE_MAX)
+  {
+    usbBootModeApplyDefaults();                                             // V251112R6: EEPROM이 비어 있으면 즉시 기본값 기록
+  }
+}
 #endif
 
 static volatile struct
@@ -92,7 +105,7 @@ static void usbBootModeRequestReset(void)
 {
   boot_mode_request.stage      = USB_BOOT_MODE_REQ_STAGE_IDLE;
   boot_mode_request.log_pending = false;
-  boot_mode_request.next_mode  = USB_BOOT_MODE_HS_8K;
+  boot_mode_request.next_mode  = USB_BOOT_MODE_FS_1K;
   boot_mode_request.delta_us   = 0U;
   boot_mode_request.expected_us = 0U;
   boot_mode_request.ready_ms   = 0U;
@@ -124,13 +137,20 @@ static const char *usbBootModeLabel(UsbBootMode_t mode)
 }
 
 #ifdef BOOTMODE_ENABLE
+void bootmode_init(void)
+{
+  bootmode_ensure_default_persisted();                                      // V251112R6: EEPROM 기본값 동기화
+  usb_boot_mode = USB_BOOT_MODE_DEFAULT_VALUE;                              // V251112R6: BootMode 기본값 초기화 진입점
+}
+
 bool usbBootModeLoad(void)
 {
   uint32_t raw_mode = eeprom_read_dword((const uint32_t *)EECONFIG_USER_BOOTMODE);
 
   if (raw_mode >= USB_BOOT_MODE_MAX)
   {
-    raw_mode = USB_BOOT_MODE_HS_8K;
+    usbBootModeApplyDefaults();                                   // V251112R5: 슬롯이 손상되면 즉시 기본값을 기록
+    raw_mode = USB_BOOT_MODE_DEFAULT_VALUE;                        // V251112R6: 보드별 기본값 적용
   }
 
   usb_boot_mode = (UsbBootMode_t)raw_mode;
@@ -167,9 +187,6 @@ uint8_t usbBootModeGetHsInterval(void)
 
 bool usbBootModeStore(UsbBootMode_t mode)
 {
-  uint32_t raw_mode = (uint32_t)mode;
-  uint32_t addr     = (uint32_t)EECONFIG_USER_BOOTMODE;
-
   if (mode >= USB_BOOT_MODE_MAX)
   {
     return false;
@@ -180,13 +197,7 @@ bool usbBootModeStore(UsbBootMode_t mode)
     return true;
   }
 
-  if (eepromWrite(addr, (uint8_t *)&raw_mode, sizeof(raw_mode)) == true)
-  {
-    usb_boot_mode = mode;
-    return true;
-  }
-
-  return false;
+  return usbBootModeWriteRaw(mode);
 }
 
 bool usbBootModeSaveAndReset(UsbBootMode_t mode)
@@ -216,6 +227,28 @@ bool usbBootModeScheduleApply(UsbBootMode_t mode)
   boot_mode_apply_request.mode    = mode;
   boot_mode_apply_request.pending = true;
   return true;
+}
+#endif
+
+#ifdef BOOTMODE_ENABLE
+static bool usbBootModeWriteRaw(UsbBootMode_t mode)
+{
+  uint32_t raw_mode = (uint32_t)mode;
+  uint32_t addr     = (uint32_t)EECONFIG_USER_BOOTMODE;
+
+  if (mode >= USB_BOOT_MODE_MAX)
+  {
+    return false;
+  }
+
+  eeprom_update_dword((uint32_t *)addr, raw_mode);                         // V251112R4: QMK EEPROM 큐 경로로 BootMode 저장
+  usb_boot_mode = mode;
+  return true;
+}
+
+void usbBootModeApplyDefaults(void)
+{
+  (void)usbBootModeWriteRaw(USB_BOOT_MODE_DEFAULT_VALUE);                   // V251112R6: 보드 기본값으로 EEPROM 초기화
 }
 #endif
 
