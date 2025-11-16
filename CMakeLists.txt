@@ -158,7 +158,7 @@ add_custom_command(TARGET ${EXECUTABLE}
   
   file(READ "src/hw/hw_def.h" version_in)
   string(REPLACE "\"" "" version_out ${version_in})
-  string(REGEX MATCH "_DEF_FIRMWATRE_VERSION * ([-A-Za-z0-9]*)" _ ${version_out})
+  string(REGEX MATCH "_DEF_FIRMWARE_VERSION * ([-A-Za-z0-9]*)" _ ${version_out})
   set(FIRM_VER ${CMAKE_MATCH_1})
   
   message("${KBD_NAME}")

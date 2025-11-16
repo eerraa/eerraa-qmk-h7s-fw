@@ -75,6 +75,8 @@ apMain()
 | `USB_BOOT_MODE_HS_8K` | HS 8 kHz. |
 | `USB_BOOT_MODE_MAX` | 범위 검사용. |
 
+> V251115R1부터 EEPROM에는 bit31이 1인 새 인코딩(`flag | mode`)이 기록됩니다. 이전 버전의 0~3 값은 부팅 시 자동으로 FS→HS 순서와 일치하도록 변환 후 재기록됩니다.
+
 ### 5.2 VIA 인코딩 (V251113R1)
 | VIA dropdown 값 | 표시 문자열 | 변환 결과 |
 | --- | --- | --- |
@@ -122,4 +124,4 @@ apMain()
 | `[!] USB BootMode apply 실패` | EEPROM 쓰기 또는 리셋 예약 실패. EEPROM 드라이버 로그를 확인합니다. |
 | `[!] usbBootModeLoad Fail` | EEPROM에서 값을 읽지 못했습니다. `eepromInit()` 또는 하드웨어 문제 가능성이 높습니다.
 
-> BootMode 관련 변경 후에는 `cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/sirind/brick60' && cmake --build build -j10` 로 빌드하여 `_DEF_FIRMWATRE_VERSION`과 로그 문자열이 일치하는지 확인하십시오.
+> BootMode 관련 변경 후에는 `cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/sirind/brick60' && cmake --build build -j10` 로 빌드하여 `_DEF_FIRMWARE_VERSION`과 로그 문자열이 일치하는지 확인하십시오.

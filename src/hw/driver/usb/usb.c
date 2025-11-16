@@ -29,6 +29,11 @@ static bool      is_init = false;
 static UsbMode_t is_usb_mode = USB_NON_MODE;
 #ifdef BOOTMODE_ENABLE
 static UsbBootMode_t usb_boot_mode = USB_BOOT_MODE_DEFAULT_VALUE;                    // V251112R6: 보드별 기본값을 매크로로 분리
+#define USB_BOOT_MODE_STORAGE_FLAG        (0x80000000UL)   // V251115R1: EEPROM 값이 신규 인코딩인지 식별하는 플래그
+#define USB_BOOT_MODE_STORAGE_VALUE_MASK  (0x0000000FUL)   // V251115R1: BootMode EEPROM 인코딩 값 마스크
+static bool usbBootModeDecodeRaw(uint32_t raw_mode, UsbBootMode_t *out_mode, bool *needs_refresh);  // V251115R1: EEPROM → 캐시 디코딩
+static uint32_t usbBootModeEncodeCurrent(UsbBootMode_t mode);                                       // V251115R1: 캐시 → EEPROM 인코딩
+static UsbBootMode_t usbBootModeDecodeLegacy(uint32_t legacy_raw);                                  // V251115R1: 구버전 값 순서를 신규로 매핑
 #endif
 
 static const char *const usb_boot_mode_name[USB_BOOT_MODE_MAX] = {          // V250923R1 Mode labels for logging/CLI
@@ -55,12 +60,85 @@ static volatile struct
 #ifdef BOOTMODE_ENABLE
 static void bootmode_ensure_default_persisted(void)
 {
-  uint32_t raw_mode = eeprom_read_dword((const uint32_t *)EECONFIG_USER_BOOTMODE);
+  uint32_t       raw_mode      = eeprom_read_dword((const uint32_t *)EECONFIG_USER_BOOTMODE);
+  UsbBootMode_t  decoded_mode  = USB_BOOT_MODE_DEFAULT_VALUE;
+  bool           needs_refresh = false;
 
-  if (raw_mode >= USB_BOOT_MODE_MAX)
+  if (usbBootModeDecodeRaw(raw_mode, &decoded_mode, &needs_refresh) != true)
   {
     usbBootModeApplyDefaults();                                             // V251112R6: EEPROM이 비어 있으면 즉시 기본값 기록
+    return;
   }
+
+  if (needs_refresh == true)
+  {
+    (void)usbBootModeWriteRaw(decoded_mode);                                // V251115R1: 구버전 인코딩을 최신 인코딩으로 재기록
+  }
+}
+#endif
+
+#ifdef BOOTMODE_ENABLE
+static uint32_t usbBootModeEncodeCurrent(UsbBootMode_t mode)                 // V251115R1: EEPROM 값에 신규 인코딩 플래그를 포함
+{
+  return USB_BOOT_MODE_STORAGE_FLAG | ((uint32_t)mode & USB_BOOT_MODE_STORAGE_VALUE_MASK);
+}
+
+static UsbBootMode_t usbBootModeDecodeLegacy(uint32_t legacy_raw)            // V251115R1: 구버전 순서를 FS→HS 순서로 재정렬
+{
+  switch (legacy_raw & USB_BOOT_MODE_STORAGE_VALUE_MASK)
+  {
+    case 0U:
+      return USB_BOOT_MODE_HS_8K;
+    case 1U:
+      return USB_BOOT_MODE_HS_4K;
+    case 2U:
+      return USB_BOOT_MODE_HS_2K;
+    case 3U:
+      return USB_BOOT_MODE_FS_1K;
+    default:
+      return USB_BOOT_MODE_DEFAULT_VALUE;
+  }
+}
+
+static bool usbBootModeDecodeRaw(uint32_t raw_mode,
+                                 UsbBootMode_t *out_mode,
+                                 bool *needs_refresh)                         // V251115R1: EEPROM 레이아웃을 감지해 신규/레거시 분기
+{
+  bool          refresh_needed = false;
+  UsbBootMode_t decoded_mode   = USB_BOOT_MODE_DEFAULT_VALUE;
+
+  if ((raw_mode & USB_BOOT_MODE_STORAGE_FLAG) != 0U)
+  {
+    uint32_t encoded_value = raw_mode & USB_BOOT_MODE_STORAGE_VALUE_MASK;
+
+    if (encoded_value >= USB_BOOT_MODE_MAX)
+    {
+      return false;
+    }
+    decoded_mode = (UsbBootMode_t)encoded_value;
+  }
+  else
+  {
+    uint32_t legacy_value = raw_mode & USB_BOOT_MODE_STORAGE_VALUE_MASK;
+
+    if (legacy_value >= USB_BOOT_MODE_MAX)
+    {
+      return false;
+    }
+    decoded_mode   = usbBootModeDecodeLegacy(legacy_value);
+    refresh_needed = true;
+  }
+
+  if (out_mode != NULL)
+  {
+    *out_mode = decoded_mode;
+  }
+  if (needs_refresh != NULL)
+  {
+    *needs_refresh = refresh_needed;
+  }
+
+  return true;
 }
 #endif
 
@@ -145,15 +223,23 @@ void bootmode_init(void)
 
 bool usbBootModeLoad(void)
 {
-  uint32_t raw_mode = eeprom_read_dword((const uint32_t *)EECONFIG_USER_BOOTMODE);
+  uint32_t      raw_mode      = eeprom_read_dword((const uint32_t *)EECONFIG_USER_BOOTMODE);
+  bool          needs_refresh = false;
+  UsbBootMode_t decoded_mode  = USB_BOOT_MODE_DEFAULT_VALUE;
 
-  if (raw_mode >= USB_BOOT_MODE_MAX)
+  if (usbBootModeDecodeRaw(raw_mode, &decoded_mode, &needs_refresh) != true)
   {
     usbBootModeApplyDefaults();                                   // V251112R5: 슬롯이 손상되면 즉시 기본값을 기록
-    raw_mode = USB_BOOT_MODE_DEFAULT_VALUE;                        // V251112R6: 보드별 기본값 적용
+    decoded_mode  = USB_BOOT_MODE_DEFAULT_VALUE;                  // V251112R6: 보드별 기본값 적용
+    needs_refresh = false;
+  }
+  else if (needs_refresh == true)
+  {
+    logPrintf("[  ] USB BootMode migrate legacy -> %s\n", usbBootModeLabel(decoded_mode));  // V251115R1: 구버전 인코딩 자동 리라이트
+    (void)usbBootModeWriteRaw(decoded_mode);
   }
 
-  usb_boot_mode = (UsbBootMode_t)raw_mode;
+  usb_boot_mode = decoded_mode;
   logPrintf("[  ] USB BootMode : %s\n", usbBootModeLabel(usb_boot_mode));  // V250923R1 Log persisted boot mode
 
   return true;
@@ -233,7 +319,7 @@ bool usbBootModeScheduleApply(UsbBootMode_t mode)
 #ifdef BOOTMODE_ENABLE
 static bool usbBootModeWriteRaw(UsbBootMode_t mode)
 {
-  uint32_t raw_mode = (uint32_t)mode;
+  uint32_t raw_mode = usbBootModeEncodeCurrent(mode);
   uint32_t addr     = (uint32_t)EECONFIG_USER_BOOTMODE;
 
   if (mode >= USB_BOOT_MODE_MAX)
