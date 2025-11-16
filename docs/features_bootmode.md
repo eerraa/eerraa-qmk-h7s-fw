@@ -122,4 +122,4 @@ apMain()
 | `[!] USB BootMode apply 실패` | EEPROM 쓰기 또는 리셋 예약 실패. EEPROM 드라이버 로그를 확인합니다. |
 | `[!] usbBootModeLoad Fail` | EEPROM에서 값을 읽지 못했습니다. `eepromInit()` 또는 하드웨어 문제 가능성이 높습니다.
 
-> BootMode 관련 변경 후에는 `cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/sirind/brick60' && cmake --build build -j10` 로 빌드하여 `_DEF_FIRMWATRE_VERSION`과 로그 문자열이 일치하는지 확인하십시오.
+> BootMode 관련 변경 후에는 `cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/sirind/brick60' && cmake --build build -j10` 로 빌드하여 `_DEF_FIRMWARE_VERSION`과 로그 문자열이 일치하는지 확인하십시오.

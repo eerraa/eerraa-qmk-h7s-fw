@@ -12,7 +12,7 @@
 - 주요 기능: USB instability monitor (마이크로프레임 격차 감시, V250924R4), 단계적 폴링 다운그레이드 큐, QMK 포팅층.
 
 ## 3. 작업 전 체크리스트
-1. `_DEF_FIRMWATRE_VERSION`과 보드 매크로를 `src/hw/hw_def.h`에서 확인합니다.
+1. `_DEF_FIRMWARE_VERSION`과 보드 매크로를 `src/hw/hw_def.h`에서 확인합니다.
 2. 엔트리 경로는 `src/main.c → src/ap/ap.c` 흐름을 중심으로 파악합니다.
 3. QMK 구조는 `src/ap/modules/qmk/{port,keyboards,quantum}` 순으로 확인합니다.
 4. 다음 경로는 **고위험 파일군**으로 분류하여 변경 시 집중 리뷰합니다.
@@ -21,7 +21,7 @@
 
 ## 4. 변경 이력 규칙
 - 코드 변경마다 **사용자로부터 전달받은 코드 버전**(`VYYMMDDRn`)으로 `// VYYMMDDRn ...` 형식의 변경 이력 주석을 추가합니다.
-- 변경된 코드 버전에 맞추어 `_DEF_FIRMWATRE_VERSION`를 업데이트 합니다.
+- 변경된 코드 버전에 맞추어 `_DEF_FIRMWARE_VERSION`를 업데이트 합니다.
   PATH: src/hw/hw_def.h
 - 사용자가 코드 버전을 명시하지 않은 상태에서 작업을 시작해야 한다면, 임의의 코드 버전을 하나 지정해 변경 이력에 표기합니다.
   그리고 즉시 사용자에게 공식 버전 확인을 요청합니다.
@@ -66,7 +66,7 @@ rm -rf build
 - 장기 실행 타이머를 건드릴 경우 USB instability monitor의 워밍업/타임아웃 조건을 함께 확인하면 리그레션을 줄일 수 있습니다.
 
 ## 11. 작업별 참조 가이드
-- **펌웨어 버전 및 로그 문자열 조정**: `src/hw/hw_def.h`의 `_DEF_FIRMWATRE_VERSION`, `src/hw/hw.c`의 `hwInit()` 버전 출력; 배경 설명은 `docs/features_instability_monitor.md`.
+- **펌웨어 버전 및 로그 문자열 조정**: `src/hw/hw_def.h`의 `_DEF_FIRMWARE_VERSION`, `src/hw/hw.c`의 `hwInit()` 버전 출력; 배경 설명은 `docs/features_instability_monitor.md`.
 - **엔트리 포인트 및 메인 루프**: `src/main.c`의 `main()`, `src/ap/ap.c`의 `apInit()/apMain()` 흐름, 초기 설정은 `src/ap/ap_def.h`.
 - **QMK 포팅 공통 계층**: `src/ap/modules/qmk/port/`의 `sys_port.*`, `matrix*.c`, `ver_port.c`, 플랫폼별 HAL 연동은 `port/platforms/`.
 - **키보드별 키맵/설정**: `src/ap/modules/qmk/keyboards/<vendor>/<board>/`, VIA/VIAL 처리는 `src/ap/modules/qmk/port/via_hid.*`.

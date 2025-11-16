@@ -8,7 +8,7 @@
 ## 2. 구성 파일 & 빌드 매크로
 | 경로 | 심볼/함수 | 설명 |
 | --- | --- | --- |
-| `src/hw/hw_def.h` | `AUTO_FACTORY_RESET_ENABLE`, `AUTO_FACTORY_RESET_COOKIE`, `AUTO_FACTORY_RESET_FLAG_MAGIC` | 빌드 타임 스위치와 쿠키/플래그 기본값을 정의합니다. 기본값은 `_DEF_FIRMWATRE_VERSION`(`VYYMMDDRn`)을 BCD로 변환한 값입니다. |
+| `src/hw/hw_def.h` | `AUTO_FACTORY_RESET_ENABLE`, `AUTO_FACTORY_RESET_COOKIE`, `AUTO_FACTORY_RESET_FLAG_MAGIC` | 빌드 타임 스위치와 쿠키/플래그 기본값을 정의합니다. 기본값은 `_DEF_FIRMWARE_VERSION`(`VYYMMDDRn`)을 BCD로 변환한 값입니다. |
 | `src/hw/driver/eeprom_auto_factory_reset.c` | `eepromAutoFactoryResetCheck()` | 자동 초기화의 진입점. `AUTO_FACTORY_RESET_ENABLE`이 0이면 단순히 true를 반환합니다. |
 | `src/ap/modules/qmk/port/eeconfig_port.c` | `eeconfig_init_user_datablock()` | USER 데이터 초기화 시 BootMode/USB monitor 슬롯과 자동 초기화 플래그/쿠키를 갱신합니다. |
 | `src/hw/hw.c` | `eepromAutoFactoryResetCheck()` 호출 | `eeprom_init()` 이후, BootMode/USB monitor가 로드되기 전에 자동 초기화를 수행합니다. |
@@ -59,7 +59,7 @@ hwInit()
 - BootMode 동작 전체는 `docs/features_bootmode.md`, USB monitor 동작은 `docs/features_instability_monitor.md`를 참고하십시오.
 
 ## 7. 사용 방법
-1. 빌드 시 `AUTO_FACTORY_RESET_ENABLE=1`과 새로운 `_DEF_FIRMWATRE_VERSION`을 지정합니다. 쿠키를 수동으로 지정하려면 `-DAUTO_FACTORY_RESET_COOKIE=0xYYMMDDRR` 형태로 넘깁니다.
+1. 빌드 시 `AUTO_FACTORY_RESET_ENABLE=1`과 새로운 `_DEF_FIRMWARE_VERSION`을 지정합니다. 쿠키를 수동으로 지정하려면 `-DAUTO_FACTORY_RESET_COOKIE=0xYYMMDDRR` 형태로 넘깁니다.
 2. 대상 사용자가 기존 설정을 보존해야 한다면 해당 빌드 옵션을 끄고, 릴리스 노트에 수동 초기화 절차를 안내합니다.
 3. 자동 초기화 빌드를 배포할 때는 첫 부팅 로그에 `[  ] EEPROM auto factory reset : begin ...` 메시지가 출력되는지 확인합니다.
 

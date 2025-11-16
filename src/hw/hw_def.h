@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 // 펌웨어/보드 식별 정보
 // ---------------------------------------------------------------------------
-#define _DEF_FIRMWATRE_VERSION      "V251114R3"   // V251114R3: 캡 의존성 주석 및 구조 가이드 보강 (사용자 확인 필요)
+#define _DEF_FIRMWARE_VERSION       "V251114R4"   // V251114R4: 펌웨어 버전 매크로 명칭 오타 수정 및 정의 가이드 정리 완료 (사용자 확인 필요)
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
@@ -42,10 +42,10 @@
 #define __EE_BCD_BYTE(a, b) \
   ((uint32_t)((((a) - '0') & 0x0F) << 4) | (((b) - '0') & 0x0F))
 
-#define __EE_VERSION_LEN        (sizeof(_DEF_FIRMWATRE_VERSION) - 1)
-#define __EE_SAFE_CHAR(idx)     (((idx) < __EE_VERSION_LEN) ? _DEF_FIRMWATRE_VERSION[idx] : '0')
-#define __EE_REV_HIGH_CHAR()    ((__EE_VERSION_LEN > 9) ? _DEF_FIRMWATRE_VERSION[8] : '0')
-#define __EE_REV_LOW_CHAR()     ((__EE_VERSION_LEN > 9) ? _DEF_FIRMWATRE_VERSION[9] : (__EE_VERSION_LEN > 8 ? _DEF_FIRMWATRE_VERSION[8] : '0'))
+#define __EE_VERSION_LEN        (sizeof(_DEF_FIRMWARE_VERSION) - 1)
+#define __EE_SAFE_CHAR(idx)     (((idx) < __EE_VERSION_LEN) ? _DEF_FIRMWARE_VERSION[idx] : '0')
+#define __EE_REV_HIGH_CHAR()    ((__EE_VERSION_LEN > 9) ? _DEF_FIRMWARE_VERSION[8] : '0')
+#define __EE_REV_LOW_CHAR()     ((__EE_VERSION_LEN > 9) ? _DEF_FIRMWARE_VERSION[9] : (__EE_VERSION_LEN > 8 ? _DEF_FIRMWARE_VERSION[8] : '0'))
 
 #define AUTO_FACTORY_RESET_COOKIE_DEFAULT                                      \
   ( (__EE_BCD_BYTE(__EE_SAFE_CHAR(1), __EE_SAFE_CHAR(2)) << 24) | \
