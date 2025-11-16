@@ -6,8 +6,16 @@
 #include QMK_KEYMAP_CONFIG_H
 
 
-#define _DEF_FIRMWATRE_VERSION      "V251112R8"   // V251112R8: EEPROM 클린업 비동기화/계측 반영
+#define _DEF_FIRMWATRE_VERSION      "V251112R9"   // V251112R9: EEPROM 로그 경량화 적용
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
+
+#ifndef LOG_LEVEL_VERBOSE
+#define LOG_LEVEL_VERBOSE            0            // V251112R9: 기본 빌드 로그 레벨을 표준으로 유지
+#endif
+
+#ifndef DEBUG_LOG_EEPROM
+#define DEBUG_LOG_EEPROM             0            // V251112R9: EEPROM 상세 로그 토글 기본 비활성화
+#endif
 
 #ifndef AUTO_FACTORY_RESET_ENABLE
 #define AUTO_FACTORY_RESET_ENABLE    0             // V251112R3: 자동 팩토리 리셋 빌드 가드 기본 비활성화

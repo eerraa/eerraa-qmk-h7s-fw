@@ -238,6 +238,13 @@ void cliEeprom(cli_args_t *args)
       cliPrintf("eeprom queue max : %lu entries\n", (unsigned long)eeprom_get_write_pending_max());     // V251112R2: 최고 사용량
       cliPrintf("eeprom queue ofl : %lu events\n", (unsigned long)eeprom_get_write_overflow_count());  // V251112R2: 직접 쓰기 횟수
 #endif
+      i2c_ready_wait_stats_t ready_stats;
+      i2cGetReadyWaitStats(i2c_ch, &ready_stats);                           // V251112R9: Ready wait 계측 노출
+      cliPrintf("ready wait count : %lu\n", (unsigned long)ready_stats.wait_count);
+      cliPrintf("ready wait max   : %lums\n", (unsigned long)ready_stats.wait_max_ms);
+      cliPrintf("ready wait last  : %lums (addr=0x%02X)\n",
+                (unsigned long)ready_stats.wait_last_ms,
+                ready_stats.wait_last_addr);
       cliPrintf("emul cleanup busy : %d\n", eepromIsErasing());                                        // V251112R8: 외부 EEPROM에서도 계측 필드 제공
       cliPrintf("emul cleanup last : 0ms\n");                                                          // V251112R8: 클린업 미지원 보드 → 고정 0
       cliPrintf("emul cleanup wait : 0 entries\n");                                                    // V251112R8: 외부 EEPROM은 큐 대기로 전환 없음

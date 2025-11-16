@@ -24,7 +24,9 @@
 4. **클린업/Ready Wait 관측 가능성**  
    - `cli eeprom info`는 큐 상태 외에도 `emul cleanup busy/last/wait/cnt`를 출력합니다.  
      - 외부 EEPROM에서는 값이 항상 0입니다.  
-     - 내부 플래시 에뮬 빌드 시 Clean-up 진행 상황을 실시간으로 모니터링할 수 있습니다.
+     - 내부 플래시 에뮬 빌드 시 Clean-up 진행 상황을 실시간으로 모니터링할 수 있습니다.  
+   - V251112R9에서는 동일 명령으로 `ready wait count/max/last`를 함께 노출하여, 부팅 로그 없이도 페이지 폴링 상태를 확인할 수 있습니다.  
+   - 기본 빌드는 `[I2C] ch1 ready wait max=5ms count=8` 형태의 요약 로그만 출력하며, 상세 begin/done 로그는 `LOG_LEVEL_VERBOSE=1` 또는 `DEBUG_LOG_EEPROM=1`로 재활성화할 수 있습니다.
 
 ## 3. 함수/CLI 빠른 참조
 | 계층 | 함수 | 설명 |
@@ -35,12 +37,12 @@
 | HW(ZD24C128) | `eepromWritePage()` | 32바이트 페이지 쓰기와 Ready wait |
 | HW(ZD24C128) | `eepromIsErasing()` | 항상 false (클린업 개념 없음) |
 | HW(Emul) | `eepromIsErasing()` | 비동기 Clean-up 진행 여부 반환 |
-| CLI | `cli eeprom info` | 큐/클린업 통계 출력 |
+| CLI | `cli eeprom info` | 큐/클린업/Ready wait 통계 출력 |
 
 ## 4. 테스트 가이드 요약
 1. `brick60` 키보드 설정으로 빌드 후 보드 플래시.
 2. 부팅 직후 `cli eeprom info` 실행 → 큐 및 클린업 초기값 확인.
-3. VIA에서 `docs/brick60.layout.json` 업로드 후 큐 최대치와 Ready wait 로그가 기대 범위(수백 엔트리, 5~6ms)인지 확인.
+3. VIA에서 `docs/brick60.layout.json` 업로드 후 Ready wait 요약 로그가 페이지당 1줄만 출력되는지 확인하고, `cli eeprom info`의 `ready wait count/max/last`가 업데이트되는지 점검.
 4. 필요 시 `cli eeprom write`로 AUTO_FACTORY_RESET 센티넬을 손상시키고 전원을 재투입, 재부팅 과정에서 큐가 안전하게 비워지는지 확인.
 5. 내부 플래시 에뮬 빌드가 필요한 경우 `EEPROM_CHIP_EMUL` 설정으로 동일 절차를 반복해 Clean-up 계측이 갱신되는지 검증.
 

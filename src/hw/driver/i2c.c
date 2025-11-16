@@ -33,6 +33,7 @@ static bool     i2c_timing_logged[I2C_MAX_CH];
 static bool     i2c_ready_wait_active[I2C_MAX_CH];       // V251112R7: Ready 폴링 상태 추적
 static uint32_t i2c_ready_wait_start_ms[I2C_MAX_CH];     // V251112R7: Ready 폴링 시작 시각
 static uint8_t  i2c_ready_wait_addr[I2C_MAX_CH];         // V251112R7: Ready 폴링 대상 주소
+static i2c_ready_wait_stats_t i2c_ready_wait_stats[I2C_MAX_CH];  // V251112R9: Ready wait 통계 누적
 
 static bool is_init = false;
 static bool is_begin[I2C_MAX_CH];
@@ -111,6 +112,10 @@ bool i2cInit(void)
     i2c_ready_wait_active[i] = false;                    // V251112R7: Ready 폴링 로그 초기화
     i2c_ready_wait_start_ms[i] = 0;                      // V251112R7: Ready 폴링 타이머 초기화
     i2c_ready_wait_addr[i] = 0;                          // V251112R7: Ready 폴링 주소 초기화
+    i2c_ready_wait_stats[i].wait_count = 0;              // V251112R9: Ready wait 누적 카운터 초기화
+    i2c_ready_wait_stats[i].wait_last_ms = 0;            // V251112R9: Ready wait 마지막 지연 초기화
+    i2c_ready_wait_stats[i].wait_max_ms = 0;             // V251112R9: Ready wait 최댓값 초기화
+    i2c_ready_wait_stats[i].wait_last_addr = 0;          // V251112R9: Ready wait 마지막 주소 초기화
   }
 
 #if CLI_USE(HW_I2C)
@@ -283,18 +288,34 @@ bool i2cIsDeviceReady(uint8_t ch, uint8_t dev_addr)
       i2c_ready_wait_active[ch] = true;
       i2c_ready_wait_start_ms[ch] = millis();
       i2c_ready_wait_addr[ch] = dev_addr;
+#if LOG_LEVEL_VERBOSE || DEBUG_LOG_EEPROM
       logPrintf("[I2C] ch%d ready wait begin addr=0x%02X\n",
                 ch + 1,
                 dev_addr);
+#endif
     }
   }
   else if (was_waiting == true)
   {
     uint32_t elapsed = millis() - i2c_ready_wait_start_ms[ch];
+    if (elapsed > i2c_ready_wait_stats[ch].wait_max_ms)
+    {
+      i2c_ready_wait_stats[ch].wait_max_ms = elapsed;
+    }
+    i2c_ready_wait_stats[ch].wait_count++;
+    i2c_ready_wait_stats[ch].wait_last_ms = elapsed;
+    i2c_ready_wait_stats[ch].wait_last_addr = i2c_ready_wait_addr[ch];
+#if LOG_LEVEL_VERBOSE || DEBUG_LOG_EEPROM
     logPrintf("[I2C] ch%d ready wait done addr=0x%02X elapsed=%lu ms\n",
               ch + 1,
               i2c_ready_wait_addr[ch],
               (unsigned long)elapsed);
+#else
+    logPrintf("[I2C] ch%d ready wait max=%lums count=%lu\n",
+              ch + 1,
+              (unsigned long)i2c_ready_wait_stats[ch].wait_max_ms,
+              (unsigned long)i2c_ready_wait_stats[ch].wait_count);    // V251112R9: Ready wait 로그 요약
+#endif
     i2c_ready_wait_active[ch] = false;
   }
 
@@ -510,6 +531,26 @@ void i2cClearErrCount(uint8_t ch)
 uint32_t i2cGetErrCount(uint8_t ch)
 {
   return i2c_errcount[ch];
+}
+
+void i2cGetReadyWaitStats(uint8_t ch, i2c_ready_wait_stats_t *p_stats)
+{
+  if (p_stats == NULL)
+  {
+    return;
+  }
+
+  p_stats->wait_count = 0;
+  p_stats->wait_last_ms = 0;
+  p_stats->wait_max_ms = 0;
+  p_stats->wait_last_addr = 0;
+
+  if (ch >= I2C_MAX_CH)
+  {
+    return;
+  }
+
+  *p_stats = i2c_ready_wait_stats[ch];                                // V251112R9: Ready wait 통계 조회
 }
 
 void delayUs(uint32_t us)

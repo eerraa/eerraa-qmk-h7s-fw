@@ -54,7 +54,9 @@ bool eepromScheduleDeferredFactoryReset(void)
 
   if (flag_ok && cookie_ok)
   {
-    logPrintf("[  ] EEPROM auto factory reset : deferred clear scheduled\n");
+#if LOG_LEVEL_VERBOSE || DEBUG_LOG_EEPROM
+    logPrintf("[  ] EEPROM auto factory reset : deferred clear scheduled\n");  // V251112R9: 기본 빌드에서는 시작/완료 로그만 유지
+#endif
     return true;
   }
 

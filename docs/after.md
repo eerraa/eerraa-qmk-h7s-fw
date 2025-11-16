@@ -11,6 +11,12 @@
 | 2 | AUTO_FACTORY_RESET 진행 로그 축소 | 초기화 과정에서 반복되는 `[  ] EEPROM auto factory reset` 로그를 “시작/완료” 두 줄로 제한하고, 중간 플러시 상태는 CLI 계측으로 대체. 필요 시 `LOG_LEVEL_VERBOSE` 빌드옵션을 통해 확장. |
 | 3 | `cli eeprom info` 보조 지표 활용 | 실시간 로그 대신 CLI 명령으로 큐/클린업/ready wait 통계를 확인하도록 문서(`docs/eeprom.md`)에 절차 추가. 사용자가 로그를 비워두고 CLI로만 관측하도록 안내. |
 
+### 진행 현황
+- **V251112R9**  
+  - 단계 1: `[I2C] ch# ready wait max=... count=...` 요약 로그로 대체하고, `LOG_LEVEL_VERBOSE`/`DEBUG_LOG_EEPROM` 설정 시 기존 begin/done 로그 복원 가능하도록 분기했습니다.  
+  - 단계 2: `deferred clear scheduled` 알림을 verbose 전용으로 옮겨 부팅 시 “시작/완료”만 출력되게 했습니다.  
+  - 단계 3: `cli eeprom info`에 `ready wait count/max/last` 필드를 추가하고, `docs/eeprom.md`에 확인 절차를 갱신했습니다.
+
 ## 3. UART 로그 보드 전용 정책
 | 단계 | 작업 내용 | 세부 조치 |
 | --- | --- | --- |

@@ -11,6 +11,13 @@
 
 #define I2C_MAX_CH       HW_I2C_MAX_CH
 
+typedef struct
+{
+  uint32_t wait_count;
+  uint32_t wait_last_ms;
+  uint32_t wait_max_ms;
+  uint8_t  wait_last_addr;
+} i2c_ready_wait_stats_t;                                    // V251112R9: Ready wait 통계 구조체
 
 bool i2cInit(void);
 bool i2cIsInit(void);
@@ -36,6 +43,7 @@ uint32_t i2cGetTimeout(uint8_t ch);
 
 void     i2cClearErrCount(uint8_t ch);
 uint32_t i2cGetErrCount(uint8_t ch);
+void     i2cGetReadyWaitStats(uint8_t ch, i2c_ready_wait_stats_t *p_stats);   // V251112R9: Ready wait 통계 조회
 
 
 #endif
