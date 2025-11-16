@@ -161,11 +161,13 @@ bool eeprom_apply_factory_defaults(bool restore_factory_reset_sentinel)
 #endif
   eeprom_flush_pending();
 
+#if (EECONFIG_USER_DATA_SIZE) == 0
 #ifdef BOOTMODE_ENABLE
-  usbBootModeApplyDefaults();
+  usbBootModeApplyDefaults();                               // V251114R4: USER 블록이 없을 때만 기본값 백업 적용
 #endif
 #ifdef USB_MONITOR_ENABLE
-  usb_monitor_storage_apply_defaults();
+  usb_monitor_storage_apply_defaults();                     // V251114R4: USB 모니터 슬롯도 동일 조건으로 보강
+#endif
 #endif
   eeprom_flush_pending();
 
