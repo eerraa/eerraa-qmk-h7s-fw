@@ -56,7 +56,7 @@ file(GLOB QMK_SRC_FILES CONFIGURE_DEPENDS
 
   ${QMK_ROOT_PATH}/quantum/sequencer/*.c
   ${QMK_ROOT_PATH}/quantum/logging/*.c
-  ${QMK_ROOT_PATH}/quantum/debounce/debounce_runtime.c
+  ${QMK_ROOT_PATH}/quantum/debounce_runtime.c
   ${QMK_ROOT_PATH}/quantum/debounce/asym_eager_defer_pk.c
   ${QMK_ROOT_PATH}/quantum/debounce/sym_defer_pk.c
   ${QMK_ROOT_PATH}/quantum/debounce/sym_eager_pk.c
