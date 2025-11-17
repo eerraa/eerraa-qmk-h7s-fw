@@ -435,14 +435,10 @@ static bool debounce_profile_values_changed(const debounce_profile_values_t *bef
 
 static void debounce_profile_log_change(const char *source)
 {
-#if LOG_LEVEL_VERBOSE
   const char *log_source = (source != NULL) ? source : "unknown";
   logPrintf("[  ] DEBOUNCE change (%s): type %d, pre %d ms, post %d ms\n",
             log_source,
             debounce_profile_state.values.type,
             debounce_profile_state.values.pre_ms,
             debounce_profile_state.values.post_ms);         // V251115R2: VIA 디바운스 런타임 설정 변경 로그
-#else
-  (void)source;
-#endif
 }
