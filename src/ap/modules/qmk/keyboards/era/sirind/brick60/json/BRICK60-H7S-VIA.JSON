@@ -213,12 +213,12 @@
               "options": [
                 ["Balanced", 0],
                 ["Fast", 1],
-                ["Asym", 2]
+                ["Advanced", 2]
               ]
             },
             {
               "showIf": "{id_qmk_debounce_mode} == 0",
-              "label": "Pre+Post (ms)",
+              "label": "Press & Release - delay before and after (same value)",
               "type": "dropdown",
               "content": ["id_qmk_debounce_time_single", 14, 2],
               "options": [
@@ -234,7 +234,7 @@
               "content": [
                 {
                   "showIf": "{id_qmk_debounce_mode} == 2",
-                  "label": "Press post (ms)",
+                  "label": "Press - delay after press (post-only cooldown)",
                   "type": "dropdown",
                   "content": ["id_qmk_debounce_time_pre", 14, 3],
                   "options": [
@@ -252,7 +252,7 @@
               "content": [
                 {
                   "showIf": "{id_qmk_debounce_mode} == 1",
-                  "label": "Post (ms)",
+                  "label": "Press & Release - delay after change (post-only)",
                   "type": "dropdown",
                   "content": ["id_qmk_debounce_time_post", 14, 4],
                   "options": [
@@ -266,7 +266,7 @@
                 },
                 {
                   "showIf": "{id_qmk_debounce_mode} == 2",
-                  "label": "Release pre+post (ms)",
+                  "label": "Release - delay before and after release (pre+post window)",
                   "type": "dropdown",
                   "content": ["id_qmk_debounce_time_post", 14, 4],
                   "options": [

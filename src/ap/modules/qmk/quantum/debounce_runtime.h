@@ -30,6 +30,8 @@ typedef enum
 bool                         debounce_runtime_apply_config(const debounce_runtime_config_t *config);
 const debounce_runtime_config_t *
                               debounce_runtime_get_config(void);
+const debounce_runtime_config_t *
+                              debounce_runtime_get_default_config(void);  // V251115R3: 보드 기본 디바운스 설정 조회
 debounce_runtime_error_t     debounce_runtime_get_last_error(void);
 bool                         debounce_runtime_is_ready(void);
 

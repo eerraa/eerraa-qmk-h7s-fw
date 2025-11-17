@@ -33,8 +33,8 @@
 
 #define MATRIX_ROWS                 5
 #define MATRIX_COLS                 15
-#define DEBOUNCE                    20
-#define DEBOUNCE_TYPE               sym_eager_pk   // V251114R3: CMake 없이 debounce 구현 선택
+#define DEBOUNCE                    5
+#define DEBOUNCE_TYPE               sym_defer_pk   // V251114R3: CMake 없이 debounce 구현 선택
 
 
 // ---------------------------------------------------------------------------

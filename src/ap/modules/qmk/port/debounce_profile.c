@@ -13,8 +13,6 @@
 #define DEBOUNCE_PROFILE_VERSION       (1U)
 #define DEBOUNCE_PROFILE_MIN_DELAY_MS  (1U)
 #define DEBOUNCE_PROFILE_MAX_DELAY_MS  (30U)
-#define DEBOUNCE_PROFILE_DEFAULT_DELAY (5U)
-#define DEBOUNCE_PROFILE_DEFAULT_TYPE  (DEBOUNCE_RUNTIME_TYPE_SYM_DEFER_PK)
 
 
 typedef struct __attribute__((packed))
@@ -53,6 +51,7 @@ static void     debounce_profile_get_value_internal(uint8_t id, uint8_t *value_d
 static void     debounce_profile_log_change(const char *source);
 static bool     debounce_profile_values_changed(const debounce_profile_values_t *before,
                                                 const debounce_profile_values_t *after);
+static const debounce_runtime_config_t *debounce_profile_default_config(void);
 
 
 void debounce_profile_init(void)
@@ -287,9 +286,10 @@ bool debounce_profile_handle_via_command(uint8_t *data, uint8_t length)
 
 static void debounce_profile_apply_defaults_locked(void)
 {
-  debounce_profile_storage.type      = (uint8_t)DEBOUNCE_PROFILE_DEFAULT_TYPE;
-  debounce_profile_storage.pre_ms    = DEBOUNCE_PROFILE_DEFAULT_DELAY;
-  debounce_profile_storage.post_ms   = DEBOUNCE_PROFILE_DEFAULT_DELAY;
+  const debounce_runtime_config_t *default_config = debounce_profile_default_config();
+  debounce_profile_storage.type      = (uint8_t)default_config->type;
+  debounce_profile_storage.pre_ms    = debounce_profile_clamp_delay(default_config->pre_ms);
+  debounce_profile_storage.post_ms   = debounce_profile_clamp_delay(default_config->post_ms);
   debounce_profile_storage.version   = DEBOUNCE_PROFILE_VERSION;
   debounce_profile_storage.signature = DEBOUNCE_PROFILE_SIGNATURE;
   eeconfig_flag_debounce_profile(true);
@@ -304,7 +304,7 @@ static void debounce_profile_sync_from_storage(void)
 
   if (values.type >= DEBOUNCE_RUNTIME_TYPE_COUNT)
   {
-    values.type = DEBOUNCE_PROFILE_DEFAULT_TYPE;
+    values.type = debounce_profile_default_config()->type;
   }
   if (values.type == DEBOUNCE_RUNTIME_TYPE_SYM_DEFER_PK)
   {
@@ -329,6 +329,11 @@ static bool debounce_profile_is_storage_valid(const debounce_profile_storage_t *
     return false;
   }
   return true;
+}
+
+static const debounce_runtime_config_t *debounce_profile_default_config(void)
+{
+  return debounce_runtime_get_default_config();             // V251115R3: 보드 기본 디바운스 설정을 프로필 기본값으로 사용
 }
 
 static uint8_t debounce_profile_clamp_delay(uint8_t delay)

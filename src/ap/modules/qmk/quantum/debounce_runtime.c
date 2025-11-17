@@ -4,6 +4,24 @@
 #include <stddef.h>
 #include <string.h>
 
+#ifndef QMK_DEFAULT_DEBOUNCE_TYPE
+#define QMK_DEFAULT_DEBOUNCE_TYPE      sym_defer_pk
+#endif
+#ifndef QMK_DEFAULT_DEBOUNCE_DELAY
+#ifdef DEBOUNCE
+#define QMK_DEFAULT_DEBOUNCE_DELAY     DEBOUNCE
+#else
+#define QMK_DEFAULT_DEBOUNCE_DELAY     5U
+#endif
+#endif
+
+// V251115R3: 보드 config.h의 디바운스 기본값을 런타임 기본값으로 반영
+#define DEBOUNCE_RUNTIME_CFG_sym_defer_pk        { .type = DEBOUNCE_RUNTIME_TYPE_SYM_DEFER_PK,       .pre_ms = (uint8_t)(QMK_DEFAULT_DEBOUNCE_DELAY), .post_ms = (uint8_t)(QMK_DEFAULT_DEBOUNCE_DELAY) }
+#define DEBOUNCE_RUNTIME_CFG_sym_eager_pk        { .type = DEBOUNCE_RUNTIME_TYPE_SYM_EAGER_PK,       .pre_ms = 1U,                                       .post_ms = (uint8_t)(QMK_DEFAULT_DEBOUNCE_DELAY) }
+#define DEBOUNCE_RUNTIME_CFG_asym_eager_defer_pk { .type = DEBOUNCE_RUNTIME_TYPE_ASYM_EAGER_DEFER_PK, .pre_ms = (uint8_t)(QMK_DEFAULT_DEBOUNCE_DELAY), .post_ms = (uint8_t)(QMK_DEFAULT_DEBOUNCE_DELAY) }
+#define DEBOUNCE_RUNTIME_CFG_JOIN(type)          DEBOUNCE_RUNTIME_CFG_##type
+#define DEBOUNCE_RUNTIME_CFG(type)               DEBOUNCE_RUNTIME_CFG_JOIN(type)  // V251115R3: 토큰 전달 시 매크로 확장 허용
+
 
 // V251115R1: VIA 런타임 디바운스 엔진이 각 알고리즘을 동적으로 전환하도록 구현
 typedef bool (*debounce_algo_init_t)(uint8_t num_rows);
@@ -76,12 +94,7 @@ typedef struct
 } debounce_runtime_state_t;
 
 static debounce_runtime_state_t g_runtime = {0};
-static const debounce_runtime_config_t     k_default_config =
-{
-  .type    = DEBOUNCE_RUNTIME_TYPE_SYM_DEFER_PK,
-  .pre_ms  = 5U,
-  .post_ms = 5U,
-};
+static const debounce_runtime_config_t k_default_config = DEBOUNCE_RUNTIME_CFG(QMK_DEFAULT_DEBOUNCE_TYPE);
 
 
 static const debounce_algo_entry_t *debounce_runtime_find_algo(debounce_runtime_type_t type);
@@ -130,6 +143,11 @@ const debounce_runtime_config_t *debounce_runtime_get_config(void)
     return &g_runtime.config;
   }
   return &k_default_config;
+}
+
+const debounce_runtime_config_t *debounce_runtime_get_default_config(void)
+{
+  return &k_default_config;                                        // V251115R3: 보드 기본 디바운스 설정 반환
 }
 
 debounce_runtime_error_t debounce_runtime_get_last_error(void)

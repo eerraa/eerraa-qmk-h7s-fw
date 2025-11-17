@@ -13,12 +13,24 @@ set(_QMK_RGBLIGHT_DEFINED_BY_CONFIG FALSE)
 
 set(_QMK_CONFIG_HEADER "${QMK_KEYBOARD_PATH}/config.h")
 if (EXISTS "${_QMK_CONFIG_HEADER}")
+  file(STRINGS "${_QMK_CONFIG_HEADER}" _QMK_DEBOUNCE_DEFINE REGEX "^[ \\t]*#define[ \\t]+DEBOUNCE[ \\t]+[0-9]+")
+  file(STRINGS "${_QMK_CONFIG_HEADER}" _QMK_DEBOUNCE_TYPE_LINE REGEX "^[ \\t]*#define[ \\t]+DEBOUNCE_TYPE[ \\t]+[A-Za-z0-9_]+")
+
   if (_QMK_RGBLIGHT_CAN_AUTO)
     file(STRINGS "${_QMK_CONFIG_HEADER}" _QMK_RGBLIGHT_DEFINE REGEX "^[ \\t]*#define[ \\t]+RGBLIGHT_ENABLE")
     if (_QMK_RGBLIGHT_DEFINE)
       set(RGBLIGHT_ENABLE ON)
       set(_QMK_RGBLIGHT_DEFINED_BY_CONFIG TRUE)
     endif()
+  endif()
+
+  if (_QMK_DEBOUNCE_DEFINE)
+    string(REGEX REPLACE ".*#define[ \\t]+DEBOUNCE[ \\t]+([0-9]+).*" "\\1" _QMK_DEBOUNCE_VALUE "${_QMK_DEBOUNCE_DEFINE}")
+    add_compile_definitions(QMK_DEFAULT_DEBOUNCE_DELAY=${_QMK_DEBOUNCE_VALUE})  # V251115R3: 보드 config.h DEBOUNCE 값 기본 적용
+  endif()
+  if (_QMK_DEBOUNCE_TYPE_LINE)
+    string(REGEX REPLACE ".*#define[ \\t]+DEBOUNCE_TYPE[ \\t]+([A-Za-z0-9_]+).*" "\\1" _QMK_DEBOUNCE_TYPE "${_QMK_DEBOUNCE_TYPE_LINE}")
+    add_compile_definitions(QMK_DEFAULT_DEBOUNCE_TYPE=${_QMK_DEBOUNCE_TYPE})    # V251115R3: 보드 config.h DEBOUNCE_TYPE 토큰 기본 적용
   endif()
 endif()
 
