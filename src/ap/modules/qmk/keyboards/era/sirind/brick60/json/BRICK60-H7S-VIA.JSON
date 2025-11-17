@@ -231,53 +231,45 @@
               ]
             },
             {
-              "content": [
-                {
-                  "showIf": "{id_qmk_debounce_mode} == 2",
-                  "label": "Press - delay after press (post-only cooldown)",
-                  "type": "dropdown",
-                  "content": ["id_qmk_debounce_time_pre", 14, 3],
-                  "options": [
-                    ["1 ms", 1], ["2 ms", 2], ["3 ms", 3], ["4 ms", 4], ["5 ms", 5],
-                    ["6 ms", 6], ["7 ms", 7], ["8 ms", 8], ["9 ms", 9], ["10 ms", 10],
-                    ["11 ms", 11], ["12 ms", 12], ["13 ms", 13], ["14 ms", 14], ["15 ms", 15],
-                    ["16 ms", 16], ["17 ms", 17], ["18 ms", 18], ["19 ms", 19], ["20 ms", 20],
-                    ["21 ms", 21], ["22 ms", 22], ["23 ms", 23], ["24 ms", 24], ["25 ms", 25],
-                    ["26 ms", 26], ["27 ms", 27], ["28 ms", 28], ["29 ms", 29], ["30 ms", 30]
-                  ]
-                }
+              "showIf": "{id_qmk_debounce_mode} == 2",
+              "label": "Press - delay after press (post-only cooldown)",
+              "type": "dropdown",
+              "content": ["id_qmk_debounce_time_pre", 14, 3],
+              "options": [
+                ["1 ms", 1], ["2 ms", 2], ["3 ms", 3], ["4 ms", 4], ["5 ms", 5],
+                ["6 ms", 6], ["7 ms", 7], ["8 ms", 8], ["9 ms", 9], ["10 ms", 10],
+                ["11 ms", 11], ["12 ms", 12], ["13 ms", 13], ["14 ms", 14], ["15 ms", 15],
+                ["16 ms", 16], ["17 ms", 17], ["18 ms", 18], ["19 ms", 19], ["20 ms", 20],
+                ["21 ms", 21], ["22 ms", 22], ["23 ms", 23], ["24 ms", 24], ["25 ms", 25],
+                ["26 ms", 26], ["27 ms", 27], ["28 ms", 28], ["29 ms", 29], ["30 ms", 30]
               ]
             },
             {
-              "content": [
-                {
-                  "showIf": "{id_qmk_debounce_mode} == 1",
-                  "label": "Press & Release - delay after change (post-only)",
-                  "type": "dropdown",
-                  "content": ["id_qmk_debounce_time_post", 14, 4],
-                  "options": [
-                    ["1 ms", 1], ["2 ms", 2], ["3 ms", 3], ["4 ms", 4], ["5 ms", 5],
-                    ["6 ms", 6], ["7 ms", 7], ["8 ms", 8], ["9 ms", 9], ["10 ms", 10],
-                    ["11 ms", 11], ["12 ms", 12], ["13 ms", 13], ["14 ms", 14], ["15 ms", 15],
-                    ["16 ms", 16], ["17 ms", 17], ["18 ms", 18], ["19 ms", 19], ["20 ms", 20],
-                    ["21 ms", 21], ["22 ms", 22], ["23 ms", 23], ["24 ms", 24], ["25 ms", 25],
-                    ["26 ms", 26], ["27 ms", 27], ["28 ms", 28], ["29 ms", 29], ["30 ms", 30]
-                  ]
-                },
-                {
-                  "showIf": "{id_qmk_debounce_mode} == 2",
-                  "label": "Release - delay before and after release (pre+post window)",
-                  "type": "dropdown",
-                  "content": ["id_qmk_debounce_time_post", 14, 4],
-                  "options": [
-                    ["1 ms", 1], ["2 ms", 2], ["3 ms", 3], ["4 ms", 4], ["5 ms", 5],
-                    ["6 ms", 6], ["7 ms", 7], ["8 ms", 8], ["9 ms", 9], ["10 ms", 10],
-                    ["11 ms", 11], ["12 ms", 12], ["13 ms", 13], ["14 ms", 14], ["15 ms", 15],
-                    ["16 ms", 16], ["17 ms", 17], ["18 ms", 18], ["19 ms", 19], ["20 ms", 20],
-                    ["21 ms", 21], ["22 ms", 22], ["23 ms", 23], ["24 ms", 24], ["25 ms", 25],
-                    ["26 ms", 26], ["27 ms", 27], ["28 ms", 28], ["29 ms", 29], ["30 ms", 30]
-                  ]
-                }
+              "showIf": "{id_qmk_debounce_mode} == 1",
+              "label": "Press & Release - delay after change (post-only)",
+              "type": "dropdown",
+              "content": ["id_qmk_debounce_time_post", 14, 4],
+              "options": [
+                ["1 ms", 1], ["2 ms", 2], ["3 ms", 3], ["4 ms", 4], ["5 ms", 5],
+                ["6 ms", 6], ["7 ms", 7], ["8 ms", 8], ["9 ms", 9], ["10 ms", 10],
+                ["11 ms", 11], ["12 ms", 12], ["13 ms", 13], ["14 ms", 14], ["15 ms", 15],
+                ["16 ms", 16], ["17 ms", 17], ["18 ms", 18], ["19 ms", 19], ["20 ms", 20],
+                ["21 ms", 21], ["22 ms", 22], ["23 ms", 23], ["24 ms", 24], ["25 ms", 25],
+                ["26 ms", 26], ["27 ms", 27], ["28 ms", 28], ["29 ms", 29], ["30 ms", 30]
+              ]
+            },
+            {
+              "showIf": "{id_qmk_debounce_mode} == 2",
+              "label": "Release - delay before and after release (pre+post window)",
+              "type": "dropdown",
+              "content": ["id_qmk_debounce_time_post", 14, 4],
+              "options": [
+                ["1 ms", 1], ["2 ms", 2], ["3 ms", 3], ["4 ms", 4], ["5 ms", 5],
+                ["6 ms", 6], ["7 ms", 7], ["8 ms", 8], ["9 ms", 9], ["10 ms", 10],
+                ["11 ms", 11], ["12 ms", 12], ["13 ms", 13], ["14 ms", 14], ["15 ms", 15],
+                ["16 ms", 16], ["17 ms", 17], ["18 ms", 18], ["19 ms", 19], ["20 ms", 20],
+                ["21 ms", 21], ["22 ms", 22], ["23 ms", 23], ["24 ms", 24], ["25 ms", 25],
+                ["26 ms", 26], ["27 ms", 27], ["28 ms", 28], ["29 ms", 29], ["30 ms", 30]
               ]
             }
           ]
