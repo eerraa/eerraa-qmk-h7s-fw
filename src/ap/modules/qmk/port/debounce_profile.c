@@ -50,6 +50,9 @@ static uint8_t  debounce_profile_clamp_delay(uint8_t delay);
 static void     debounce_profile_store_current(void);
 static bool     debounce_profile_set_value_internal(uint8_t id, uint8_t value);
 static void     debounce_profile_get_value_internal(uint8_t id, uint8_t *value_data);
+static void     debounce_profile_log_change(const char *source);
+static bool     debounce_profile_values_changed(const debounce_profile_values_t *before,
+                                                const debounce_profile_values_t *after);
 
 
 void debounce_profile_init(void)
@@ -126,6 +129,7 @@ bool debounce_profile_set_mode(uint8_t mode)
     return false;
   }
 
+  debounce_profile_values_t previous = debounce_profile_state.values;
   debounce_profile_state.values.type = (debounce_runtime_type_t)mode;
   if (mode == DEBOUNCE_RUNTIME_TYPE_SYM_DEFER_PK)
   {
@@ -143,10 +147,15 @@ bool debounce_profile_set_mode(uint8_t mode)
     debounce_profile_state.values.post_ms = debounce_profile_clamp_delay(debounce_profile_state.values.post_ms);
   }
 
+  bool changed = debounce_profile_values_changed(&previous, &debounce_profile_state.values);
   debounce_profile_state.applied         = false;
   debounce_profile_state.requires_reboot = false;
   debounce_profile_store_current();
   debounce_profile_apply_current();
+  if (changed)
+  {
+    debounce_profile_log_change("mode");                    // V251115R2: VIA 디바운스 타입 변경 로그
+  }
   return true;
 }
 
@@ -157,12 +166,18 @@ bool debounce_profile_set_single_delay(uint8_t delay_ms)
     return false;
   }
 
+  debounce_profile_values_t previous = debounce_profile_state.values;
   uint8_t clamped = debounce_profile_clamp_delay(delay_ms);
   debounce_profile_state.values.pre_ms  = clamped;
   debounce_profile_state.values.post_ms = clamped;
+  bool changed = debounce_profile_values_changed(&previous, &debounce_profile_state.values);
   debounce_profile_state.applied        = false;
   debounce_profile_store_current();
   debounce_profile_apply_current();
+  if (changed)
+  {
+    debounce_profile_log_change("single delay");            // V251115R2: VIA 디바운스 지연 변경 로그
+  }
   return true;
 }
 
@@ -173,10 +188,16 @@ bool debounce_profile_set_press_delay(uint8_t delay_ms)
     return false;
   }
 
+  debounce_profile_values_t previous = debounce_profile_state.values;
   debounce_profile_state.values.pre_ms = debounce_profile_clamp_delay(delay_ms);
+  bool changed = debounce_profile_values_changed(&previous, &debounce_profile_state.values);
   debounce_profile_state.applied       = false;
   debounce_profile_store_current();
   debounce_profile_apply_current();
+  if (changed)
+  {
+    debounce_profile_log_change("press delay");             // V251115R2: VIA 디바운스 지연 변경 로그
+  }
   return true;
 }
 
@@ -187,10 +208,16 @@ bool debounce_profile_set_release_delay(uint8_t delay_ms)
     return false;
   }
 
+  debounce_profile_values_t previous = debounce_profile_state.values;
   debounce_profile_state.values.post_ms = debounce_profile_clamp_delay(delay_ms);
+  bool changed = debounce_profile_values_changed(&previous, &debounce_profile_state.values);
   debounce_profile_state.applied        = false;
   debounce_profile_store_current();
   debounce_profile_apply_current();
+  if (changed)
+  {
+    debounce_profile_log_change("release delay");           // V251115R2: VIA 디바운스 지연 변경 로그
+  }
   return true;
 }
 
@@ -381,4 +408,41 @@ static void debounce_profile_get_value_internal(uint8_t id, uint8_t *value_data)
       value_data[0] = 0U;
       break;
   }
+}
+
+static bool debounce_profile_values_changed(const debounce_profile_values_t *before,
+                                            const debounce_profile_values_t *after)
+{
+  if (before == NULL || after == NULL)
+  {
+    return false;
+  }
+
+  if (before->type != after->type)
+  {
+    return true;
+  }
+  if (before->pre_ms != after->pre_ms)
+  {
+    return true;
+  }
+  if (before->post_ms != after->post_ms)
+  {
+    return true;
+  }
+  return false;
+}
+
+static void debounce_profile_log_change(const char *source)
+{
+#if LOG_LEVEL_VERBOSE
+  const char *log_source = (source != NULL) ? source : "unknown";
+  logPrintf("[  ] DEBOUNCE change (%s): type %d, pre %d ms, post %d ms\n",
+            log_source,
+            debounce_profile_state.values.type,
+            debounce_profile_state.values.pre_ms,
+            debounce_profile_state.values.post_ms);         // V251115R2: VIA 디바운스 런타임 설정 변경 로그
+#else
+  (void)source;
+#endif
 }
