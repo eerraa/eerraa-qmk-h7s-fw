@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "quantum/debounce_runtime.h"
+#include "qmk/quantum/debounce_runtime.h"
 
 
 typedef struct
