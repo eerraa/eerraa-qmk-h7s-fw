@@ -11,13 +11,6 @@ else()
 endif()
 set(_QMK_RGBLIGHT_DEFINED_BY_CONFIG FALSE)
 
-if (DEFINED DEBOUNCE_TYPE)
-  set(_QMK_DEBOUNCE_CAN_AUTO FALSE)
-else()
-  set(_QMK_DEBOUNCE_CAN_AUTO TRUE)
-  set(DEBOUNCE_TYPE sym_eager_pk)
-endif()
-
 set(_QMK_CONFIG_HEADER "${QMK_KEYBOARD_PATH}/config.h")
 if (EXISTS "${_QMK_CONFIG_HEADER}")
   if (_QMK_RGBLIGHT_CAN_AUTO)
@@ -25,12 +18,6 @@ if (EXISTS "${_QMK_CONFIG_HEADER}")
     if (_QMK_RGBLIGHT_DEFINE)
       set(RGBLIGHT_ENABLE ON)
       set(_QMK_RGBLIGHT_DEFINED_BY_CONFIG TRUE)
-    endif()
-  endif()
-  if (_QMK_DEBOUNCE_CAN_AUTO)
-    file(STRINGS "${_QMK_CONFIG_HEADER}" _QMK_DEBOUNCE_LINE REGEX "^[ \\t]*#define[ \\t]+DEBOUNCE_TYPE[ \\t]+[A-Za-z0-9_]+")
-    if (_QMK_DEBOUNCE_LINE)
-      string(REGEX REPLACE ".*#define[ \\t]+DEBOUNCE_TYPE[ \\t]+([A-Za-z0-9_]+).*" "\\1" DEBOUNCE_TYPE "${_QMK_DEBOUNCE_LINE}")
     endif()
   endif()
 endif()
@@ -69,9 +56,10 @@ file(GLOB QMK_SRC_FILES CONFIGURE_DEPENDS
 
   ${QMK_ROOT_PATH}/quantum/sequencer/*.c
   ${QMK_ROOT_PATH}/quantum/logging/*.c
-  # ${QMK_ROOT_PATH}/quantum/debounce/sym_eager_pk.c
-  # ${QMK_ROOT_PATH}/quantum/debounce/asym_eager_defer_pk.c
-  ${QMK_ROOT_PATH}/quantum/debounce/${DEBOUNCE_TYPE}.c
+  ${QMK_ROOT_PATH}/quantum/debounce/debounce_runtime.c
+  ${QMK_ROOT_PATH}/quantum/debounce/asym_eager_defer_pk.c
+  ${QMK_ROOT_PATH}/quantum/debounce/sym_defer_pk.c
+  ${QMK_ROOT_PATH}/quantum/debounce/sym_eager_pk.c
   
 
   ${QMK_ROOT_PATH}/quantum/send_string/*.c

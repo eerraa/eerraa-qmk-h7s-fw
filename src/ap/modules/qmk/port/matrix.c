@@ -9,6 +9,7 @@
 #include "usb.h"
 #include "keys.h"
 #include "matrix_instrumentation.h"  // V251009R9: 매트릭스 계측 경로를 독립 모듈로 이관
+#include "debounce_profile.h"
 
 
 /* matrix state(1:on, 0:off) */
@@ -29,6 +30,7 @@ void matrix_init(void)
   memset(raw_matrix, 0, sizeof(raw_matrix));
 
   debounce_init(MATRIX_ROWS);
+  debounce_profile_apply_current();                                   // V251115R1: 매트릭스 초기화 직후 현재 디바운스 프로필 적용
 
   cliAdd("matrix", cliCmd);
 }
