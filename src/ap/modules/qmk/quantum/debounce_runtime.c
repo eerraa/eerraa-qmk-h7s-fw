@@ -185,6 +185,16 @@ bool debounce(matrix_row_t raw[], matrix_row_t cooked[], uint8_t num_rows, bool 
   {
     return changed;
   }
+
+  if (!debounce_runtime_is_ready())                                             // V251115R4: 재초기화 대기/오류 시 안전 경로로 우회
+  {
+    debounce_runtime_apply_if_possible();
+    if (!debounce_runtime_is_ready())
+    {
+      return changed;
+    }
+  }
+
   if (num_rows != g_runtime.rows)
   {
     return g_runtime.algo->run(raw, cooked, g_runtime.rows, changed);
