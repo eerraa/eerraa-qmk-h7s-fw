@@ -204,26 +204,26 @@
           ]
         },
         {
-          "label": "Key Response",
+          "label": "DEBOUNCE",
           "content": [
             {
-              "label": "Response Mode",
+              "label": "Debounce Mode",
               "type": "dropdown",
               "content": ["id_qmk_debounce_mode", 14, 1],
               "options": [
-                ["Balanced: same delay on press & release", 0],
-                ["Fast Press: instant press / delayed release", 1],
-                ["Advanced: separate press cooldown / release delay", 2]
+                ["Balanced", 0],
+                ["Fast", 1],
+                ["Advanced", 2]
               ]
             },
             {
               "showIf": "{id_qmk_debounce_mode} == 0",
-              "label": "Hold-off (Press & Release, ms)",
+              "label": "Press & Release Hold-off",
               "type": "dropdown",
               "content": ["id_qmk_debounce_time_single", 14, 2],
               "options": [
-                ["01 ms", 1], ["02 ms", 2], ["03 ms", 3], ["04 ms", 4], ["05 ms", 5],
-                ["06 ms", 6], ["07 ms", 7], ["08 ms", 8], ["09 ms", 9], ["10 ms", 10],
+                ["1 ms", 1], ["2 ms", 2], ["3 ms", 3], ["4 ms", 4], ["5 ms", 5],
+                ["6 ms", 6], ["7 ms", 7], ["8 ms", 8], ["9 ms", 9], ["10 ms", 10],
                 ["11 ms", 11], ["12 ms", 12], ["13 ms", 13], ["14 ms", 14], ["15 ms", 15],
                 ["16 ms", 16], ["17 ms", 17], ["18 ms", 18], ["19 ms", 19], ["20 ms", 20],
                 ["21 ms", 21], ["22 ms", 22], ["23 ms", 23], ["24 ms", 24], ["25 ms", 25],
@@ -231,45 +231,53 @@
               ]
             },
             {
-              "showIf": "{id_qmk_debounce_mode} == 1",
-              "label": "Release Hold-off (ms)",
-              "type": "dropdown",
-              "content": ["id_qmk_debounce_time_post", 14, 4],
-              "options": [
-                ["01 ms", 1], ["02 ms", 2], ["03 ms", 3], ["04 ms", 4], ["05 ms", 5],
-                ["06 ms", 6], ["07 ms", 7], ["08 ms", 8], ["09 ms", 9], ["10 ms", 10],
-                ["11 ms", 11], ["12 ms", 12], ["13 ms", 13], ["14 ms", 14], ["15 ms", 15],
-                ["16 ms", 16], ["17 ms", 17], ["18 ms", 18], ["19 ms", 19], ["20 ms", 20],
-                ["21 ms", 21], ["22 ms", 22], ["23 ms", 23], ["24 ms", 24], ["25 ms", 25],
-                ["26 ms", 26], ["27 ms", 27], ["28 ms", 28], ["29 ms", 29], ["30 ms", 30]
+              "content": [
+                {
+                  "showIf": "{id_qmk_debounce_mode} == 2",
+                  "label": "Press Cooldown (ms)",
+                  "type": "dropdown",
+                  "content": ["id_qmk_debounce_time_pre", 14, 3],
+                  "options": [
+                    ["1 ms", 1], ["2 ms", 2], ["3 ms", 3], ["4 ms", 4], ["5 ms", 5],
+                    ["6 ms", 6], ["7 ms", 7], ["8 ms", 8], ["9 ms", 9], ["10 ms", 10],
+                    ["11 ms", 11], ["12 ms", 12], ["13 ms", 13], ["14 ms", 14], ["15 ms", 15],
+                    ["16 ms", 16], ["17 ms", 17], ["18 ms", 18], ["19 ms", 19], ["20 ms", 20],
+                    ["21 ms", 21], ["22 ms", 22], ["23 ms", 23], ["24 ms", 24], ["25 ms", 25],
+                    ["26 ms", 26], ["27 ms", 27], ["28 ms", 28], ["29 ms", 29], ["30 ms", 30]
+                  ]
+                }
               ]
             },
             {
-              "showIf": "{id_qmk_debounce_mode} == 2",
-              "label": "Press Cooldown (ms, 0 = instant)",
-              "type": "dropdown",
-              "content": ["id_qmk_debounce_time_pre", 14, 3],
-              "options": [
-                ["01 ms", 1], ["02 ms", 2], ["03 ms", 3], ["04 ms", 4], ["05 ms", 5],
-                ["06 ms", 6], ["07 ms", 7], ["08 ms", 8], ["09 ms", 9], ["10 ms", 10],
-                ["11 ms", 11], ["12 ms", 12], ["13 ms", 13], ["14 ms", 14], ["15 ms", 15],
-                ["16 ms", 16], ["17 ms", 17], ["18 ms", 18], ["19 ms", 19], ["20 ms", 20],
-                ["21 ms", 21], ["22 ms", 22], ["23 ms", 23], ["24 ms", 24], ["25 ms", 25],
-                ["26 ms", 26], ["27 ms", 27], ["28 ms", 28], ["29 ms", 29], ["30 ms", 30]
-              ]
-            },
-            {
-              "showIf": "{id_qmk_debounce_mode} == 2",
-              "label": "Release Delay (ms)",
-              "type": "dropdown",
-              "content": ["id_qmk_debounce_time_post", 14, 4],
-              "options": [
-                ["01 ms", 1], ["02 ms", 2], ["03 ms", 3], ["04 ms", 4], ["05 ms", 5],
-                ["06 ms", 6], ["07 ms", 7], ["08 ms", 8], ["09 ms", 9], ["10 ms", 10],
-                ["11 ms", 11], ["12 ms", 12], ["13 ms", 13], ["14 ms", 14], ["15 ms", 15],
-                ["16 ms", 16], ["17 ms", 17], ["18 ms", 18], ["19 ms", 19], ["20 ms", 20],
-                ["21 ms", 21], ["22 ms", 22], ["23 ms", 23], ["24 ms", 24], ["25 ms", 25],
-                ["26 ms", 26], ["27 ms", 27], ["28 ms", 28], ["29 ms", 29], ["30 ms", 30]
+              "content": [
+                {
+                  "showIf": "{id_qmk_debounce_mode} == 1",
+                  "label": "Release Hold-off (ms)",
+                  "type": "dropdown",
+                  "content": ["id_qmk_debounce_time_post", 14, 4],
+                  "options": [
+                    ["1 ms", 1], ["2 ms", 2], ["3 ms", 3], ["4 ms", 4], ["5 ms", 5],
+                    ["6 ms", 6], ["7 ms", 7], ["8 ms", 8], ["9 ms", 9], ["10 ms", 10],
+                    ["11 ms", 11], ["12 ms", 12], ["13 ms", 13], ["14 ms", 14], ["15 ms", 15],
+                    ["16 ms", 16], ["17 ms", 17], ["18 ms", 18], ["19 ms", 19], ["20 ms", 20],
+                    ["21 ms", 21], ["22 ms", 22], ["23 ms", 23], ["24 ms", 24], ["25 ms", 25],
+                    ["26 ms", 26], ["27 ms", 27], ["28 ms", 28], ["29 ms", 29], ["30 ms", 30]
+                  ]
+                },
+                {
+                  "showIf": "{id_qmk_debounce_mode} == 2",
+                  "label": "Release Delay (ms)",
+                  "type": "dropdown",
+                  "content": ["id_qmk_debounce_time_post", 14, 4],
+                  "options": [
+                    ["1 ms", 1], ["2 ms", 2], ["3 ms", 3], ["4 ms", 4], ["5 ms", 5],
+                    ["6 ms", 6], ["7 ms", 7], ["8 ms", 8], ["9 ms", 9], ["10 ms", 10],
+                    ["11 ms", 11], ["12 ms", 12], ["13 ms", 13], ["14 ms", 14], ["15 ms", 15],
+                    ["16 ms", 16], ["17 ms", 17], ["18 ms", 18], ["19 ms", 19], ["20 ms", 20],
+                    ["21 ms", 21], ["22 ms", 22], ["23 ms", 23], ["24 ms", 24], ["25 ms", 25],
+                    ["26 ms", 26], ["27 ms", 27], ["28 ms", 28], ["29 ms", 29], ["30 ms", 30]
+                  ]
+                }
               ]
             }
           ]
