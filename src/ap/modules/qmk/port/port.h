@@ -21,6 +21,7 @@
 #define EECONFIG_USER_USB_INSTABILITY     ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 32))  // 4B  // V251108R1: USB 모니터 토글 저장 슬롯
 #define EECONFIG_USER_EEPROM_CLEAR_FLAG   ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 36))  // 4B  // V251112R1: 자동 초기화 플래그
 #define EECONFIG_USER_EEPROM_CLEAR_COOKIE ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 40))  // 4B  // V251112R1: 자동 초기화 쿠키 기록 슬롯
+#define EECONFIG_USER_DEBOUNCE            ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 44))  // 8B  // V251115R1: VIA 디바운스 프로필 저장 슬롯
 
 typedef struct
 {

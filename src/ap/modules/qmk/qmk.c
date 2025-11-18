@@ -1,6 +1,7 @@
 #include "qmk.h"
 #include "qmk/port/port.h"
 #include "qmk/port/platforms/eeprom.h"            // V251112R5: EEPROM 버스트 모드 제어
+#include "qmk/port/debounce_profile.h"
 
 
 static void cliQmk(cli_args_t *args);
@@ -15,6 +16,7 @@ bool qmkInit(void)
 {
   eeprom_init();
   via_hid_init();
+  debounce_profile_init();                         // V251115R1: VIA 디바운스 프로필 초기 로드
 
   keyboard_setup();
   keyboard_init();
@@ -25,7 +27,11 @@ bool qmkInit(void)
   logPrintf("[  ] qmkInit()\n");
   logPrintf("     MATRIX_ROWS : %d\n", MATRIX_ROWS);
   logPrintf("     MATRIX_COLS : %d\n", MATRIX_COLS);
-  logPrintf("     DEBOUNCE    : %d\n", DEBOUNCE);
+  const debounce_profile_values_t *profile = debounce_profile_current();
+  logPrintf("     DEBOUNCE    : mode %d, pre %d ms, post %d ms\n",
+            profile->type,
+            profile->pre_ms,
+            profile->post_ms);                    // V251115R1: VIA 런타임 디바운스 상태 로그
 
   cliAdd("qmk", cliQmk);
   return true;

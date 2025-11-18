@@ -3,6 +3,7 @@
 #include "sys_port.h"
 #include "bootmode.h"
 #include "usb_monitor.h"
+#include "debounce_profile.h"
 
 static void via_handle_usb_polling_channel(uint8_t *data, uint8_t length);  // V251108R8: BootMode/USB 모니터 분기 공통화
 
@@ -23,6 +24,14 @@ void via_custom_value_command_kb(uint8_t *data, uint8_t length)
   {
     indicator_port_via_command(data, length);  // V251012R2: 커스텀 인디케이터 채널 처리
     return;
+  }
+
+  if (*channel_id == id_qmk_key_response)
+  {
+    if (debounce_profile_handle_via_command(data, length))
+    {
+      return;
+    }
   }
 
   if (*channel_id == id_qmk_version)

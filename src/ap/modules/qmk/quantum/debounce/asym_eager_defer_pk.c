@@ -24,23 +24,15 @@ releasing a key, that state is pushed after no changes occur for DEBOUNCE millis
 */
 
 #include "debounce.h"
+#include "debounce_runtime.h"
 #include "timer.h"
 #include <stdlib.h>
+#include <string.h>
 
 #ifdef PROTOCOL_CHIBIOS
 #    if CH_CFG_USE_MEMCORE == FALSE
 #        error ChibiOS is configured without a memory allocator. Your keyboard may have set `#define CH_CFG_USE_MEMCORE FALSE`, which is incompatible with this debounce algorithm.
 #    endif
-#endif
-
-#ifndef DEBOUNCE
-#    define DEBOUNCE 5
-#endif
-
-// Maximum debounce: 127ms
-#if DEBOUNCE > 127
-#    undef DEBOUNCE
-#    define DEBOUNCE 127
 #endif
 
 #define ROW_SHIFTER ((matrix_row_t)1)
@@ -50,7 +42,6 @@ typedef struct {
     uint8_t time : 7;
 } debounce_counter_t;
 
-#if DEBOUNCE > 0
 static debounce_counter_t *debounce_counters;
 static fast_timer_t        last_time;
 static bool                counters_need_update;
@@ -62,23 +53,31 @@ static bool                cooked_changed;
 static void update_debounce_counters_and_transfer_if_expired(matrix_row_t raw[], matrix_row_t cooked[], uint8_t num_rows, uint8_t elapsed_time);
 static void transfer_matrix_values(matrix_row_t raw[], matrix_row_t cooked[], uint8_t num_rows);
 
-// we use num_rows rather than MATRIX_ROWS to support split keyboards
-void debounce_init(uint8_t num_rows) {
-    debounce_counters = malloc(num_rows * MATRIX_COLS * sizeof(debounce_counter_t));
-    int i             = 0;
-    for (uint8_t r = 0; r < num_rows; r++) {
-        for (uint8_t c = 0; c < MATRIX_COLS; c++) {
-            debounce_counters[i++].time = DEBOUNCE_ELAPSED;
-        }
+bool debounce_asym_eager_defer_pk_init(uint8_t num_rows)
+{
+    // V251115R5: 런타임 엔진에서 free 처리되므로 init에서는 해제하지 않음
+    debounce_counters = malloc((size_t)num_rows * MATRIX_COLS * sizeof(debounce_counter_t));
+    if (debounce_counters == NULL) {
+        return false;
     }
+    memset(debounce_counters, 0, (size_t)num_rows * MATRIX_COLS * sizeof(debounce_counter_t));
+    counters_need_update = false;
+    matrix_need_update   = false;
+    cooked_changed       = false;
+    last_time            = timer_read_fast();
+    return true;
 }
 
-void debounce_free(void) {
+void debounce_asym_eager_defer_pk_free(void)
+{
     free(debounce_counters);
     debounce_counters = NULL;
+    counters_need_update = false;
+    matrix_need_update   = false;
 }
 
-bool debounce(matrix_row_t raw[], matrix_row_t cooked[], uint8_t num_rows, bool changed) {
+bool debounce_asym_eager_defer_pk_run(matrix_row_t raw[], matrix_row_t cooked[], uint8_t num_rows, bool changed)
+{
     bool updated_last = false;
     cooked_changed    = false;
 
@@ -143,7 +142,8 @@ static void update_debounce_counters_and_transfer_if_expired(matrix_row_t raw[],
 
 static void transfer_matrix_values(matrix_row_t raw[], matrix_row_t cooked[], uint8_t num_rows) {
     debounce_counter_t *debounce_pointer = debounce_counters;
-
+    const uint8_t       press_delay      = debounce_runtime_press_delay();
+    const uint8_t       release_delay    = debounce_runtime_release_delay();
     matrix_need_update = false;
 
     for (uint8_t row = 0; row < num_rows; row++) {
@@ -154,7 +154,7 @@ static void transfer_matrix_values(matrix_row_t raw[], matrix_row_t cooked[], ui
             if (delta & col_mask) {
                 if (debounce_pointer->time == DEBOUNCE_ELAPSED) {
                     debounce_pointer->pressed = (raw[row] & col_mask);
-                    debounce_pointer->time    = DEBOUNCE;
+                    debounce_pointer->time    = debounce_pointer->pressed ? press_delay : release_delay;
                     counters_need_update      = true;
 
                     if (debounce_pointer->pressed) {
@@ -174,6 +174,3 @@ static void transfer_matrix_values(matrix_row_t raw[], matrix_row_t cooked[], ui
     }
 }
 
-#else
-#    include "none.c"
-#endif

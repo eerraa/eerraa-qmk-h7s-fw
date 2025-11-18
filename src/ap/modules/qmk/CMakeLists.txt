@@ -11,15 +11,15 @@ else()
 endif()
 set(_QMK_RGBLIGHT_DEFINED_BY_CONFIG FALSE)
 
-if (DEFINED DEBOUNCE_TYPE)
-  set(_QMK_DEBOUNCE_CAN_AUTO FALSE)
-else()
-  set(_QMK_DEBOUNCE_CAN_AUTO TRUE)
-  set(DEBOUNCE_TYPE sym_eager_pk)
-endif()
-
 set(_QMK_CONFIG_HEADER "${QMK_KEYBOARD_PATH}/config.h")
 if (EXISTS "${_QMK_CONFIG_HEADER}")
+  file(STRINGS "${_QMK_CONFIG_HEADER}" _QMK_DEBOUNCE_DEFINE REGEX "^[ \\t]*#define[ \\t]+DEBOUNCE[ \\t]+[0-9]+")
+  file(STRINGS "${_QMK_CONFIG_HEADER}" _QMK_DEBOUNCE_TYPE_LINE REGEX "^[ \\t]*#define[ \\t]+DEBOUNCE_TYPE[ \\t]+[A-Za-z0-9_]+")
+
+  if (NOT _QMK_DEBOUNCE_DEFINE OR NOT _QMK_DEBOUNCE_TYPE_LINE)
+    message(FATAL_ERROR "V251115R4: ${_QMK_CONFIG_HEADER}에서 DEBOUNCE/DEBOUNCE_TYPE을 찾을 수 없습니다. 보드 기본 설정을 확인하세요.")
+  endif()
+
   if (_QMK_RGBLIGHT_CAN_AUTO)
     file(STRINGS "${_QMK_CONFIG_HEADER}" _QMK_RGBLIGHT_DEFINE REGEX "^[ \\t]*#define[ \\t]+RGBLIGHT_ENABLE")
     if (_QMK_RGBLIGHT_DEFINE)
@@ -27,11 +27,14 @@ if (EXISTS "${_QMK_CONFIG_HEADER}")
       set(_QMK_RGBLIGHT_DEFINED_BY_CONFIG TRUE)
     endif()
   endif()
-  if (_QMK_DEBOUNCE_CAN_AUTO)
-    file(STRINGS "${_QMK_CONFIG_HEADER}" _QMK_DEBOUNCE_LINE REGEX "^[ \\t]*#define[ \\t]+DEBOUNCE_TYPE[ \\t]+[A-Za-z0-9_]+")
-    if (_QMK_DEBOUNCE_LINE)
-      string(REGEX REPLACE ".*#define[ \\t]+DEBOUNCE_TYPE[ \\t]+([A-Za-z0-9_]+).*" "\\1" DEBOUNCE_TYPE "${_QMK_DEBOUNCE_LINE}")
-    endif()
+
+  if (_QMK_DEBOUNCE_DEFINE)
+    string(REGEX REPLACE ".*#define[ \\t]+DEBOUNCE[ \\t]+([0-9]+).*" "\\1" _QMK_DEBOUNCE_VALUE "${_QMK_DEBOUNCE_DEFINE}")
+    add_compile_definitions(QMK_DEFAULT_DEBOUNCE_DELAY=${_QMK_DEBOUNCE_VALUE})  # V251115R3: 보드 config.h DEBOUNCE 값 기본 적용
+  endif()
+  if (_QMK_DEBOUNCE_TYPE_LINE)
+    string(REGEX REPLACE ".*#define[ \\t]+DEBOUNCE_TYPE[ \\t]+([A-Za-z0-9_]+).*" "\\1" _QMK_DEBOUNCE_TYPE "${_QMK_DEBOUNCE_TYPE_LINE}")
+    add_compile_definitions(QMK_DEFAULT_DEBOUNCE_TYPE=${_QMK_DEBOUNCE_TYPE})    # V251115R3: 보드 config.h DEBOUNCE_TYPE 토큰 기본 적용
   endif()
 endif()
 
@@ -69,9 +72,10 @@ file(GLOB QMK_SRC_FILES CONFIGURE_DEPENDS
 
   ${QMK_ROOT_PATH}/quantum/sequencer/*.c
   ${QMK_ROOT_PATH}/quantum/logging/*.c
-  # ${QMK_ROOT_PATH}/quantum/debounce/sym_eager_pk.c
-  # ${QMK_ROOT_PATH}/quantum/debounce/asym_eager_defer_pk.c
-  ${QMK_ROOT_PATH}/quantum/debounce/${DEBOUNCE_TYPE}.c
+  ${QMK_ROOT_PATH}/quantum/debounce_runtime.c
+  ${QMK_ROOT_PATH}/quantum/debounce/asym_eager_defer_pk.c
+  ${QMK_ROOT_PATH}/quantum/debounce/sym_defer_pk.c
+  ${QMK_ROOT_PATH}/quantum/debounce/sym_eager_pk.c
   
 
   ${QMK_ROOT_PATH}/quantum/send_string/*.c
