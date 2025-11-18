@@ -48,7 +48,7 @@ static void transfer_matrix_values(matrix_row_t raw[], matrix_row_t cooked[], ui
 
 bool debounce_sym_eager_pk_init(uint8_t num_rows)
 {
-    free(debounce_counters);                                      // V251115R1: 런타임 알고리즘 교체 시 기존 버퍼 재활용 방지
+    // V251115R5: 런타임 엔진에서 free 처리되므로 init에서는 해제하지 않음
     debounce_counters = (debounce_counter_t *)malloc((size_t)num_rows * MATRIX_COLS * sizeof(debounce_counter_t));
     if (debounce_counters == NULL) {
         return false;

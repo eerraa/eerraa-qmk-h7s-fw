@@ -47,7 +47,7 @@ static void start_debounce_counters(matrix_row_t raw[], matrix_row_t cooked[], u
 
 bool debounce_sym_defer_pk_init(uint8_t num_rows)
 {
-    free(debounce_counters);                                      // V251115R1: 재초기화 시 기존 버퍼를 먼저 해제
+    // V251115R5: 런타임 엔진에서 free 처리되므로 init에서는 해제하지 않음
     debounce_counters = (debounce_counter_t *)malloc((size_t)num_rows * MATRIX_COLS * sizeof(debounce_counter_t));
     if (debounce_counters == NULL) {
         return false;
