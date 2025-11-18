@@ -101,6 +101,10 @@ static const debounce_algo_entry_t *debounce_runtime_find_algo(debounce_runtime_
 static uint8_t                       debounce_runtime_clamp_delay(uint8_t value, uint8_t max_value);
 static bool                          debounce_runtime_apply_if_possible(void);
 static void                          debounce_runtime_free_active(void);
+static bool                          debounce_runtime_passthrough(matrix_row_t raw[],
+                                                                  matrix_row_t cooked[],
+                                                                  uint8_t      num_rows,
+                                                                  bool         changed);
 
 
 bool debounce_runtime_apply_config(const debounce_runtime_config_t *config)
@@ -183,7 +187,7 @@ bool debounce(matrix_row_t raw[], matrix_row_t cooked[], uint8_t num_rows, bool 
 {
   if (g_runtime.algo == NULL || !g_runtime.config_ready)
   {
-    return changed;
+    return debounce_runtime_passthrough(raw, cooked, num_rows, changed);      // V251115R6: 런타임 준비 실패 시 입력 우회 처리
   }
 
   if (!debounce_runtime_is_ready())                                             // V251115R4: 재초기화 대기/오류 시 안전 경로로 우회
@@ -191,7 +195,7 @@ bool debounce(matrix_row_t raw[], matrix_row_t cooked[], uint8_t num_rows, bool 
     debounce_runtime_apply_if_possible();
     if (!debounce_runtime_is_ready())
     {
-      return changed;
+      return debounce_runtime_passthrough(raw, cooked, num_rows, changed);    // V251115R6: 적용 실패 시 키 입력 손실 방지
     }
   }
 
@@ -272,4 +276,20 @@ static void debounce_runtime_free_active(void)
   {
     g_runtime.algo->free();
   }
+}
+
+static bool debounce_runtime_passthrough(matrix_row_t raw[], matrix_row_t cooked[], uint8_t num_rows, bool changed)
+{
+  bool updated = changed;
+
+  for (uint8_t row = 0; row < num_rows; row++)
+  {
+    if (cooked[row] != raw[row])
+    {
+      cooked[row] = raw[row];
+      updated     = true;
+    }
+  }
+
+  return updated;
 }
