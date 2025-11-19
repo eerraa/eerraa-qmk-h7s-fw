@@ -9,6 +9,7 @@
 #define BIT_HIGH   (70)  // 700ns
 #define BIT_LOW    (35)  // 350ns
 #define BIT_ZERO   (50)
+#define WS2812_BIT_BUF_LEN (BIT_ZERO + 24*(HW_WS2812_MAX_CH+1))  // V251116R1: DMA/CPU 더블 버퍼 크기 상수
 
 bool is_init = false;
 
@@ -21,7 +22,11 @@ typedef struct
 } ws2812_t;
 
 __attribute__((section(".non_cache")))
-static uint8_t bit_buf[BIT_ZERO + 24*(HW_WS2812_MAX_CH+1)];
+static uint8_t bit_buf_dma[WS2812_BIT_BUF_LEN];            // V251116R1: DMA 활성 버퍼
+__attribute__((section(".non_cache")))
+static uint8_t bit_buf_cpu[WS2812_BIT_BUF_LEN];            // V251116R1: CPU 작업 버퍼
+static uint8_t *ws2812_dma_buf = bit_buf_dma;              // V251116R1: DMA와 CPU 포인터 분리
+static uint8_t *ws2812_work_buf = bit_buf_cpu;
 
 
 ws2812_t ws2812;
@@ -46,7 +51,8 @@ bool ws2812Init(void)
   TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
 
 
-  memset(bit_buf, 0, sizeof(bit_buf));
+  memset(bit_buf_dma, 0, sizeof(bit_buf_dma));
+  memset(bit_buf_cpu, 0, sizeof(bit_buf_cpu));
   
   ws2812.h_timer = &htim15;
   ws2812.channel = TIM_CHANNEL_1;
@@ -183,8 +189,11 @@ bool ws2812Refresh(void)
   {
     (void)HAL_TIM_PWM_Stop_DMA(ws2812.h_timer, ws2812.channel);
 
-    if (HAL_TIM_PWM_Start_DMA(ws2812.h_timer, ws2812.channel, (const uint32_t *)bit_buf, sizeof(bit_buf)) == HAL_OK)
+    if (HAL_TIM_PWM_Start_DMA(ws2812.h_timer, ws2812.channel, (const uint32_t *)ws2812_work_buf, WS2812_BIT_BUF_LEN) == HAL_OK)
     {
+      uint8_t *prev_dma_buf = ws2812_dma_buf;
+      ws2812_dma_buf = ws2812_work_buf;
+      ws2812_work_buf = prev_dma_buf;  // V251116R1: DMA 버퍼와 CPU 버퍼를 스왑하여 전송 중 덮어쓰기 차단
       return true;  // V251018R1: DMA BUSY/ERROR 시 재시도 후 성공 시점만 반환
     }
   }
@@ -245,9 +254,10 @@ void ws2812SetColor(uint32_t ch, uint32_t color)
 
   offset = BIT_ZERO;
 
-  memcpy(&bit_buf[offset + ch*24 + 8*0], g_bit, 8*1);
-  memcpy(&bit_buf[offset + ch*24 + 8*1], r_bit, 8*1);
-  memcpy(&bit_buf[offset + ch*24 + 8*2], b_bit, 8*1);
+  // V251116R1: CPU 전용 버퍼에 RGB 비트를 준비해 DMA 버퍼를 보호
+  memcpy(&ws2812_work_buf[offset + ch*24 + 8*0], g_bit, 8*1);
+  memcpy(&ws2812_work_buf[offset + ch*24 + 8*1], r_bit, 8*1);
+  memcpy(&ws2812_work_buf[offset + ch*24 + 8*2], b_bit, 8*1);
 }
 
 void GPDMA1_Channel4_IRQHandler(void)
