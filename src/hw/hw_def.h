@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 // 펌웨어/보드 식별 정보
 // ---------------------------------------------------------------------------
-#define _DEF_FIRMWARE_VERSION       "V251121R4"   // V251121R4: RGBLIGHT_SLEEP API 가드 정비
+#define _DEF_FIRMWARE_VERSION       "V251121R5"   // V251121R5: rgblight 1kHz 게이트 및 타이머 캐시 추가
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

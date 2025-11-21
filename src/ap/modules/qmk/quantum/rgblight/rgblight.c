@@ -1613,6 +1613,7 @@ void rgblight_timer_enable(void) {
         rgblight_status.timer_enabled = true;
     }
     animation_status.last_timer = sync_timer_read();
+    animation_status.next_timer_due = animation_status.last_timer;  // V251121R5: 타이머 활성 시 만료 기준을 초기화
     RGBLIGHT_SPLIT_SET_CHANGE_TIMER_ENABLE;
     dprintf("rgblight timer enabled.\n");
 }
@@ -1757,12 +1758,18 @@ void rgblight_timer_task(void) {
     }
 #    endif
     if (animation_status.restart) {
-        animation_status.restart    = false;
-        animation_status.last_timer = sync_timer_read();
-        animation_status.pos16      = 0; // restart signal to local each effect
+        animation_status.restart     = false;
+        animation_status.last_timer  = sync_timer_read();
+        animation_status.next_timer_due = animation_status.last_timer;  // V251121R5: 재시작 시 만료 기준 리셋
+        animation_status.pos16       = 0; // restart signal to local each effect
     }
     uint16_t now = sync_timer_read();
-    if (timer_expired(now, animation_status.last_timer)) {
+    if (animation_status.next_timer_due == 0) {
+        animation_status.next_timer_due = animation_status.last_timer;  // V251121R5: 초기 진입 시 만료 기준을 설정
+    }
+    if (!timer_expired(now, animation_status.next_timer_due)) {
+        return;  // V251121R5: 만료 시각 이전에는 즉시 반환해 불필요한 연산을 차단
+    }
 #    if defined(RGBLIGHT_SPLIT) && !defined(RGBLIGHT_SPLIT_NO_ANIMATION_SYNC)
         static uint16_t report_last_timer = 0;
         static bool     tick_flag         = false;
@@ -1777,14 +1784,14 @@ void rgblight_timer_task(void) {
         }
         oldpos16 = animation_status.pos16;
 #    endif
-        animation_status.last_timer += interval_time;
-        effect_func(&animation_status);
+    animation_status.last_timer     = animation_status.next_timer_due;
+    animation_status.next_timer_due = animation_status.last_timer + interval_time;  // V251121R5: 다음 만료 시각 캐싱으로 호출당 타이머 계산 감소
+    effect_func(&animation_status);
 #    if defined(RGBLIGHT_SPLIT) && !defined(RGBLIGHT_SPLIT_NO_ANIMATION_SYNC)
         if (animation_status.pos16 == 0 && oldpos16 != 0) {
             tick_flag = true;
         }
 #    endif
-    }
 }
 
 #endif /* RGBLIGHT_USE_TIMER */
@@ -2177,6 +2184,22 @@ static void rgblight_flush_render_queue(void)
 }
 
 void rgblight_task(void) {
+    bool urgent_pending = rgblight_render_pending || rgblight_host_led_pending;
+    if (!urgent_pending) {
+        static uint16_t rgblight_next_run = 0;  // V251121R5: 1kHz 슬라이스로 rgblight_task 호출 희박화
+        uint16_t       now               = sync_timer_read();
+
+        if (rgblight_next_run == 0) {
+            rgblight_next_run = now;  // V251121R5: 초기 호출은 즉시 통과
+        }
+
+        if (!timer_expired(now, rgblight_next_run)) {
+            return;  // V251121R5: 우선 이벤트가 없고 주기 전이면 조기 반환
+        }
+
+        rgblight_next_run = now + 1;  // V251121R5: 약 1ms 간격으로 평가
+    }
+
     rgblight_consume_host_led_queue();
 #ifdef RGBLIGHT_USE_TIMER
     rgblight_timer_task();
