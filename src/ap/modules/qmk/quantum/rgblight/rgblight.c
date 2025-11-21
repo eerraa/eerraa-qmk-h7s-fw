@@ -507,6 +507,7 @@ static rgb_led_t rgblight_indicator_compute_color(rgblight_indicator_config_t co
 // V251016R9: 프레임 준비 로직이 호출부로 이관되어 오버레이 함수는 적용만 수행
 static void rgblight_indicator_apply_overlay(void)
 {
+    // V251121R1: 전체 오버레이는 재렌더 플래그와 무관하게 항상 적용해 우선순위를 유지
     if (!rgblight_indicator_state.active) {
         rgblight_indicator_state.needs_render = false;
         return;
@@ -515,10 +516,6 @@ static void rgblight_indicator_apply_overlay(void)
     rgblight_indicator_range_t range = rgblight_indicator_state.range;
     if (range.count == 0) {
         rgblight_indicator_state.needs_render = false;
-        return;
-    }
-
-    if (!rgblight_indicator_state.needs_render && rgblight_indicator_state.overrides_all) {
         return;
     }
 
@@ -1471,14 +1468,16 @@ static void rgblight_render_frame(void)
     rgblight_indicator_range_t indicator_range = rgblight_indicator_state.range;
     bool indicator_has_range = indicator_active && (indicator_range.count > 0);
     bool indicator_overrides = indicator_has_range && rgblight_indicator_state.overrides_all;
+    bool indicator_ready     = indicator_active && indicator_has_range;
 
-    if (!indicator_active) {
+    if (!indicator_ready) {
         rgblight_indicator_state.needs_render = false;  // V251016R9: 비활성 프레임에서 대기 플래그 정리
-    } else if (!indicator_has_range) {
-        rgblight_indicator_state.needs_render = false;  // V251016R9: 유효 범위가 없으면 오버레이를 건너뛰고 타이머 대기 해제
     } else if (!indicator_overrides) {
         rgblight_indicator_state.needs_render = true;   // V251016R9: 부분 오버레이는 기본 이펙트 이후에 항상 재적용
     }
+
+    bool indicator_should_apply = indicator_ready &&
+                                  (indicator_overrides || rgblight_indicator_state.needs_render);  // V251121R1: 오버레이 우선순위를 항상 보장
 
     if (!indicator_overrides) {
         if (!rgblight_config.enable) {
@@ -1505,12 +1504,8 @@ static void rgblight_render_frame(void)
 #endif
     }
 
-    if (indicator_has_range) {
-        if (!indicator_overrides && !rgblight_indicator_state.needs_render) {
-            // 부분 오버레이는 재렌더 요청이 있을 때만 적용한다.  // V251018R2
-        } else {
-            rgblight_indicator_apply_overlay();  // V251016R9: 준비가 완료된 프레임만 오버레이 적용
-        }
+    if (indicator_should_apply) {
+        rgblight_indicator_apply_overlay();  // V251121R1: 인디케이터 활성 시 베이스 프레임 위에 항상 최종 오버레이 적용
     }
 
 #ifdef RGBLIGHT_LED_MAP
