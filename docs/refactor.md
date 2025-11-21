@@ -18,3 +18,13 @@
 - 다음 만료 캐시: `rgblight_timer_task()`가 매 호출마다 `sync_timer_read()`와 모드 분기, `get_interval_time()`을 반복한다. `animation_status`에 `next_due`를 저장해 만료 시점 전에 빠르게 대기(return)하면 8kHz 호출 시 불필요한 타이머 연산을 피할 수 있다.
 - 렌더 플러시 우선순위 조정: `rgblight_render_pending` 플러시를 Idle 계층(예: `idle_task()` 전)으로 옮기거나, WS2812 DMA 시작을 매트릭스/HID 전송 직후가 아닌 틱 경계에 묶으면 매트릭스 스캔 지터를 더 줄일 여지가 있다.
 - 계측 추가: `_DEF_ENABLE_MATRIX_TIMING_PROBE` 수준의 간단한 프로브를 `rgblight_render_frame()` 전후에 넣어 전송 시간/대기열 길이를 기록하면, 호출 주기를 낮출 때 HID 지터나 인디케이터 반응 지연이 없는지 확인하기 쉽다.
+
+## 적용 현황 (V251121R5 시점)
+- 적용됨: `rgblight_task()` 1kHz 희박화 + 렌더/호스트 LED 플래그 우회, `animation_status.next_timer_due`로 애니메이션 만료 시각 캐시.
+- 미적용: 렌더 플러시 우선순위 조정(Idle 등으로 이동) — 플러시 지연·경로 누락 리스크와 upstream 충돌 가능성이 있어 실제 지터 문제가 확인되면 측정 기반으로 진행 예정.
+- 미적용: `rgblight_render_frame()` 전후 계측 추가 — 빌드 플래그/로그 설계와 측정 시나리오 정리 후 반영 예정.
+
+## 2차 탐색 (임시 V251201R1 제안 메모)
+- 타이머 분기 순서: `rgblight_timer_task()`가 만료 시각보다 먼저 모드별 분기와 `get_interval_time()`을 수행해 1kHz 게이트 이후에도 매 호출마다 PROGMEM 접근이 반복된다(`src/ap/modules/qmk/quantum/rgblight/rgblight.c:1652`~`1772`). 모드 전환 시점에 `effect_func`/기본 interval을 캐시해두고, `next_timer_due` 체크를 분기 앞단으로 끌어올리면 Idling 구간에서의 잔여 연산을 더 줄일 수 있다.
+- 호출 시각 공유: 현재 `rgblight_task()`와 `rgblight_timer_task()`가 각자 `sync_timer_read()`를 호출해 동일 틱에서 타이머를 두 번 읽는다(`src/ap/modules/qmk/quantum/rgblight/rgblight.c:2186`~`2207`, `1760`~`1772`). `rgblight_task()`가 읽은 `now`를 인자로 넘기고, `rgblight_next_run`을 `animation_status.next_timer_due`(또는 최소 1ms)로 조정하면 불필요한 타이머 호출을 줄이고 애니메이션 만료 시각에 맞춰 호출 빈도를 자동 희박화할 수 있다.
+- 전면 인디케이터 중 애니메이션 낭비: 인디케이터 범위가 전체 LED를 덮는 경우(`overrides_all` true)에도 베이스 애니메이션이 계속 프레임을 구축하고 `rgblight_set()`을 큐잉한다(`src/ap/modules/qmk/quantum/rgblight/rgblight.c:1473`~`1537`, `1652`~`1794`). 인디케이터 전용 오버레이 동안에는 효과 상태만 시간에 맞춰 진척시키고 LED 버퍼/WS2812 전송을 건너뛰도록 분기하면(복귀 시 1프레임 재렌더) 캡스락 상시 점등 등에서의 불필요한 연산과 버스 사용을 줄일 수 있다.
