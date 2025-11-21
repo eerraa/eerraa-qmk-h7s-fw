@@ -12,8 +12,8 @@
 // ---------------------------------------------------------------------------
 // hw_def.h / hw_caps_* 오버라이드 및 공용 토글
 // ---------------------------------------------------------------------------
-// #define _DEF_ENABLE_MATRIX_TIMING_PROBE   0     // MATRIX 계측을 개발 빌드에서 강제 활성화하려면 정의
-// #define _DEF_ENABLE_USB_HID_TIMING_PROBE  0     // HID 계측을 개발 빌드에서 강제 활성화하려면 정의
+#define _DEF_ENABLE_MATRIX_TIMING_PROBE   0     // MATRIX 계측을 개발 빌드에서 강제 활성화하려면 정의
+#define _DEF_ENABLE_USB_HID_TIMING_PROBE  0     // HID 계측을 개발 빌드에서 강제 활성화하려면 정의
 // #define _USE_HW_VCOM                        // hw_caps_usb.h 참고
 #define _USE_HW_WS2812                         // hw_caps_led.h 참고 (V251114R2: WS2812 캡 분리)
 #define HW_WS2812_MAX_CH            30
