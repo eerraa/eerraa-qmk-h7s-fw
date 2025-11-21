@@ -418,8 +418,10 @@ HSV     rgblight_get_hsv(void);
 
 /* === qmk_firmware (core)internal Functions === */
 void     rgblight_init(void);
-void     rgblight_suspend(void);
-void     rgblight_wakeup(void);
+#ifdef RGBLIGHT_SLEEP
+void     rgblight_suspend(void);  // V251121R4: RGBLIGHT_SLEEP 정의 시에만 슬립 API를 노출
+void     rgblight_wakeup(void);   // V251121R4: RGBLIGHT_SLEEP 정의 시에만 웨이크업 API를 노출
+#endif
 uint64_t rgblight_read_qword(void);
 void     rgblight_update_qword(uint64_t qword);
 uint64_t eeconfig_read_rgblight(void);
