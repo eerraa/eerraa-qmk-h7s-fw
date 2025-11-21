@@ -533,6 +533,16 @@ static void rgblight_indicator_apply_overlay(void)
     rgblight_indicator_state.needs_render = false;
 }
 
+static void rgblight_indicator_restore_pulse_effect(void)
+{
+#if defined(RGBLIGHT_EFFECT_PULSE_ON_PRESS) || defined(RGBLIGHT_EFFECT_PULSE_OFF_PRESS) || defined(RGBLIGHT_EFFECT_PULSE_ON_PRESS_HOLD) || defined(RGBLIGHT_EFFECT_PULSE_OFF_PRESS_HOLD)
+    if (rgblight_effect_pulse_mode_active()) {
+        rgblight_pulse_effect_state.initialized = false;  // V251121R2: 인디케이터 종료 시 Pulse 계열 기본 출력 재적용
+        rgblight_effect_pulse_evaluate_output();
+    }
+#endif
+}
+
 // V251012R3: 인디케이터 상태 전이를 공통화해 중복 로직과 불필요한 rgblight_set 호출을 축소
 static void rgblight_indicator_commit_state(bool should_enable, bool request_render)
 {
@@ -559,6 +569,7 @@ static void rgblight_indicator_commit_state(bool should_enable, bool request_ren
             rgblight_mode_noeeprom(rgblight_config.mode);  // V251018R3: 정적 효과는 즉시 재렌더해 원본 상태 복구
         }
 
+        rgblight_indicator_restore_pulse_effect();  // V251121R2: CAPS OFF에서 Pulse 기본 상태를 즉시 재적용
         rgblight_request_render();  // V251120R1: CAPS OFF 시 기본 프레임을 즉시 큐잉해 잔상을 방지
     }
 }
