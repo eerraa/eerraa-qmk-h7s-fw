@@ -2116,7 +2116,11 @@ void rgblight_effect_twinkle(animation_status_t *anim) {
             // This LED is off, but was randomly selected to start brightening
             if (random_color) {
                 c->h = rand() % 0xFF;
-                c->s = (rand() % (rgblight_config.sat / 2)) + (rgblight_config.sat / 2);
+                uint8_t sat_half = rgblight_config.sat / 2;
+                if (sat_half == 0) {
+                    sat_half = 1;  // V251121R3: 포화도 0에서도 0으로 나누지 않도록 최소값 보정
+                }
+                c->s = (rand() % sat_half) + sat_half;
             }
             c->v        = 0;
             t->max_life = MAX(20, MIN(RGBLIGHT_EFFECT_TWINKLE_LIFE, rgblight_config.val));
