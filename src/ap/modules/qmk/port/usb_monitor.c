@@ -1,0 +1,96 @@
+#include "usb_monitor.h"
+
+#ifdef USB_MONITOR_ENABLE
+
+#include <string.h>
+
+#include "eeconfig.h"
+#include "usb.h"
+#include "via.h"
+
+usb_monitor_config_t usb_monitor_config = {0};                  // V251112R6: 기본값은 usb_monitor_init()에서만 정의
+
+EECONFIG_DEBOUNCE_HELPER(usb_monitor, EECONFIG_USER_USB_INSTABILITY, usb_monitor_config);
+
+static void usb_monitor_apply_defaults_locked(void)
+{
+  usb_monitor_config.enable = 0U;                               // V251112R6: USB 모니터 기본값 OFF
+  memset(usb_monitor_config.reserved, 0, sizeof(usb_monitor_config.reserved));
+  eeconfig_flag_usb_monitor(true);
+  eeconfig_flush_usb_monitor(true);
+}
+
+void usb_monitor_init(void)
+{
+  eeconfig_init_usb_monitor();
+
+  if (usb_monitor_config.enable > 1U)
+  {
+    usb_monitor_apply_defaults_locked();                        // V251112R6: 손상된 데이터 복원
+  }
+}
+
+void usb_monitor_storage_init(void)
+{
+  usb_monitor_init();                                           // V251112R6: KillSwitch/KKUK과 동일한 초기화 경로
+}
+
+void usb_monitor_storage_set_enable(bool enable)
+{
+  usb_monitor_config.enable = enable ? 1U : 0U;
+  eeconfig_flag_usb_monitor(true);
+}
+
+void usb_monitor_storage_flush(bool force)
+{
+  eeconfig_flush_usb_monitor(force);
+}
+
+bool usb_monitor_storage_is_enabled(void)
+{
+  return usb_monitor_config.enable != 0U;
+}
+
+void usb_monitor_storage_apply_defaults(void)
+{
+  usb_monitor_apply_defaults_locked();                           // V251112R6: EEPROM 초기화 시 기본값 재적용
+}
+
+void via_qmk_usb_monitor_command(uint8_t *data, uint8_t length)
+{
+  if (length < 4 || data == NULL)
+  {
+    return;
+  }
+
+  uint8_t *command_id = &(data[0]);
+  uint8_t *value_id   = &(data[2]);
+  uint8_t *value_data = &(data[3]);
+
+  if (*value_id != id_qmk_usb_monitor_toggle)
+  {
+    return;
+  }
+
+  switch (*command_id)
+  {
+    case id_custom_set_value:
+    {
+      bool enable = value_data[0] != 0U;
+      usbInstabilityStore(enable);
+      value_data[0] = (uint8_t)usbInstabilityIsEnabled();
+      break;
+    }
+
+    case id_custom_get_value:
+    {
+      value_data[0] = (uint8_t)usbInstabilityIsEnabled();
+      break;
+    }
+
+    default:
+      break;
+  }
+}
+
+#endif
