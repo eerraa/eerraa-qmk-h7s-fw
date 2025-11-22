@@ -1700,35 +1700,35 @@ void rgblight_timer_task(void) {
 #    ifdef RGBLIGHT_EFFECT_BREATHING
     else if (rgblight_status.base_mode == RGBLIGHT_MODE_BREATHING) {
         // breathing mode
-        interval_time = get_interval_time(&RGBLED_BREATHING_INTERVALS[delta], 1, 100);
+        interval_time = get_interval_time(&RGBLED_BREATHING_INTERVALS[delta], 5, 100);  // V251123R3: Breathing Velocikey 범위를 5~100ms로 상향
         effect_func   = rgblight_effect_breathing;
     }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_RAINBOW_MOOD
     else if (rgblight_status.base_mode == RGBLIGHT_MODE_RAINBOW_MOOD) {
         // rainbow mood mode
-        interval_time = get_interval_time(&RGBLED_RAINBOW_MOOD_INTERVALS[delta], 5, 100);
+        interval_time = get_interval_time(&RGBLED_RAINBOW_MOOD_INTERVALS[delta], 10, 120);  // V251123R3: Rainbow Mood Velocikey 범위를 10~120ms로 확장
         effect_func   = rgblight_effect_rainbow_mood;
     }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_RAINBOW_SWIRL
     else if (rgblight_status.base_mode == RGBLIGHT_MODE_RAINBOW_SWIRL) {
         // rainbow swirl mode
-        interval_time = get_interval_time(&RGBLED_RAINBOW_SWIRL_INTERVALS[delta / 2], 1, 100);
+        interval_time = get_interval_time(&RGBLED_RAINBOW_SWIRL_INTERVALS[delta / 2], 5, 100);  // V251123R3: Rainbow Swirl Velocikey 최저 속도를 5ms로 상향
         effect_func   = rgblight_effect_rainbow_swirl;
     }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_SNAKE
     else if (rgblight_status.base_mode == RGBLIGHT_MODE_SNAKE) {
         // snake mode
-        interval_time = get_interval_time(&RGBLED_SNAKE_INTERVALS[delta / 2], 1, 200);
+        interval_time = get_interval_time(&RGBLED_SNAKE_INTERVALS[delta / 2], 10, 200);  // V251123R3: Snake Velocikey 최저 속도를 10ms로 조정
         effect_func   = rgblight_effect_snake;
     }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_KNIGHT
     else if (rgblight_status.base_mode == RGBLIGHT_MODE_KNIGHT) {
         // knight mode
-        interval_time = get_interval_time(&RGBLED_KNIGHT_INTERVALS[delta], 5, 100);
+        interval_time = get_interval_time(&RGBLED_KNIGHT_INTERVALS[delta], 10, 100);  // V251123R3: Knight Velocikey 범위를 10~100ms로 조정
         effect_func   = rgblight_effect_knight;
     }
 #    endif
@@ -2279,7 +2279,7 @@ void rgblight_velocikey_set(bool on, bool write_to_eeprom)
 
 void rgblight_velocikey_accelerate(void) {
     if (typing_speed < TYPING_SPEED_MAX_VALUE) {
-        uint8_t step = (TYPING_SPEED_MAX_VALUE / 30);  // V251123R2: 가속 반응을 높이되 과민 반응을 완화
+        uint8_t step = (TYPING_SPEED_MAX_VALUE / 50);  // V251123R3: QMK 대비 2배 민감도로 가속(스텝 상향)
         if (step == 0) {
             step = 1;
         }
@@ -2291,14 +2291,14 @@ void rgblight_velocikey_accelerate(void) {
 void rgblight_velocikey_decelerate(void) {
     static uint16_t decay_timer = 0;
 
-    if (timer_elapsed(decay_timer) > 200 || decay_timer == 0) {  // V251123R2: 감속 주기를 유지하되 과도한 민감도를 완화
+    if (timer_elapsed(decay_timer) > 250 || decay_timer == 0) {  // V251123R3: 250ms 주기로 감속해 QMK 대비 2배 민감도로 반응
         if (typing_speed > 0) {
-            uint8_t dec = 1;  // 기본 감속을 낮춰 민감도 완화
+            uint8_t dec = 1;  // QMK 기본 감속과 동일하게 시작
             if (typing_speed > TYPING_SPEED_MAX_VALUE / 2) {
-                dec += 1;  // 중간 속도 이상에서만 추가 감속
+                dec += 1;  // 중간 속도 이상 추가 감속
             }
             if (typing_speed > (TYPING_SPEED_MAX_VALUE * 3) / 4) {
-                dec += 1;  // 최고 속도 근처에서도 완만한 감속
+                dec += 2;  // 최고 속도 구간 감속 강화
             }
             typing_speed = (typing_speed > dec) ? typing_speed - dec : 0;
         }
