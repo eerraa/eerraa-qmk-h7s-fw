@@ -139,6 +139,7 @@ static const bool rgblight_indicator_supported = false;  // V251120R1: 인디케
 static rgblight_indicator_range_t rgblight_indicator_range_table[RGBLIGHT_INDICATOR_RANGE_TABLE_LENGTH] = {0};
 
 #ifdef RGBLIGHT_USE_TIMER
+static void rgblight_timer_task(void);  // V251122R7: 인디케이터 경로에서 즉시 호출하므로 선행 선언
 #endif
 
 // V251012R2: Brick60 인디케이터 상태를 rgblight 내부에서 추적하기 위한 구조체
