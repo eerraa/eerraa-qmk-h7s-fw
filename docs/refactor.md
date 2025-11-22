@@ -19,12 +19,16 @@
 - 렌더 플러시 우선순위 조정: `rgblight_render_pending` 플러시를 Idle 계층(예: `idle_task()` 전)으로 옮기거나, WS2812 DMA 시작을 매트릭스/HID 전송 직후가 아닌 틱 경계에 묶으면 매트릭스 스캔 지터를 더 줄일 여지가 있다.
 - 계측 추가: `_DEF_ENABLE_MATRIX_TIMING_PROBE` 수준의 간단한 프로브를 `rgblight_render_frame()` 전후에 넣어 전송 시간/대기열 길이를 기록하면, 호출 주기를 낮출 때 HID 지터나 인디케이터 반응 지연이 없는지 확인하기 쉽다.
 
-## 적용 현황 (V251121R5 시점)
-- 적용됨: `rgblight_task()` 1kHz 희박화 + 렌더/호스트 LED 플래그 우회, `animation_status.next_timer_due`로 애니메이션 만료 시각 캐시.
+## 적용 현황 (V251122R1 시점)
+- 적용됨: `rgblight_task()` 1kHz 희박화 + 긴급 플래그 우회, `animation_status.next_timer_due` 애니메이션 만료 캐시 및 0 wrap 정상 처리.
 - 미적용: 렌더 플러시 우선순위 조정(Idle 등으로 이동) — 플러시 지연·경로 누락 리스크와 upstream 충돌 가능성이 있어 실제 지터 문제가 확인되면 측정 기반으로 진행 예정.
 - 미적용: `rgblight_render_frame()` 전후 계측 추가 — 빌드 플래그/로그 설계와 측정 시나리오 정리 후 반영 예정.
 
-## 2차 탐색 (임시 V251201R1 제안 메모)
-- 타이머 분기 순서: `rgblight_timer_task()`가 만료 시각보다 먼저 모드별 분기와 `get_interval_time()`을 수행해 1kHz 게이트 이후에도 매 호출마다 PROGMEM 접근이 반복된다(`src/ap/modules/qmk/quantum/rgblight/rgblight.c:1652`~`1772`). 모드 전환 시점에 `effect_func`/기본 interval을 캐시해두고, `next_timer_due` 체크를 분기 앞단으로 끌어올리면 Idling 구간에서의 잔여 연산을 더 줄일 수 있다.
-- 호출 시각 공유: 현재 `rgblight_task()`와 `rgblight_timer_task()`가 각자 `sync_timer_read()`를 호출해 동일 틱에서 타이머를 두 번 읽는다(`src/ap/modules/qmk/quantum/rgblight/rgblight.c:2186`~`2207`, `1760`~`1772`). `rgblight_task()`가 읽은 `now`를 인자로 넘기고, `rgblight_next_run`을 `animation_status.next_timer_due`(또는 최소 1ms)로 조정하면 불필요한 타이머 호출을 줄이고 애니메이션 만료 시각에 맞춰 호출 빈도를 자동 희박화할 수 있다.
-- 전면 인디케이터 중 애니메이션 낭비: 인디케이터 범위가 전체 LED를 덮는 경우(`overrides_all` true)에도 베이스 애니메이션이 계속 프레임을 구축하고 `rgblight_set()`을 큐잉한다(`src/ap/modules/qmk/quantum/rgblight/rgblight.c:1473`~`1537`, `1652`~`1794`). 인디케이터 전용 오버레이 동안에는 효과 상태만 시간에 맞춰 진척시키고 LED 버퍼/WS2812 전송을 건너뛰도록 분기하면(복귀 시 1프레임 재렌더) 캡스락 상시 점등 등에서의 불필요한 연산과 버스 사용을 줄일 수 있다.
+## 추가 개선 검토 (V251122R1 기준)
+- 유효 제안
+  - 타이머 분기 순서 최적화: `rgblight_timer_task()`에서 만료 체크를 모드 분기 이전으로 이동하고, 모드별 `effect_func`/`interval_time`을 전환 시점에 캐시해 1kHz 게이트 구간의 PROGMEM 접근을 제거.
+  - 호출 시각 공유: `rgblight_task()`가 읽은 `now`를 `rgblight_timer_task()`에 전달하고, `rgblight_next_run`을 `animation_status.next_timer_due`(최소 1ms)와 연동해 타이머 읽기/호출을 애니메이션 만료 시각에 맞춰 자동 희박화.
+  - 전면 인디케이터 시 베이스 렌더 스킵: `overrides_all`이 true이면 베이스 이펙트가 LED 버퍼를 구축·전송하지 않도록 분기해 캡스락 상시 점등 등에서 불필요한 WS2812 전송과 큐잉을 제거(복귀 시 1프레임 재렌더).
+- 추가 탐색
+  - 비활성 상태 조기 반환: `rgblight_config.enable`이 0이고 렌더/호스트 LED/Velocikey 플래그도 없을 때는 `rgblight_task()`를 즉시 종료해 All Off 상태의 1kHz 호출을 완전히 제거.
+  - 지터/응답성 검증을 위한 경량 계측: `rgblight_render_frame()` 시작/종료 시 타임스탬프/대기열 길이를 빌드 플래그 기반으로 로깅해 위 최적화 적용 전후의 HID 지터와 인디케이터 반응성을 확인.
