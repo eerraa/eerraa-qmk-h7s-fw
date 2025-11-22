@@ -1613,7 +1613,7 @@ void rgblight_timer_enable(void) {
         rgblight_status.timer_enabled = true;
     }
     animation_status.last_timer = sync_timer_read();
-    animation_status.next_timer_due = animation_status.last_timer;  // V251121R5: 타이머 활성 시 만료 기준을 초기화
+    animation_status.next_timer_due = animation_status.last_timer;  // V251122R1: 타이머 활성 시 만료 기준을 설정(0도 유효값으로 사용)
     RGBLIGHT_SPLIT_SET_CHANGE_TIMER_ENABLE;
     dprintf("rgblight timer enabled.\n");
 }
@@ -1760,15 +1760,12 @@ void rgblight_timer_task(void) {
     if (animation_status.restart) {
         animation_status.restart     = false;
         animation_status.last_timer  = sync_timer_read();
-        animation_status.next_timer_due = animation_status.last_timer;  // V251121R5: 재시작 시 만료 기준 리셋
+        animation_status.next_timer_due = animation_status.last_timer;  // V251122R1: 재시작 시 만료 기준을 설정(0 wrap도 정상 처리)
         animation_status.pos16       = 0; // restart signal to local each effect
     }
     uint16_t now = sync_timer_read();
-    if (animation_status.next_timer_due == 0) {
-        animation_status.next_timer_due = animation_status.last_timer;  // V251121R5: 초기 진입 시 만료 기준을 설정
-    }
-    if (!timer_expired(now, animation_status.next_timer_due)) {
-        return;  // V251121R5: 만료 시각 이전에는 즉시 반환해 불필요한 연산을 차단
+    if (!timer_expired(now, animation_status.next_timer_due)) {  // V251122R1: 0도 유효 타임스탬프이므로 센티널 체크 제거
+        return;
     }
 #    if defined(RGBLIGHT_SPLIT) && !defined(RGBLIGHT_SPLIT_NO_ANIMATION_SYNC)
         static uint16_t report_last_timer = 0;

@@ -478,7 +478,7 @@ void rgblight_update_sync(rgblight_syncinfo_t *syncinfo, bool write_to_eeprom);
 
 typedef struct _animation_status_t {
     uint16_t last_timer;
-    uint16_t next_timer_due;  // V251121R5: 애니메이션 만료 시각 캐시로 불필요한 타이머 연산 감소
+    uint16_t next_timer_due;  // V251122R1: 애니메이션 만료 시각 캐시(0 wrap도 정상 처리)
     uint8_t  delta; /* mode - base_mode */
     bool     restart;
     union {
