@@ -1540,6 +1540,8 @@ static void rgblight_render_frame(void)
 // V251018R6: 초기화 이후에는 렌더를 큐잉해 WS2812 전송을 주 루프에서만 수행
 void rgblight_set(void)
 {
+    // V251122R3: 전면 인디케이터 중에도 렌더 큐잉을 유지해 오버레이 누락을 방지
+
     if (!is_rgblight_initialized) {
         rgblight_render_frame();
         return;
@@ -1602,6 +1604,12 @@ void rgblight_update_sync(rgblight_syncinfo_t *syncinfo, bool write_to_eeprom) {
 #ifdef RGBLIGHT_USE_TIMER
 
 typedef void (*effect_func_t)(animation_status_t *anim);
+static void     rgblight_effect_dummy(animation_status_t *anim);
+static effect_func_t cached_effect_func   = rgblight_effect_dummy;  // V251122R2: 모드별 이펙트 함수 캐시
+static uint16_t      cached_interval_time = 2000;                   // V251122R2: 모드별 주기 캐시
+static uint8_t       cached_base_mode     = 0;
+static uint8_t       cached_delta         = 0;
+static bool          cached_effect_valid  = false;
 
 // Animation timer -- use system timer (AVR Timer0)
 void rgblight_timer_init(void) {
@@ -1663,110 +1671,121 @@ void rgblight_timer_task(void) {
         return;  // V251013R10: 빈 효과 범위에서는 애니메이션 루프를 건너뛰어 0으로 나누는 연산을 방지
     }
 
-    // V251120R1: 인디케이터 오버레이 중에도 베이스 이펙트를 큐잉해 렌더 루프를 유지
-    effect_func_t effect_func   = rgblight_effect_dummy;
-    uint16_t      interval_time = 2000; // dummy interval
-    uint8_t       delta         = rgblight_config.mode - rgblight_status.base_mode;
-    animation_status.delta      = delta;
+    uint8_t delta = rgblight_config.mode - rgblight_status.base_mode;
 
-    // static light mode, do nothing here
-    if (1 == 0) { // dummy
+    if (animation_status.restart) {
+        animation_status.restart        = false;
+        animation_status.last_timer     = sync_timer_read();
+        animation_status.next_timer_due = animation_status.last_timer;  // V251122R2: 재시작 시 기준 타임스탬프 재설정
+        animation_status.pos16          = 0;
     }
+
+    uint16_t now = sync_timer_read();
+    if (!timer_expired(now, animation_status.next_timer_due)) {
+        return;  // V251122R2: 만료 이전에는 모드 분기/PROGMEM 접근 없이 종료
+    }
+
+    bool cache_dirty = !cached_effect_valid ||
+                       cached_base_mode != rgblight_status.base_mode ||
+                       cached_delta != delta;
+    if (cache_dirty) {
+        cached_effect_valid  = true;
+        cached_base_mode     = rgblight_status.base_mode;
+        cached_delta         = delta;
+        cached_effect_func   = rgblight_effect_dummy;
+        cached_interval_time = 2000; // dummy interval
+
+        // static light mode, do nothing here
+        if (1 == 0) { // dummy
+        }
 #    ifdef RGBLIGHT_EFFECT_BREATHING
-    else if (rgblight_status.base_mode == RGBLIGHT_MODE_BREATHING) {
-        // breathing mode
-        interval_time = get_interval_time(&RGBLED_BREATHING_INTERVALS[delta], 1, 100);
-        effect_func   = rgblight_effect_breathing;
-    }
+        else if (rgblight_status.base_mode == RGBLIGHT_MODE_BREATHING) {
+            // breathing mode
+            cached_interval_time = get_interval_time(&RGBLED_BREATHING_INTERVALS[delta], 1, 100);
+            cached_effect_func   = rgblight_effect_breathing;
+        }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_RAINBOW_MOOD
-    else if (rgblight_status.base_mode == RGBLIGHT_MODE_RAINBOW_MOOD) {
-        // rainbow mood mode
-        interval_time = get_interval_time(&RGBLED_RAINBOW_MOOD_INTERVALS[delta], 5, 100);
-        effect_func   = rgblight_effect_rainbow_mood;
-    }
+        else if (rgblight_status.base_mode == RGBLIGHT_MODE_RAINBOW_MOOD) {
+            // rainbow mood mode
+            cached_interval_time = get_interval_time(&RGBLED_RAINBOW_MOOD_INTERVALS[delta], 5, 100);
+            cached_effect_func   = rgblight_effect_rainbow_mood;
+        }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_RAINBOW_SWIRL
-    else if (rgblight_status.base_mode == RGBLIGHT_MODE_RAINBOW_SWIRL) {
-        // rainbow swirl mode
-        interval_time = get_interval_time(&RGBLED_RAINBOW_SWIRL_INTERVALS[delta / 2], 1, 100);
-        effect_func   = rgblight_effect_rainbow_swirl;
-    }
+        else if (rgblight_status.base_mode == RGBLIGHT_MODE_RAINBOW_SWIRL) {
+            // rainbow swirl mode
+            cached_interval_time = get_interval_time(&RGBLED_RAINBOW_SWIRL_INTERVALS[delta / 2], 1, 100);
+            cached_effect_func   = rgblight_effect_rainbow_swirl;
+        }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_SNAKE
-    else if (rgblight_status.base_mode == RGBLIGHT_MODE_SNAKE) {
-        // snake mode
-        interval_time = get_interval_time(&RGBLED_SNAKE_INTERVALS[delta / 2], 1, 200);
-        effect_func   = rgblight_effect_snake;
-    }
+        else if (rgblight_status.base_mode == RGBLIGHT_MODE_SNAKE) {
+            // snake mode
+            cached_interval_time = get_interval_time(&RGBLED_SNAKE_INTERVALS[delta / 2], 1, 200);
+            cached_effect_func   = rgblight_effect_snake;
+        }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_KNIGHT
-    else if (rgblight_status.base_mode == RGBLIGHT_MODE_KNIGHT) {
-        // knight mode
-        interval_time = get_interval_time(&RGBLED_KNIGHT_INTERVALS[delta], 5, 100);
-        effect_func   = rgblight_effect_knight;
-    }
+        else if (rgblight_status.base_mode == RGBLIGHT_MODE_KNIGHT) {
+            // knight mode
+            cached_interval_time = get_interval_time(&RGBLED_KNIGHT_INTERVALS[delta], 5, 100);
+            cached_effect_func   = rgblight_effect_knight;
+        }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_CHRISTMAS
-    else if (rgblight_status.base_mode == RGBLIGHT_MODE_CHRISTMAS) {
-        // christmas mode
-        interval_time = RGBLIGHT_EFFECT_CHRISTMAS_INTERVAL;
-        effect_func   = (effect_func_t)rgblight_effect_christmas;
-    }
+        else if (rgblight_status.base_mode == RGBLIGHT_MODE_CHRISTMAS) {
+            // christmas mode
+            cached_interval_time = RGBLIGHT_EFFECT_CHRISTMAS_INTERVAL;
+            cached_effect_func   = (effect_func_t)rgblight_effect_christmas;
+        }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_RGB_TEST
-    else if (rgblight_status.base_mode == RGBLIGHT_MODE_RGB_TEST) {
-        // RGB test mode
-        interval_time = pgm_read_word(&RGBLED_RGBTEST_INTERVALS[0]);
-        effect_func   = (effect_func_t)rgblight_effect_rgbtest;
-    }
+        else if (rgblight_status.base_mode == RGBLIGHT_MODE_RGB_TEST) {
+            // RGB test mode
+            cached_interval_time = pgm_read_word(&RGBLED_RGBTEST_INTERVALS[0]);
+            cached_effect_func   = (effect_func_t)rgblight_effect_rgbtest;
+        }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_ALTERNATING
-    else if (rgblight_status.base_mode == RGBLIGHT_MODE_ALTERNATING) {
-        interval_time = 500;
-        effect_func   = (effect_func_t)rgblight_effect_alternating;
-    }
+        else if (rgblight_status.base_mode == RGBLIGHT_MODE_ALTERNATING) {
+            cached_interval_time = 500;
+            cached_effect_func   = (effect_func_t)rgblight_effect_alternating;
+        }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_TWINKLE
-    else if (rgblight_status.base_mode == RGBLIGHT_MODE_TWINKLE) {
-        interval_time = get_interval_time(&RGBLED_TWINKLE_INTERVALS[delta % 3], 5, 30);
-        effect_func   = (effect_func_t)rgblight_effect_twinkle;
-    }
+        else if (rgblight_status.base_mode == RGBLIGHT_MODE_TWINKLE) {
+            cached_interval_time = get_interval_time(&RGBLED_TWINKLE_INTERVALS[delta % 3], 5, 30);
+            cached_effect_func   = (effect_func_t)rgblight_effect_twinkle;
+        }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_PULSE_ON_PRESS
-    else if (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_ON_PRESS) {
-        interval_time = 5;  // V251018R5: Pulse On Press는 짧은 주기로 상태를 평가
-        effect_func   = (effect_func_t)rgblight_effect_pulse_on_press;
-    }
+        else if (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_ON_PRESS) {
+            cached_interval_time = 5;  // V251018R5: Pulse On Press는 짧은 주기로 상태를 평가
+            cached_effect_func   = (effect_func_t)rgblight_effect_pulse_on_press;
+        }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_PULSE_OFF_PRESS
-    else if (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_OFF_PRESS) {
-        interval_time = 5;  // V251018R5: Pulse Off Press 역시 동일 주기 사용
-        effect_func   = (effect_func_t)rgblight_effect_pulse_off_press;
-    }
+        else if (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_OFF_PRESS) {
+            cached_interval_time = 5;  // V251018R5: Pulse Off Press 역시 동일 주기 사용
+            cached_effect_func   = (effect_func_t)rgblight_effect_pulse_off_press;
+        }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_PULSE_ON_PRESS_HOLD
-    else if (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_ON_PRESS_HOLD) {
-        interval_time = 5;  // V251018R5: Pulse On Press (Hold) 확장 모드도 동일 주기 적용
-        effect_func   = (effect_func_t)rgblight_effect_pulse_on_press_hold;
-    }
+        else if (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_ON_PRESS_HOLD) {
+            cached_interval_time = 5;  // V251018R5: Pulse On Press (Hold) 확장 모드도 동일 주기 적용
+            cached_effect_func   = (effect_func_t)rgblight_effect_pulse_on_press_hold;
+        }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_PULSE_OFF_PRESS_HOLD
-    else if (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD) {
-        interval_time = 5;  // V251018R5: Pulse Off Press (Hold) 확장 모드도 동일 주기 적용
-        effect_func   = (effect_func_t)rgblight_effect_pulse_off_press_hold;
-    }
+        else if (rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD) {
+            cached_interval_time = 5;  // V251018R5: Pulse Off Press (Hold) 확장 모드도 동일 주기 적용
+            cached_effect_func   = (effect_func_t)rgblight_effect_pulse_off_press_hold;
+        }
 #    endif
-    if (animation_status.restart) {
-        animation_status.restart     = false;
-        animation_status.last_timer  = sync_timer_read();
-        animation_status.next_timer_due = animation_status.last_timer;  // V251122R1: 재시작 시 만료 기준을 설정(0 wrap도 정상 처리)
-        animation_status.pos16       = 0; // restart signal to local each effect
     }
-    uint16_t now = sync_timer_read();
-    if (!timer_expired(now, animation_status.next_timer_due)) {  // V251122R1: 0도 유효 타임스탬프이므로 센티널 체크 제거
-        return;
-    }
+
+    animation_status.delta = delta;
 #    if defined(RGBLIGHT_SPLIT) && !defined(RGBLIGHT_SPLIT_NO_ANIMATION_SYNC)
         static uint16_t report_last_timer = 0;
         static bool     tick_flag         = false;
@@ -1775,15 +1794,15 @@ void rgblight_timer_task(void) {
             tick_flag = false;
             if (timer_expired(now, report_last_timer)) {
                 report_last_timer += 30000;
-                dprintf("rgblight animation tick report to slave\\n");  // V251120R1: 슬레이브 동기화 로깅
+                dprintf("rgblight animation tick report to slave\n");  // V251120R1: 슬레이브 동기화 로깅
                 RGBLIGHT_SPLIT_ANIMATION_TICK;
             }
         }
         oldpos16 = animation_status.pos16;
 #    endif
     animation_status.last_timer     = animation_status.next_timer_due;
-    animation_status.next_timer_due = animation_status.last_timer + interval_time;  // V251121R5: 다음 만료 시각 캐싱으로 호출당 타이머 계산 감소
-    effect_func(&animation_status);
+    animation_status.next_timer_due = animation_status.last_timer + cached_interval_time;  // V251122R2: 캐시된 주기로 다음 만료 시각 계산
+    cached_effect_func(&animation_status);
 #    if defined(RGBLIGHT_SPLIT) && !defined(RGBLIGHT_SPLIT_NO_ANIMATION_SYNC)
         if (animation_status.pos16 == 0 && oldpos16 != 0) {
             tick_flag = true;
@@ -2182,6 +2201,13 @@ static void rgblight_flush_render_queue(void)
 
 void rgblight_task(void) {
     bool urgent_pending = rgblight_render_pending || rgblight_host_led_pending;
+    bool velocikey_active = false;
+#ifdef VELOCIKEY_ENABLE
+    velocikey_active = rgblight_velocikey_enabled();
+#endif
+    if (!urgent_pending && !rgblight_config.enable && !velocikey_active) {
+        return;  // V251122R2: 완전 비활성 상태에서는 1kHz 슬라이스 호출도 건너뜀
+    }
     if (!urgent_pending) {
         static uint16_t rgblight_next_run = 0;  // V251121R5: 1kHz 슬라이스로 rgblight_task 호출 희박화
         uint16_t       now               = sync_timer_read();
