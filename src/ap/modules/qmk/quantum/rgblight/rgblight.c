@@ -2278,18 +2278,30 @@ void rgblight_velocikey_set(bool on, bool write_to_eeprom)
 }
 
 void rgblight_velocikey_accelerate(void) {
-    if (typing_speed < TYPING_SPEED_MAX_VALUE) typing_speed += (TYPING_SPEED_MAX_VALUE / 100);
+    if (typing_speed < TYPING_SPEED_MAX_VALUE) {
+        uint8_t step = (TYPING_SPEED_MAX_VALUE / 30);  // V251123R2: 가속 반응을 높이되 과민 반응을 완화
+        if (step == 0) {
+            step = 1;
+        }
+        uint16_t next = typing_speed + step;
+        typing_speed   = next > TYPING_SPEED_MAX_VALUE ? TYPING_SPEED_MAX_VALUE : (uint8_t)next;
+    }
 }
 
 void rgblight_velocikey_decelerate(void) {
     static uint16_t decay_timer = 0;
 
-    if (timer_elapsed(decay_timer) > 500 || decay_timer == 0) {
-        if (typing_speed > 0) typing_speed -= 1;
-        // Decay a little faster at half of max speed
-        if (typing_speed > TYPING_SPEED_MAX_VALUE / 2) typing_speed -= 1;
-        // Decay even faster at 3/4 of max speed
-        if (typing_speed > TYPING_SPEED_MAX_VALUE / 4 * 3) typing_speed -= 2;
+    if (timer_elapsed(decay_timer) > 200 || decay_timer == 0) {  // V251123R2: 감속 주기를 유지하되 과도한 민감도를 완화
+        if (typing_speed > 0) {
+            uint8_t dec = 1;  // 기본 감속을 낮춰 민감도 완화
+            if (typing_speed > TYPING_SPEED_MAX_VALUE / 2) {
+                dec += 1;  // 중간 속도 이상에서만 추가 감속
+            }
+            if (typing_speed > (TYPING_SPEED_MAX_VALUE * 3) / 4) {
+                dec += 1;  // 최고 속도 근처에서도 완만한 감속
+            }
+            typing_speed = (typing_speed > dec) ? typing_speed - dec : 0;
+        }
         decay_timer = timer_read();
     }
 }
