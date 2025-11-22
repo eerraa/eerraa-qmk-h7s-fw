@@ -1491,6 +1491,7 @@ static void rgblight_render_frame(void)
     bool indicator_has_range = indicator_active && (indicator_range.count > 0);
     bool indicator_overrides = indicator_has_range && rgblight_indicator_state.overrides_all;
     bool indicator_ready     = indicator_active && indicator_has_range;
+    uint8_t clip_start       = rgblight_ranges.clipping_start_pos;
 
     if (!indicator_ready) {
         rgblight_indicator_state.needs_render = false;  // V251016R9: 비활성 프레임에서 대기 플래그 정리
@@ -1500,6 +1501,11 @@ static void rgblight_render_frame(void)
 
     bool indicator_should_apply = indicator_ready &&
                                   (indicator_overrides || rgblight_indicator_state.needs_render);  // V251121R1: 오버레이 우선순위를 항상 보장
+
+    if (num_leds == 0) {
+        rgblight_indicator_state.needs_render = false;  // V251122R8: 전송 범위가 비어 있으면 조기 종료로 불필요한 호출 제거
+        return;
+    }
 
     if (!indicator_overrides) {
         if (!rgblight_config.enable) {
@@ -1532,12 +1538,12 @@ static void rgblight_render_frame(void)
 
 #ifdef RGBLIGHT_LED_MAP
     rgb_led_t led0[RGBLIGHT_LED_COUNT];
-    for (uint8_t i = 0; i < RGBLIGHT_LED_COUNT; i++) {
-        led0[i] = led[pgm_read_byte(&led_map[i])];
+    for (uint8_t i = 0; i < num_leds; i++) {
+        led0[i] = led[pgm_read_byte(&led_map[clip_start + i])];  // V251122R8: 클리핑 범위만 매핑해 복사량 축소
     }
-    start_led = led0 + rgblight_ranges.clipping_start_pos;
+    start_led = led0;  // V251122R8: 부분 매핑에 맞춰 시작 포인터도 선형 버퍼로 조정
 #else
-    start_led = led + rgblight_ranges.clipping_start_pos;
+    start_led = led + clip_start;
 #endif
 
 #ifdef RGBW
@@ -2198,6 +2204,16 @@ static void rgblight_flush_render_queue(void)
 
 void rgblight_task(void) {
     bool urgent_pending = rgblight_render_pending || rgblight_host_led_pending;
+    bool timer_disabled = !rgblight_status.timer_enabled;
+#ifdef VELOCIKEY_ENABLE
+    bool velocikey_on = rgblight_velocikey_enabled();
+#else
+    bool velocikey_on = false;
+#endif
+    if (!urgent_pending && timer_disabled && !velocikey_on) {
+        return;  // V251122R8: 긴급 이벤트, 타이머, Velocikey 모두 없을 때 250kHz 경로 부하를 줄이기 위해 즉시 반환
+    }
+
     if (!urgent_pending) {
         // V251122R6: 캐시 연동 게이트를 제거하고 단순 1ms 슬라이스로 복원해 스톨 리스크 해소
         static uint16_t rgblight_next_run = 0;  // V251121R5: 1kHz 슬라이스로 rgblight_task 호출 희박화
