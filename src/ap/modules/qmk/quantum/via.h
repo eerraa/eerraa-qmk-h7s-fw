@@ -118,6 +118,7 @@ enum via_channel_id {
     id_qmk_kkuk               = 12,
     id_qmk_usb_polling        = 13,  // V251108R1: BootMode/USB 모니터 전용 채널
     id_qmk_key_response       = 14,  // V251115R1: VIA 디바운스 프로필 제어 채널
+    id_qmk_tapping            = 15,  // V251123R4: VIA TAPPING 제어 채널
 };
 
 enum via_qmk_backlight_value {
@@ -165,6 +166,14 @@ enum via_qmk_key_response_value {
     id_qmk_debounce_time_pre    = 3,
     id_qmk_debounce_time_post   = 4,
     id_qmk_debounce_status      = 5,
+};
+
+// V251123R4: VIA TAPPING 설정 value ID 매핑
+enum via_qmk_tapping_value {
+    id_qmk_tapping_global_term             = 1,
+    id_qmk_tapping_permissive_hold         = 2,
+    id_qmk_tapping_hold_on_other_key_press = 3,
+    id_qmk_tapping_retro_tapping           = 4,
 };
 
 // V251012R2: 커스텀 인디케이터 제어 값 ID

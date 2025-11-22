@@ -34,7 +34,7 @@ BRICK60 펌웨어 안내
 
    - Pulse on Press / Pulse off Press / Pulse on Press (Hold) / Pulse off Press (Hold) 네 가지 새로운 이펙트가 추가되었습니다.
    - VIA CONFIGURE 탭에서 LIGHTING 메뉴를 열고, 이펙트 항목에서 원하는 모드를 선택할 수 있습니다.
-   - Velocikey: LIGHTING 메뉴에 Velocikey 토글이 추가되었으며, Enable 하면 Snake/Knigh­t/Rainbow/Twinkle 등의 이펙트의 속도가 키 입력 속도에 따라서 변화합니다.
+   - Velocikey: LIGHTING 메뉴에 Velocikey 토글이 추가되었으며, Enable 하면 Snake/Knight/Rainbow/Twinkle 등의 이펙트의 속도가 키 입력 속도에 따라서 변화합니다.
 
 2-4. 디바운스 설정 (DEBOUNCE)
 
@@ -186,7 +186,7 @@ This document is the official guide for BRICK60 (STM32H7S with 8,000 Hz USB poll
 
    - The following four lighting effects are available: Pulse on Press, Pulse off Press, Pulse on Press (Hold), Pulse off Press (Hold).
    - Open the LIGHTING menu under the VIA CONFIGURE tab and select your preferred effect from the list.
-   - Velocikey: A Velocikey toggle is available in the LIGHTING menu. When enabled, speed-based effects such as Snake/Knigh­t/Rainbow/Twinkle change their playback speed according to your typing speed. When disabled, they run at their built-in default speeds (as indicated by the effect name numbers).
+   - Velocikey: A Velocikey toggle is available in the LIGHTING menu. When enabled, speed-based effects such as Snake/Knight/Rainbow/Twinkle change their playback speed according to your typing speed. When disabled, they run at their built-in default speeds (as indicated by the effect name numbers).
 
 2-4. Debounce settings (DEBOUNCE)
 

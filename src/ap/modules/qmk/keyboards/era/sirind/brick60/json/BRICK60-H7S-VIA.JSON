@@ -280,6 +280,54 @@
               ]
             }
           ]
+        },
+        {
+          "label": "TAPPING",
+          "content": [
+            {
+              "label": "Global Tapping Term",
+              "type": "dropdown",
+              "content": ["id_qmk_tapping_global_term", 15, 1],
+              "options": [
+                ["100 ms", 10],
+                ["120 ms", 12],
+                ["140 ms", 14],
+                ["160 ms", 16],
+                ["180 ms", 18],
+                ["200 ms", 20],
+                ["220 ms", 22],
+                ["240 ms", 24],
+                ["260 ms", 26],
+                ["280 ms", 28],
+                ["300 ms", 30],
+                ["320 ms", 32],
+                ["340 ms", 34],
+                ["360 ms", 36],
+                ["380 ms", 38],
+                ["400 ms", 40],
+                ["420 ms", 42],
+                ["440 ms", 44],
+                ["460 ms", 46],
+                ["480 ms", 48],
+                ["500 ms", 50]
+              ]
+            },
+            {
+              "label": "Permissive Hold",
+              "type": "toggle",
+              "content": ["id_qmk_tapping_permissive_hold", 15, 2]
+            },
+            {
+              "label": "Hold on Other Key Press",
+              "type": "toggle",
+              "content": ["id_qmk_tapping_hold_on_other_key_press", 15, 3]
+            },
+            {
+              "label": "Retro Tapping (Tap if unused)",
+              "type": "toggle",
+              "content": ["id_qmk_tapping_retro_tapping", 15, 4]
+            }
+          ]
         }
       ]
     },
