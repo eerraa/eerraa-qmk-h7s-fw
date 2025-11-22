@@ -927,6 +927,7 @@ void rgblight_mode_eeprom_helper(uint8_t mode, bool write_to_eeprom) {
     }
 #ifdef RGBLIGHT_USE_TIMER
     animation_status.restart = true;
+    rgblight_invalidate_effect_cache();  // V251122R5: 모드 전환 시 캐시된 이펙트/주기를 초기화
 #endif
     rgblight_sethsv_noeeprom(rgblight_config.hue, rgblight_config.sat, rgblight_config.val);
 }
@@ -1611,9 +1612,19 @@ static uint8_t       cached_base_mode     = 0;
 static uint8_t       cached_delta         = 0;
 static bool          cached_effect_valid  = false;
 
+static void rgblight_invalidate_effect_cache(void)
+{
+    cached_effect_valid  = false;
+    cached_effect_func   = rgblight_effect_dummy;
+    cached_interval_time = 2000;
+    cached_base_mode     = 0;
+    cached_delta         = 0;
+}
+
 // Animation timer -- use system timer (AVR Timer0)
 void rgblight_timer_init(void) {
     rgblight_status.timer_enabled = false;
+    rgblight_invalidate_effect_cache();  // V251122R5: 초기화 시 캐시를 비워 잘못된 주기가 남지 않도록 함
     RGBLIGHT_SPLIT_SET_CHANGE_TIMER_ENABLE;
 }
 void rgblight_timer_enable(void) {
@@ -1622,11 +1633,13 @@ void rgblight_timer_enable(void) {
     }
     animation_status.last_timer = sync_timer_read();
     animation_status.next_timer_due = animation_status.last_timer;  // V251122R1: 타이머 활성 시 만료 기준을 설정(0도 유효값으로 사용)
+    rgblight_invalidate_effect_cache();  // V251122R5: 타이머 재활성화 시 이펙트/주기 캐시 초기화
     RGBLIGHT_SPLIT_SET_CHANGE_TIMER_ENABLE;
     dprintf("rgblight timer enabled.\n");
 }
 void rgblight_timer_disable(void) {
     rgblight_status.timer_enabled = false;
+    rgblight_invalidate_effect_cache();  // V251122R5: 타이머 비활성화 시 캐시를 비워 재개 시점에 새로 계산
     RGBLIGHT_SPLIT_SET_CHANGE_TIMER_ENABLE;
     dprintf("rgblight timer disable.\n");
 }
@@ -1672,6 +1685,10 @@ void rgblight_timer_task(uint16_t now) {
     }
 
     uint8_t delta = rgblight_config.mode - rgblight_status.base_mode;
+    bool    cache_disabled = false;
+#ifdef VELOCIKEY_ENABLE
+    cache_disabled = rgblight_velocikey_enabled();  // V251122R5: Velocikey 주기 변화 시에는 캐시를 강제 무효화
+#endif
 
     if (now == 0) {
         now = sync_timer_read();  // V251122R4: 호출원이 없는 경우 기존 동작 유지
@@ -1688,7 +1705,8 @@ void rgblight_timer_task(uint16_t now) {
         return;  // V251122R2: 만료 이전에는 모드 분기/PROGMEM 접근 없이 종료
     }
 
-    bool cache_dirty = !cached_effect_valid ||
+    bool cache_dirty = cache_disabled ||
+                       !cached_effect_valid ||
                        cached_base_mode != rgblight_status.base_mode ||
                        cached_delta != delta;
     if (cache_dirty) {
@@ -2213,18 +2231,29 @@ void rgblight_task(void) {
     }
     uint16_t now = 0;
     if (!urgent_pending) {
-        static uint16_t rgblight_next_run = 0;  // V251121R5: 1kHz 슬라이스로 rgblight_task 호출 희박화
+        static uint16_t rgblight_next_run = 0;  // V251122R5: 1kHz 슬라이스로 rgblight_task 호출 희박화
         now = sync_timer_read();
 
         if (rgblight_next_run == 0) {
-            rgblight_next_run = now;  // V251121R5: 초기 호출은 즉시 통과
+            rgblight_next_run = now;  // V251122R5: 초기 호출은 즉시 통과
         }
 
         if (!timer_expired(now, rgblight_next_run)) {
-            return;  // V251121R5: 우선 이벤트가 없고 주기 전이면 조기 반환
+            return;  // V251122R5: 우선 이벤트가 없고 주기 전이면 조기 반환
         }
 
-        rgblight_next_run = now + 1;  // V251121R5: 약 1ms 간격으로 평가
+    #ifdef RGBLIGHT_USE_TIMER
+        uint16_t next_gate = now + 1;
+        if (rgblight_status.timer_enabled) {
+            uint16_t timer_due = animation_status.next_timer_due;
+            if (!timer_expired(now, timer_due)) {
+                next_gate = timer_due;  // V251122R5: 타이머 만료 시각에 맞춰 호출 주기를 정렬
+            }
+        }
+        rgblight_next_run = next_gate;  // V251122R5: 다음 호출 시각을 캐시된 만료 기준과 동기화
+    #else
+        rgblight_next_run = now + 1;  // V251122R5: 약 1ms 간격으로 평가
+    #endif
     }
 
     rgblight_consume_host_led_queue();
@@ -2253,22 +2282,37 @@ void rgblight_velocikey_toggle(void) {
     dprintf("rgblight velocikey toggle [EEPROM]: rgblight_config.velocikey = %u\n", !rgblight_config.velocikey);
     rgblight_config.velocikey = !rgblight_config.velocikey;
     eeconfig_update_rgblight_current();
+#ifdef RGBLIGHT_USE_TIMER
+    rgblight_invalidate_effect_cache();  // V251122R5: Velocikey 상태 변경 시 애니메이션 주기를 다시 계산
+#endif
 }
 
 void rgblight_velocikey_accelerate(void) {
+    uint8_t prev_speed = typing_speed;
     if (typing_speed < TYPING_SPEED_MAX_VALUE) typing_speed += (TYPING_SPEED_MAX_VALUE / 100);
+#ifdef RGBLIGHT_USE_TIMER
+    if (typing_speed != prev_speed) {
+        rgblight_invalidate_effect_cache();  // V251122R5: 속도 상승에 따라 주기를 갱신하도록 캐시 무효화
+    }
+#endif
 }
 
 void rgblight_velocikey_decelerate(void) {
     static uint16_t decay_timer = 0;
 
     if (timer_elapsed(decay_timer) > 500 || decay_timer == 0) {
+        uint8_t prev_speed = typing_speed;
         if (typing_speed > 0) typing_speed -= 1;
         // Decay a little faster at half of max speed
         if (typing_speed > TYPING_SPEED_MAX_VALUE / 2) typing_speed -= 1;
         // Decay even faster at 3/4 of max speed
         if (typing_speed > TYPING_SPEED_MAX_VALUE / 4 * 3) typing_speed -= 2;
         decay_timer = timer_read();
+#ifdef RGBLIGHT_USE_TIMER
+        if (typing_speed != prev_speed) {
+            rgblight_invalidate_effect_cache();  // V251122R5: 속도 감소 시에도 새 주기를 반영
+        }
+#endif
     }
 }
 
