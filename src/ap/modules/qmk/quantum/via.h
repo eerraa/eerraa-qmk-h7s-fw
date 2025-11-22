@@ -130,6 +130,7 @@ enum via_qmk_rgblight_value {
     id_qmk_rgblight_effect       = 2,
     id_qmk_rgblight_effect_speed = 3,
     id_qmk_rgblight_color        = 4,
+    id_qmk_velocikey_toggle      = 5,  // V251123R1: VIA에서 Velocikey 토글 노출
 };
 
 enum via_qmk_rgb_matrix_value {

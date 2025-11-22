@@ -509,6 +509,7 @@ void    rgblight_velocikey_toggle(void);
 void    rgblight_velocikey_accelerate(void);
 void    rgblight_velocikey_decelerate(void);
 uint8_t rgblight_velocikey_match_speed(uint8_t minValue, uint8_t maxValue);
+void    rgblight_velocikey_set(bool on, bool write_to_eeprom);  // V251123R1: VIA 직접 설정용
 
 #    define velocikey_enabled rgblight_velocikey_enabled
 #    define velocikey_toggle rgblight_velocikey_toggle

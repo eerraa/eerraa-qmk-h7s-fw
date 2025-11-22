@@ -139,6 +139,7 @@ static const bool rgblight_indicator_supported = false;  // V251120R1: 인디케
 static rgblight_indicator_range_t rgblight_indicator_range_table[RGBLIGHT_INDICATOR_RANGE_TABLE_LENGTH] = {0};
 
 #ifdef RGBLIGHT_USE_TIMER
+static void rgblight_timer_task(void);  // V251122R7: 인디케이터 경로에서 즉시 호출하므로 선행 선언
 #endif
 
 // V251012R2: Brick60 인디케이터 상태를 rgblight 내부에서 추적하기 위한 구조체
@@ -570,6 +571,13 @@ static void rgblight_indicator_commit_state(bool should_enable, bool request_ren
     if (was_active) {
         if (rgblight_config.enable && is_static_effect(rgblight_config.mode)) {
             rgblight_mode_noeeprom(rgblight_config.mode);  // V251018R3: 정적 효과는 즉시 재렌더해 원본 상태 복구
+        } else {
+#ifdef RGBLIGHT_USE_TIMER
+            if (rgblight_status.timer_enabled) {
+                animation_status.next_timer_due = sync_timer_read();  // V251122R7: 인디케이터 종료 시 베이스 이펙트를 즉시 재계산하도록 만료 시각을 당김
+                rgblight_timer_task();  // V251122R7: 다음 틱을 기다리지 않고 오버레이가 남지 않게 즉시 프레임 재계산
+            }
+#endif
         }
 
         rgblight_indicator_restore_pulse_effect();  // V251121R2: CAPS OFF에서 Pulse 기본 상태를 즉시 재적용
@@ -1483,6 +1491,12 @@ static void rgblight_render_frame(void)
     bool indicator_has_range = indicator_active && (indicator_range.count > 0);
     bool indicator_overrides = indicator_has_range && rgblight_indicator_state.overrides_all;
     bool indicator_ready     = indicator_active && indicator_has_range;
+    uint8_t clip_start       = rgblight_ranges.clipping_start_pos;
+
+    if (clip_start >= RGBLIGHT_LED_COUNT) {
+        rgblight_indicator_state.needs_render = false;
+        return;  // V251122R9: 클리핑 시작점이 범위를 벗어나면 전송을 생략해 OOB를 방지
+    }
 
     if (!indicator_ready) {
         rgblight_indicator_state.needs_render = false;  // V251016R9: 비활성 프레임에서 대기 플래그 정리
@@ -1492,6 +1506,11 @@ static void rgblight_render_frame(void)
 
     bool indicator_should_apply = indicator_ready &&
                                   (indicator_overrides || rgblight_indicator_state.needs_render);  // V251121R1: 오버레이 우선순위를 항상 보장
+
+    if (num_leds == 0) {
+        rgblight_indicator_state.needs_render = false;  // V251122R8: 전송 범위가 비어 있으면 조기 종료로 불필요한 호출 제거
+        return;
+    }
 
     if (!indicator_overrides) {
         if (!rgblight_config.enable) {
@@ -1524,12 +1543,12 @@ static void rgblight_render_frame(void)
 
 #ifdef RGBLIGHT_LED_MAP
     rgb_led_t led0[RGBLIGHT_LED_COUNT];
-    for (uint8_t i = 0; i < RGBLIGHT_LED_COUNT; i++) {
-        led0[i] = led[pgm_read_byte(&led_map[i])];
+    for (uint8_t i = 0; i < num_leds; i++) {
+        led0[i] = led[pgm_read_byte(&led_map[clip_start + i])];  // V251122R8: 클리핑 범위만 매핑해 복사량 축소
     }
-    start_led = led0 + rgblight_ranges.clipping_start_pos;
+    start_led = led0;  // V251122R8: 부분 매핑에 맞춰 시작 포인터도 선형 버퍼로 조정
 #else
-    start_led = led + rgblight_ranges.clipping_start_pos;
+    start_led = led + clip_start;
 #endif
 
 #ifdef RGBW
@@ -1681,35 +1700,35 @@ void rgblight_timer_task(void) {
 #    ifdef RGBLIGHT_EFFECT_BREATHING
     else if (rgblight_status.base_mode == RGBLIGHT_MODE_BREATHING) {
         // breathing mode
-        interval_time = get_interval_time(&RGBLED_BREATHING_INTERVALS[delta], 1, 100);
+        interval_time = get_interval_time(&RGBLED_BREATHING_INTERVALS[delta], 5, 100);  // V251123R3: Breathing Velocikey 범위를 5~100ms로 상향
         effect_func   = rgblight_effect_breathing;
     }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_RAINBOW_MOOD
     else if (rgblight_status.base_mode == RGBLIGHT_MODE_RAINBOW_MOOD) {
         // rainbow mood mode
-        interval_time = get_interval_time(&RGBLED_RAINBOW_MOOD_INTERVALS[delta], 5, 100);
+        interval_time = get_interval_time(&RGBLED_RAINBOW_MOOD_INTERVALS[delta], 10, 120);  // V251123R3: Rainbow Mood Velocikey 범위를 10~120ms로 확장
         effect_func   = rgblight_effect_rainbow_mood;
     }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_RAINBOW_SWIRL
     else if (rgblight_status.base_mode == RGBLIGHT_MODE_RAINBOW_SWIRL) {
         // rainbow swirl mode
-        interval_time = get_interval_time(&RGBLED_RAINBOW_SWIRL_INTERVALS[delta / 2], 1, 100);
+        interval_time = get_interval_time(&RGBLED_RAINBOW_SWIRL_INTERVALS[delta / 2], 5, 100);  // V251123R3: Rainbow Swirl Velocikey 최저 속도를 5ms로 상향
         effect_func   = rgblight_effect_rainbow_swirl;
     }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_SNAKE
     else if (rgblight_status.base_mode == RGBLIGHT_MODE_SNAKE) {
         // snake mode
-        interval_time = get_interval_time(&RGBLED_SNAKE_INTERVALS[delta / 2], 1, 200);
+        interval_time = get_interval_time(&RGBLED_SNAKE_INTERVALS[delta / 2], 10, 200);  // V251123R3: Snake Velocikey 최저 속도를 10ms로 조정
         effect_func   = rgblight_effect_snake;
     }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_KNIGHT
     else if (rgblight_status.base_mode == RGBLIGHT_MODE_KNIGHT) {
         // knight mode
-        interval_time = get_interval_time(&RGBLED_KNIGHT_INTERVALS[delta], 5, 100);
+        interval_time = get_interval_time(&RGBLED_KNIGHT_INTERVALS[delta], 10, 100);  // V251123R3: Knight Velocikey 범위를 10~100ms로 조정
         effect_func   = rgblight_effect_knight;
     }
 #    endif
@@ -1873,8 +1892,8 @@ __attribute__((weak)) const uint8_t RGBLED_SNAKE_INTERVALS[] PROGMEM = {100, 50,
 void rgblight_effect_snake(animation_status_t *anim) {
     static uint8_t pos = 0;
     uint8_t        i, j;
-    int8_t         k;
     int8_t         increment = 1;
+    uint8_t        effect_span = rgblight_ranges.effect_num_leds;  // V251122R7: 효과 범위 기반 래핑을 위해 캐시
 
     if (anim->delta % 2) {
         increment = -1;
@@ -1888,7 +1907,7 @@ void rgblight_effect_snake(animation_status_t *anim) {
             pos = 0;
         }
         anim->pos = 1;
-    }
+        }
 #    endif
 
     for (i = 0; i < rgblight_ranges.effect_num_leds; i++) {
@@ -1900,12 +1919,12 @@ void rgblight_effect_snake(animation_status_t *anim) {
         ledp->w = 0;
 #    endif
         for (j = 0; j < RGBLIGHT_EFFECT_SNAKE_LENGTH; j++) {
-            k = pos + j * increment;
-            if (k > RGBLIGHT_LED_COUNT) {
-                k = k % (RGBLIGHT_LED_COUNT);
+            int16_t k = (int16_t)pos + (int16_t)j * increment;
+            if (k >= effect_span) {
+                k = k % effect_span;  // V251122R7: 전체 LED가 아닌 효과 범위 기준으로 래핑
             }
             if (k < 0) {
-                k = k + rgblight_ranges.effect_num_leds;
+                k = k + effect_span;  // V251122R7: 음수 래핑도 동일 기준 적용
             }
             if (i == k) {
                 sethsv(rgblight_config.hue, rgblight_config.sat, (uint8_t)(rgblight_config.val * (RGBLIGHT_EFFECT_SNAKE_LENGTH - j) / RGBLIGHT_EFFECT_SNAKE_LENGTH), ledp);
@@ -2190,6 +2209,16 @@ static void rgblight_flush_render_queue(void)
 
 void rgblight_task(void) {
     bool urgent_pending = rgblight_render_pending || rgblight_host_led_pending;
+    bool timer_disabled = !rgblight_status.timer_enabled;
+#ifdef VELOCIKEY_ENABLE
+    bool velocikey_on = rgblight_velocikey_enabled();
+#else
+    bool velocikey_on = false;
+#endif
+    if (!urgent_pending && timer_disabled && !velocikey_on) {
+        return;  // V251122R8: 긴급 이벤트, 타이머, Velocikey 모두 없을 때 250kHz 경로 부하를 줄이기 위해 즉시 반환
+    }
+
     if (!urgent_pending) {
         // V251122R6: 캐시 연동 게이트를 제거하고 단순 1ms 슬라이스로 복원해 스톨 리스크 해소
         static uint16_t rgblight_next_run = 0;  // V251121R5: 1kHz 슬라이스로 rgblight_task 호출 희박화
@@ -2234,19 +2263,45 @@ void rgblight_velocikey_toggle(void) {
     eeconfig_update_rgblight_current();
 }
 
+// V251123R1: VIA 연동을 위한 직접 설정 API
+void rgblight_velocikey_set(bool on, bool write_to_eeprom)
+{
+    if (rgblight_config.velocikey == on) {
+        return;
+    }
+
+    rgblight_config.velocikey = on;
+
+    if (write_to_eeprom) {
+        eeconfig_update_rgblight_current();
+    }
+}
+
 void rgblight_velocikey_accelerate(void) {
-    if (typing_speed < TYPING_SPEED_MAX_VALUE) typing_speed += (TYPING_SPEED_MAX_VALUE / 100);
+    if (typing_speed < TYPING_SPEED_MAX_VALUE) {
+        uint8_t step = (TYPING_SPEED_MAX_VALUE / 50);  // V251123R3: QMK 대비 2배 민감도로 가속(스텝 상향)
+        if (step == 0) {
+            step = 1;
+        }
+        uint16_t next = typing_speed + step;
+        typing_speed   = next > TYPING_SPEED_MAX_VALUE ? TYPING_SPEED_MAX_VALUE : (uint8_t)next;
+    }
 }
 
 void rgblight_velocikey_decelerate(void) {
     static uint16_t decay_timer = 0;
 
-    if (timer_elapsed(decay_timer) > 500 || decay_timer == 0) {
-        if (typing_speed > 0) typing_speed -= 1;
-        // Decay a little faster at half of max speed
-        if (typing_speed > TYPING_SPEED_MAX_VALUE / 2) typing_speed -= 1;
-        // Decay even faster at 3/4 of max speed
-        if (typing_speed > TYPING_SPEED_MAX_VALUE / 4 * 3) typing_speed -= 2;
+    if (timer_elapsed(decay_timer) > 250 || decay_timer == 0) {  // V251123R3: 250ms 주기로 감속해 QMK 대비 2배 민감도로 반응
+        if (typing_speed > 0) {
+            uint8_t dec = 1;  // QMK 기본 감속과 동일하게 시작
+            if (typing_speed > TYPING_SPEED_MAX_VALUE / 2) {
+                dec += 1;  // 중간 속도 이상 추가 감속
+            }
+            if (typing_speed > (TYPING_SPEED_MAX_VALUE * 3) / 4) {
+                dec += 2;  // 최고 속도 구간 감속 강화
+            }
+            typing_speed = (typing_speed > dec) ? typing_speed - dec : 0;
+        }
         decay_timer = timer_read();
     }
 }

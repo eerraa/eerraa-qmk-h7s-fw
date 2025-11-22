@@ -20,7 +20,8 @@
               "label": "Brightness",
               "type": "range",
               "options": [0, 255],
-              "content": ["id_qmk_rgblight_brightness", 2, 1]
+              "content": ["id_qmk_rgblight_brightness", 2, 1],
+              "showIf": "{id_qmk_rgblight_effect} != 0 && {id_qmk_rgblight_effect} != 2 && {id_qmk_rgblight_effect} != 3 && {id_qmk_rgblight_effect} != 4 && {id_qmk_rgblight_effect} != 5 && {id_qmk_rgblight_effect} != 24 && {id_qmk_rgblight_effect} != 35"
             },
             {
               "label": "Effect",
@@ -77,7 +78,7 @@
               ]
             },
             {
-              "showIf": "{id_qmk_rgblight_effect} != 0 && {id_qmk_rgblight_effect} != 1 && {id_qmk_rgblight_effect} != 2 && {id_qmk_rgblight_effect} != 3 && {id_qmk_rgblight_effect} != 4 && {id_qmk_rgblight_effect} != 5",
+              "showIf": "{id_qmk_rgblight_effect} >= 43 && {id_qmk_rgblight_effect} <= 46",
               "label": "Effect Speed",
               "type": "range",
               "options": [0, 255],
@@ -88,6 +89,12 @@
               "label": "Color",
               "type": "color",
               "content": ["id_qmk_rgblight_color", 2, 4]
+            },
+            {
+              "showIf": "({id_qmk_rgblight_effect} >= 2 && {id_qmk_rgblight_effect} <= 23) || ({id_qmk_rgblight_effect} >= 37 && {id_qmk_rgblight_effect} <= 42)",
+              "label": "Velocikey",
+              "type": "toggle",
+              "content": ["id_qmk_velocikey_toggle", 2, 5]
             }
           ]
         },
