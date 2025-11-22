@@ -89,6 +89,12 @@
               "label": "Color",
               "type": "color",
               "content": ["id_qmk_rgblight_color", 2, 4]
+            },
+            {
+              "showIf": "({id_qmk_rgblight_effect} >= 2 && {id_qmk_rgblight_effect} <= 23) || ({id_qmk_rgblight_effect} >= 37 && {id_qmk_rgblight_effect} <= 42)",
+              "label": "Velocikey",
+              "type": "toggle",
+              "content": ["id_qmk_velocikey_toggle", 2, 5]
             }
           ]
         },

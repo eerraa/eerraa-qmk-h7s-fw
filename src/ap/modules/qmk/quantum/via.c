@@ -594,6 +594,14 @@ void via_qmk_rgblight_get_value(uint8_t *data) {
             value_data[1] = rgblight_get_sat();
             break;
         }
+        case id_qmk_velocikey_toggle: {  // V251123R1: VIA Velocikey 토글 상태 조회
+#ifdef VELOCIKEY_ENABLE
+            value_data[0] = rgblight_velocikey_enabled();
+#else
+            value_data[0] = 0;
+#endif
+            break;
+        }
     }
 }
 
@@ -621,6 +629,13 @@ void via_qmk_rgblight_set_value(uint8_t *data) {
         }
         case id_qmk_rgblight_color: {
             rgblight_sethsv_noeeprom(value_data[0], value_data[1], rgblight_get_val());
+            break;
+        }
+        case id_qmk_velocikey_toggle: {  // V251123R1: VIA에서 Velocikey 직접 설정
+#ifdef VELOCIKEY_ENABLE
+            bool enable_velocikey = (value_data[0] != 0);
+            rgblight_velocikey_set(enable_velocikey, false);
+#endif
             break;
         }
     }

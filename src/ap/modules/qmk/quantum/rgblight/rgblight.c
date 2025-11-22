@@ -2263,6 +2263,20 @@ void rgblight_velocikey_toggle(void) {
     eeconfig_update_rgblight_current();
 }
 
+// V251123R1: VIA 연동을 위한 직접 설정 API
+void rgblight_velocikey_set(bool on, bool write_to_eeprom)
+{
+    if (rgblight_config.velocikey == on) {
+        return;
+    }
+
+    rgblight_config.velocikey = on;
+
+    if (write_to_eeprom) {
+        eeconfig_update_rgblight_current();
+    }
+}
+
 void rgblight_velocikey_accelerate(void) {
     if (typing_speed < TYPING_SPEED_MAX_VALUE) typing_speed += (TYPING_SPEED_MAX_VALUE / 100);
 }
