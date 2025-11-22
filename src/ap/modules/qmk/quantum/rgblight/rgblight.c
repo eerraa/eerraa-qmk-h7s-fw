@@ -570,6 +570,13 @@ static void rgblight_indicator_commit_state(bool should_enable, bool request_ren
     if (was_active) {
         if (rgblight_config.enable && is_static_effect(rgblight_config.mode)) {
             rgblight_mode_noeeprom(rgblight_config.mode);  // V251018R3: 정적 효과는 즉시 재렌더해 원본 상태 복구
+        } else {
+#ifdef RGBLIGHT_USE_TIMER
+            if (rgblight_status.timer_enabled) {
+                animation_status.next_timer_due = sync_timer_read();  // V251122R7: 인디케이터 종료 시 베이스 이펙트를 즉시 재계산하도록 만료 시각을 당김
+                rgblight_timer_task();  // V251122R7: 다음 틱을 기다리지 않고 오버레이가 남지 않게 즉시 프레임 재계산
+            }
+#endif
         }
 
         rgblight_indicator_restore_pulse_effect();  // V251121R2: CAPS OFF에서 Pulse 기본 상태를 즉시 재적용
@@ -1873,8 +1880,8 @@ __attribute__((weak)) const uint8_t RGBLED_SNAKE_INTERVALS[] PROGMEM = {100, 50,
 void rgblight_effect_snake(animation_status_t *anim) {
     static uint8_t pos = 0;
     uint8_t        i, j;
-    int8_t         k;
     int8_t         increment = 1;
+    uint8_t        effect_span = rgblight_ranges.effect_num_leds;  // V251122R7: 효과 범위 기반 래핑을 위해 캐시
 
     if (anim->delta % 2) {
         increment = -1;
@@ -1888,7 +1895,7 @@ void rgblight_effect_snake(animation_status_t *anim) {
             pos = 0;
         }
         anim->pos = 1;
-    }
+        }
 #    endif
 
     for (i = 0; i < rgblight_ranges.effect_num_leds; i++) {
@@ -1900,12 +1907,12 @@ void rgblight_effect_snake(animation_status_t *anim) {
         ledp->w = 0;
 #    endif
         for (j = 0; j < RGBLIGHT_EFFECT_SNAKE_LENGTH; j++) {
-            k = pos + j * increment;
-            if (k > RGBLIGHT_LED_COUNT) {
-                k = k % (RGBLIGHT_LED_COUNT);
+            int16_t k = (int16_t)pos + (int16_t)j * increment;
+            if (k >= effect_span) {
+                k = k % effect_span;  // V251122R7: 전체 LED가 아닌 효과 범위 기준으로 래핑
             }
             if (k < 0) {
-                k = k + rgblight_ranges.effect_num_leds;
+                k = k + effect_span;  // V251122R7: 음수 래핑도 동일 기준 적용
             }
             if (i == k) {
                 sethsv(rgblight_config.hue, rgblight_config.sat, (uint8_t)(rgblight_config.val * (RGBLIGHT_EFFECT_SNAKE_LENGTH - j) / RGBLIGHT_EFFECT_SNAKE_LENGTH), ledp);
