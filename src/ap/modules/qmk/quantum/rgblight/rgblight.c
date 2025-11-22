@@ -138,6 +138,10 @@ static const bool rgblight_indicator_supported = false;  // V251120R1: 인디케
 #define RGBLIGHT_INDICATOR_RANGE_TABLE_LENGTH (RGBLIGHT_INDICATOR_TARGET_NUM + 1)  // V251016R8: Caps/Scroll/Num + OFF
 static rgblight_indicator_range_t rgblight_indicator_range_table[RGBLIGHT_INDICATOR_RANGE_TABLE_LENGTH] = {0};
 
+#ifdef RGBLIGHT_USE_TIMER
+static void rgblight_invalidate_effect_cache(void);  // V251122R5: 이펙트/주기 캐시 초기화 프로토타입
+#endif
+
 // V251012R2: Brick60 인디케이터 상태를 rgblight 내부에서 추적하기 위한 구조체
 typedef struct {
     rgblight_indicator_config_t config;
