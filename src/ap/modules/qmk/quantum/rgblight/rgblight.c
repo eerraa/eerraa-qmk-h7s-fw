@@ -1657,7 +1657,7 @@ static void rgblight_effect_dummy(animation_status_t *anim) {
     **/
 }
 
-void rgblight_timer_task(void) {
+void rgblight_timer_task(uint16_t now) {
     bool indicator_supported = rgblight_indicator_supported;
     bool indicator_active    = indicator_supported && rgblight_indicator_state.active;
 
@@ -1673,14 +1673,17 @@ void rgblight_timer_task(void) {
 
     uint8_t delta = rgblight_config.mode - rgblight_status.base_mode;
 
+    if (now == 0) {
+        now = sync_timer_read();  // V251122R4: 호출원이 없는 경우 기존 동작 유지
+    }
+
     if (animation_status.restart) {
         animation_status.restart        = false;
-        animation_status.last_timer     = sync_timer_read();
+        animation_status.last_timer     = now;
         animation_status.next_timer_due = animation_status.last_timer;  // V251122R2: 재시작 시 기준 타임스탬프 재설정
         animation_status.pos16          = 0;
     }
 
-    uint16_t now = sync_timer_read();
     if (!timer_expired(now, animation_status.next_timer_due)) {
         return;  // V251122R2: 만료 이전에는 모드 분기/PROGMEM 접근 없이 종료
     }
@@ -2208,9 +2211,10 @@ void rgblight_task(void) {
     if (!urgent_pending && !rgblight_config.enable && !velocikey_active) {
         return;  // V251122R2: 완전 비활성 상태에서는 1kHz 슬라이스 호출도 건너뜀
     }
+    uint16_t now = 0;
     if (!urgent_pending) {
         static uint16_t rgblight_next_run = 0;  // V251121R5: 1kHz 슬라이스로 rgblight_task 호출 희박화
-        uint16_t       now               = sync_timer_read();
+        now = sync_timer_read();
 
         if (rgblight_next_run == 0) {
             rgblight_next_run = now;  // V251121R5: 초기 호출은 즉시 통과
@@ -2225,7 +2229,7 @@ void rgblight_task(void) {
 
     rgblight_consume_host_led_queue();
 #ifdef RGBLIGHT_USE_TIMER
-    rgblight_timer_task();
+    rgblight_timer_task(now);  // V251122R4: 타이머 시각을 공유해 중복 읽기 제거
 #endif
     rgblight_flush_render_queue();
 
