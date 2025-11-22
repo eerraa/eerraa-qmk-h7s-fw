@@ -1493,6 +1493,11 @@ static void rgblight_render_frame(void)
     bool indicator_ready     = indicator_active && indicator_has_range;
     uint8_t clip_start       = rgblight_ranges.clipping_start_pos;
 
+    if (clip_start >= RGBLIGHT_LED_COUNT) {
+        rgblight_indicator_state.needs_render = false;
+        return;  // V251122R9: 클리핑 시작점이 범위를 벗어나면 전송을 생략해 OOB를 방지
+    }
+
     if (!indicator_ready) {
         rgblight_indicator_state.needs_render = false;  // V251016R9: 비활성 프레임에서 대기 플래그 정리
     } else if (!indicator_overrides) {
