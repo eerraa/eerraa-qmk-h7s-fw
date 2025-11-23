@@ -38,3 +38,8 @@
    - 위치: `src/hw/hw.c:59-83`  
    - 내용: `eepromAutoFactoryResetCheck()` 반환값을 `(void)`로 버려 리셋 센티넬 읽기/포맷 실패가 발생해도 이후 부팅이 정상 진행됩니다. EEPROM이 손상된 상태로 키맵/설정 로드가 이뤄질 수 있어 예측 불가한 입력/USB 동작이 발생할 수 있습니다.  
    - 개선: 실패 시 `_DEF_LED1`을 3회 점멸하며 `eeprom_init()` 재동기화 후 최대 3회 재시도하고, 반복 실패 시 `hwInit()`이 false를 반환해 부팅을 차단하도록 보강해야 합니다.
+
+## 3차 검토 결과
+- 신규 로직 결함은 발견되지 않았습니다. `main → ap → qmk` 루프, BootMode/VIA 경로, USB 모니터·다운그레이드 처리, AUTO_FACTORY_RESET 재시도/오류 전파, 키 스캔 DMA·디바운스/탭핑, RGB 인디케이터, EEPROM 큐/버스트 플러시 흐름을 다시 추적했으나 추가 이상 징후는 확인되지 않았습니다.
+- 기존 보고 항목 조치 확인: USB 모니터 토글 시 큐 초기화(`src/hw/driver/usb/usb.c`), Composite 모드 캐시 보정(`src/hw/driver/usb/usb.c`), 키 초기화 실패 반환(`src/hw/driver/keys.c`), EEPROM flush 스톨 타임아웃(`src/ap/modules/qmk/port/platforms/eeprom.c`), WS2812 DMA 방향 및 실패 전파(`src/hw/driver/ws2812.c`), AUTO_FACTORY_RESET 실패 재시도/차단(`src/hw/hw.c`)이 반영되어 동작 경로가 정상화되었습니다.
+- 기본 USB 모드 FS 1kHz 정책은 여전히 코드 기본값으로 유지됨을 재확인했습니다(`src/hw/driver/usb/usb.h`, `src/hw/driver/usb/usbd_conf.c`). 문서/가이드와의 정책 일치 여부는 향후 사용자 안내 문서에서 추가로 확인해 정리하는 것이 좋겠습니다.
