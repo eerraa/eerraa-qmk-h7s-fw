@@ -22,7 +22,7 @@ BRICK60 펌웨어 안내
    - USB POLLING 항목에서 원하는 폴링 레이트[1 kHz (FS), 2 kHz (HS), 4 kHz (HS), 8 kHz (HS)]를 선택합니다.
    - 새로 플래싱한 직후의 기본 폴링 레이트는 1 kHz (FS)이며, 8 kHz (HS) 사용을 원한다면 반드시 이 메뉴에서 직접 8 kHz (HS)로 변경해야 합니다.
    - 화면 하단의 Apply 버튼을 누르면 선택한 폴링 레이트가 즉시 적용됩니다.
-   - 일부 USB 허브나 케이블 환경에서는 너무 높은 폴링 레이트에서 연결이 불안정해질 수 있습니다. 이 경우 낮은 값으로 다시 설정하십시오.
+   - 일부 USB 허브나 케이블 환경에서는 HS 옵션의 폴링레이트에서 연결이 불안정해질 수 있습니다. 키보드가 오동작하는 것 같다면 1 kHz (FS) 옵션으로 변경하십시오.
 
 2-2. USB 모니터링 기능
 
@@ -32,11 +32,27 @@ BRICK60 펌웨어 안내
 
 2-3. RGB 이펙트 확장
 
-   - Pulse on Press / Pulse off Press / Pulse on Press (Hold) / Pulse off Press (Hold) 네 가지 새로운 이펙트가 추가되었습니다.
-   - VIA CONFIGURE 탭에서 LIGHTING 메뉴를 열고, 이펙트 항목에서 원하는 모드를 선택할 수 있습니다.
+   - 기본적으로 QMK에서 제공하는 RGB 이펙트(솔리드/브리딩/레인보우/스네이크/나이트/그라데이션/트윙클 등)를 모두 제공합니다.
+   - 여기에 Pulse on Press / Pulse off Press / Pulse on Press (Hold) / Pulse off Press (Hold) 네 가지 이펙트를 추가했습니다. 나머지 목록은 모두 QMK 오리지널 이펙트입니다.
+   - VIA CONFIGURE 탭에서 LIGHTING 메뉴를 열고 Effect 드롭다운에서 원하는 모드를 선택할 수 있으며, Pulse on/off 계열을 선택한 경우 Effect Speed 슬라이더로 속도를 조절할 수 있습니다.
    - Velocikey: LIGHTING 메뉴에 Velocikey 토글이 추가되었으며, Enable 하면 Snake/Knight/Rainbow/Twinkle 등의 이펙트의 속도가 키 입력 속도에 따라서 변화합니다.
 
-2-4. 디바운스 설정 (DEBOUNCE)
+2-4. SOCD (Kill Switch)
+
+   - VIA CONFIGURE 탭 → FEATURE 메뉴 안의 SOCD 항목에서 설정합니다.
+   - KEY BIND 1은 좌/우 한 쌍, KEY BIND 2는 상/하 한 쌍을 켜고 끈 뒤, 각 쌍의 KEY 1 / KEY 2에 원하는 키를 지정합니다(예: A/D 또는 ←/→ 등).
+   - 동작 방식: 두 키가 동시에 눌리면 마지막으로 눌린 키만 남기고 반대 키를 즉시 해제하며, 마지막 키를 뗄 때 반대 키가 여전히 눌려 있으면 자동으로 다시 눌러 줍니다.
+   - 대전 격투 게임 등에서 상쇄(SOCD) 입력을 정리하고, 마지막 입력 우선 규칙을 만들고 싶을 때 사용합니다. 각 쌍은 서로 독립적으로 동작합니다.
+
+2-5. Anti-Ghosting
+
+   - VIA CONFIGURE 탭 → FEATURE 메뉴의 Anti-Ghosting 항목을 Enable 하면 동시 입력 반복 보정 기능이 켜집니다.
+   - First Delay Time: 두 개 이상 기본 키를 누른 상태가 얼마나 지속되면 보정 모드로 진입할지 설정합니다(50~300 ms 범위).
+   - Repeat Time: 보정 모드 활성화 후, 현재 눌린 키 묶음을 끊었다가 다시 눌러 주는 주기를 설정합니다(50~200 ms 범위).
+   - 동작 방식: 두 개 이상 키를 지정한 시간 이상 누르고 있으면 모드가 켜지고, 설정한 주기마다 모든 눌린 키를 한 번 해제 후 다시 눌러 `ASDASD...`처럼 묶음 전체가 반복 입력됩니다. 처음부터 한 개만 누르는 경우에는 영향을 주지 않으며, SOCD에 묶어 둔 키는 모드 진입 판정에서 제외됩니다.
+   - 여러 키를 누르다 한 개만 남을 때도 한 번 더 입력 상태를 새로 보내 주며, 모든 키를 떼면 모드가 종료됩니다.
+
+2-6. 디바운스 설정 (DEBOUNCE)
 
    (1) 디바운스란 무엇인가?
 
@@ -117,7 +133,7 @@ BRICK60 펌웨어 안내
 
        - Advanced 모드는, 스위치의 채터링 패턴이나 본인의 타건 습관을 잘 알고 있는 사용자만 세밀 조정용으로 사용하는 것을 권장합니다.
 
-2-5. 탭핑 설정 (TAPPING TERM, 실시간 변경)
+2-7. 탭핑 설정 (TAPPING TERM, 실시간 변경)
 
    - 기존 펌웨어에서는 TAPPING_TERM이 고정이었으나, 현재 버전부터 VIA의 GLOBAL SETTINGS에 TAPPING 항목이 추가되어 런타임으로 조정할 수 있습니다.
    - VIA JSON의 UI 항목 이름과 역할:
@@ -184,7 +200,7 @@ This document is the official guide for BRICK60 (STM32H7S with 8,000 Hz USB poll
    - In the USB POLLING section, choose the desired polling rate from the list [1 kHz (FS), 2 kHz (HS), 4 kHz (HS), 8 kHz (HS)].
    - Immediately after flashing, the default polling rate is 1 kHz (FS). If you want to use 8 kHz (HS), you must change it manually to 8 kHz (HS) in this menu.
    - Click Apply at the bottom of the page to apply the selected polling rate.
-   - Some USB hubs, mainboards, or cables may become unstable at very high polling rates. If you notice disconnections or odd behavior, switch to a lower polling rate.
+   - On some USB hubs, mainboards, or cables, HS polling options can be unstable. If the keyboard misbehaves, switch to 1 kHz (FS).
 
 2-2. USB monitoring
 
@@ -194,11 +210,27 @@ This document is the official guide for BRICK60 (STM32H7S with 8,000 Hz USB poll
 
 2-3. RGB effects
 
-   - The following four lighting effects are available: Pulse on Press, Pulse off Press, Pulse on Press (Hold), Pulse off Press (Hold).
-   - Open the LIGHTING menu under the VIA CONFIGURE tab and select your preferred effect from the list.
+   - All standard QMK RGB effects are available (Solid/Breathing/Rainbow/Snake/Knight/Gradient/Twinkle, etc.).
+   - In addition, four extra effects are added: Pulse on Press, Pulse off Press, Pulse on Press (Hold), Pulse off Press (Hold). Everything else in the Effect dropdown is the original QMK list.
+   - Open the LIGHTING menu under the VIA CONFIGURE tab and select your preferred effect; for the Pulse on/off variants you can adjust the Effect Speed slider.
    - Velocikey: A Velocikey toggle is available in the LIGHTING menu. When enabled, speed-based effects such as Snake/Knight/Rainbow/Twinkle change their playback speed according to your typing speed. When disabled, they run at their built-in default speeds (as indicated by the effect name numbers).
 
-2-4. Debounce settings (DEBOUNCE)
+2-4. SOCD (Kill Switch)
+
+   - Configure this in VIA → CONFIGURE → FEATURE → SOCD.
+   - KEY BIND 1 controls a left/right pair, KEY BIND 2 controls an up/down pair; enable each pair and assign any two keys to KEY 1 / KEY 2 (for example A/D or ←/→).
+   - Behavior: when both keys in a pair are held, the most recently pressed key stays active while the opposite key is immediately released. When the last key is released, the opposite key is re-pressed automatically if it is still held down.
+   - Useful for fighting games or any case where you want last-input-wins SOCD cleaning. The two pairs work independently.
+
+2-5. Anti-Ghosting
+
+   - Enable Anti-Ghosting in VIA → CONFIGURE → FEATURE to activate the simultaneous-key repeat helper.
+   - First Delay Time sets how long two or more basic keys must be held before the helper mode starts (50–300 ms range).
+   - Repeat Time sets how often, once active, the firmware releases and re-sends the currently held keys (50–200 ms range).
+   - Behavior: after holding two or more keys past the delay, the firmware periodically clears and re-sends all held keys, producing `ASDASD...`-style repeated input for the whole chord. Single-key presses are unaffected, and keys assigned to SOCD pairs are ignored for the activation check.
+   - If you go from multiple keys down to one, the firmware sends one more refresh; the mode ends when all keys are released.
+
+2-6. Debounce settings (DEBOUNCE)
 
    (1) What is debounce?
 
@@ -279,7 +311,7 @@ This document is the official guide for BRICK60 (STM32H7S with 8,000 Hz USB poll
 
        - Advanced mode is intended as a fine-tuning tool for users who understand how their switches chatter and how they type.
 
-2-5. Tapping settings (TAPPING TERM, runtime adjustable)
+2-7. Tapping settings (TAPPING TERM, runtime adjustable)
 
    - Earlier firmware versions used a fixed TAPPING_TERM. The current version adds a TAPPING section under VIA → GLOBAL SETTINGS so you can change it at runtime.
    - VIA JSON UI labels and their roles:
