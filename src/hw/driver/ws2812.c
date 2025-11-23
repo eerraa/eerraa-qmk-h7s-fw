@@ -71,22 +71,22 @@ bool ws2812Init(void)
   htim15.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim15) != HAL_OK)
   {
-    Error_Handler();
+    return false;                                                // V251124R6: WS2812 타이머 초기화 실패 시 오류 전파
   }
   sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
   if (HAL_TIM_ConfigClockSource(&htim15, &sClockSourceConfig) != HAL_OK)
   {
-    Error_Handler();
+    return false;                                                // V251124R6: WS2812 클럭 소스 설정 실패 시 오류 전파
   }
   if (HAL_TIM_PWM_Init(&htim15) != HAL_OK)
   {
-    Error_Handler();
+    return false;                                                // V251124R6: PWM 초기화 실패 시 상위로 실패 전달
   }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterSlaveMode     = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim15, &sMasterConfig) != HAL_OK)
   {
-    Error_Handler();
+    return false;                                                // V251124R6: PWM 마스터 설정 실패 시 부팅 중단
   }
   sConfigOC.OCMode       = TIM_OCMODE_PWM1;
   sConfigOC.Pulse        = 0;
@@ -97,7 +97,7 @@ bool ws2812Init(void)
   sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
   if (HAL_TIM_PWM_ConfigChannel(&htim15, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
-    Error_Handler();
+    return false;                                                // V251124R6: PWM 채널 설정 실패 시 부팅 진행 차단
   }
   sBreakDeadTimeConfig.OffStateRunMode  = TIM_OSSR_DISABLE;
   sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
@@ -109,20 +109,28 @@ bool ws2812Init(void)
   sBreakDeadTimeConfig.AutomaticOutput  = TIM_AUTOMATICOUTPUT_DISABLE;
   if (HAL_TIMEx_ConfigBreakDeadTime(&htim15, &sBreakDeadTimeConfig) != HAL_OK)
   {
-    Error_Handler();
+    return false;                                                // V251124R6: 브레이크/데드타임 설정 실패 시 상위로 실패 전파
   }
 
-  ws2812InitHw();
+  if (ws2812InitHw() != true)
+  {
+    return false;                                                 // V251124R6: WS2812 하드웨어 초기화 실패 시 상위로 전달
+  }
 
 
   ws2812.led_cnt = WS2812_MAX_CH;
-  is_init = true;
+  is_init = false;
 
   for (int i=0; i<WS2812_MAX_CH; i++)
   {
     ws2812SetColor(i, WS2812_COLOR_OFF);
   }
-  ws2812Refresh();
+  if (ws2812Refresh() != true)
+  {
+    return false;                                                 // V251124R6: 초기 WS2812 전송 실패 시 부팅 진행 차단
+  }
+
+  is_init = true;
 
 #if CLI_USE(HW_WS2812)
   cliAdd("ws2812", cliCmd);
@@ -152,7 +160,7 @@ bool ws2812InitHw(void)
   handle_GPDMA1_Channel4.Instance                   = GPDMA1_Channel4;
   handle_GPDMA1_Channel4.Init.Request               = GPDMA1_REQUEST_TIM15_CH1;
   handle_GPDMA1_Channel4.Init.BlkHWRequest          = DMA_BREQ_SINGLE_BURST;
-  handle_GPDMA1_Channel4.Init.Direction             = DMA_PERIPH_TO_MEMORY;
+  handle_GPDMA1_Channel4.Init.Direction             = DMA_MEMORY_TO_PERIPH;  // V251124R6: WS2812 PWM 전송 방향을 메모리→타이머로 교정
   handle_GPDMA1_Channel4.Init.SrcInc                = DMA_SINC_INCREMENTED;
   handle_GPDMA1_Channel4.Init.DestInc               = DMA_DINC_FIXED;
   handle_GPDMA1_Channel4.Init.SrcDataWidth          = DMA_SRC_DATAWIDTH_BYTE;
@@ -165,14 +173,14 @@ bool ws2812InitHw(void)
   handle_GPDMA1_Channel4.Init.Mode                  = DMA_NORMAL;
   if (HAL_DMA_Init(&handle_GPDMA1_Channel4) != HAL_OK)
   {
-    Error_Handler();
+    return false;                                                // V251124R6: DMA 초기화 실패 시 즉시 실패 반환
   }
 
   __HAL_LINKDMA(&htim15, hdma[TIM_DMA_ID_CC1], handle_GPDMA1_Channel4);
 
   if (HAL_DMA_ConfigChannelAttributes(&handle_GPDMA1_Channel4, DMA_CHANNEL_NPRIV) != HAL_OK)
   {
-    Error_Handler();
+    return false;                                                // V251124R6: 채널 속성 설정 실패 시 상위에서 복구 처리
   }
 
   HAL_NVIC_SetPriority(GPDMA1_Channel4_IRQn, 5, 0);

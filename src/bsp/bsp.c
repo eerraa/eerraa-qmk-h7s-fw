@@ -5,9 +5,6 @@
 static void SystemClock_Config(void);
 static void bspMpuInit(void);
 
-
-
-
 bool bspInit(void)
 {
   bool ret = true;
@@ -49,8 +46,6 @@ uint32_t millis(void)
 {
   return HAL_GetTick();
 }
-
-
 
 void Error_Handler(void)
 {

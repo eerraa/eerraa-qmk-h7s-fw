@@ -49,8 +49,13 @@
 #if defined(USB_MONITOR_ENABLE) && !defined(BOOTMODE_ENABLE)
 #  define BOOTMODE_ENABLE           1
 #endif
-
-#define TAPPING_TERM                200
+#define G_TERM_ENABLE                           // V251123R4: VIA TAPPING term/옵션 제어 활성화
+#ifdef G_TERM_ENABLE
+#  define TAPPING_TERM_PER_KEY
+#  define PERMISSIVE_HOLD_PER_KEY
+#  define HOLD_ON_OTHER_KEY_PRESS_PER_KEY
+#  define RETRO_TAPPING_PER_KEY
+#endif
 #define INDICATOR_ENABLE            // V251016R8: Brick60 전용 RGB 인디케이터 기능 플래그
 
 

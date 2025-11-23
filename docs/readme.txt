@@ -34,7 +34,7 @@ BRICK60 펌웨어 안내
 
    - Pulse on Press / Pulse off Press / Pulse on Press (Hold) / Pulse off Press (Hold) 네 가지 새로운 이펙트가 추가되었습니다.
    - VIA CONFIGURE 탭에서 LIGHTING 메뉴를 열고, 이펙트 항목에서 원하는 모드를 선택할 수 있습니다.
-   - Velocikey: LIGHTING 메뉴에 Velocikey 토글이 추가되었으며, Enable 하면 Snake/Knigh­t/Rainbow/Twinkle 등의 이펙트의 속도가 키 입력 속도에 따라서 변화합니다.
+   - Velocikey: LIGHTING 메뉴에 Velocikey 토글이 추가되었으며, Enable 하면 Snake/Knight/Rainbow/Twinkle 등의 이펙트의 속도가 키 입력 속도에 따라서 변화합니다.
 
 2-4. 디바운스 설정 (DEBOUNCE)
 
@@ -117,6 +117,16 @@ BRICK60 펌웨어 안내
 
        - Advanced 모드는, 스위치의 채터링 패턴이나 본인의 타건 습관을 잘 알고 있는 사용자만 세밀 조정용으로 사용하는 것을 권장합니다.
 
+2-5. 탭핑 설정 (TAPPING TERM, 실시간 변경)
+
+   - 기존 펌웨어에서는 TAPPING_TERM이 고정이었으나, 현재 버전부터 VIA의 GLOBAL SETTINGS에 TAPPING 항목이 추가되어 런타임으로 조정할 수 있습니다.
+   - VIA JSON의 UI 항목 이름과 역할:
+     · Global Tapping Term: 탭으로 인식할 최대 시간(기본 200 ms). 이 시간이 지나면 홀드로 처리됩니다.
+     · Permissive Hold: 이 옵션을 켜면, 탭핑 윈도우 내에 다른 키가 함께 눌리면 홀드로 간주해 롱프레스 동작을 더 쉽게 냅니다.
+     · Hold on Other Key Press: 탭핑 중 다른 키가 눌린 순간 즉시 홀드로 전환합니다(타이밍에 상관없이 빠르게 홀드 처리).
+     · Retro Tapping (Tap if unused): 탭핑 윈도우 안에 키를 눌렀다가 떼지 않아도, 다른 입력이 없고 타이머가 끝나면 탭으로 확정합니다(레트로 탭핑).
+   - 값을 바꾼 뒤 SAVE(또는 VIA 저장)을 누르면 EEPROM에 저장되어 재부팅 후에도 유지됩니다.
+
 3. VIA 사용 절차
 
    1) 브라우저에서 https://usevia.app 에 접속합니다.
@@ -186,7 +196,7 @@ This document is the official guide for BRICK60 (STM32H7S with 8,000 Hz USB poll
 
    - The following four lighting effects are available: Pulse on Press, Pulse off Press, Pulse on Press (Hold), Pulse off Press (Hold).
    - Open the LIGHTING menu under the VIA CONFIGURE tab and select your preferred effect from the list.
-   - Velocikey: A Velocikey toggle is available in the LIGHTING menu. When enabled, speed-based effects such as Snake/Knigh­t/Rainbow/Twinkle change their playback speed according to your typing speed. When disabled, they run at their built-in default speeds (as indicated by the effect name numbers).
+   - Velocikey: A Velocikey toggle is available in the LIGHTING menu. When enabled, speed-based effects such as Snake/Knight/Rainbow/Twinkle change their playback speed according to your typing speed. When disabled, they run at their built-in default speeds (as indicated by the effect name numbers).
 
 2-4. Debounce settings (DEBOUNCE)
 
@@ -268,6 +278,16 @@ This document is the official guide for BRICK60 (STM32H7S with 8,000 Hz USB poll
          Start from a low value, and raise it step by step if you see chatter or unwanted repeated input.
 
        - Advanced mode is intended as a fine-tuning tool for users who understand how their switches chatter and how they type.
+
+2-5. Tapping settings (TAPPING TERM, runtime adjustable)
+
+   - Earlier firmware versions used a fixed TAPPING_TERM. The current version adds a TAPPING section under VIA → GLOBAL SETTINGS so you can change it at runtime.
+   - VIA JSON UI labels and their roles:
+     · Global Tapping Term: Maximum time window (default 200 ms) for a tap; if you hold longer, it becomes a hold.
+     · Permissive Hold: If another key is pressed during the tapping window, treat the key as a hold so long-press actions are easier to trigger.
+     · Hold on Other Key Press: Immediately force a hold as soon as any other key is pressed, regardless of remaining tap time.
+     · Retro Tapping (Tap if unused): If no other input happens before the window ends, a key still being held is counted as a tap (retro tapping behavior).
+   - After adjusting values, click SAVE in VIA to store them to EEPROM so they persist across reboots.
 
 3. How to use VIA
 

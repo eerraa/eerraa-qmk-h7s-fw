@@ -40,7 +40,13 @@ void NMI_Handler(void)
   */
 void HardFault_Handler(void)
 {
-  printf("HardFault_Handler()\n");
+  uint32_t cfsr  = SCB->CFSR;                                 // V251123R7: Fault 원인 로깅
+  uint32_t hfsr  = SCB->HFSR;
+  uint32_t mmfar = SCB->MMFAR;
+  uint32_t bfar  = SCB->BFAR;
+
+  logPrintf("[F] HardFault cfsr=0x%08lX hfsr=0x%08lX mmfar=0x%08lX bfar=0x%08lX\n",
+            cfsr, hfsr, mmfar, bfar);
   NVIC_SystemReset();
   while (1)
   {
@@ -52,8 +58,11 @@ void HardFault_Handler(void)
   */
 void MemManage_Handler(void)
 {
-  printf("MemManage_Handler()\n");
-  NVIC_SystemReset();  
+  uint32_t cfsr  = SCB->CFSR;
+  uint32_t mmfar = SCB->MMFAR;
+
+  logPrintf("[F] MemFault cfsr=0x%08lX mmfar=0x%08lX\n", cfsr, mmfar);
+  NVIC_SystemReset();
   while (1)
   {
   }
@@ -64,6 +73,11 @@ void MemManage_Handler(void)
   */
 void BusFault_Handler(void)
 {
+  uint32_t cfsr  = SCB->CFSR;
+  uint32_t bfar  = SCB->BFAR;
+
+  logPrintf("[F] BusFault cfsr=0x%08lX bfar=0x%08lX\n", cfsr, bfar);  // V251123R7: BusFault 즉시 리셋
+  NVIC_SystemReset();
   while (1)
   {
   }
@@ -74,6 +88,10 @@ void BusFault_Handler(void)
   */
 void UsageFault_Handler(void)
 {
+  uint32_t cfsr = SCB->CFSR;
+
+  logPrintf("[F] UsageFault cfsr=0x%08lX\n", cfsr);
+  NVIC_SystemReset();
   while (1)
   {
   }
@@ -106,4 +124,5 @@ void PendSV_Handler(void)
 void SysTick_Handler(void)
 {
   HAL_IncTick();
+  /* V251124R2: V251123R8 메인 루프 헬스체크 계측 제거 */
 }
