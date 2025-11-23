@@ -265,15 +265,7 @@ static bool tapping_term_set_value(uint8_t id, uint8_t *value_data, uint8_t leng
   {
     case id_qmk_tapping_global_term:
     {
-      uint16_t term_ms = 0U;
-      if (length >= 5U && value_data[1] != 0U)
-      {
-        term_ms = ((uint16_t)value_data[1] << 8) | value_data[0];   // V251123R4: 2바이트 리틀엔디안 ms 직접 전달 수용
-      }
-      else
-      {
-        term_ms = (uint16_t)value_data[0] * 10U;                    // V251123R4: VIA dropdown은 100ms 단위를 10 단위로 축약 전달
-      }
+      uint16_t term_ms = (uint16_t)value_data[0] * 10U;             // V251123R5: VIA dropdown 단일 바이트만 수용
       tapping_term_storage.tapping_term_ms = tapping_term_normalize(term_ms);  // V251123R4: 100~500ms / 20ms 스텝으로 정규화
       break;
     }
