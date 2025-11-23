@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 // 펌웨어/보드 식별 정보
 // ---------------------------------------------------------------------------
-#define _DEF_FIRMWARE_VERSION       "V251124R1"   // V251124R1: USB 모니터 OFF 시 백그라운드 경로 즉시 우회
+#define _DEF_FIRMWARE_VERSION       "V251124R2"   // V251124R2: V251123R7/R8 계측 비활성화 롤백 테스트
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
@@ -17,7 +17,7 @@
 // 로그 및 디버그 기본값
 // ---------------------------------------------------------------------------
 #ifndef HW_LOG_ENABLE_DEFAULT
-#define HW_LOG_ENABLE_DEFAULT       1             // V251113R1: 릴리스 빌드는 UART 로그 비활성 상태로 시작
+#define HW_LOG_ENABLE_DEFAULT       0             // V251113R1: 릴리스 빌드는 UART 로그 비활성 상태로 시작
 #endif
 
 #ifndef LOG_LEVEL_VERBOSE

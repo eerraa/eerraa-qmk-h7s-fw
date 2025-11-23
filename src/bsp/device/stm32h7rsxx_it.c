@@ -124,30 +124,5 @@ void PendSV_Handler(void)
 void SysTick_Handler(void)
 {
   HAL_IncTick();
-
-  uint32_t now_ms = HAL_GetTick();
-  uint32_t hb_ms  = bspHeartbeatMillis();                        // V251123R8: 메인 루프 정지 감시
-
-  if (hb_ms != 0U)
-  {
-    uint32_t delta = now_ms - hb_ms;
-    static bool     stalled      = false;
-    static uint32_t last_report  = 0U;
-
-    if (delta >= 2000U)
-    {
-      if (stalled == false || (now_ms - last_report) >= 2000U)
-      {
-        stalled     = true;
-        last_report = now_ms;
-        logPrintf("[F] Main stalled delta=%lu seq=%lu\n",
-                  (unsigned long)delta,
-                  (unsigned long)bspHeartbeatSeq());
-      }
-    }
-    else
-    {
-      stalled = false;
-    }
-  }
+  /* V251124R2: V251123R8 메인 루프 헬스체크 계측 제거 */
 }
