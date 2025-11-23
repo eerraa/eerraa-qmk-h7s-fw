@@ -14,6 +14,8 @@
 #define EEPROM_UPDATE_BLOCK_CHUNK      64          // V251112R2: 고정 버퍼로 블록 비교
 #define EEPROM_WRITE_BURST_THRESHOLD   512         // V251112R5: 버스트 모드 진입 임계값(엔트리)
 #define EEPROM_WRITE_BURST_EXTRA_CALLS 2           // V251112R5: 버스트 모드 시 추가 실행 횟수
+#define EEPROM_FLUSH_STALL_TIMEOUT_MS  200         // V251124R5: flush 정체 감지 타임아웃(ms)
+#define EEPROM_FLUSH_MAX_SPIN          32000       // V251124R5: flush 정체 시 최대 반복 횟수
 
 
 typedef struct
@@ -139,17 +141,43 @@ bool eeprom_is_pending(void)
   return qbufferAvailable(&write_q) > 0;
 }
 
-void eeprom_flush_pending(void)
+bool eeprom_flush_pending(void)
 {
+  uint32_t last_progress_ms = millis();
+  uint32_t stall_loops      = 0;
+
   while (eeprom_is_pending())
   {
+    uint32_t pending_before = qbufferAvailable(&write_q);
     eeprom_update();
+
+    if (qbufferAvailable(&write_q) < pending_before)
+    {
+      last_progress_ms = millis();
+      stall_loops      = 0;
+      continue;
+    }
+
+    stall_loops++;
+
+    if ((millis() - last_progress_ms) >= EEPROM_FLUSH_STALL_TIMEOUT_MS ||
+        stall_loops >= EEPROM_FLUSH_MAX_SPIN)
+    {
+      logPrintf("[!] EEPROM flush stalled pending=%lu\n", (unsigned long)qbufferAvailable(&write_q));  // V251124R5: 연속 실패 시 무한 루프 방지
+      qbufferFlush(&write_q);
+      return false;
+    }
   }
+
+  return true;
 }
 
 bool eeprom_apply_factory_defaults(bool restore_factory_reset_sentinel)
 {
-  eeprom_flush_pending();                                      // V251112R3: 초기화 전 대기열 제거
+  if (eeprom_flush_pending() != true)                                      // V251112R3: 초기화 전 대기열 제거
+  {
+    return false;
+  }
 
   eeconfig_disable();
   eeconfig_init();
@@ -159,7 +187,10 @@ bool eeprom_apply_factory_defaults(bool restore_factory_reset_sentinel)
 #if (EECONFIG_USER_DATA_SIZE) > 0
   eeconfig_init_user_datablock();
 #endif
-  eeprom_flush_pending();
+  if (eeprom_flush_pending() != true)
+  {
+    return false;
+  }
 
 #if (EECONFIG_USER_DATA_SIZE) == 0
 #ifdef BOOTMODE_ENABLE
@@ -169,12 +200,18 @@ bool eeprom_apply_factory_defaults(bool restore_factory_reset_sentinel)
   usb_monitor_storage_apply_defaults();                     // V251114R4: USB 모니터 슬롯도 동일 조건으로 보강
 #endif
 #endif
-  eeprom_flush_pending();
+  if (eeprom_flush_pending() != true)
+  {
+    return false;
+  }
 
   if (restore_factory_reset_sentinel)
   {
     eeprom_restore_auto_factory_reset_sentinel();              // V251112R3: 공용 초기화 루틴에서 센티넬 복구
-    eeprom_flush_pending();
+    if (eeprom_flush_pending() != true)
+    {
+      return false;
+    }
   }
 
   return true;

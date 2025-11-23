@@ -17,7 +17,8 @@ volatile const firm_ver_t firm_ver __attribute__((section(".version"))) =
 
 
 bool hwInit(void)
-{  
+{
+  bool hw_ok = true;                                                       // V251124R4: 하위 모듈 초기화 상태 집계
   #ifdef _USE_HW_CACHE
   SCB_EnableICache();
   SCB_EnableDCache();
@@ -84,7 +85,11 @@ bool hwInit(void)
   qspiInit();
   #endif
   flashInit();
-  keysInit();
+  if (keysInit() != true)
+  {
+    logPrintf("[!] keysInit Fail\n");                                     // V251124R4: 키 스캔 초기화 실패 표시
+    hw_ok = false;
+  }
   #ifdef _USE_HW_WS2812
   ws2812Init();
   #endif
@@ -108,5 +113,5 @@ bool hwInit(void)
   }
 #endif
 
-  return true;
+  return hw_ok;
 }
