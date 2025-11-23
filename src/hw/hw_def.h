@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 // 펌웨어/보드 식별 정보
 // ---------------------------------------------------------------------------
-#define _DEF_FIRMWARE_VERSION       "V251123R5"   // V251123R5: VIA TAPPING 설정 응답/검증 보강
+#define _DEF_FIRMWARE_VERSION       "V251123R6"   // V251123R6: USB_MONITOR_ENABLE 비활성 빌드 가드 수정
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

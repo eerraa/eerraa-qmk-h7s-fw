@@ -70,15 +70,7 @@ static volatile struct
   uint32_t ready_ms;
 } usb_reset_request = {false, 0U};
 
-#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
-typedef enum
-{
-  USB_BOOT_MODE_REQ_STAGE_IDLE = 0,
-  USB_BOOT_MODE_REQ_STAGE_ARMED,
-  USB_BOOT_MODE_REQ_STAGE_COMMIT,
-} usb_boot_mode_request_stage_t;
-
-USBD_HandleTypeDef USBD_Device;
+USBD_HandleTypeDef USBD_Device;                                            // V251123R6: USB_MONITOR_ENABLE 비활성 빌드에서도 전역 선언 유지
 extern PCD_HandleTypeDef hpcd_USB_OTG_HS;
 
 extern USBD_DescriptorsTypeDef VCP_Desc;
@@ -86,7 +78,15 @@ extern USBD_DescriptorsTypeDef MSC_Desc;
 extern USBD_DescriptorsTypeDef HID_Desc;
 extern USBD_DescriptorsTypeDef CMP_Desc;
 
-static USBD_DescriptorsTypeDef *p_desc = NULL;
+static USBD_DescriptorsTypeDef *p_desc = NULL;                             // V251123R6: USB 전역 상태를 항상 보관
+
+#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
+typedef enum
+{
+  USB_BOOT_MODE_REQ_STAGE_IDLE = 0,
+  USB_BOOT_MODE_REQ_STAGE_ARMED,
+  USB_BOOT_MODE_REQ_STAGE_COMMIT,
+} usb_boot_mode_request_stage_t;
 
 typedef struct
 {

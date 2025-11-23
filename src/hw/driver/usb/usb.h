@@ -176,9 +176,12 @@ static inline bool usbInstabilityIsEnabled(void)
   return false;
 }
 
+#ifndef USB_MONITOR_INIT_STUB_DEFINED
+#define USB_MONITOR_INIT_STUB_DEFINED                                     // V251123R6: usb_monitor_init 스텁 중복 정의 방지
 static inline void usb_monitor_init(void)
 {
 }
+#endif
 #endif
 
 void usbProcess(void);                                  // V250924R2 USB 안정성 모니터 서비스 루프
