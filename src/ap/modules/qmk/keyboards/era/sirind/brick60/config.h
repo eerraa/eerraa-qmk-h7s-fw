@@ -44,7 +44,7 @@
 #define GRAVE_ESC_ENABLE
 #define KILL_SWITCH_ENABLE
 #define KKUK_ENABLE
-#define USB_MONITOR_ENABLE          1           // V251108R1: Brick60 VIA 채널 USB 모니터 활성화 (검증을 위해 비활성화)
+#define USB_MONITOR_ENABLE          1           // V251108R1: Brick60 VIA 채널 USB 모니터 활성화
 #define BOOTMODE_ENABLE             1
 #if defined(USB_MONITOR_ENABLE) && !defined(BOOTMODE_ENABLE)
 #  define BOOTMODE_ENABLE           1
