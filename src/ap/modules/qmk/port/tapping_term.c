@@ -256,11 +256,16 @@ static void tapping_term_sync_state_from_storage(void)
 
 static bool tapping_term_set_value(uint8_t id, uint8_t *value_data, uint8_t length)
 {
+  if (value_data == NULL || length < 4U)
+  {
+    return false;                                                     // V251123R5: VIA 패킷 최소 길이 보강
+  }
+
   switch (id)
   {
     case id_qmk_tapping_global_term:
     {
-      uint16_t term_ms;
+      uint16_t term_ms = 0U;
       if (length >= 5U && value_data[1] != 0U)
       {
         term_ms = ((uint16_t)value_data[1] << 8) | value_data[0];   // V251123R4: 2바이트 리틀엔디안 ms 직접 전달 수용
@@ -296,13 +301,17 @@ static bool tapping_term_set_value(uint8_t id, uint8_t *value_data, uint8_t leng
 
 static void tapping_term_get_value(uint8_t id, uint8_t *value_data, uint8_t length)
 {
+  if (value_data == NULL || length < 4U)
+  {
+    return;                                                          // V251123R5: VIA 응답 버퍼 최소 길이 확인
+  }
+
   switch (id)
   {
     case id_qmk_tapping_global_term:
     {
       uint16_t term_ms = tapping_term_storage.tapping_term_ms;
       value_data[0] = (uint8_t)(term_ms / 10U);                    // V251123R4: 100ms 단위를 10 단위로 축약해 응답
-      value_data[1] = 0U;
       break;
     }
 
