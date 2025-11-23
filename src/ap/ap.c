@@ -17,6 +17,11 @@ void apInit(void)
   logBoot(false);
 }
 
+void apHeartbeatTouch(void)
+{
+  bspHeartbeatTouch();                                         // V251123R8: 메인 루프 헬스 체크 갱신
+}
+
 void apMain(void)
 {
   uint32_t led_pre_time;
@@ -30,6 +35,7 @@ void apMain(void)
   while(1)
   {
     uint32_t now = millis();
+    apHeartbeatTouch();                                          // V251123R8: 루프 생존 갱신
 
     if (now - led_pre_time >= 500U)                               // V251123R7: CPU 생존 감시용 LED 토글
     {

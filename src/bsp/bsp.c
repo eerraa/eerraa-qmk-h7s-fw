@@ -5,6 +5,9 @@
 static void SystemClock_Config(void);
 static void bspMpuInit(void);
 
+static volatile uint32_t heartbeat_ms  = 0;                      // V251123R8: 메인 루프 헬스 체크
+static volatile uint32_t heartbeat_seq = 0;
+
 
 
 
@@ -48,6 +51,22 @@ void delay(uint32_t ms)
 uint32_t millis(void)
 {
   return HAL_GetTick();
+}
+
+void bspHeartbeatTouch(void)
+{
+  heartbeat_ms = HAL_GetTick();
+  heartbeat_seq++;
+}
+
+uint32_t bspHeartbeatMillis(void)
+{
+  return heartbeat_ms;
+}
+
+uint32_t bspHeartbeatSeq(void)
+{
+  return heartbeat_seq;
 }
 
 
