@@ -172,8 +172,12 @@ bool usbHidGetRateInfo(usb_hid_rate_info_t *p_info);
 bool usbHidSetTimeLog(uint16_t index, uint32_t time_us);
 void usbHidSetStatusLed(uint8_t led_bits);
 #ifdef USB_MONITOR_ENABLE
-void usbHidMonitorBackgroundTick(uint32_t now_us);                  // V251108R9 SOF 중단 감시 진입점
+void usbHidMonitorBackgroundService(void);                      // V251124R1: 런타임 토글을 반영한 백그라운드 진입점
+void usbHidMonitorBackgroundTick(uint32_t now_us);              // V251108R9 SOF 중단 감시 진입점
 #else
+static inline void usbHidMonitorBackgroundService(void)
+{
+}
 static inline void usbHidMonitorBackgroundTick(uint32_t now_us)
 {
   (void)now_us;

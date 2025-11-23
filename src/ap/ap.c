@@ -64,7 +64,7 @@ void apMain(void)
 
     cliUpdate();
     usbProcess();                                               // V250924R2 USB 안정성 이벤트 처리
-    usbHidMonitorBackgroundTick(micros());                      // V251108R9 SOF 누락 백그라운드 감시
+    usbHidMonitorBackgroundService();                           // V251124R1: 모니터 OFF 시 타임스탬프 취득을 건너뛰는 래퍼
     qmkUpdate();
   }
 }
