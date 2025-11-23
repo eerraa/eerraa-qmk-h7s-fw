@@ -18,7 +18,7 @@ bool qmkInit(void)
   via_hid_init();
   debounce_profile_init();                         // V251115R1: VIA 디바운스 프로필 초기 로드
 #ifdef G_TERM_ENABLE
-//  tapping_term_init();                             // V251123R4: VIA TAPPING 설정 초기 로드
+  tapping_term_init();                             // V251123R4: VIA TAPPING 설정 초기 로드
 #endif
 
   keyboard_setup();

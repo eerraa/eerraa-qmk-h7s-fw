@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 // 펌웨어/보드 식별 정보
 // ---------------------------------------------------------------------------
-#define _DEF_FIRMWARE_VERSION       "V251123R6"   // V251123R6: USB_MONITOR_ENABLE 비활성 빌드 가드 수정
+#define _DEF_FIRMWARE_VERSION       "V251123R7"   // V251123R7: USB 모니터 디버그 로깅/LED 헬스체크 추가
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
@@ -17,7 +17,7 @@
 // 로그 및 디버그 기본값
 // ---------------------------------------------------------------------------
 #ifndef HW_LOG_ENABLE_DEFAULT
-#define HW_LOG_ENABLE_DEFAULT       0             // V251113R1: 릴리스 빌드는 UART 로그 비활성 상태로 시작
+#define HW_LOG_ENABLE_DEFAULT       1             // V251113R1: 릴리스 빌드는 UART 로그 비활성 상태로 시작
 #endif
 
 #ifndef LOG_LEVEL_VERBOSE

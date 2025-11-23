@@ -429,6 +429,28 @@ static bool usbHasPendingService(bool has_apply_request, bool has_monitor_reques
          || has_reset_request;
 }
 
+void usbDebugGetState(usb_debug_state_t *state)                               // V251123R7: USB 모니터/리셋 상태 스냅샷
+{
+  if (state == NULL)
+  {
+    return;
+  }
+
+#if defined(USB_MONITOR_ENABLE)
+  state->monitor_enabled = usbInstabilityIsEnabled();
+#else
+  state->monitor_enabled = false;
+#endif
+
+#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
+  state->boot_stage = (uint8_t)boot_mode_request.stage;
+#else
+  state->boot_stage = 0U;
+#endif
+
+  state->reset_pending = usb_reset_request.pending;
+}
+
 void usbProcess(void)
 {
 #if defined(BOOTMODE_ENABLE)

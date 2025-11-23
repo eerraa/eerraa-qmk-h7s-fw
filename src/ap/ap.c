@@ -1,5 +1,6 @@
 #include "ap.h"
 #include "qmk/qmk.h"
+#include "usb.h"                                             // V251123R7: USB 디버그 스냅샷 참조
 #include "usbd_hid.h"                                      // V251108R9 USB SOF 모니터 백그라운드 훅
 
 
@@ -18,19 +19,41 @@ void apInit(void)
 
 void apMain(void)
 {
-  uint32_t pre_time;
+  uint32_t led_pre_time;
+  uint32_t dbg_pre_time = 0U;                                    // V251123R7: USB 모니터 상태 주기 로그
   bool is_led_on = true;
 
 
   ledOn(_DEF_LED1);
 
-  pre_time = millis();
+  led_pre_time = millis();
   while(1)
   {
-    if (is_led_on && millis()-pre_time >= 500)
+    uint32_t now = millis();
+
+    if (now - led_pre_time >= 500U)                               // V251123R7: CPU 생존 감시용 LED 토글
     {
-      is_led_on = false;
-      ledOff(_DEF_LED1);
+      led_pre_time = now;
+      is_led_on = !is_led_on;
+      if (is_led_on)
+      {
+        ledOn(_DEF_LED1);
+      }
+      else
+      {
+        ledOff(_DEF_LED1);
+      }
+    }
+
+    if (now - dbg_pre_time >= 1000U)                              // V251123R7: USB 모니터/리셋 상태 주기 출력
+    {
+      dbg_pre_time = now;
+      usb_debug_state_t usb_dbg = {0};
+      usbDebugGetState(&usb_dbg);
+      logPrintf("[DBG] usb mon=%s stage=%u reset=%u\n",
+                usb_dbg.monitor_enabled ? "ON" : "OFF",
+                usb_dbg.boot_stage,
+                usb_dbg.reset_pending ? 1U : 0U);
     }
 
     cliUpdate();

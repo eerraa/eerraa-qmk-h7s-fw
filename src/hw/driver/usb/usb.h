@@ -80,6 +80,13 @@ typedef enum
   USB_BOOT_DOWNGRADE_CONFIRMED,
 } usb_boot_downgrade_result_t;
 
+typedef struct
+{
+  bool     monitor_enabled;                                     // V251123R7: USB 모니터/리셋 상태 디버그 스냅샷
+  uint8_t  boot_stage;
+  bool     reset_pending;
+} usb_debug_state_t;
+
 #ifdef BOOTMODE_ENABLE
 void          bootmode_init(void);                   // V251112R6: BootMode 기본값 초기화 진입점
 bool          usbBootModeLoad(void);                    // V250923R1 Load stored boot mode selection
@@ -94,6 +101,7 @@ usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
                                                         uint32_t      measured_delta_us,
                                                         uint32_t      expected_us,
                                                         uint32_t      now_ms); // V250924R2 USB 다운그레이드 요청 인터페이스
+void usbDebugGetState(usb_debug_state_t *state);                // V251123R7: USB 모니터/리셋 상태 조회
 #else
 static inline void bootmode_init(void)
 {
@@ -139,6 +147,16 @@ static inline bool usbBootModeScheduleApply(UsbBootMode_t mode)
 {
   (void)mode;
   return false;
+}
+
+static inline void usbDebugGetState(usb_debug_state_t *state)    // V251123R7: BootMode 비활성 빌드용 스텁
+{
+  if (state != NULL)
+  {
+    state->monitor_enabled = false;
+    state->boot_stage      = 0U;
+    state->reset_pending   = false;
+  }
 }
 
 static inline usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
