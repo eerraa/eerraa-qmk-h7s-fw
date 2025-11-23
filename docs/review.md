@@ -1,4 +1,4 @@
-# 펌웨어 로직 리뷰 (V251124R2)
+# 펌웨어 로직 리뷰 (V251124R6)
 
 ## 범위
 - 부팅 경로(main → ap → qmk)와 BootMode/VIA 경로, USB instability monitor, AUTO_FACTORY_RESET, 키 스캔·디바운스·탭핑 설정, RGB 인디케이터, EEPROM 큐를 검토했습니다.
@@ -23,3 +23,18 @@
    - 위치: `src/ap/modules/qmk/port/platforms/eeprom.c:72-148`  
    - 내용: `eepromWritePage()`가 연속 실패하면 큐가 비워지지 않아 `eeprom_flush_pending()`이 영구 루프에 빠집니다(특히 AUTO_FACTORY_RESET 시).  
    - 개선: flush에 타임아웃/재시도 한계를 두고 오류를 상위로 전달해 부팅이 완전히 멈추지 않게 처리 필요.
+
+## 2차 검토 추가 발견사항
+5. **기본 USB 모드가 FS 1kHz로 고정(정책 재확인 필요)**  
+   - 위치: `src/hw/driver/usb/usb.h:61-72`, `src/hw/driver/usb/usbd_conf.c:336-353`  
+   - 내용: `USB_BOOT_MODE_DEFAULT_VALUE`가 FS 1kHz로 지정되어 AUTO_FACTORY_RESET 이후나 EEPROM 초기화 시 HS PHY가 `PCD_SPEED_HIGH_IN_FULL`로 동작합니다. USB 정책이 FS 우선으로 전환되어 기본값과 일치하므로, 문서·가이드에 남아 있는 HS 우선 표기를 FS 우선으로 정리해야 합니다.
+
+6. **WS2812 PWM DMA 방향 설정 오류**  
+   - 위치: `src/hw/driver/ws2812.c:152-165`  
+   - 내용: TIM15 채널 DMA를 `DMA_PERIPH_TO_MEMORY`로 설정한 상태에서 소스 인크리먼트/목적지 고정값은 메모리→타이머 전송 형태로 남아 있어, `HAL_TIM_PWM_Start_DMA` 실행 시 타이머 레지스터 영역을 증가시키며 읽거나 DMA 에러로 LED 갱신이 실패할 수 있습니다.  
+   - 개선: WS2812 전송 방향을 `DMA_MEMORY_TO_PERIPH`로 교정하고, 초기화 실패 시 즉시 오류를 반환하도록 안전장치를 넣어야 합니다.
+
+7. **자동 팩토리 리셋 실패 시에도 부팅을 계속 진행**  
+   - 위치: `src/hw/hw.c:59-83`  
+   - 내용: `eepromAutoFactoryResetCheck()` 반환값을 `(void)`로 버려 리셋 센티넬 읽기/포맷 실패가 발생해도 이후 부팅이 정상 진행됩니다. EEPROM이 손상된 상태로 키맵/설정 로드가 이뤄질 수 있어 예측 불가한 입력/USB 동작이 발생할 수 있습니다.  
+   - 개선: 실패 시 `_DEF_LED1`을 3회 점멸하며 `eeprom_init()` 재동기화 후 최대 3회 재시도하고, 반복 실패 시 `hwInit()`이 false를 반환해 부팅을 차단하도록 보강해야 합니다.

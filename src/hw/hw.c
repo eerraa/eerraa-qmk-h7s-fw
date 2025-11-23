@@ -14,6 +14,46 @@ volatile const firm_ver_t firm_ver __attribute__((section(".version"))) =
   .firm_addr    = (uint32_t)&_fw_flash_begin
 };
 
+// V251124R6: AUTO_FACTORY_RESET 실패 알림용 LED 점멸 시퀀스
+static void hwBlinkFactoryResetFailure(void)
+{
+  const uint32_t blink_count  = 3;
+  const uint32_t blink_on_ms  = 120U;
+  const uint32_t blink_off_ms = 120U;
+
+  for (uint32_t i = 0; i < blink_count; i++)
+  {
+    ledOn(_DEF_LED1);
+    delay(blink_on_ms);
+    ledOff(_DEF_LED1);
+    delay(blink_off_ms);
+  }
+}
+
+// V251124R6: AUTO_FACTORY_RESET 재시도 및 실패 기록 헬퍼
+static bool hwRunFactoryResetWithRetry(void)
+{
+  const uint32_t retry_limit = 3;
+
+  for (uint32_t attempt = 0; attempt < retry_limit; attempt++)
+  {
+    if (eepromAutoFactoryResetCheck() == true)
+    {
+      return true;
+    }
+
+    logPrintf("[!] EEPROM auto factory reset : retry %lu/%lu\n",
+              (unsigned long)(attempt + 1U),
+              (unsigned long)retry_limit);                          // V251124R6: 실패 시 재시도 및 원인 표시
+    hwBlinkFactoryResetFailure();
+    eeprom_init();                                                 // V251124R6: 재시도 전에 QMK EEPROM 미러 재동기화
+  }
+
+  logPrintf("[!] EEPROM auto factory reset : failed after %lu attempts\n",
+            (unsigned long)retry_limit);                            // V251124R6: 반복 실패 시 치명적 오류로 처리
+  return false;
+}
+
 
 
 bool hwInit(void)
@@ -67,20 +107,23 @@ bool hwInit(void)
 #ifdef USB_MONITOR_ENABLE
   usb_monitor_init();                                         // V251112R6: USB 모니터 기본값 초기화
 #endif
-  bool factory_reset_ok = eepromAutoFactoryResetCheck();      // V251112R3: AUTO_FACTORY_RESET_ENABLE 빌드에서 강제 초기화
+  bool factory_reset_ok = hwRunFactoryResetWithRetry();        // V251124R6: AUTO_FACTORY_RESET 실패 시 LED 표시 후 재시도
 #ifdef BOOTMODE_ENABLE
-  if (usbBootModeLoad() != true)                              // V250923R1 Apply stored USB boot mode preference
+  if (factory_reset_ok && usbBootModeLoad() != true)           // V250923R1 Apply stored USB boot mode preference
   {
     logPrintf("[!] usbBootModeLoad Fail\n");
   }
 #endif
 #ifdef USB_MONITOR_ENABLE
-  if (usbInstabilityLoad() != true)                           // V251108R1: VIA 토글과 USB 모니터 상태 동기화
+  if (factory_reset_ok && usbInstabilityLoad() != true)        // V251108R1: VIA 토글과 USB 모니터 상태 동기화
   {
     logPrintf("[!] usbInstabilityLoad Fail\n");
   }
 #endif
-  (void)factory_reset_ok;
+  if (factory_reset_ok != true)
+  {
+    hw_ok = false;                                             // V251124R6: 팩토리 리셋 실패 시 치명적 상태 표시
+  }
   #ifdef _USE_HW_QSPI
   qspiInit();
   #endif
@@ -91,7 +134,11 @@ bool hwInit(void)
     hw_ok = false;
   }
   #ifdef _USE_HW_WS2812
-  ws2812Init();
+  if (ws2812Init() != true)
+  {
+    logPrintf("[!] ws2812Init Fail\n");                                    // V251124R6: WS2812 초기화 실패 시 부팅 상태에 반영
+    hw_ok = false;
+  }
   #endif
   
   cdcInit();

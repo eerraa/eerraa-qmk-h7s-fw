@@ -8,9 +8,9 @@
 
 ## 2. 프로젝트 개요
 - 대상 보드: STM32H7S (내장 HS PHY) — 기본 USB 폴링 주기 8000Hz.
-- 지원 속도: HS 4k/2kHz, FS 1kHz. 정책은 HS 우선입니다.
+- 지원 속도: HS 8k/4k/2kHz, FS 1kHz. 정책은 FS 우선입니다.
 - 주요 기능: USB instability monitor (마이크로프레임 격차 감시, V250924R4), 단계적 폴링 다운그레이드 큐, QMK 포팅층.
-- 현재 `_DEF_FIRMWARE_VERSION`: **V251124R2**
+- 현재 `_DEF_FIRMWARE_VERSION`: **V251124R6**
 
 ## 3. 작업 전 체크리스트
 1. `_DEF_FIRMWARE_VERSION`과 보드 매크로를 `src/hw/hw_def.h`에서 확인합니다.
