@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 // 펌웨어/보드 식별 정보
 // ---------------------------------------------------------------------------
-#define _DEF_FIRMWARE_VERSION       "V251124R8"   // V251124R8: VIA Tap Dance 슬롯/런타임 처리 추가
+#define _DEF_FIRMWARE_VERSION       "V251125R1"   // V251125R1: VIA Tap Dance 동작 Vial 정합성 개선
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

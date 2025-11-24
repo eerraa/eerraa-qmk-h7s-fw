@@ -309,8 +309,7 @@ static void tapdance_on_dance_finished(tap_dance_state_t *state, void *user_data
       else if (tapdance_keycode_is_valid(entry.on_tap))
       {
         tap_code16(entry.on_tap);
-        tap_code16(entry.on_tap);
-        register_code16(entry.on_tap);
+        register_code16(entry.on_tap);                               // V251125R1: Vial 폴백과 동일하게 두 번만 입력
         tapdance_runtime[slot_index].active_action  = TAPDANCE_ACTION_DOUBLE_TAP;
         tapdance_runtime[slot_index].active_keycode = entry.on_tap;
       }
@@ -551,6 +550,31 @@ static bool tapdance_keycode_is_valid(uint16_t keycode)
     return false;
   }
   return true;
+}
+
+bool tapdance_should_finish_immediate(uint8_t slot_index, uint8_t tap_count)
+{
+  if (slot_index >= TAPDANCE_SLOT_COUNT)
+  {
+    return false;
+  }
+
+  tapdance_slot_state_t *slot_state = &tapdance_state[slot_index];
+  bool has_tap      = tapdance_keycode_is_valid(slot_state->actions[0]);
+  bool has_hold     = tapdance_keycode_is_valid(slot_state->actions[1]);
+  bool has_double   = tapdance_keycode_is_valid(slot_state->actions[2]);
+  bool has_tap_hold = tapdance_keycode_is_valid(slot_state->actions[3]);
+
+  if (tap_count == 1U && has_tap && has_hold && has_double == false && has_tap_hold == false)
+  {
+    return true;                                                 // V251125R1: tap/hold 단순 조합은 즉시 완료
+  }
+  if (tap_count == 2U && has_double)
+  {
+    return true;                                                 // V251125R1: 더블 탭 지정 시 즉시 완료
+  }
+
+  return false;
 }
 
 static bool tapdance_set_value(uint8_t value_id, uint8_t *value_data, uint8_t length)

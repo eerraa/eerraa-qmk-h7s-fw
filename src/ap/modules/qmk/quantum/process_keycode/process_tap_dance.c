@@ -173,10 +173,30 @@ bool process_tap_dance(uint16_t keycode, keyrecord_t *record) {
                     break;                                    // V251124R8: 지원 슬롯 밖 Tap Dance 무시
                 }
                 action = &tap_dance_actions[slot_index];
+
+                action->state.pressed = record->event.pressed;
+                if (record->event.pressed) {
+                    last_tap_time = timer_read();
+                    process_tap_dance_action_on_each_tap(action);
+                    active_td = action->state.finished ? 0 : keycode;
+                } else {
+                    if (tapdance_should_finish_immediate(slot_index, action->state.count)) {
+                        action->state.pressed = false;
+                        process_tap_dance_action_on_dance_finished(action);  // V251125R1: Vial 호환 즉시 종료
+                        break;
+                    }
+
+                    process_tap_dance_action_on_each_release(action);
+                    if (action->state.finished) {
+                        process_tap_dance_action_on_reset(action);
+                        if (active_td == keycode) {
+                            active_td = 0;
+                        }
+                    }
+                }
             }
 #else
             action = &tap_dance_actions[QK_TAP_DANCE_GET_INDEX(keycode)];
-#endif
 
             action->state.pressed = record->event.pressed;
             if (record->event.pressed) {
@@ -192,6 +212,7 @@ bool process_tap_dance(uint16_t keycode, keyrecord_t *record) {
                     }
                 }
             }
+#endif
 
             break;
     }
