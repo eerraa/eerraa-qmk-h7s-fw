@@ -24,7 +24,7 @@
 ## 4. VIA UI·명령 매핑
 - 채널 ID: `id_qmk_tapdance`(16).
 - Value ID: 슬롯당 5개, `(16, base+0..4)` = tap, hold, double tap, tap+hold, term. 슬롯 1의 base=1 → 1~5, 슬롯 8의 base=36 → 36~40.
-- Term 단위: VIA dropdown 10~50 → 실제 ms = 값×10 (100~500ms). 내부에서 최소/최대/10ms 단위로 정규화.
+- Term 단위: VIA dropdown 10~50 → 실제 ms = 값×10 (100~500ms). 내부에서 최소/최대/20ms 단위로 정규화.
 - `id_custom_set_value`: 값 적용 후 즉시 에코(`tapdance_get_value`)로 응답. `id_custom_save`: EEPROM flush.
 
 ### VIA JSON (VIA3 `customKeycodes`)

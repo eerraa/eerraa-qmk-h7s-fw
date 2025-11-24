@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 // 펌웨어/보드 식별 정보
 // ---------------------------------------------------------------------------
-#define _DEF_FIRMWARE_VERSION       "V251125R2"   // V251125R2: KKUK 지연 설정 단위 정규화 및 Tap Dance 개선
+#define _DEF_FIRMWARE_VERSION       "V251125R3"   // V251125R3: KKUK EEPROM 버전 필드 추가 및 Tap Dance 폴백 정정
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

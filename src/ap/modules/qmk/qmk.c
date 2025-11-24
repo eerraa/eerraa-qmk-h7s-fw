@@ -77,21 +77,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record)
   return true;
 }
 
-bool process_record_kb(uint16_t keycode, keyrecord_t *record)
-{
-#ifdef TAPDANCE_ENABLE
-  if (IS_KB_KEYCODE(keycode))
-  {
-    uint8_t idx = (uint8_t)(keycode - QK_KB_0);
-    if (idx < TAPDANCE_SLOT_COUNT)
-    {
-      keycode = (QK_TAP_DANCE | idx);                            // V251124R8: VIA customKeycodes TDn → TD(n) 매핑
-    }
-  }
-#endif
-  return process_record_user(keycode, record);
-}
-
 void idle_task(void)
 {
   bool is_suspended_cur;

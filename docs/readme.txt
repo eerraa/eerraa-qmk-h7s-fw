@@ -145,7 +145,8 @@ BRICK60 펌웨어 안내
 
 2-8. 탭댄스(Tap Dance) 설정 & 키코드 사용법
 
-   - 기본 개념: 슬롯 1~8(TD0~TD7)에 “어떤 키를 몇 번/얼마나 눌렀을 때 무엇을 보낼지”를 기록해 둔 뒤, 키맵에는 TD0~TD7을 배치만 하면 됩니다. Tap Dance 전용 매크로나 스크립트는 필요 없습니다.
+   - 기본 개념: 슬롯 1~8(TD0~TD7)에 “어떤 키를 몇 번/얼마나 눌렀을 때 무엇을 보낼지”를 기록해 둔 뒤, 키맵에는 TD0~TD7을 배치만 하면 됩니다.
+   - KC_* 키코드 전체 목록은 https://docs.qmk.fm/keycodes 에서 확인할 수 있습니다.
    - 설정 위치: VIA CONFIGURE → TAPDANCE 메뉴.
      · On Tap / On Hold / On Double Tap / Tap+Hold를 슬롯별로 지정합니다. 비워 두면 해당 동작은 실행되지 않고, 비어 있는 경우에는 Tap을 대신 사용하는 폴백이 적용됩니다.
      · Term은 슬롯별 탭/홀드 판정 시간(100~500 ms, 20 ms 스텝)으로, 글로벌 TAPPING_TERM과는 완전히 독립적입니다. 기본값은 200 ms입니다.
@@ -154,7 +155,7 @@ BRICK60 펌웨어 안내
    - 동작 예시 (Vial과 동일한 로직):
      · Hold가 비어 있으면 Tap을 대신 눌러 유지합니다.
      · Tap+Hold가 비어 있으면 Tap을 한 번 보내고 나서 Hold(없으면 Tap)를 길게 누릅니다.
-     · Double Tap이 비어 있으면 Tap을 두 번 보내고 Tap을 길게 누릅니다.
+     · Double Tap이 비어 있으면 Tap을 한 번 보내고 Tap을 길게 누릅니다.
      · 3번 연타하면 Tap×3, 4번 이상은 추가 Tap을 보냅니다. DOUBLE_SINGLE_TAP 패턴도 동일하게 처리합니다.
    - 빠른 시작 가이드 (초보자용):
      1) TAPDANCE 메뉴에서 TD0 슬롯에 On Tap=“A”, On Hold=“B”, Term=200 ms로 설정합니다.
@@ -341,7 +342,8 @@ This document is the official guide for BRICK60 (STM32H7S with 8,000 Hz USB poll
 
 2-8. Tap Dance configuration & keycode usage
 
-   - Concept: assign “what to send” for slots 1–8 (TD0–TD7) and simply place TD0–TD7 on the keymap. No extra macro or script is needed.
+   - Concept: assign “what to send” for slots 1–8 (TD0–TD7) and simply place TD0–TD7 on the keymap.
+   - KC keycodes are listed at https://docs.qmk.fm/keycodes.
    - Where to set: VIA CONFIGURE → TAPDANCE.
      · On Tap / On Hold / On Double Tap / Tap+Hold per slot. If a field is left empty, that action is skipped and Tap is used as the fallback where applicable.
      · Term is the per-slot tap/hold window (100–500 ms, 20 ms step). It is completely independent of the global TAPPING_TERM. Default is 200 ms.
@@ -350,7 +352,7 @@ This document is the official guide for BRICK60 (STM32H7S with 8,000 Hz USB poll
    - Behavior (matches Vial Tap Dance):
      · If Hold is empty, the Tap key is held instead.
      · If Tap+Hold is empty, Tap is sent once, then Hold (or Tap) is held down.
-     · If Double Tap is empty, Tap is sent twice, then Tap is held.
+     · If Double Tap is empty, Tap is sent once, then Tap is held.
      · Triple tap sends Tap×3; more than three sends extra Tap. DOUBLE_SINGLE_TAP is handled the same way as Vial.
    - Quick start example for newcomers:
      1) In TAPDANCE, set TD0: On Tap = “A”, On Hold = “B”, Term = 200 ms.

@@ -309,7 +309,7 @@ static void tapdance_on_dance_finished(tap_dance_state_t *state, void *user_data
       else if (tapdance_keycode_is_valid(entry.on_tap))
       {
         tap_code16(entry.on_tap);
-        register_code16(entry.on_tap);                               // V251125R1: Vial 폴백과 동일하게 두 번만 입력
+        register_code16(entry.on_tap);                               // V251125R3: Vial 폴백과 동일한 1탭+홀드 유지
         tapdance_runtime[slot_index].active_action  = TAPDANCE_ACTION_DOUBLE_TAP;
         tapdance_runtime[slot_index].active_keycode = entry.on_tap;
       }

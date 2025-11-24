@@ -3,7 +3,7 @@
 #ifdef KKUK_ENABLE
 
 
-#define KKUK_TIME_UNIT      10
+#define KKUK_TIME_UNIT         10
 #define KKUK_DELAY_TICKS_MIN   5    // 50ms
 #define KKUK_DELAY_TICKS_MAX   30   // 300ms
 #define KKUK_REPEAT_TICKS_MIN  5    // 50ms
@@ -70,7 +70,7 @@ void kkuk_init(void)
 
   if (kkuk_normalize_config())
   {
-    eeconfig_flush_kkuk(true);                                  // V251125R2: 구버전 ms 단위 저장값 정규화
+    eeconfig_flush_kkuk(true);                                  // V251125R3: KKUK 정규화 경로 정리
   }
 
   logPrintf("[ON] KKUK\n");
@@ -275,17 +275,6 @@ void via_qmk_kkuk_save(void)
 static bool kkuk_normalize_config(void)
 {
   bool dirty = false;
-
-  if (kkuk_config.delay_time > KKUK_DELAY_TICKS_MAX)
-  {
-    kkuk_config.delay_time = (uint8_t)((kkuk_config.delay_time + (KKUK_TIME_UNIT / 2)) / KKUK_TIME_UNIT);
-    dirty = true;
-  }
-  if (kkuk_config.repeat_time > KKUK_REPEAT_TICKS_MAX)
-  {
-    kkuk_config.repeat_time = (uint8_t)((kkuk_config.repeat_time + (KKUK_TIME_UNIT / 2)) / KKUK_TIME_UNIT);
-    dirty = true;
-  }
 
   if (kkuk_config.delay_time < KKUK_DELAY_TICKS_MIN)
   {
