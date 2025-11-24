@@ -21,6 +21,9 @@
 #include "action_util.h"
 #include "timer.h"
 #include "wait.h"
+#ifdef TAPDANCE_ENABLE
+#    include "tapdance.h"
+#endif
 
 static uint16_t active_td;
 static uint16_t last_tap_time;
@@ -133,7 +136,16 @@ bool preprocess_tap_dance(uint16_t keycode, keyrecord_t *record) {
 
     if (!active_td || keycode == active_td) return false;
 
+#ifdef TAPDANCE_ENABLE
+    uint8_t slot_index = QK_TAP_DANCE_GET_INDEX(active_td);
+    if (slot_index >= TAPDANCE_SLOT_COUNT) {
+        active_td = 0;
+        return false;                                        // V251124R8: 정의된 슬롯만 처리
+    }
+    action = &tap_dance_actions[slot_index];
+#else
     action                             = &tap_dance_actions[QK_TAP_DANCE_GET_INDEX(active_td)];
+#endif
     action->state.interrupted          = true;
     action->state.interrupting_keycode = keycode;
     process_tap_dance_action_on_dance_finished(action);
@@ -154,6 +166,36 @@ bool process_tap_dance(uint16_t keycode, keyrecord_t *record) {
 
     switch (keycode) {
         case QK_TAP_DANCE ... QK_TAP_DANCE_MAX:
+#ifdef TAPDANCE_ENABLE
+            {
+                uint8_t slot_index = QK_TAP_DANCE_GET_INDEX(keycode);
+                if (slot_index >= TAPDANCE_SLOT_COUNT) {
+                    break;                                    // V251124R8: 지원 슬롯 밖 Tap Dance 무시
+                }
+                action = &tap_dance_actions[slot_index];
+
+                action->state.pressed = record->event.pressed;
+                if (record->event.pressed) {
+                    last_tap_time = timer_read();
+                    process_tap_dance_action_on_each_tap(action);
+                    active_td = action->state.finished ? 0 : keycode;
+                } else {
+                    if (tapdance_should_finish_immediate(slot_index, action->state.count)) {
+                        action->state.pressed = false;
+                        process_tap_dance_action_on_dance_finished(action);  // V251125R1: Vial 호환 즉시 종료
+                        break;
+                    }
+
+                    process_tap_dance_action_on_each_release(action);
+                    if (action->state.finished) {
+                        process_tap_dance_action_on_reset(action);
+                        if (active_td == keycode) {
+                            active_td = 0;
+                        }
+                    }
+                }
+            }
+#else
             action = &tap_dance_actions[QK_TAP_DANCE_GET_INDEX(keycode)];
 
             action->state.pressed = record->event.pressed;
@@ -170,6 +212,7 @@ bool process_tap_dance(uint16_t keycode, keyrecord_t *record) {
                     }
                 }
             }
+#endif
 
             break;
     }
@@ -180,9 +223,27 @@ bool process_tap_dance(uint16_t keycode, keyrecord_t *record) {
 void tap_dance_task(void) {
     tap_dance_action_t *action;
 
+#ifdef TAPDANCE_ENABLE
+    if (!active_td) {
+        return;
+    }
+
+    uint8_t slot_index = QK_TAP_DANCE_GET_INDEX(active_td);
+    if (slot_index >= TAPDANCE_SLOT_COUNT) {
+        active_td = 0;
+        return;                                               // V251124R8: 정의되지 않은 Tap Dance 슬롯 무시
+    }
+
+    if (timer_elapsed(last_tap_time) <= tapdance_get_term_ms(active_td)) {
+        return;
+    }
+
+    action = &tap_dance_actions[slot_index];
+#else
     if (!active_td || timer_elapsed(last_tap_time) <= GET_TAPPING_TERM(active_td, &(keyrecord_t){})) return;
 
     action = &tap_dance_actions[QK_TAP_DANCE_GET_INDEX(active_td)];
+#endif
     if (!action->state.interrupted) {
         process_tap_dance_action_on_dance_finished(action);
     }

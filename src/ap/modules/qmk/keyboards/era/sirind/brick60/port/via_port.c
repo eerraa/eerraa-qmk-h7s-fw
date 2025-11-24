@@ -5,6 +5,7 @@
 #include "usb_monitor.h"
 #include "debounce_profile.h"
 #include "tapping_term.h"
+#include "tapdance.h"
 
 static void via_handle_usb_polling_channel(uint8_t *data, uint8_t length);  // V251108R8: BootMode/USB 모니터 분기 공통화
 
@@ -41,6 +42,15 @@ void via_custom_value_command_kb(uint8_t *data, uint8_t length)
     if (tapping_term_handle_via_command(data, length))
     {
       return;  // V251123R4: VIA TAPPING 채널 처리
+    }
+  }
+#endif
+#ifdef TAPDANCE_ENABLE
+  if (*channel_id == id_qmk_tapdance)
+  {
+    if (tapdance_handle_via_command(data, length))
+    {
+      return;  // V251124R8: VIA TAPDANCE 채널 처리
     }
   }
 #endif

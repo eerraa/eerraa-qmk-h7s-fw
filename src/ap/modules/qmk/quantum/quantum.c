@@ -56,6 +56,10 @@
 #    include "process_rgb.h"
 #endif
 
+#ifdef TAPDANCE_ENABLE
+#    include "tapdance.h"  // V251125R1: VIA customKeycodes(TD0~7) → Tap Dance 매핑
+#endif
+
 #ifdef SECURE_ENABLE
 #    include "process_secure.h"
 #endif
@@ -206,6 +210,21 @@ void soft_reset_keyboard(void) {
     mcu_reset();
 }
 
+#ifdef TAPDANCE_ENABLE
+static inline uint16_t translate_kb_to_tap_dance(uint16_t keycode)
+{
+  if (IS_KB_KEYCODE(keycode))
+  {
+    uint8_t idx = (uint8_t)(keycode - QK_KB_0);
+    if (idx < TAPDANCE_SLOT_COUNT)
+    {
+      return (uint16_t)(QK_TAP_DANCE | idx);                     // V251125R1: VIA TDn → TD(n)로 조기 변환
+    }
+  }
+  return keycode;
+}
+#endif
+
 /* Convert record into usable keycode via the contained event. */
 uint16_t get_record_keycode(keyrecord_t *record, bool update_layer_cache) {
 #if defined(COMBO_ENABLE) || defined(REPEAT_KEY_ENABLE)
@@ -213,7 +232,12 @@ uint16_t get_record_keycode(keyrecord_t *record, bool update_layer_cache) {
         return record->keycode;
     }
 #endif
-    return get_event_keycode(record->event, update_layer_cache);
+    uint16_t keycode = get_event_keycode(record->event, update_layer_cache);
+
+#ifdef TAPDANCE_ENABLE
+    keycode = translate_kb_to_tap_dance(keycode);               // V251125R1: Tap Dance 프리패스
+#endif
+    return keycode;
 }
 
 /* Convert event into usable keycode. Checks the layer cache to ensure that it
