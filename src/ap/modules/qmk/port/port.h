@@ -8,6 +8,7 @@
 #include "kill_switch.h"
 #include "kkuk.h"
 #include "tapping_term.h"
+#include "tapdance.h"
 
 
 
@@ -24,6 +25,7 @@
 #define EECONFIG_USER_EEPROM_CLEAR_COOKIE ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 40))  // 4B  // V251112R1: 자동 초기화 쿠키 기록 슬롯
 #define EECONFIG_USER_DEBOUNCE            ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 44))  // 8B  // V251115R1: VIA 디바운스 프로필 저장 슬롯
 #define EECONFIG_USER_TAPPING_TERM        ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 52))  // 12B  // V251123R4: VIA TAPPING 설정 슬롯
+#define EECONFIG_USER_TAPDANCE            ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 64))  // 88B  // V251124R8: VIA TAPDANCE 슬롯
 
 typedef struct
 {

@@ -56,6 +56,10 @@
 #  define HOLD_ON_OTHER_KEY_PRESS_PER_KEY
 #  define RETRO_TAPPING_PER_KEY
 #endif
+#define TAPDANCE_ENABLE                     // V251124R8: VIA Tap Dance 런타임 설정 활성화
+#ifdef TAPDANCE_ENABLE
+#  define TAP_DANCE_ENABLE
+#endif
 #define INDICATOR_ENABLE            // V251016R8: Brick60 전용 RGB 인디케이터 기능 플래그
 
 

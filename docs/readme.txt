@@ -6,11 +6,11 @@ BRICK60 펌웨어 안내
 
 1. 펌웨어 파일 구성
 
-   BRICK60-V251124R6.uf2
+   BRICK60-V251124R8.uf2
      - BRICK60 본체에 올리는 펌웨어 파일입니다.
      - 이 버전부터 디바운스 모드와 딜레이를 VIA에서 실시간으로 조정할 수 있으므로, 과거처럼 DEF/EAG 두 종류의 이미지를 따로 배포하지 않습니다. 이 하나의 UF2 파일만 사용하면 됩니다.
 
-   BRICK60-V251124R6.JSON
+   BRICK60-V251124R8.JSON
      - VIA(usevia.app)에서 BRICK60을 인식하고, 디바운스/USB 설정/기타 기능을 노출하기 위한 Draft Definition 파일입니다.
      - 키맵을 편집하기 전에 반드시 한 번 로드해야 합니다.
 
@@ -143,11 +143,21 @@ BRICK60 펌웨어 안내
      · Retro Tapping (Tap if unused): 탭핑 윈도우 안에 키를 눌렀다가 떼지 않아도, 다른 입력이 없고 타이머가 끝나면 탭으로 확정합니다(레트로 탭핑).
    - 값을 바꾼 뒤 SAVE(또는 VIA 저장)을 누르면 EEPROM에 저장되어 재부팅 후에도 유지됩니다.
 
+2-8. 탭댄스(Tap Dance) 설정 & 키코드 사용법
+
+   - VIA CONFIGURE → TAPDANCE 메뉴에서 슬롯 1~8의 동작을 설정합니다.
+     · On Tap / On Hold / On Double Tap / Tap+Hold 액션을 슬롯별로 지정합니다.
+     · Term은 슬롯별 탭/홀드 판정 시간(100~500 ms, 20 ms 스텝 정규화)이며 TAPPING_TERM과 독립적으로 동작합니다.
+   - UI의 Tap Dance 슬롯은 TD0~TD7(내부 인덱스 0~7)과 1:1로 연결됩니다. VIA에서 설정을 바꾸면 즉시 반영되며, Save를 누르면 EEPROM에 영구 저장됩니다.
+   - 키맵 배치: VIA 키코드 목록의 “Tap Dance” 그룹에서 TD0~TD7을 선택해 원하는 위치에 배치하면, 지정한 슬롯 액션이 그대로 실행됩니다. 별도 매크로나 스크립트 없이 TD 키코드만 배치하면 됩니다.
+   - 동작 로직은 Vial Tap Dance와 동일합니다. (1) Hold가 비어 있으면 Tap을 대신 눌러 유지, (2) Tap+Hold가 비어 있으면 Tap을 먼저 전송한 뒤 Hold(없으면 Tap)를 누른 채 유지, (3) Double Tap이 비어 있으면 Tap을 두 번 전송 후 유지, (4) 3연타 시 Tap×3, 4회 이상은 Tap을 추가 전송, DOUBLE_SINGLE_TAP 패턴도 동일하게 처리됩니다.
+   - 슬롯 Term만 사용하며 글로벌 TAPPING_TERM 변경의 영향을 받지 않습니다.
+
 3. VIA 사용 절차
 
    1) 브라우저에서 https://usevia.app 에 접속합니다.
    2) 상단의 SETTINGS 탭으로 이동한 뒤, "Show Design tab" 토글을 켭니다.
-   3) 새로 생긴 DESIGN 탭을 열고, 화면의 "Load Draft Definition" 버튼을 눌러 BRICK60-V251124R6.JSON 파일을 불러옵니다.
+   3) 새로 생긴 DESIGN 탭을 열고, 화면의 "Load Draft Definition" 버튼을 눌러 BRICK60-V251124R8.JSON 파일을 불러옵니다.
    4) JSON 로드가 완료되면 CONFIGURE 탭으로 돌아가 키맵, 레이어, 매크로 등을 설정합니다.
    5) SYSTEM 메뉴에서 USB POLLING 및 USB 모니터링 옵션을, LIGHTING 메뉴에서 RGB 이펙트를 조정합니다.
    6) DEBOUNCE 메뉴에서 위에서 설명한 디바운스 모드와 시간을 설정합니다.
@@ -157,7 +167,7 @@ BRICK60 펌웨어 안내
    1) 키보드를 부트로더 모드로 전환합니다.
       - Bootmagic 리셋: ESC 키(매트릭스 0,0)를 누른 채 USB 케이블을 연결합니다.
       - VIA 리셋: VIA CONFIGURE → SYSTEM 메뉴에서 "Jump To BOOT" 버튼을 누릅니다.
-   2) PC에 새로운 이동식 디스크가 나타나면, BRICK60-V251124R6.uf2 파일을 해당 디스크에 복사합니다.
+   2) PC에 새로운 이동식 디스크가 나타나면, BRICK60-V251124R8.uf2 파일을 해당 디스크에 복사합니다.
    3) 복사가 끝나고 디스크가 자동으로 사라지면, 플래싱이 완료되고 키보드는 새 펌웨어로 재시작합니다.
 
 5. EEPROM 초기화 및 키맵 백업 안내 (AUTO_FACTORY_RESET)
@@ -184,11 +194,11 @@ This document is the official guide for BRICK60 (STM32H7S with 8,000 Hz USB poll
 
 1. Firmware files
 
-   BRICK60-V251124R6.uf2
+   BRICK60-V251124R8.uf2
      - The firmware image that you flash onto the BRICK60 itself.
      - From this version onward, debounce mode and delay can be adjusted in real time in VIA, so there is no longer a separate DEF / EAG image. A single UF2 file is used for all configurations.
 
-   BRICK60-V251124R6.JSON
+   BRICK60-V251124R8.JSON
      - Draft Definition file used by VIA (usevia.app) so that BRICK60 is correctly recognized and its debounce / USB / other options appear.
      - You must load this file once before you start editing the keymap.
 
@@ -321,11 +331,21 @@ This document is the official guide for BRICK60 (STM32H7S with 8,000 Hz USB poll
      · Retro Tapping (Tap if unused): If no other input happens before the window ends, a key still being held is counted as a tap (retro tapping behavior).
    - After adjusting values, click SAVE in VIA to store them to EEPROM so they persist across reboots.
 
+2-8. Tap Dance configuration & keycode usage
+
+   - In VIA CONFIGURE → TAPDANCE, configure slots 1–8:
+     · On Tap / On Hold / On Double Tap / Tap+Hold per slot
+     · Term is per-slot tap/hold window (100–500 ms, 20 ms step) and is independent of global TAPPING_TERM.
+   - UI slots map to TD0–TD7 (indexes 0–7). Changes take effect immediately; press Save to persist to EEPROM.
+   - Keymap placement: In VIA keycodes, pick TD0–TD7 under “Tap Dance” and place them on the layout; the assigned slot actions will run with no extra macros or scripts.
+   - Behavior matches Vial Tap Dance: (1) If Hold is empty, On Tap is held instead; (2) If Tap+Hold is empty, On Tap is tapped then Hold (or Tap) is held; (3) If Double Tap is empty, On Tap is sent twice then held; (4) Triple tap sends tap×3, >3 taps send additional tap; DOUBLE_SINGLE_TAP is handled the same way as Vial.
+   - Only the slot Term is used; changes to global TAPPING_TERM do not affect Tap Dance timing.
+
 3. How to use VIA
 
    1) Visit https://usevia.app in a web browser.
    2) Open the SETTINGS tab at the top and enable "Show Design tab."
-   3) Open the new DESIGN tab, click "Load Draft Definition," and load the file BRICK60-V251124R6.JSON.
+   3) Open the new DESIGN tab, click "Load Draft Definition," and load the file BRICK60-V251124R8.JSON.
    4) After the JSON has been loaded, go back to the CONFIGURE tab to edit keymaps, layers, and macros.
    5) Use the SYSTEM menu to adjust USB POLLING and USB monitoring, the LIGHTING menu to configure RGB effects, and the DEBOUNCE group to set the debounce modes and timings described above.
 
@@ -334,7 +354,7 @@ This document is the official guide for BRICK60 (STM32H7S with 8,000 Hz USB poll
    1) Put the keyboard into bootloader mode:
       - Bootmagic reset: hold the ESC key (matrix position 0,0) while plugging in the USB cable.
       - VIA reset: in VIA CONFIGURE → SYSTEM, click the "Jump To BOOT" button.
-   2) When a new removable drive appears on the host PC, copy BRICK60-V251124R6.uf2 onto that drive.
+   2) When a new removable drive appears on the host PC, copy BRICK60-V251124R8.uf2 onto that drive.
    3) When the drive disappears automatically, flashing is complete and the keyboard restarts with the new firmware.
 
 5. EEPROM reset and keymap backup (AUTO_FACTORY_RESET)
@@ -349,7 +369,7 @@ This document is the official guide for BRICK60 (STM32H7S with 8,000 Hz USB poll
    1) Before changing firmware, open the VIA CONFIGURE tab while the keyboard is still running the old version.
    2) In the left-side menu, open the SAVE + LOAD section:
       - Click Save to export your current layout to a file (for example brick60.layout.json).
-   3) Flash the new firmware (BRICK60-V251124R6.uf2). After the keyboard reboots, AUTO_FACTORY_RESET will run once and clear the EEPROM.
+   3) Flash the new firmware (BRICK60-V251124R8.uf2). After the keyboard reboots, AUTO_FACTORY_RESET will run once and clear the EEPROM.
    4) Open the VIA CONFIGURE tab again, go back to the SAVE + LOAD section, and click Load to import the layout file you saved earlier. Your previous layout will then be restored.
 
    The SYSTEM → CLEAN menu is still available for manual EEPROM reset when necessary. If the configuration seems broken while you remain on the same firmware version, you can use manual EEPROM clean as a last resort and then restore your saved layout using the same SAVE + LOAD procedure.

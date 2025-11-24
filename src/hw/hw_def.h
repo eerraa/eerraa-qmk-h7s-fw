@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 // 펌웨어/보드 식별 정보
 // ---------------------------------------------------------------------------
-#define _DEF_FIRMWARE_VERSION       "V251124R7"   // V251124R7: USB HID LED 캐시 추가로 Layer-Tap CAPS 인디케이터 동기화 보강
+#define _DEF_FIRMWARE_VERSION       "V251124R8"   // V251124R8: VIA Tap Dance 슬롯/런타임 처리 추가
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 

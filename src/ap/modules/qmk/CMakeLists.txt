@@ -36,6 +36,11 @@ if (EXISTS "${_QMK_CONFIG_HEADER}")
     string(REGEX REPLACE ".*#define[ \\t]+DEBOUNCE_TYPE[ \\t]+([A-Za-z0-9_]+).*" "\\1" _QMK_DEBOUNCE_TYPE "${_QMK_DEBOUNCE_TYPE_LINE}")
     add_compile_definitions(QMK_DEFAULT_DEBOUNCE_TYPE=${_QMK_DEBOUNCE_TYPE})    # V251115R3: 보드 config.h DEBOUNCE_TYPE 토큰 기본 적용
   endif()
+
+  file(STRINGS "${_QMK_CONFIG_HEADER}" _QMK_TAPDANCE_DEFINE REGEX "^[ \\t]*#define[ \\t]+TAPDANCE_ENABLE")
+  if (_QMK_TAPDANCE_DEFINE)
+    list(APPEND QMK_ADD_FILES "${QMK_ROOT_PATH}/quantum/process_keycode/process_tap_dance.c")  # V251124R8: Tap Dance 처리 소스 포함
+  endif()
 endif()
 
 if (RGBLIGHT_ENABLE)

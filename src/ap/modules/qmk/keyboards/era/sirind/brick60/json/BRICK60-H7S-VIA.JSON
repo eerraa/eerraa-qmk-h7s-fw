@@ -9,6 +9,48 @@
   "keycodes": [
     "qmk_lighting"
   ],
+  "customKeycodes": [
+    {
+      "name": "TD0",
+      "title": "Tap Dance 0",
+      "shortName": "TD0"
+    },
+    {
+      "name": "TD1",
+      "title": "Tap Dance 1",
+      "shortName": "TD1"
+    },
+    {
+      "name": "TD2",
+      "title": "Tap Dance 2",
+      "shortName": "TD2"
+    },
+    {
+      "name": "TD3",
+      "title": "Tap Dance 3",
+      "shortName": "TD3"
+    },
+    {
+      "name": "TD4",
+      "title": "Tap Dance 4",
+      "shortName": "TD4"
+    },
+    {
+      "name": "TD5",
+      "title": "Tap Dance 5",
+      "shortName": "TD5"
+    },
+    {
+      "name": "TD6",
+      "title": "Tap Dance 6",
+      "shortName": "TD6"
+    },
+    {
+      "name": "TD7",
+      "title": "Tap Dance 7",
+      "shortName": "TD7"
+    }
+  ],
   "menus": [
     {
       "label": "Lighting",
@@ -326,6 +368,179 @@
               "label": "Retro Tapping (Tap if unused)",
               "type": "toggle",
               "content": ["id_qmk_tapping_retro_tapping", 15, 4]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "TAPDANCE",
+      "content": [
+        {
+          "label": "TD0",
+          "content": [
+            { "label": "On Tap",        "type": "keycode", "content": ["id_qmk_tapdance_1_tap",   16, 1] },
+            { "label": "On Hold",       "type": "keycode", "content": ["id_qmk_tapdance_1_hold",  16, 2] },
+            { "label": "On Double Tap", "type": "keycode", "content": ["id_qmk_tapdance_1_dtap",  16, 3] },
+            { "label": "Tap+Hold",      "type": "keycode", "content": ["id_qmk_tapdance_1_thold", 16, 4] },
+            {
+              "label": "Term",
+              "type": "dropdown",
+              "content": ["id_qmk_tapdance_1_term", 16, 5],
+              "options": [
+                ["100 ms", 10], ["120 ms", 12], ["140 ms", 14], ["160 ms", 16], ["180 ms", 18],
+                ["200 ms", 20], ["220 ms", 22], ["240 ms", 24], ["260 ms", 26], ["280 ms", 28],
+                ["300 ms", 30], ["320 ms", 32], ["340 ms", 34], ["360 ms", 36], ["380 ms", 38],
+                ["400 ms", 40], ["420 ms", 42], ["440 ms", 44], ["460 ms", 46], ["480 ms", 48],
+                ["500 ms", 50]
+              ]
+            }
+          ]
+        },
+        {
+          "label": "TD1",
+          "content": [
+            { "label": "On Tap",        "type": "keycode", "content": ["id_qmk_tapdance_2_tap",   16, 6] },
+            { "label": "On Hold",       "type": "keycode", "content": ["id_qmk_tapdance_2_hold",  16, 7] },
+            { "label": "On Double Tap", "type": "keycode", "content": ["id_qmk_tapdance_2_dtap",  16, 8] },
+            { "label": "Tap+Hold",      "type": "keycode", "content": ["id_qmk_tapdance_2_thold", 16, 9] },
+            {
+              "label": "Term",
+              "type": "dropdown",
+              "content": ["id_qmk_tapdance_2_term", 16, 10],
+              "options": [
+                ["100 ms", 10], ["120 ms", 12], ["140 ms", 14], ["160 ms", 16], ["180 ms", 18],
+                ["200 ms", 20], ["220 ms", 22], ["240 ms", 24], ["260 ms", 26], ["280 ms", 28],
+                ["300 ms", 30], ["320 ms", 32], ["340 ms", 34], ["360 ms", 36], ["380 ms", 38],
+                ["400 ms", 40], ["420 ms", 42], ["440 ms", 44], ["460 ms", 46], ["480 ms", 48],
+                ["500 ms", 50]
+              ]
+            }
+          ]
+        },
+        {
+          "label": "TD2",
+          "content": [
+            { "label": "On Tap",        "type": "keycode", "content": ["id_qmk_tapdance_3_tap",   16, 11] },
+            { "label": "On Hold",       "type": "keycode", "content": ["id_qmk_tapdance_3_hold",  16, 12] },
+            { "label": "On Double Tap", "type": "keycode", "content": ["id_qmk_tapdance_3_dtap",  16, 13] },
+            { "label": "Tap+Hold",      "type": "keycode", "content": ["id_qmk_tapdance_3_thold", 16, 14] },
+            {
+              "label": "Term",
+              "type": "dropdown",
+              "content": ["id_qmk_tapdance_3_term", 16, 15],
+              "options": [
+                ["100 ms", 10], ["120 ms", 12], ["140 ms", 14], ["160 ms", 16], ["180 ms", 18],
+                ["200 ms", 20], ["220 ms", 22], ["240 ms", 24], ["260 ms", 26], ["280 ms", 28],
+                ["300 ms", 30], ["320 ms", 32], ["340 ms", 34], ["360 ms", 36], ["380 ms", 38],
+                ["400 ms", 40], ["420 ms", 42], ["440 ms", 44], ["460 ms", 46], ["480 ms", 48],
+                ["500 ms", 50]
+              ]
+            }
+          ]
+        },
+        {
+          "label": "TD3",
+          "content": [
+            { "label": "On Tap",        "type": "keycode", "content": ["id_qmk_tapdance_4_tap",   16, 16] },
+            { "label": "On Hold",       "type": "keycode", "content": ["id_qmk_tapdance_4_hold",  16, 17] },
+            { "label": "On Double Tap", "type": "keycode", "content": ["id_qmk_tapdance_4_dtap",  16, 18] },
+            { "label": "Tap+Hold",      "type": "keycode", "content": ["id_qmk_tapdance_4_thold", 16, 19] },
+            {
+              "label": "Term",
+              "type": "dropdown",
+              "content": ["id_qmk_tapdance_4_term", 16, 20],
+              "options": [
+                ["100 ms", 10], ["120 ms", 12], ["140 ms", 14], ["160 ms", 16], ["180 ms", 18],
+                ["200 ms", 20], ["220 ms", 22], ["240 ms", 24], ["260 ms", 26], ["280 ms", 28],
+                ["300 ms", 30], ["320 ms", 32], ["340 ms", 34], ["360 ms", 36], ["380 ms", 38],
+                ["400 ms", 40], ["420 ms", 42], ["440 ms", 44], ["460 ms", 46], ["480 ms", 48],
+                ["500 ms", 50]
+              ]
+            }
+          ]
+        },
+        {
+          "label": "TD4",
+          "content": [
+            { "label": "On Tap",        "type": "keycode", "content": ["id_qmk_tapdance_5_tap",   16, 21] },
+            { "label": "On Hold",       "type": "keycode", "content": ["id_qmk_tapdance_5_hold",  16, 22] },
+            { "label": "On Double Tap", "type": "keycode", "content": ["id_qmk_tapdance_5_dtap",  16, 23] },
+            { "label": "Tap+Hold",      "type": "keycode", "content": ["id_qmk_tapdance_5_thold", 16, 24] },
+            {
+              "label": "Term",
+              "type": "dropdown",
+              "content": ["id_qmk_tapdance_5_term", 16, 25],
+              "options": [
+                ["100 ms", 10], ["120 ms", 12], ["140 ms", 14], ["160 ms", 16], ["180 ms", 18],
+                ["200 ms", 20], ["220 ms", 22], ["240 ms", 24], ["260 ms", 26], ["280 ms", 28],
+                ["300 ms", 30], ["320 ms", 32], ["340 ms", 34], ["360 ms", 36], ["380 ms", 38],
+                ["400 ms", 40], ["420 ms", 42], ["440 ms", 44], ["460 ms", 46], ["480 ms", 48],
+                ["500 ms", 50]
+              ]
+            }
+          ]
+        },
+        {
+          "label": "TD5",
+          "content": [
+            { "label": "On Tap",        "type": "keycode", "content": ["id_qmk_tapdance_6_tap",   16, 26] },
+            { "label": "On Hold",       "type": "keycode", "content": ["id_qmk_tapdance_6_hold",  16, 27] },
+            { "label": "On Double Tap", "type": "keycode", "content": ["id_qmk_tapdance_6_dtap",  16, 28] },
+            { "label": "Tap+Hold",      "type": "keycode", "content": ["id_qmk_tapdance_6_thold", 16, 29] },
+            {
+              "label": "Term",
+              "type": "dropdown",
+              "content": ["id_qmk_tapdance_6_term", 16, 30],
+              "options": [
+                ["100 ms", 10], ["120 ms", 12], ["140 ms", 14], ["160 ms", 16], ["180 ms", 18],
+                ["200 ms", 20], ["220 ms", 22], ["240 ms", 24], ["260 ms", 26], ["280 ms", 28],
+                ["300 ms", 30], ["320 ms", 32], ["340 ms", 34], ["360 ms", 36], ["380 ms", 38],
+                ["400 ms", 40], ["420 ms", 42], ["440 ms", 44], ["460 ms", 46], ["480 ms", 48],
+                ["500 ms", 50]
+              ]
+            }
+          ]
+        },
+        {
+          "label": "TD6",
+          "content": [
+            { "label": "On Tap",        "type": "keycode", "content": ["id_qmk_tapdance_7_tap",   16, 31] },
+            { "label": "On Hold",       "type": "keycode", "content": ["id_qmk_tapdance_7_hold",  16, 32] },
+            { "label": "On Double Tap", "type": "keycode", "content": ["id_qmk_tapdance_7_dtap",  16, 33] },
+            { "label": "Tap+Hold",      "type": "keycode", "content": ["id_qmk_tapdance_7_thold", 16, 34] },
+            {
+              "label": "Term",
+              "type": "dropdown",
+              "content": ["id_qmk_tapdance_7_term", 16, 35],
+              "options": [
+                ["100 ms", 10], ["120 ms", 12], ["140 ms", 14], ["160 ms", 16], ["180 ms", 18],
+                ["200 ms", 20], ["220 ms", 22], ["240 ms", 24], ["260 ms", 26], ["280 ms", 28],
+                ["300 ms", 30], ["320 ms", 32], ["340 ms", 34], ["360 ms", 36], ["380 ms", 38],
+                ["400 ms", 40], ["420 ms", 42], ["440 ms", 44], ["460 ms", 46], ["480 ms", 48],
+                ["500 ms", 50]
+              ]
+            }
+          ]
+        },
+        {
+          "label": "TD7",
+          "content": [
+            { "label": "On Tap",        "type": "keycode", "content": ["id_qmk_tapdance_8_tap",   16, 36] },
+            { "label": "On Hold",       "type": "keycode", "content": ["id_qmk_tapdance_8_hold",  16, 37] },
+            { "label": "On Double Tap", "type": "keycode", "content": ["id_qmk_tapdance_8_dtap",  16, 38] },
+            { "label": "Tap+Hold",      "type": "keycode", "content": ["id_qmk_tapdance_8_thold", 16, 39] },
+            {
+              "label": "Term",
+              "type": "dropdown",
+              "content": ["id_qmk_tapdance_8_term", 16, 40],
+              "options": [
+                ["100 ms", 10], ["120 ms", 12], ["140 ms", 14], ["160 ms", 16], ["180 ms", 18],
+                ["200 ms", 20], ["220 ms", 22], ["240 ms", 24], ["260 ms", 26], ["280 ms", 28],
+                ["300 ms", 30], ["320 ms", 32], ["340 ms", 34], ["360 ms", 36], ["380 ms", 38],
+                ["400 ms", 40], ["420 ms", 42], ["440 ms", 44], ["460 ms", 46], ["480 ms", 48],
+                ["500 ms", 50]
+              ]
             }
           ]
         }

@@ -119,6 +119,7 @@ enum via_channel_id {
     id_qmk_usb_polling        = 13,  // V251108R1: BootMode/USB 모니터 전용 채널
     id_qmk_key_response       = 14,  // V251115R1: VIA 디바운스 프로필 제어 채널
     id_qmk_tapping            = 15,  // V251123R4: VIA TAPPING 제어 채널
+    id_qmk_tapdance           = 16,  // V251124R8: VIA TAPDANCE 제어 채널
 };
 
 enum via_qmk_backlight_value {
@@ -174,6 +175,57 @@ enum via_qmk_tapping_value {
     id_qmk_tapping_permissive_hold         = 2,
     id_qmk_tapping_hold_on_other_key_press = 3,
     id_qmk_tapping_retro_tapping           = 4,
+};
+
+// V251124R8: VIA TAPDANCE value ID 매핑
+enum via_qmk_tapdance_value {
+    id_qmk_tapdance_1_tap   = 1,
+    id_qmk_tapdance_1_hold  = 2,
+    id_qmk_tapdance_1_dtap  = 3,
+    id_qmk_tapdance_1_thold = 4,
+    id_qmk_tapdance_1_term  = 5,
+
+    id_qmk_tapdance_2_tap   = 6,
+    id_qmk_tapdance_2_hold  = 7,
+    id_qmk_tapdance_2_dtap  = 8,
+    id_qmk_tapdance_2_thold = 9,
+    id_qmk_tapdance_2_term  = 10,
+
+    id_qmk_tapdance_3_tap   = 11,
+    id_qmk_tapdance_3_hold  = 12,
+    id_qmk_tapdance_3_dtap  = 13,
+    id_qmk_tapdance_3_thold = 14,
+    id_qmk_tapdance_3_term  = 15,
+
+    id_qmk_tapdance_4_tap   = 16,
+    id_qmk_tapdance_4_hold  = 17,
+    id_qmk_tapdance_4_dtap  = 18,
+    id_qmk_tapdance_4_thold = 19,
+    id_qmk_tapdance_4_term  = 20,
+
+    id_qmk_tapdance_5_tap   = 21,
+    id_qmk_tapdance_5_hold  = 22,
+    id_qmk_tapdance_5_dtap  = 23,
+    id_qmk_tapdance_5_thold = 24,
+    id_qmk_tapdance_5_term  = 25,
+
+    id_qmk_tapdance_6_tap   = 26,
+    id_qmk_tapdance_6_hold  = 27,
+    id_qmk_tapdance_6_dtap  = 28,
+    id_qmk_tapdance_6_thold = 29,
+    id_qmk_tapdance_6_term  = 30,
+
+    id_qmk_tapdance_7_tap   = 31,
+    id_qmk_tapdance_7_hold  = 32,
+    id_qmk_tapdance_7_dtap  = 33,
+    id_qmk_tapdance_7_thold = 34,
+    id_qmk_tapdance_7_term  = 35,
+
+    id_qmk_tapdance_8_tap   = 36,
+    id_qmk_tapdance_8_hold  = 37,
+    id_qmk_tapdance_8_dtap  = 38,
+    id_qmk_tapdance_8_thold = 39,
+    id_qmk_tapdance_8_term  = 40,
 };
 
 // V251012R2: 커스텀 인디케이터 제어 값 ID
