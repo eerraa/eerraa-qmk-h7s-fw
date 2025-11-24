@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 // 펌웨어/보드 식별 정보
 // ---------------------------------------------------------------------------
-#define _DEF_FIRMWARE_VERSION       "V251125R1"   // V251125R1: VIA Tap Dance 동작 Vial 정합성 개선
+#define _DEF_FIRMWARE_VERSION       "V251125R2"   // V251125R2: KKUK 지연 설정 단위 정규화 및 Tap Dance 개선
 #define _DEF_BOARD_NAME             "BARAM-QMK-H7S-FW"
 
 
