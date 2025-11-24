@@ -6,11 +6,11 @@ BRICK60 펌웨어 안내
 
 1. 펌웨어 파일 구성
 
-   BRICK60-8K-V251123R1.uf2
+   BRICK60-V251124R6.uf2
      - BRICK60 본체에 올리는 펌웨어 파일입니다.
      - 이 버전부터 디바운스 모드와 딜레이를 VIA에서 실시간으로 조정할 수 있으므로, 과거처럼 DEF/EAG 두 종류의 이미지를 따로 배포하지 않습니다. 이 하나의 UF2 파일만 사용하면 됩니다.
 
-   BRICK60-8K-V251123R1.JSON
+   BRICK60-V251124R6.JSON
      - VIA(usevia.app)에서 BRICK60을 인식하고, 디바운스/USB 설정/기타 기능을 노출하기 위한 Draft Definition 파일입니다.
      - 키맵을 편집하기 전에 반드시 한 번 로드해야 합니다.
 
@@ -147,7 +147,7 @@ BRICK60 펌웨어 안내
 
    1) 브라우저에서 https://usevia.app 에 접속합니다.
    2) 상단의 SETTINGS 탭으로 이동한 뒤, "Show Design tab" 토글을 켭니다.
-   3) 새로 생긴 DESIGN 탭을 열고, 화면의 "Load Draft Definition" 버튼을 눌러 BRICK60-8K-V251123R1.JSON 파일을 불러옵니다.
+   3) 새로 생긴 DESIGN 탭을 열고, 화면의 "Load Draft Definition" 버튼을 눌러 BRICK60-V251124R6.JSON 파일을 불러옵니다.
    4) JSON 로드가 완료되면 CONFIGURE 탭으로 돌아가 키맵, 레이어, 매크로 등을 설정합니다.
    5) SYSTEM 메뉴에서 USB POLLING 및 USB 모니터링 옵션을, LIGHTING 메뉴에서 RGB 이펙트를 조정합니다.
    6) DEBOUNCE 메뉴에서 위에서 설명한 디바운스 모드와 시간을 설정합니다.
@@ -157,7 +157,7 @@ BRICK60 펌웨어 안내
    1) 키보드를 부트로더 모드로 전환합니다.
       - Bootmagic 리셋: ESC 키(매트릭스 0,0)를 누른 채 USB 케이블을 연결합니다.
       - VIA 리셋: VIA CONFIGURE → SYSTEM 메뉴에서 "Jump To BOOT" 버튼을 누릅니다.
-   2) PC에 새로운 이동식 디스크가 나타나면, BRICK60-8K-V251123R1.uf2 파일을 해당 디스크에 복사합니다.
+   2) PC에 새로운 이동식 디스크가 나타나면, BRICK60-V251124R6.uf2 파일을 해당 디스크에 복사합니다.
    3) 복사가 끝나고 디스크가 자동으로 사라지면, 플래싱이 완료되고 키보드는 새 펌웨어로 재시작합니다.
 
 5. EEPROM 초기화 및 키맵 백업 안내 (AUTO_FACTORY_RESET)
@@ -184,11 +184,11 @@ This document is the official guide for BRICK60 (STM32H7S with 8,000 Hz USB poll
 
 1. Firmware files
 
-   BRICK60-8K-V251123R1.uf2
+   BRICK60-V251124R6.uf2
      - The firmware image that you flash onto the BRICK60 itself.
      - From this version onward, debounce mode and delay can be adjusted in real time in VIA, so there is no longer a separate DEF / EAG image. A single UF2 file is used for all configurations.
 
-   BRICK60-8K-V251123R1.JSON
+   BRICK60-V251124R6.JSON
      - Draft Definition file used by VIA (usevia.app) so that BRICK60 is correctly recognized and its debounce / USB / other options appear.
      - You must load this file once before you start editing the keymap.
 
@@ -325,7 +325,7 @@ This document is the official guide for BRICK60 (STM32H7S with 8,000 Hz USB poll
 
    1) Visit https://usevia.app in a web browser.
    2) Open the SETTINGS tab at the top and enable "Show Design tab."
-   3) Open the new DESIGN tab, click "Load Draft Definition," and load the file BRICK60-8K-V251123R1.JSON.
+   3) Open the new DESIGN tab, click "Load Draft Definition," and load the file BRICK60-V251124R6.JSON.
    4) After the JSON has been loaded, go back to the CONFIGURE tab to edit keymaps, layers, and macros.
    5) Use the SYSTEM menu to adjust USB POLLING and USB monitoring, the LIGHTING menu to configure RGB effects, and the DEBOUNCE group to set the debounce modes and timings described above.
 
@@ -334,7 +334,7 @@ This document is the official guide for BRICK60 (STM32H7S with 8,000 Hz USB poll
    1) Put the keyboard into bootloader mode:
       - Bootmagic reset: hold the ESC key (matrix position 0,0) while plugging in the USB cable.
       - VIA reset: in VIA CONFIGURE → SYSTEM, click the "Jump To BOOT" button.
-   2) When a new removable drive appears on the host PC, copy BRICK60-8K-V251123R1.uf2 onto that drive.
+   2) When a new removable drive appears on the host PC, copy BRICK60-V251124R6.uf2 onto that drive.
    3) When the drive disappears automatically, flashing is complete and the keyboard restarts with the new firmware.
 
 5. EEPROM reset and keymap backup (AUTO_FACTORY_RESET)
@@ -349,7 +349,7 @@ This document is the official guide for BRICK60 (STM32H7S with 8,000 Hz USB poll
    1) Before changing firmware, open the VIA CONFIGURE tab while the keyboard is still running the old version.
    2) In the left-side menu, open the SAVE + LOAD section:
       - Click Save to export your current layout to a file (for example brick60.layout.json).
-   3) Flash the new firmware (BRICK60-8K-V251123R1.uf2). After the keyboard reboots, AUTO_FACTORY_RESET will run once and clear the EEPROM.
+   3) Flash the new firmware (BRICK60-V251124R6.uf2). After the keyboard reboots, AUTO_FACTORY_RESET will run once and clear the EEPROM.
    4) Open the VIA CONFIGURE tab again, go back to the SAVE + LOAD section, and click Load to import the layout file you saved earlier. Your previous layout will then be restored.
 
    The SYSTEM → CLEAN menu is still available for manual EEPROM reset when necessary. If the configuration seems broken while you remain on the same firmware version, you can use manual EEPROM clean as a last resort and then restore your saved layout using the same SAVE + LOAD procedure.
