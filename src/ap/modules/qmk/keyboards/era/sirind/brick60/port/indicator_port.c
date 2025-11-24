@@ -2,6 +2,7 @@
 
 #include "color.h"
 #include "eeconfig.h"
+#include "host.h"
 #include "led.h"
 #include "port.h"
 #include "rgblight.h"
@@ -55,6 +56,7 @@ static void indicator_apply_defaults(void)
 // V251012R2: USB HID 호스트 LED 이벤트를 QMK LED 파이프라인으로 전달한다.
 void usbHidSetStatusLed(uint8_t led_bits)
 {
+  host_keyboard_leds_update(led_bits);  // V251124R7: 호스트 LED 상태를 캐시에 반영해 Layer-Tap led_set 재동기화
   led_t host_state = {.raw = led_bits};
   rgblight_indicator_post_host_event(host_state);  // V251018R1: USB 인터럽트에서 rgblight_set 호출을 피하기 위해 큐잉
 }

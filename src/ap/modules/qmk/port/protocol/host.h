@@ -17,6 +17,7 @@ host_driver_t *host_get_driver(void);
 /* host driver interface */
 uint8_t host_keyboard_leds(void);
 led_t   host_keyboard_led_state(void);
+void    host_keyboard_leds_update(uint8_t led_state);  // V251124R7: USB HID LED 상태를 캐시해 탭/홀드 분기 시 재사용
 void    host_keyboard_send(report_keyboard_t *report);
 void    host_nkro_send(report_nkro_t *report);
 void    host_mouse_send(report_mouse_t *report);
