@@ -13,9 +13,9 @@ static rgblight_indicator_config_t indicator_config = {.raw = 0};
 enum
 {
   INTIGRITY80_INDICATOR_START_INDEX = 0,
-  INTIGRITY80_INDICATOR_END_INDEX   = 29,
+  INTIGRITY80_INDICATOR_END_INDEX   = 27,  // V251127R1: 실제 RGB 수량(0~27, 28개)로 보정
   INTIGRITY80_INDICATOR_LED_COUNT   = (INTIGRITY80_INDICATOR_END_INDEX - INTIGRITY80_INDICATOR_START_INDEX + 1),
-};  // V251125R3: INTIGRITY80 인디케이터는 RGB 0~29번을 고정 사용
+};  // V251127R1: INTIGRITY80 인디케이터는 RGB 0~27번(28개)을 고정 사용
 
 static const rgblight_indicator_range_t intigrity80_indicator_ranges[] = {
   [RGBLIGHT_INDICATOR_TARGET_OFF] = {.start = 0, .count = 0},
@@ -31,7 +31,7 @@ static const rgblight_indicator_range_t intigrity80_indicator_ranges[] = {
     .start = INTIGRITY80_INDICATOR_START_INDEX,
     .count = INTIGRITY80_INDICATOR_LED_COUNT,
   },
-};  // V251016R8: Caps/Scroll/Num 인디케이터 모두 0~29번 RGB를 공유
+};  // V251127R1: Caps/Scroll/Num 인디케이터 모두 0~27번 RGB를 공유
 
 _Static_assert(sizeof(rgblight_indicator_config_t) == sizeof(uint32_t),
                "EECONFIG out of spec.");  // V251012R3: 슬롯 크기 검증 유지
