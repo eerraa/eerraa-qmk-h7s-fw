@@ -42,7 +42,7 @@ static void indicator_via_save(void);
 static void indicator_apply_led_ranges(void);  // V251016R8: 인디케이터 대상별 LED 범위 등록
 static bool indicator_target_from_host(uint8_t target, led_t host_state);  // V251016R8: Brick60 전용 타깃 판별기
 
-EECONFIG_DEBOUNCE_HELPER(indicator, EECONFIG_USER_LED_CAPS, indicator_config);
+EECONFIG_DEBOUNCE_HELPER(indicator, EECONFIG_USER_INDICATOR, indicator_config);
 
 static void indicator_apply_defaults(void)
 {
