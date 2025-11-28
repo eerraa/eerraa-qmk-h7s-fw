@@ -14,11 +14,9 @@
 #define _DEF_ENABLE_MATRIX_TIMING_PROBE   0     // MATRIX 계측을 개발 빌드에서 강제 활성화하려면 정의
 #define _DEF_ENABLE_USB_HID_TIMING_PROBE  0     // HID 계측을 개발 빌드에서 강제 활성화하려면 정의
 #define _USE_HW_WS2812
-#define     HW_WS2812_MAX_CH        32
+#define     HW_WS2812_MAX_CH        33
 #define     HW_WS2812_RGB           2
-#define     HW_WS2812_RGB_CNT       30
-// #define     HW_WS2812_CAPS          0        // 더이상 사용되지 않음
-// #define     HW_WS2812_SCROLL        1        // 더이상 사용되지 않음
+#define     HW_WS2812_RGB_CNT       33
 #define AUTO_FACTORY_RESET_ENABLE   1 
 
 
@@ -58,7 +56,7 @@
 #ifdef TAPDANCE_ENABLE
 #  define TAP_DANCE_ENABLE
 #endif
-#define INDICATOR_ENABLE
+// #define INDICATOR_ENABLE
 
 
 // ---------------------------------------------------------------------------

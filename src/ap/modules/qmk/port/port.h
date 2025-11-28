@@ -14,8 +14,7 @@
 
 #define QMK_BUILDDATE   "2025-06-27-17:35:30"
 
-#define EECONFIG_USER_LED_CAPS            ((void *)((uint32_t)EECONFIG_USER_DATABLOCK +  0))  // 4B  // V251016R8: Brick60 인디케이터 슬롯 복원
-#define EECONFIG_USER_LED_SCROLL          ((void *)((uint32_t)EECONFIG_USER_DATABLOCK +  4))  // 4B
+#define EECONFIG_USER_INDICATOR           ((void *)((uint32_t)EECONFIG_USER_DATABLOCK +  0))  // 8B  // V251129R1: 통합 인디케이터 슬롯 (기존 CAPS/SCROLL 통합)
 #define EECONFIG_USER_KILL_SWITCH_LR      ((void *)((uint32_t)EECONFIG_USER_DATABLOCK +  8))  // 8B
 #define EECONFIG_USER_KILL_SWITCH_UD      ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 16))  // 8B
 #define EECONFIG_USER_KKUK                ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 24))  // 4B

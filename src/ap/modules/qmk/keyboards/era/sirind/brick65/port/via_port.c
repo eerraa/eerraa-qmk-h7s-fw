@@ -1,4 +1,4 @@
-#include "led_port.h"
+#include "indicator_port.h"
 #include "ver_port.h"
 #include "sys_port.h"
 
@@ -13,15 +13,15 @@ void via_custom_value_command_kb(uint8_t *data, uint8_t length)
   uint8_t *channel_id = &(data[1]);
 
 
-  if (*channel_id == id_qmk_led_caps_channel)
+  if (*channel_id == 0)
   {
-    via_qmk_led_command(0, data, length);
+    indicator_port_via_command(data, length);
     return;
   }
 
-  if (*channel_id == id_qmk_led_scroll_channel)
+  if (*channel_id == 1)
   {
-    via_qmk_led_command(1, data, length);
+    indicator_port_via_command(data, length);
     return;
   }
 
