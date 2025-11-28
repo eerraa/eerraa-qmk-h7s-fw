@@ -47,7 +47,8 @@ void led_init_ports(void)
 {
   // 1. Isolate Underglow (Index 2~32) from Indicators (Index 0, 1)
   // This ensures standard rgblight effects only play on LEDs 2+.
-  rgblight_set_effect_range(2, 33); 
+  // Total LEDs = 33. Indicators = 2. Underglow = 31.
+  rgblight_set_effect_range(2, 31); 
 
   // 2. Load Configs
   eeconfig_init_indicator_0();
@@ -193,16 +194,6 @@ static void indicator_via_set_value(uint8_t index, uint8_t *data)
   }
 
   if (indicator_config[index].raw == prev_raw) return;
-
-  // Immediate update
-  // We don't have a dedicated update function for this manual logic, 
-  // but led_update_ports is called on every host event. 
-  // To force an update now, we can re-trigger with current host state if we had access to it.
-  // Or just wait for next event? 
-  // Better: Trigger a manual update using cached host state if available, or just let the user toggle lock key.
-  // Actually, rgblight_indicator_update_config was used in BRICK60. 
-  // Here we can just call led_update_ports with current host state if we can get it.
-  // host_keyboard_leds() returns the state.
   
   led_t current_state;
   current_state.raw = host_keyboard_leds();

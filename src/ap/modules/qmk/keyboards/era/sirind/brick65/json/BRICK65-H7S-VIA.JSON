@@ -167,7 +167,7 @@
             {
               "label": "Indicator 2 Select",
               "type": "dropdown",
-              "content": ["id_qmk_custom_ind2_selec", 1, 1],
+              "content": ["id_qmk_custom_ind_selec", 1, 1],
               "options": [
                 ["Off", 0],
                 ["Caps Lock", 1],
@@ -180,13 +180,13 @@
               "label": "Indicator 2 Brightness",
               "type": "range",
               "options": [0, 255],
-              "content": ["id_qmk_custom_ind2_brightness", 1, 2]
+              "content": ["id_qmk_custom_ind_brightness", 1, 2]
             },
             {
               "showIf": "{id_qmk_custom_ind_selec} != 0",
               "label": "Indicator 2 Color",
               "type": "color",
-              "content": ["id_qmk_custom_ind2_color", 1, 3]
+              "content": ["id_qmk_custom_ind_color", 1, 3]
             }
           ]
         }
@@ -648,7 +648,7 @@
             {
               "label": "EEPROM Clean Confirm 2",
               "type": "toggle",
-              "content": ["id_qmk_system_reset_1", 9, 3]
+              "content": ["id_qmk_system_reset_1", 3, 3]
             },
             {
               "label": "Are you sure ?",
