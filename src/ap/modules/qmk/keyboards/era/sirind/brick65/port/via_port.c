@@ -12,8 +12,20 @@ static void via_handle_usb_polling_channel(uint8_t *data, uint8_t length);  // V
 
 void via_custom_value_command_kb(uint8_t *data, uint8_t length)
 {
+  if (data == NULL || length == 0U)
+  {
+    return;
+  }
+
   // data = [ command_id, channel_id, value_id, value_data ]
   uint8_t *command_id = &(data[0]);
+
+  if (length < 2U)
+  {
+    *command_id = id_unhandled;
+    return;  // V250310R5: command/channel 헤더가 없으면 보드별 VIA 채널을 라우팅하지 않는다.
+  }
+
   uint8_t *channel_id = &(data[1]);
 
   if (*channel_id == id_qmk_usb_polling)
@@ -93,7 +105,26 @@ void via_custom_value_command_kb(uint8_t *data, uint8_t length)
 
 static void via_handle_usb_polling_channel(uint8_t *data, uint8_t length)
 {
+  if (data == NULL || length == 0U)
+  {
+    return;
+  }
+
   uint8_t *command_id = &(data[0]);
+
+  if (length < 2U)
+  {
+    *command_id = id_unhandled;
+    return;  // V250310R5: USB polling 채널 헤더가 없으면 즉시 중단한다.
+  }
+
+#ifdef BOOTMODE_ENABLE
+  if (*command_id == id_custom_save)
+  {
+    via_qmk_usb_bootmode_command(data, length);  // V250310R5: save 명령은 payload 없이도 BootMode 경로로 전달한다.
+    return;
+  }
+#endif
 
   if (length < 4U)
   {
@@ -104,8 +135,7 @@ static void via_handle_usb_polling_channel(uint8_t *data, uint8_t length)
   uint8_t value_id = data[2];
 
 #ifdef BOOTMODE_ENABLE
-  if (*command_id == id_custom_save ||
-      value_id == id_qmk_usb_bootmode_select ||
+  if (value_id == id_qmk_usb_bootmode_select ||
       value_id == id_qmk_usb_bootmode_apply)
   {
     via_qmk_usb_bootmode_command(data, length);

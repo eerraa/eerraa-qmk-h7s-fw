@@ -38,6 +38,7 @@ static void indicator_via_set_value(uint8_t *data);
 static void indicator_via_save(void);
 static void indicator_apply_defaults(uint8_t index);
 static void indicator_render(uint8_t slot, bool active, rgb_led_t color);
+static bool indicator_via_color_value(uint8_t value_id);  // V250310R5: 색상 명령의 2바이트 payload 요구 여부 판별
 
 EECONFIG_DEBOUNCE_HELPER(indicator_0, EECONFIG_USER_INDICATOR, indicator_config[BRICK65_INDICATOR_SLOT_1]);
 EECONFIG_DEBOUNCE_HELPER(indicator_1, (void *)((uint32_t)EECONFIG_USER_INDICATOR + 4), indicator_config[BRICK65_INDICATOR_SLOT_2]);
@@ -81,6 +82,22 @@ static void indicator_render(uint8_t slot, bool active, rgb_led_t color)
   }
 
   ws2812SetColor(target, WS2812_COLOR(color.r, color.g, color.b));  // V260310R4: 공용 rgblight 프레임에 BRICK65 물리 인디케이터를 합성
+}
+
+static bool indicator_via_color_value(uint8_t value_id)
+{
+  switch (value_id)
+  {
+    case id_qmk_custom_ind_color:
+    case id_qmk_custom_ind_2_color:
+    {
+      return true;
+    }
+    default:
+    {
+      return false;
+    }
+  }
 }
 
 void usbHidSetStatusLed(uint8_t led_bits)
@@ -129,20 +146,44 @@ void led_update_ports(led_t led_state)
 
 void indicator_port_via_command(uint8_t *data, uint8_t length)
 {
-  (void)length;
+  if (data == NULL || length == 0U)
+  {
+    return;
+  }
 
   uint8_t *command_id = &(data[0]);
+
+  if (length < 2U)
+  {
+    *command_id = id_unhandled;
+    return;  // V250310R5: command/channel 헤더가 없으면 커스텀 인디케이터 채널을 해석하지 않는다.
+  }
 
   switch (*command_id)
   {
     case id_custom_set_value:
-    {
-      indicator_via_set_value(&(data[2]));
-      break;
-    }
     case id_custom_get_value:
     {
-      indicator_via_get_value(&(data[2]));
+      if (length < 4U)
+      {
+        *command_id = id_unhandled;
+        return;  // V250310R5: value_id와 첫 value_data 접근 전 최소 길이를 확인한다.
+      }
+
+      if (indicator_via_color_value(data[2]) && length < 5U)
+      {
+        *command_id = id_unhandled;
+        return;  // V250310R5: 색상 명령은 hue/sat 2바이트가 모두 필요하다.
+      }
+
+      if (*command_id == id_custom_set_value)
+      {
+        indicator_via_set_value(&(data[2]));
+      }
+      else
+      {
+        indicator_via_get_value(&(data[2]));
+      }
       break;
     }
     case id_custom_save:

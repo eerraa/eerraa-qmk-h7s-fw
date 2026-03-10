@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 // 펌웨어/보드 식별 정보
 // ---------------------------------------------------------------------------
-#define _DEF_FIRMWARE_VERSION       "V260310R4"   // V260310R4: BRICK65 rgblight dual-indicator 정리 및 WS2812 작업 버퍼 동기화 유지
+#define _DEF_FIRMWARE_VERSION       "V260311R1"   // V260311R1: Jump to Boot 응답 payload echo를 유지해 VIA mismatch 오류를 제거
 #define _DEF_BOARD_NAME             "ERA-QMK-H7S-FW"  // V251125R3: 사용자 표시용 보드명 ERA로 변경
 
 
