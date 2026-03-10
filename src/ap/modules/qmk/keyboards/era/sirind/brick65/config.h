@@ -14,9 +14,11 @@
 #define _DEF_ENABLE_MATRIX_TIMING_PROBE   0     // MATRIX 계측을 개발 빌드에서 강제 활성화하려면 정의
 #define _DEF_ENABLE_USB_HID_TIMING_PROBE  0     // HID 계측을 개발 빌드에서 강제 활성화하려면 정의
 #define _USE_HW_WS2812
-#define     HW_WS2812_MAX_CH        33
+#define     HW_WS2812_MAX_CH        32    // V260310R1: BRICK65는 indicator 2ch + underglow 30ch 총 32채널
+#define     HW_WS2812_CAPS          0
+#define     HW_WS2812_SCROLL        1
 #define     HW_WS2812_RGB           2
-#define     HW_WS2812_RGB_CNT       33
+#define     HW_WS2812_RGB_CNT       30    // V260310R1: rgblight 드라이버는 물리 2번부터 underglow 30개만 제어
 #define AUTO_FACTORY_RESET_ENABLE   1 
 
 
@@ -56,7 +58,7 @@
 #ifdef TAPDANCE_ENABLE
 #  define TAP_DANCE_ENABLE
 #endif
-// #define INDICATOR_ENABLE
+#define INDICATOR_ENABLE            // V260310R4: BRICK65도 공용 rgblight 인디케이터 경로를 사용
 
 
 // ---------------------------------------------------------------------------
@@ -68,7 +70,8 @@
 #define RGBLIGHT_DEFAULT_ON         true
 #define RGBLIGHT_DEFAULT_HUE        0
 #define RGBLIGHT_DEFAULT_SAT        0
-#define RGBLIGHT_DEFAULT_VAL        128
+#define RGBLIGHT_DEFAULT_VAL        191   // V260310R3: BRICK65 underglow 기본 밝기를 white 75%로 상향
+#define RGBLIGHT_INDICATOR_SLOT_COUNT 2   // V260310R4: BRICK65는 indicator 2개를 독립 슬롯으로 운용
 #define RGBLIGHT_LED_COUNT          HW_WS2812_RGB_CNT
 #define RGBLIGHT_LIMIT_VAL          255
 #define RGBLIGHT_SAT_STEP           8

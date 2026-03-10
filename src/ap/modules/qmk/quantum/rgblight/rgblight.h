@@ -191,7 +191,12 @@ enum rgblight_indicator_target {
     RGBLIGHT_INDICATOR_TARGET_NUM    = 3,
 };
 
+#ifndef RGBLIGHT_INDICATOR_SLOT_COUNT
+#    define RGBLIGHT_INDICATOR_SLOT_COUNT 1
+#endif
+
 typedef bool (*rgblight_indicator_target_callback_t)(uint8_t target, led_t host_state);  // V251016R8: 키보드별 타깃 판별 콜백
+typedef void (*rgblight_indicator_render_callback_t)(uint8_t slot, bool active, rgb_led_t color);  // V260310R4: 키보드별 물리 인디케이터 렌더 콜백
 
 typedef union {
     uint32_t raw;
@@ -209,10 +214,13 @@ typedef struct {
 } rgblight_indicator_range_t;  // V251016R8: 인디케이터 대상별 LED 범위 정보
 
 void rgblight_indicator_update_config(rgblight_indicator_config_t config);
+void rgblight_indicator_update_config_at(uint8_t slot, rgblight_indicator_config_t config);  // V260310R4: 멀티 슬롯 보드용 인디케이터 구성 갱신
 void rgblight_indicator_apply_host_led(led_t host_led_state);
 void rgblight_indicator_post_host_event(led_t host_led_state);  // V251018R1: IRQ에서 전달된 호스트 LED 이벤트 큐
 void rgblight_indicator_set_target_callback(rgblight_indicator_target_callback_t callback);  // V251016R8: 포트 콜백 등록
 void rgblight_indicator_set_ranges(const rgblight_indicator_range_t *ranges, uint8_t length);  // V251016R8: 키보드별 범위 전달
+void rgblight_indicator_set_ranges_at(uint8_t slot, const rgblight_indicator_range_t *ranges, uint8_t length);  // V260310R4: 슬롯별 범위 전달
+void rgblight_indicator_set_render_callback(rgblight_indicator_render_callback_t callback);  // V260310R4: 키보드별 물리 인디케이터 출력 등록
 // V251012R3: HSV → RGB 변환 헬퍼를 외부에서도 재사용할 수 있도록 선언
 RGB rgblight_hsv_to_rgb(HSV hsv);
 

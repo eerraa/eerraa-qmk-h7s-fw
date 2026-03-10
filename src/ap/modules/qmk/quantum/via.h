@@ -233,6 +233,9 @@ enum via_qmk_custom_indicator_value {
     id_qmk_custom_ind_selec      = 1,
     id_qmk_custom_ind_brightness = 2,
     id_qmk_custom_ind_color      = 3,
+    id_qmk_custom_ind_2_selec      = 4,  // V260310R1: BRICK65 Indicator 2는 custom channel 내 별도 value ID 사용
+    id_qmk_custom_ind_2_brightness = 5,
+    id_qmk_custom_ind_2_color      = 6,
 };
 
 // Can be called in an overriding via_init_kb() to test if keyboard level code usage of

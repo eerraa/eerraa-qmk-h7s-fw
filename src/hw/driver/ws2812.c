@@ -202,6 +202,7 @@ bool ws2812Refresh(void)
       uint8_t *prev_dma_buf = ws2812_dma_buf;
       ws2812_dma_buf = ws2812_work_buf;
       ws2812_work_buf = prev_dma_buf;  // V251116R1: DMA 버퍼와 CPU 버퍼를 스왑하여 전송 중 덮어쓰기 차단
+      memcpy(ws2812_work_buf, ws2812_dma_buf, WS2812_BIT_BUF_LEN);  // V260310R4: 다음 부분 갱신도 현재 프레임을 기준으로 누적되도록 작업 버퍼를 즉시 동기화
       return true;  // V251018R1: DMA BUSY/ERROR 시 재시도 후 성공 시점만 반환
     }
   }
