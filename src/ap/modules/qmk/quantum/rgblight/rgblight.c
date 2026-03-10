@@ -157,6 +157,7 @@ static rgblight_indicator_state_t rgblight_indicator_state[RGBLIGHT_INDICATOR_SL
 static rgblight_indicator_render_callback_t rgblight_indicator_render_callback = NULL;  // V260310R4: BRICK65 물리 인디케이터 렌더 경로
 
 static void rgblight_sethsv_noeeprom_old(uint8_t hue, uint8_t sat, uint8_t val);  // V251018R5: Pulse 제어 블록에서 재사용
+void rgblight_sethsv_eeprom_helper(uint8_t hue, uint8_t sat, uint8_t val, bool write_to_eeprom);  // V260310R5: 모드 전환 보정 경로에서 선행 참조
 
 #if defined(RGBLIGHT_EFFECT_PULSE_ON_PRESS) || defined(RGBLIGHT_EFFECT_PULSE_OFF_PRESS) || defined(RGBLIGHT_EFFECT_PULSE_ON_PRESS_HOLD) || defined(RGBLIGHT_EFFECT_PULSE_OFF_PRESS_HOLD)
 typedef struct {
@@ -371,6 +372,32 @@ static inline void rgblight_effect_pulse_evaluate_output(void) {}
 static volatile bool    rgblight_host_led_pending    = false;  // V251018R1: USB IRQ에서 전달된 호스트 LED 버퍼 상태
 static volatile uint8_t rgblight_host_led_raw_buffer = 0;
 static bool             rgblight_render_pending      = false;  // V251018R1: rgblight_set 실행을 주 루프에서 단일 처리
+
+static uint8_t rgblight_mode_transition_sat(uint8_t old_mode, uint8_t new_mode, uint8_t sat)
+{
+    if (sat != 0) {
+        return sat;
+    }
+
+    if (mode_base_table[old_mode] != RGBLIGHT_MODE_STATIC_LIGHT) {
+        return sat;
+    }
+
+    uint8_t new_base_mode = mode_base_table[new_mode];
+
+#ifdef RGBLIGHT_EFFECT_RAINBOW_MOOD
+    if (new_base_mode == RGBLIGHT_MODE_RAINBOW_MOOD) {
+        return UINT8_MAX;  // V260310R5: Solid Color 흰색(채도 0)에서 Rainbow Mood 진입 시 즉시 다색 효과가 보이도록 채도 복원
+    }
+#endif
+#ifdef RGBLIGHT_EFFECT_RAINBOW_SWIRL
+    if (new_base_mode == RGBLIGHT_MODE_RAINBOW_SWIRL) {
+        return UINT8_MAX;  // V260310R5: Solid Color 흰색(채도 0)에서 Rainbow Swirl 진입 시 즉시 다색 효과가 보이도록 채도 복원
+    }
+#endif
+
+    return sat;
+}
 
 static void rgblight_request_render(void)
 {
@@ -994,6 +1021,9 @@ uint8_t rgblight_get_mode(void) {
 }
 
 void rgblight_mode_eeprom_helper(uint8_t mode, bool write_to_eeprom) {
+    uint8_t prev_mode = rgblight_config.mode;
+    uint8_t next_sat;
+
     if (!rgblight_config.enable) {
         return;
     }
@@ -1019,7 +1049,8 @@ void rgblight_mode_eeprom_helper(uint8_t mode, bool write_to_eeprom) {
 #ifdef RGBLIGHT_USE_TIMER
     animation_status.restart = true;
 #endif
-    rgblight_sethsv_noeeprom(rgblight_config.hue, rgblight_config.sat, rgblight_config.val);
+    next_sat = rgblight_mode_transition_sat(prev_mode, rgblight_config.mode, rgblight_config.sat);
+    rgblight_sethsv_eeprom_helper(rgblight_config.hue, next_sat, rgblight_config.val, write_to_eeprom);
 }
 
 void rgblight_mode(uint8_t mode) {
