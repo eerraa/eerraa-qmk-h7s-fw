@@ -41,6 +41,7 @@ static void indicator_via_set_value(uint8_t *data);
 static void indicator_via_save(void);
 static void indicator_apply_led_ranges(void);  // V251016R8: 인디케이터 대상별 LED 범위 등록
 static bool indicator_target_from_host(uint8_t target, led_t host_state);  // V251016R8: Brick60 전용 타깃 판별기
+static bool indicator_via_color_value(uint8_t value_id);  // V250310R5: 색상 명령의 2바이트 payload 요구 여부 판별
 
 EECONFIG_DEBOUNCE_HELPER(indicator, EECONFIG_USER_INDICATOR, indicator_config);
 
@@ -114,22 +115,61 @@ static void indicator_apply_led_ranges(void)
   rgblight_indicator_set_ranges(brick60_indicator_ranges, range_count);  // V251016R8: Caps/Scroll/Num 범위를 rgblight에 전달
 }
 
+static bool indicator_via_color_value(uint8_t value_id)
+{
+  switch (value_id)
+  {
+    case id_qmk_custom_ind_color:
+    {
+      return true;
+    }
+    default:
+    {
+      return false;
+    }
+  }
+}
+
 void indicator_port_via_command(uint8_t *data, uint8_t length)
 {
-  (void)length;
+  if (data == NULL || length == 0U)
+  {
+    return;
+  }
 
   uint8_t *command_id = &(data[0]);
+
+  if (length < 2U)
+  {
+    *command_id = id_unhandled;
+    return;  // V250310R5: command/channel 헤더가 없으면 커스텀 인디케이터 채널을 해석하지 않는다.
+  }
 
   switch (*command_id)
   {
     case id_custom_set_value:
-    {
-      indicator_via_set_value(&(data[2]));
-      break;
-    }
     case id_custom_get_value:
     {
-      indicator_via_get_value(&(data[2]));
+      if (length < 4U)
+      {
+        *command_id = id_unhandled;
+        return;  // V250310R5: value_id와 첫 value_data 접근 전 최소 길이를 확인한다.
+      }
+
+      if (indicator_via_color_value(data[2]) && length < 5U)
+      {
+        *command_id = id_unhandled;
+        return;  // V250310R5: 색상 명령은 hue/sat 2바이트가 모두 필요하다.
+      }
+
+      if (*command_id == id_custom_set_value)
+      {
+        indicator_via_set_value(&(data[2]));
+      }
+      else
+      {
+        indicator_via_get_value(&(data[2]));
+      }
       break;
     }
     case id_custom_save:

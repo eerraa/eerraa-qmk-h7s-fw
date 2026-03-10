@@ -1,6 +1,6 @@
 #include "quantum.h"
 #include "usb.h"                                   // V251112R5: VIA EEPROM 클리어 시 BootMode 기본값 적용
-#include "reset.h"                                 // V251112R4: VIA EEPROM CLEAR 즉시 리셋 UX
+#include "bootloader.h"                            // V250310R6: VIA CLEAN 이후 응답 송신 보장 리셋 래퍼
 #include "eeprom_auto_factory_reset.h"             // V251112R4: AUTO_FACTORY_RESET/VIA 센티넬 공용화
 #include "qmk/quantum/eeconfig.h"                  // V251112R3: AUTO_FACTORY_RESET/VIA 공용 초기화 루틴
 #include "qmk/port/usb_monitor.h"                  // V251112R5: USB 모니터 기본값 적용
@@ -233,7 +233,10 @@ void eeprom_req_clean(void)
   }
 
   logPrintf("[  ] VIA EEPROM clear : rebooting to apply defaults\n");
-  resetToReset();
+  if (mcu_reset_deferred() != true)
+  {
+    mcu_reset();                                                   // V250310R6: deferred 예약 실패 시 기존 리셋 경로로 폴백
+  }
 #else
   logPrintf("[!] VIA EEPROM clear : AUTO_FACTORY_RESET support disabled\n");
 #endif
