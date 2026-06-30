@@ -44,6 +44,15 @@ cmake --build build -j10
 - 별도의 **빌드 테스트 실행 명령**이 없다면 빌드 테스트는 생략합니다.
 - UF2 변환은 CMake 타깃 내부에서 자동으로 처리됩니다.
 
+## 6-1. 개발 도구 환경
+- 현재 WSL 환경은 `/home/theguru/.local/bin`이 `PATH` 앞쪽에 포함되도록 설정되어 있습니다.
+- `fd`와 `bat`은 각각 `/usr/bin/fdfind`, `/usr/bin/batcat`을 가리키는 심볼릭 링크로 설정되어 있습니다.
+- 저장소 탐색은 기본적으로 `rg`와 `fd`를 우선 사용합니다.
+- JSON/VIA 파일 검증은 `jq`를 우선 사용하고, 필요 시 Python 표준 JSON 파서로 대체합니다.
+- 소스 열람은 필요 시 `bat`을 사용할 수 있으며, Git diff 확인은 `delta`가 설치된 환경임을 전제로 합니다.
+- CMake 반복 빌드는 필요 시 `ninja-build`와 `ccache`를 활용할 수 있습니다. 기존 빌드 명령을 바꿀 때는 사용자 요청 또는 작업 목적에 맞는 경우로 제한합니다.
+- 포맷/정적 분석 도구로 `clang-format`, `clang-tidy`, `shellcheck`, `shfmt`, `dos2unix`, `universal-ctags`를 사용할 수 있습니다.
+
 ## 7. 디렉터리 힌트
 - `src/` : 펌웨어 소스 및 라이브러리 전반
 - `src/ap/` : 애플리케이션 계층과 QMK 포팅
