@@ -13,7 +13,7 @@
 | `src/hw/driver/usb/usb.h` | `usbInstabilityLoad/Store/IsEnabled` | 런타임 토글 캐시와 빌드 가드를 정의합니다. |
 | `src/hw/driver/usb/usb.c` | `usbInstability*`, `usbRequestBootModeDowngrade()`, `usbProcess()` | VIA 토글 캐시, 다운그레이드 큐, 메인 루프 상태 머신을 담당합니다. |
 | `src/hw/driver/usb/usb_hid/usbd_hid.c` | `usbHidMonitor*` | SOF ISR/백그라운드 감시, 점수 계산, 이벤트 윈도우, BootMode 다운그레이드 요청. |
-| `src/ap/ap.c` | `usbProcess()`, `usbHidMonitorBackgroundTick()` | 메인 루프에서 큐 상태와 SOF 누락 감시를 주기적으로 호출합니다. |
+| `src/ap/ap.c` | `usbProcess()`, `usbHidMonitorBackgroundService()` | 메인 루프에서 큐 상태와 SOF 누락 감시를 주기적으로 호출합니다. 백그라운드 감시는 V251124R1 래퍼를 통해 모니터 OFF 시 `micros()` 취득 없이 조기 리턴합니다. |
 
 > `USB_MONITOR_ENABLE`이 정의되지 않은 빌드에서는 모든 API가 스텁으로 치환되며, VIA UI에서 해당 항목을 숨기는 것이 권장됩니다.
 
@@ -34,10 +34,11 @@ USB SOF ISR (8000 Hz)
 
 apMain()
   ↳ usbProcess()                         // 다운그레이드 큐 처리, 저장/리셋 실행
-  ↳ usbHidMonitorBackgroundTick(micros())
-      ↳ usbHidMonitorRefreshEventWindows()
-      ↳ usbHidMonitorTrackEnumeration()
-      ↳ usbHidMonitorProcessDelta() (SOF 누락 감지)
+  ↳ usbHidMonitorBackgroundService()     // V251124R1: 모니터 OFF면 micros() 취득 없이 조기 리턴
+      ↳ usbHidMonitorBackgroundTick(micros())
+          ↳ usbHidMonitorRefreshEventWindows()
+          ↳ usbHidMonitorTrackEnumeration()
+          ↳ usbHidMonitorProcessDelta() (SOF 누락 감지)
 ```
 - SOF ISR 경로는 `USB_MONITOR_ENABLE`과 `usbInstabilityIsEnabled()`가 모두 true일 때만 동작합니다.
 - 백그라운드 틱은 약 1 kHz 주기로 호출되어, 장시간 SOF가 중단되거나 USB 장치가 재열거되는 경우를 감시합니다.
@@ -65,7 +66,7 @@ apMain()
 | 이벤트 | 발생 조건 | 다운그레이드 경로 |
 | --- | --- | --- |
 | `USB_MONITOR_EVENT_SOF` | SOF 간격이 허용치보다 크거나 SOF가 멈춤 | 즉시 ARM/COMMIT 상태 머신으로 진입합니다. |
-| `USB_MONITOR_EVENT_ENUM` | 구성 이전에 세 번 연속 detach (열거 실패) | 백그라운드 틱에서 감지 후 `usbRequestBootModeDowngrade()` 호출. |
+| `USB_MONITOR_EVENT_ENUM` | 구성(CONFIGURED) 도달 실패 타임아웃(`USB_ENUM_MONITOR_ATTEMPT_TIMEOUT_US`)이 만료될 때마다 `fail_score`가 증가하고, `USB_ENUM_MONITOR_FAIL_THRESHOLD`(3) 도달 시 트리거. CONFIGURED 상태가 유지되면 점수가 감쇠하며 회복됩니다. | 백그라운드 틱에서 감지 후 `usbRequestBootModeDowngrade()` 호출. |
 | `USB_MONITOR_EVENT_SPEED` | 1초 내 3회 이상 속도 재협상 | Persistent 점수가 임계에 도달하면 다운그레이드. |
 | `USB_MONITOR_EVENT_SUSPEND` | 1.5초 내 3회 이상 Selective Suspend | Persistent 점수가 임계에 도달하면 다운그레이드. |
 
@@ -84,7 +85,7 @@ apMain()
 | `[  ] USB Monitor : ON/OFF` | EEPROM 로드 결과. VIA에서 상태가 올바르게 반영되는지 확인합니다. |
 | `[!] USB Monitor downgrade (SOF/SPEED/SUSPEND/ENUM)` | 해당 이벤트가 임계치를 넘었습니다. 케이블, 허브, 호스트 전원 관리 설정을 점검하세요. |
 | `[!] USB Poll 모드 저장 실패` | EEPROM 쓰기 실패. `usbBootModeSaveAndReset()` 경로를 확인합니다. |
-| `[!] USB Monitor Toggle -> ...` | VIA 토글이 성공적으로 저장되었습니다. |
+| `[  ] USB Monitor Toggle -> ...` | VIA 토글이 성공적으로 저장되었습니다. |
 
 ### 운영 체크리스트
 1. 모니터를 끌 때는 VIA JSON에서도 "Auto downgrade" 항목을 숨겨 혼선을 방지합니다.

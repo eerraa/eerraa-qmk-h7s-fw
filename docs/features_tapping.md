@@ -1,19 +1,19 @@
 # TAPPING_TERM 런타임 변경 가이드
 
 ## 1. 목적과 범위
-- Brick60-H7S에서 VIA를 통해 TAPPING_TERM(탭-홀드 분기 시간)과 관련 옵션(Per­missive Hold, Hold on Other Key Press, Retro Tapping)을 런타임으로 조정하는 기능을 설명합니다.
-- 대상 모듈: `src/ap/modules/qmk/port/tapping_term.{c,h}`, `src/ap/modules/qmk/keyboards/era/sirind/brick60/port/via_port.c`, `src/ap/modules/qmk/keyboards/era/sirind/brick60/json/BRICK60-H7S-VIA.JSON`, `src/ap/modules/qmk/port/eeconfig_port.c`, `src/ap/modules/qmk/quantum/action_tapping.c`, `src/ap/modules/qmk/quantum/action.c`, `src/ap/modules/qmk/quantum/process_keycode/*`의 TAPPING_TERM 소비 경로.
+- 전 보드 공통 기능으로, VIA를 통해 TAPPING_TERM(탭-홀드 분기 시간)과 관련 옵션(Per­missive Hold, Hold on Other Key Press, Retro Tapping)을 런타임으로 조정하는 기능을 설명합니다. `G_TERM_ENABLE`은 may65, intigrity80, brick60, brick65, sculpturei 전 보드의 `config.h`에 정의되어 있으며, MAY65 등 다른 보드에도 동일하게 적용됩니다.
+- 대상 모듈: `src/ap/modules/qmk/port/tapping_term.{c,h}`, 각 키보드의 `port/via_port.c`와 VIA JSON(예: brick60의 `src/ap/modules/qmk/keyboards/era/sirind/brick60/port/via_port.c`, `src/ap/modules/qmk/keyboards/era/sirind/brick60/json/BRICK60-H7S-VIA.JSON`), `src/ap/modules/qmk/port/eeconfig_port.c`, `src/ap/modules/qmk/quantum/action_tapping.c`, `src/ap/modules/qmk/quantum/action.c`, `src/ap/modules/qmk/quantum/process_keycode/*`의 TAPPING_TERM 소비 경로.
 
 ## 2. 구성 파일 & 빌드 매크로
 | 경로 | 심볼/함수 | 설명 |
 | --- | --- | --- |
-| `src/ap/modules/qmk/keyboards/era/sirind/brick60/config.h` | `G_TERM_ENABLE`, `TAPPING_TERM_PER_KEY`, `PERMISSIVE_HOLD_PER_KEY`, `HOLD_ON_OTHER_KEY_PRESS_PER_KEY`, `RETRO_TAPPING_PER_KEY` | Brick60 빌드에서 TAPPING_TERM 런타임 제어를 활성화하고 QMK의 per-key 훅을 사용하도록 강제합니다. |
+| 각 키보드 `config.h` (예: `src/ap/modules/qmk/keyboards/era/sirind/brick60/config.h`) | `G_TERM_ENABLE`, `TAPPING_TERM_PER_KEY`, `PERMISSIVE_HOLD_PER_KEY`, `HOLD_ON_OTHER_KEY_PRESS_PER_KEY`, `RETRO_TAPPING_PER_KEY` | 전 보드(may65, intigrity80, brick60, brick65, sculpturei) 빌드에서 TAPPING_TERM 런타임 제어를 활성화하고 QMK의 per-key 훅을 사용하도록 강제합니다. |
 | `src/ap/modules/qmk/qmk.c` | `tapping_term_init()` | QMK 초기화 시 EEPROM을 읽어 런타임 상태로 반영합니다. |
 | `src/ap/modules/qmk/port/tapping_term.{c,h}` | `tapping_term_handle_via_command()`, `tapping_term_sync_state_from_storage()` | VIA 명령 처리, 값 정규화, 런타임 상태/EEPROM 저장소 동기화 핵심 로직. |
 | `src/ap/modules/qmk/port/port.h` | `EECONFIG_USER_TAPPING_TERM` | USER 데이터 블록 내 TAPPING_TERM 저장 슬롯(오프셋 +52, 12B). |
 | `src/ap/modules/qmk/port/eeconfig_port.c` | `tapping_term_storage_apply_defaults()`, `tapping_term_storage_flush()` | EEPROM 초기화 경로(수동/자동 초기화 포함)에서 기본값을 기록하고 즉시 저장합니다. |
-| `src/ap/modules/qmk/keyboards/era/sirind/brick60/port/via_port.c` | `via_custom_value_command_kb()` | VIA 커스텀 채널 분기. `id_qmk_tapping`(채널 15)으로 유입된 명령을 `tapping_term_handle_via_command()`로 라우팅합니다. |
-| `src/ap/modules/qmk/keyboards/era/sirind/brick60/json/BRICK60-H7S-VIA.JSON` | `TAPPING` 섹션 | VIA UI에 TAPPING_TERM dropdown(100~500ms, 20ms 스텝)과 옵션 토글을 노출합니다. |
+| 각 키보드 `port/via_port.c` (예: `src/ap/modules/qmk/keyboards/era/sirind/brick60/port/via_port.c`) | `via_custom_value_command_kb()` | VIA 커스텀 채널 분기. `id_qmk_tapping`(채널 15)으로 유입된 명령을 `tapping_term_handle_via_command()`로 라우팅합니다. |
+| 각 키보드 VIA JSON (예: `src/ap/modules/qmk/keyboards/era/sirind/brick60/json/BRICK60-H7S-VIA.JSON`) | `TAPPING` 섹션 | VIA UI에 TAPPING_TERM dropdown(100~500ms, 20ms 스텝)과 옵션 토글을 노출합니다. |
 
 ## 3. EEPROM 슬롯 & 데이터 구조
 | 심볼/크기 | 오프셋 (`EECONFIG_USER_DATABLOCK` 기준) | 필드 | 설명 |

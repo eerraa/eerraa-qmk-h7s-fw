@@ -43,7 +43,7 @@
 ## 4. 테스트 가이드 요약
 1. `brick60` 키보드 설정으로 빌드 후 보드 플래시.
 2. 부팅 직후 `cli eeprom info` 실행 → 큐 및 클린업 초기값 확인.
-3. VIA에서 `docs/brick60.layout.json` 업로드 후 부팅 시 출력되는 `[I2C] ready wait summary ...`를 기록하고, `cli eeprom info`의 `ready wait count/max/last`가 기대대로 증가하는지 점검.
+3. VIA에서 `src/ap/modules/qmk/keyboards/era/sirind/brick60/json/BRICK60-H7S-VIA.JSON` 업로드 후 부팅 시 출력되는 `[I2C] ready wait summary ...`를 기록하고, `cli eeprom info`의 `ready wait count/max/last`가 기대대로 증가하는지 점검.
 4. 필요 시 `cli eeprom write`로 AUTO_FACTORY_RESET 센티넬을 손상시키고 전원을 재투입, 재부팅 과정에서 큐가 안전하게 비워지는지 확인.
 5. 내부 플래시 에뮬 빌드가 필요한 경우 `EEPROM_CHIP_EMUL` 설정으로 동일 절차를 반복해 Clean-up 계측이 갱신되는지 검증.
 

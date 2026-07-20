@@ -4,11 +4,11 @@
 
 1. 펌웨어 파일 구성
 
-   키보드이름-V251127R1.uf2
+   키보드이름-V260720R1.uf2
      - 키보드 본체에 올리는 펌웨어 파일입니다.
      - 디바운스 모드/딜레이를 VIA에서 실시간 조정할 수 있으므로 추가 변형 이미지는 제공하지 않습니다. 이 하나의 UF2만 사용하면 됩니다.
 
-   키보드이름-VIA-V251127R1.JSON
+   키보드이름-VIA-V260720R1.JSON
      - VIA(usevia.app)에서 키보드를 인식하고, 디바운스/USB 설정/기타 기능을 노출하기 위한 Draft Definition 파일입니다.
      - 키맵을 편집하기 전에 반드시 한 번 로드해야 합니다.
 
@@ -30,6 +30,7 @@
    - QMK 기본 RGB 이펙트(솔리드/브리딩/레인보우/스네이크/나이트/그라데이션/트윙클 등)에 더해 Pulse on/off Press (Hold 포함) 4종을 추가했습니다.
    - VIA CONFIGURE → LIGHTING에서 Effect를 선택하고, Pulse on/off 계열은 Effect Speed로 속도를 조절합니다.
    - Velocikey 토글을 켜면 Snake/Knight/Rainbow/Twinkle 등이 입력 속도에 따라 가속됩니다.
+   - V260720R1부터 MAY65는 언더글로우(underglow) 기본값이 꺼짐(OFF)입니다. VIA CONFIGURE → LIGHTING에서 켤 수 있습니다.
 
 2-4. SOCD (Kill Switch)
 
@@ -133,11 +134,11 @@ Firmware Guide
 
 1. Firmware package contents
 
-   KeyboardName-V251127R1.uf2
+   KeyboardName-V260720R1.uf2
      - Flash this UF2 onto the keyboard.
      - Debounce mode/delay are runtime-configurable in VIA, so no alternate images are shipped—use this single UF2.
 
-   KeyboardName-VIA-V251127R1.JSON
+   KeyboardName-VIA-V260720R1.JSON
      - VIA Draft Definition so the keyboard is recognized and USB/debounce/feature controls appear.
      - Load it once before editing the keymap.
 
@@ -159,6 +160,7 @@ Firmware Guide
    - Includes all stock QMK effects plus four extra Pulse on/off Press (with Hold variants).
    - VIA CONFIGURE → LIGHTING: pick Effect; adjust Effect Speed for Pulse modes.
    - Velocikey toggle accelerates effects like Snake/Knight/Rainbow/Twinkle based on typing speed.
+   - Starting with V260720R1, underglow is OFF by default on MAY65; turn it on in VIA CONFIGURE → LIGHTING.
 
 2-4. SOCD (Kill Switch)
 

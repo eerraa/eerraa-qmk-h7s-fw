@@ -24,9 +24,9 @@ hwInit()
   ↳ eepromInit() / eeprom_init()                  // QMK EEPROM 베이스라인
   ↳ bootmode_init()                              // EEPROM 범위 밖 값은 즉시 기본값으로 갱신
   ↳ usb_monitor_init()
-  ↳ eepromAutoFactoryResetCheck() (선택)                // AUTO_FACTORY_RESET_ENABLE일 때만
-  ↳ usbBootModeLoad()                            // EEPROM → RAM 캐시
-  ↳ usbInstabilityLoad()
+  ↳ hwRunFactoryResetWithRetry()                 // V251124R6: eepromAutoFactoryResetCheck()를 최대 3회 재시도, 실패 시 LED 점멸 + eeprom_init() 재동기화 (src/hw/hw.c:34-55)
+  ↳ usbBootModeLoad()                            // factory_reset_ok일 때만 실행, EEPROM → RAM 캐시 (src/hw/hw.c:110-122)
+  ↳ usbInstabilityLoad()                         // factory_reset_ok일 때만 실행
   ↳ usbInit()/usbBegin()
 
 apMain()
@@ -63,7 +63,7 @@ apMain()
 | 위치 | 책임 |
 | --- | --- |
 | `src/ap/modules/qmk/port/eeconfig_port.c` | USER 데이터가 재초기화될 때 `usbBootModeApplyDefaults()`를 호출해 슬롯을 기본값으로 채우고, 플래그/쿠키도 갱신합니다. |
-| `src/hw/driver/eeprom_auto_factory_reset.c` | AUTO_FACTORY_RESET_ENABLE 빌드에서 EEPROM을 포맷한 뒤 `usbBootModeApplyDefaults()`를 호출합니다. |
+| `src/hw/driver/eeprom_auto_factory_reset.c` | AUTO_FACTORY_RESET_ENABLE 빌드에서 EEPROM을 포맷한 뒤 `eeprom_apply_factory_defaults(true)`를 호출합니다. 기본값은 `eeconfig_init_user_datablock()` 경로로 기록되며, `usbBootModeApplyDefaults()` 직접 호출은 `EECONFIG_USER_DATA_SIZE == 0`일 때의 백업 경로입니다. (V251114R4) |
 
 ## 5. 데이터 구조
 ### 5.1 `UsbBootMode_t` ( `src/hw/driver/usb/usb.h` )
@@ -112,6 +112,7 @@ apMain()
 - 모니터가 이벤트를 감지하면 `usbHidResolveDowngradeTarget()`으로 현 모드보다 낮은 모드를 계산합니다. 순서는 8k→4k→2k→1k입니다.
 - `usbRequestBootModeDowngrade()`는 ARM 단계에서 한 번, COMMIT 단계에서 한 번 로그를 출력합니다. COMMIT 단계에서 `usbBootModeSaveAndReset()`을 호출하며 실패 시 `[!] USB Poll 모드 저장 실패`가 발생합니다.
 - 다운그레이드 후에는 `usbBootModeRequestReset()`으로 큐를 비우고 다음 이벤트를 기다립니다.
+- 모니터의 감지 조건, 워밍업/타임아웃 파라미터 등 상세는 `docs/features_instability_monitor.md`를 참조하십시오.
 
 ## 8. 로그 & 트러블슈팅
 | 로그 | 의미/대응 |

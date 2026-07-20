@@ -13,7 +13,7 @@
 | 퀀텀 코어 | `src/ap/modules/qmk/quantum/keyboard.c` + `quantum/action.c` | `matrix_task()` 변화 감지 → `action_exec()` → `host_keyboard_send()` 흐름을 담당합니다. |
 | 포팅 메인 루프 | `src/ap/modules/qmk/qmk.c` | `qmkUpdate()`가 VIA RX → `keyboard_task()` → EEPROM → Idle 순으로 호출됩니다. |
 | USB 호스트 래퍼 | `src/ap/modules/qmk/port/protocol/host.c` | QMK 보고서를 `usbHidSendReport()`에 전달하고 NKRO/LED 상태를 동기화합니다. |
-| USB HID/계측 | `src/hw/driver/usb/usb_hid/usbd_hid.c` + `usb_hid_instrumentation.c` | HID IN 엔드포인트, VIA RAW HID 큐, 폴링 계측을 처리합니다. |
+| USB HID/계측 | `src/hw/driver/usb/usb_hid/usbd_hid.c` + `usbd_hid_instrumentation.c` | HID IN 엔드포인트, VIA RAW HID 큐, 폴링 계측을 처리합니다. |
 
 ## 3. 하드웨어 스캐너 (`src/hw/driver/keys.c`)
 - `keysInit()`은 GPIO → DMA → TIM16 순으로 초기화한 뒤 타이머/채널을 스타트합니다.
@@ -37,8 +37,8 @@
 - `qmkUpdate()`(`src/ap/modules/qmk/qmk.c`)는 `via_hid_task()` → `keyboard_task()` → `eeprom_task()` → `idle_task()` 순으로 호출되어 VIA RAW HID 패킷이 HID 리포트보다 먼저 처리되도록 보장합니다.
 
 ## 6. USB HID & VIA RAW HID
-- `usbHidSendReport()`/`usbHidSendReportEXK()`는 보고서를 즉시 전송하거나 큐에 적재하고, 계측 모듈(`usb_hid_instrumentation.c`)에 타임스탬프를 남깁니다.
-- `usb_hid_rate_info_t` 구조체는 폴링 주파수, bInterval, 큐 깊이 등을 CLI/로그에 제공하며 `matrix info`에서 재사용됩니다.
+- `usbHidSendReport()`/`usbHidSendReportEXK()`는 보고서를 즉시 전송하거나 큐에 적재하고, 계측 모듈(`usbd_hid_instrumentation.c`)에 타임스탬프를 남깁니다.
+- `usb_hid_rate_info_t` 구조체는 폴링 주파수(`freq_hz`), 폴링 간격 최대/최소(`time_max`/`time_min`), 예상 간격 초과분 최대값(`time_excess_max`), 폴링 지연 당시 큐 길이 최대값(`queue_depth_max`)을 CLI/로그에 제공하며 `matrix info`에서 재사용됩니다.
 - VIA RAW HID는 `src/ap/modules/qmk/port/via_hid.c`가 인터럽트 컨텍스트에서 수신 버퍼에 적재하고, 메인 루프에서 처리 후 `usbHidEnqueueViaResponse()`로 응답합니다.
 
 ## 7. 진단 & CLI
@@ -49,5 +49,5 @@
 ## 8. 운영 팁
 1. 행/열 수를 변경하면 `row_wr_buf`와 GPIO 초기화 핀 배열을 함께 수정해야 합니다.
 2. DMA 노드 설정은 HAL Linked-List API를 사용하므로, 타이머/채널을 바꿀 경우 `GPDMA1_REQUEST_TIM16_*` 요청과 채널 속성을 같이 검토합니다.
-3. 매트릭스 계측은 USB HID 계측(`usb_hid_instrumentation.c`)과 동일 버퍼를 공유하므로, 두 경로 모두 `_DEF_ENABLE_*_TIMING_PROBE` 매크로를 맞춰야 일관된 데이터를 얻을 수 있습니다.
+3. 매트릭스 계측은 USB HID 계측(`usbd_hid_instrumentation.c`)과 동일 버퍼를 공유하므로, 두 경로 모두 `_DEF_ENABLE_*_TIMING_PROBE` 매크로를 맞춰야 일관된 데이터를 얻을 수 있습니다.
 4. VIA RAW HID 응답이 지연되면 `usbProcess()`의 리셋 큐 또는 USB monitor가 영향을 줄 수 있으므로, USB 관련 로그(`usb`, `boot`, `usb monitor`)도 함께 확인하십시오.

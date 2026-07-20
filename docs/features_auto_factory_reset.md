@@ -36,6 +36,7 @@ hwInit()
       ↳ eeprom_apply_factory_defaults(true) 호출
           ↳ eeconfig_disable()/eeconfig_init()/*_datablock() 재실행
           ↳ usbBootModeApplyDefaults() / usb_monitor_storage_apply_defaults()
+             (EECONFIG_USER_DATA_SIZE==0일 때만 직접 호출 — V251114R4)
           ↳ AUTO_FACTORY_RESET 센티넬(플래그/쿠키) 재기록
           ↳ eeprom_flush_pending()
       ↳ 성공 시 곧바로 부팅 지속
@@ -48,16 +49,16 @@ hwInit()
 
 ## 5. 알고리즘 세부 절차 (`eepromAutoFactoryResetCheck`)
 1. **센티넬 판독** : `flag_addr`와 `cookie_addr`에서 32비트 값을 읽습니다. 플래그가 매직 값이고 쿠키가 현재 빌드 쿠키와 같으면 아무 작업도 하지 않습니다.
-2. **플래그 리셋** : 플래그는 매직인데 쿠키가 다르면 플래그를 0으로 되돌리고 다시 검사를 진행합니다.
+2. **플래그 리셋** : 플래그는 매직인데 쿠키가 다르면 플래그를 0으로 되돌린 뒤, 곧바로 begin 로그를 출력하고 `eepromFormat()` 단계로 진행합니다.
 3. **EEPROM 포맷** : `eepromFormat()` 실패 시 경고 로그 후 false를 반환합니다.
-4. **버퍼 재동기화 및 공용 초기화** : `eeprom_init()`를 호출해 QMK EEPROM 미러를 재설정한 뒤, `eeprom_apply_factory_defaults(true)`를 통해 아래 세 단계를 한 번에 수행합니다. (a) `eeconfig_disable()`/`eeconfig_init()`/`eeconfig_init_*()` (b) `usbBootModeApplyDefaults()`/`usb_monitor_storage_apply_defaults()` (c) `eeprom_restore_auto_factory_reset_sentinel()`로 플래그/쿠키 재기록.
+4. **버퍼 재동기화 및 공용 초기화** : `eeprom_init()`를 호출해 QMK EEPROM 미러를 재설정한 뒤, `eeprom_apply_factory_defaults(true)`를 통해 아래 세 단계를 한 번에 수행합니다. (a) `eeconfig_disable()`/`eeconfig_init()`/`eeconfig_init_*()` (b) `usbBootModeApplyDefaults()`/`usb_monitor_storage_apply_defaults()` 직접 호출 — 단, `EECONFIG_USER_DATA_SIZE`가 0일 때만이며(V251114R4), 현재 모든 보드는 USER 512B를 사용하므로 기본값은 `eeconfig_init_user_datablock()` 경유로 기록됩니다 (c) `eeprom_restore_auto_factory_reset_sentinel()`로 플래그/쿠키 재기록.
 5. **센티넬 갱신** : 공용 초기화 루틴이 플래그와 쿠키를 모두 최신 빌드 쿠키로 덮어쓰고, 내부에서 `eeprom_flush_pending()`을 반복 호출해 비동기 큐를 소진합니다.
 6. **오류 처리 및 재시도** : 위 단계 중 하나라도 실패하면 `[!] EEPROM auto factory reset : retry X/Y` 로그를 남기고 `_DEF_LED1`을 세 번 깜빡인 뒤 `eeprom_init()`을 다시 호출해 재시도합니다. 세 번 모두 실패하면 `[!] ... failed after 3 attempts` 로그를 남기고 `hwInit()`이 false를 반환합니다.
 7. **부팅 지속** : 모든 쓰기가 끝나면 `[  ] EEPROM auto factory reset : success ...` 로그만 남기고 곧바로 다음 초기화 단계로 넘어갑니다. VIA 경로가 예약한 경우에도 동일한 흐름을 사용합니다.
 
 ## 6. BootMode & USB Monitor 연동
 - USER 데이터가 플래시에서 지워지면 `eeconfig_init_user_datablock()`이 호출되어 BootMode/USB monitor 기본값을 즉시 기록합니다. 자동 초기화 루틴도 동일한 함수를 이용하므로, 별도의 버전 마이그레이션 코드를 중복 작성할 필요가 없습니다.
-- VIA에서 제공하는 EEPROM 초기화 명령(`eeprom_req_clean()`)은 `eepromScheduleDeferredFactoryReset()`을 호출해 AUTO_FACTORY_RESET 플래그/쿠키를 지우고 즉시 `resetToReset()`으로 재부팅합니다. 다음 부팅 시 `eepromAutoFactoryResetCheck()`가 동일 공용 루틴(`eeprom_apply_factory_defaults`)을 수행하므로, VIA/AUTO 경로가 완전히 일치합니다.
+- VIA에서 제공하는 EEPROM 초기화 명령(`eeprom_req_clean()`)은 `eepromScheduleDeferredFactoryReset()`을 호출해 AUTO_FACTORY_RESET 플래그/쿠키를 지운 뒤 `mcu_reset_deferred()`로 지연 리셋을 예약합니다. 실제 `resetToReset()`은 VIA 응답 송신이 끝난 이후에 실행되며(V251109R4), 예약에 실패하면 `mcu_reset()`으로 즉시 폴백합니다. 다음 부팅 시 `eepromAutoFactoryResetCheck()`가 동일 공용 루틴(`eeprom_apply_factory_defaults`)을 수행하므로, VIA/AUTO 경로가 완전히 일치합니다.
 - BootMode 동작 전체는 `docs/features_bootmode.md`, USB monitor 동작은 `docs/features_instability_monitor.md`를 참고하십시오.
 
 ## 7. 사용 방법
@@ -71,10 +72,10 @@ hwInit()
 | `[  ] EEPROM auto factory reset : begin ...` | 플래그/쿠키가 일치하지 않아 초기화를 시작했습니다. |
 | `[!] EEPROM auto factory reset : sentinel read fail` | EEPROM 드라이버에서 값을 읽지 못했습니다. 부팅 중 3회까지 자동 재시도하며, 연속 실패 시 부팅이 중단됩니다. |
 | `[!] EEPROM auto factory reset : format fail` | `eepromFormat()` 실패. 각 재시도 사이에 `_DEF_LED1`이 세 번 점멸하며, 반복 실패 시 AUTO_FACTORY_RESET 옵션을 비활성화하고 원인을 조사합니다. |
-| `[!] EEPROM auto factory reset : cookie write fail` | 쿠키 저장 실패. 플래그를 0으로 되돌린 뒤 경고를 출력하고 동일 부팅 내에서 다시 시도합니다. |
+| `[!] EEPROM auto factory reset : cookie write fail` | VIA 예약 경로(`eepromScheduleDeferredFactoryReset()`)에서 쿠키 저장에 실패했습니다. 경고 출력 후 false를 반환하고 끝나며, 플래그 롤백이나 동일 부팅 내 재시도는 없습니다. |
 | `[!] EEPROM auto factory reset : retry X/Y` | 초기화 도중 오류가 발생해 다시 시도했습니다(`Y`는 최대 3회). |
 | `[!] EEPROM auto factory reset : failed after 3 attempts` | 재시도 한계에 도달했습니다. `main()`이 LED 점멸 상태로 정지합니다. |
-| `[  ] EEPROM auto factory reset : deferred clear scheduled` | VIA 또는 다른 경로에서 센티넬을 리셋했고, 다음 부팅에서 자동 초기화가 실행될 예정입니다. |
+| `[  ] EEPROM auto factory reset : deferred clear scheduled` | VIA 또는 다른 경로에서 센티넬을 리셋했고, 다음 부팅에서 자동 초기화가 실행될 예정입니다. 이 로그는 `LOG_LEVEL_VERBOSE \|\| DEBUG_LOG_EEPROM` 빌드에서만 출력됩니다. |
 
 > 자동 초기화 빌드를 테스트할 때는, 한 번 부팅해 로그를 확인한 뒤 다시 부팅해 플래그/쿠키가 유지되어 재초기화가 발생하지 않는지 검증해야 합니다.
-> VIA CLI에서도 `eeprom info`를 호출하면 AUTO_FACTORY_RESET 및 VIA 초기화 공용 루틴의 큐 최댓값/오버플로 카운터를 확인할 수 있습니다.
+> 펌웨어 자체 CLI(UART/USB CLI, `cliEeprom`)에서도 `eeprom info`를 호출하면 AUTO_FACTORY_RESET 및 VIA 초기화 공용 루틴의 큐 최댓값/오버플로 카운터를 확인할 수 있습니다.

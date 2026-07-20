@@ -1,6 +1,6 @@
 # rgblight 경로 가이드
 
-본 문서는 V251122R6 시점의 rgblight 구성/동작/패치 이력을 정리한 가이드입니다. 캐시가 제거된 최신 구조를 기준으로 하며, 향후 Codex가 빠르게 파악할 수 있도록 흐름과 API를 요약합니다.
+본 문서는 rgblight 구성/동작/패치 이력을 정리한 가이드입니다. 현재 펌웨어는 V260720R1이며, rgblight.c에는 V251122R6 이후 V251122R7/V260310R4/V260310R5 후속 변경이 반영되어 있습니다. 캐시가 제거된 최신 구조를 기준으로 하며, 향후 Codex가 빠르게 파악할 수 있도록 흐름과 API를 요약합니다.
 
 ## 1. 계층/전역 상태 개요
 - **구성/상태**  
@@ -8,7 +8,7 @@
   - `rgblight_status`: `timer_enabled`, `base_mode`, split 동기화 플래그.  
   - `animation_status`(RGBLIGHT_USE_TIMER): `pos`, `current_hue`, `delta`, `last_timer`, `next_timer_due`, `restart`.  
   - `rgblight_ranges`: 효과 범위/클리핑/인디케이터 범위.  
-  - 인디케이터 상태(`rgblight_indicator_state`): host LED, 색상 캐시, 범위, `overrides_all`, `needs_render`.  
+  - 인디케이터 상태(`rgblight_indicator_state[RGBLIGHT_INDICATOR_SLOT_COUNT]`, V260310R4 슬롯 배열): 슬롯별 host LED, 색상 캐시, 범위, `overrides_all`, `needs_render`. 슬롯별 범위 테이블 `rgblight_indicator_range_table`(BRICK65 dual-indicator 지원)과 물리 렌더 콜백 `rgblight_indicator_render_callback` 포함.  
   - LED 버퍼: `led[RGBLIGHT_LED_COUNT]` (RGBW 옵션 시 w 포함).
 - **메모리/타이머**  
   - 16비트 `sync_timer_read()` 기반. `rgblight_next_run`으로 1kHz 게이트.  
@@ -16,7 +16,7 @@
 
 ## 2. 동작 흐름
 1. **초기화**: `rgblight_init()` → EEPROM 로드/보정 → `rgblight_timer_init()` → enable이면 `rgblight_mode_noeeprom()` → 인디케이터 초기 평가·렌더 예약.
-2. **이벤트 처리**: 모드/HSV/속도/Velocikey 토글 시 타이머 on/off 갱신, 렌더 예약.
+2. **이벤트 처리**: 모드/HSV/속도/Velocikey 토글 시 타이머 on/off 갱신, 렌더 예약. 인디케이터 종료 시(V251122R7) `next_timer_due`를 현재 시각으로 당기고 `rgblight_timer_task()`를 즉시 호출해 다음 틱을 기다리지 않고 베이스 이펙트를 재계산.
 3. **주기 태스크**: `rgblight_task()`(약 1ms 게이트)  
    - 호스트 LED 큐 소비 → `rgblight_timer_task()`로 애니메이션 만료 확인·이펙트 실행 → 렌더 큐 플러시 → Velocikey 감속.
 4. **렌더**: `rgblight_render_frame()`이 베이스 이펙트 결과 위에 인디케이터 오버레이 적용 후 LED 맵/RGBW 변환을 거쳐 드라이버 `setleds`.
@@ -33,12 +33,13 @@
 ## 4. Velocikey/인디케이터 특이 사항
 - **Velocikey**: `preprocess_rgblight()`에서 키 입력 시 가속, `rgblight_task()` 말미에 감속. `get_interval_time()`이 런타임 속도에 따라 주기를 결정하며, 캐시가 없으므로 즉시 반영.
 - **인디케이터**: `overrides_all`이면 전면 덮어쓰기 후 베이스 이펙트를 위에서 덮음. 호스트 LED 큐는 인터럽트에서 적재되고 메인 루프에서 소비.
+- **채도 복원 특례(V260310R5)**: Solid Color 흰색(채도 0)에서 Rainbow Mood/Swirl로 진입 시 `rgblight_mode_transition_sat()`이 채도를 255로 복원해 즉시 다색 효과가 보이도록 처리.
 
 ## 5. 프리징 패치 타임라인
 - **V251121R1/R5 (83dc2679…)**: 캐시 없음, 프리징 미재현.
 - **V251122R2/R3 (261efa94…)**: 이펙트 함수/주기 캐시 + 만료 선행 분기 도입. 16비트 타이머 창(≈32s) 밖으로 `next_timer_due`가 밀리거나 Velocikey/비활성 상태에서 캐시가 stale 될 때 애니메이션·렌더 정지 → 10분 내외 프리징 재현.
 - **V251122R5 (980a2c8…)**: 캐시 무효화·게이트 정렬 보완 시도, 여전히 스톨 재현.
-- **V251122R6 (현재)**: 캐시/만료 선행 분기 완전 제거, V251121R5 수준으로 복원. 타이머 재시작 시 `next_timer_due`만 초기화. 프리징 해소 확인.
+- **V251122R6**: 캐시/만료 선행 분기 완전 제거, V251121R5 수준으로 복원. 타이머 재시작 시 `next_timer_due`만 초기화. 프리징 해소 확인. 이후 V251122R7/V260310R4/V260310R5 후속 변경이 반영됨(현재 펌웨어 V260720R1).
 
 ## 6. 테스트 가이드 요약
 1. RGB OFF/Static/Snake + Velocikey on/off 조합으로 15분 이상 방치 후 키 입력·LED 토글 반응 확인.
