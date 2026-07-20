@@ -5,6 +5,19 @@ Claude auto-memory는 Codex CLI와 공유되지 않으므로 공용 사실은 �
 
 ---
 
+## 2026-07-20 — 에이전트 협업 재설정: graphify 지식그래프 도입 및 문서 체계 개편
+
+**결정**:
+1. graphify 지식그래프를 도입하고 산출물(`graphify-out/graph.json`, `GRAPH_REPORT.md`, `manifest.json`, `.graphify_labels.json`, 시맨틱 캐시)을 리포에 커밋한다. 코드 탐색은 그래프 질의를 1순위로 한다 (AGENTS.md §3).
+2. 그래프 스코프는 `.graphifyignore`로 **"실제 컴파일되는 코드 + 프로젝트 문서"**로 한정한다. 전체 리포(1,046파일/247만 단어) 대신 360파일/19.7만 단어. 근거: 에이전트 이해 1순위 — 미컴파일 QMK 업스트림 원본(quantum 504→~100파일)과 벤더 HAL/CMSIS가 그래프에 있으면 커뮤니티/god node가 죽은 코드에 오염되고 "활성 기능"으로 오인할 위험이 있음. 토큰 절약은 2순위 부수 효과. 컴파일 목록의 기준은 `src/ap/modules/qmk/CMakeLists.txt`이며, 이 목록이 바뀌면 `.graphifyignore`를 함께 갱신해야 한다.
+3. 세팅의 원격 유지: 커밋되는 `.claude/settings.json`의 SessionStart hook이 `tools/graphify/bootstrap.py`를 실행해 새 워크스페이스에서도 git hook 설치·그래프 동기화를 자동 복원한다. git post-commit/post-checkout hook과 graph.json merge driver는 graphify가 공용 git dir에 설치하므로 같은 리포의 모든 worktree(orca 워크스페이스)에 공유된다. Codex CLI는 AGENTS.md §3 체크리스트로 동일 부트스트랩을 실행한다.
+4. 문서 감사(에이전트 39개, 전 문서 코드 대조) 결과: `docs/review.md`(V251124R6 리뷰 스냅샷 — 코드 변경 이력 주석과 커밋 9cbeb3b로 완전 복원 가능)와 `AGENTS.cursorrules`(AGENTS.md 구버전 사본, 고유 정보는 3308d68:AGENTS.md에서 복원 가능)를 폐기. 나머지 문서의 stale 항목 약 25건을 교정(자세한 내역은 이 커밋의 diff 참조).
+5. 문서 역할 원칙 확정: 코드 구조·호출 관계는 그래프로 질의하고, `docs/`에는 코드에서 복원 불가능한 것(결정 기록·실측 회고·운영 가이드·릴리스 안내)만 둔다. 구조 설명만을 위한 신규 문서는 만들지 않는다.
+
+**미해결(문서 공백, 감사에서 high 판정)**: ① 보드 추가/포팅 절차(board bring-up), ② USB 클래스/컴포지트(HID·CDC·CMP) 아키텍처. 필요해지는 시점에 운영 지식 중심으로 작성 검토.
+
+---
+
 ## 2026-07-20 — MAY65 underglow 기본값 OFF 및 버전 상향 (V260720R1)
 
 **결정**: `era/keynetix/may65`의 `RGBLIGHT_DEFAULT_ON`을 `false`로 변경하고,
