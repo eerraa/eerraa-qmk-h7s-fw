@@ -66,7 +66,7 @@
 #define RGBLIGHT_ENABLE
 #define EEPROM_ENABLE
 #define RGBLIGHT_SLEEP
-#define RGBLIGHT_DEFAULT_ON         true
+#define RGBLIGHT_DEFAULT_ON         false // V260720R1: underglow 기본값 OFF (EEPROM 팩토리 초기화 시 1회 적용)
 #define RGBLIGHT_DEFAULT_HUE        0
 #define RGBLIGHT_DEFAULT_SAT        0
 #define RGBLIGHT_DEFAULT_VAL        191
