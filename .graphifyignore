@@ -1,0 +1,78 @@
+# graphify 스코프 정의 (.gitignore 문법, graphify detect가 읽음)
+#
+# 원칙: "실제 펌웨어에 컴파일되는 코드 + 프로젝트 문서"만 그래프에 포함한다.
+#  - 컴파일 대상 기준: CMakeLists.txt, src/ap/modules/qmk/CMakeLists.txt
+#  - QMK CMakeLists의 컴파일 파일 목록이 바뀌면 이 파일도 함께 갱신할 것.
+
+# --- IDE/프로젝트 부산물 ---
+.vscode/
+prj/
+LICENSE
+
+# --- 벤더 라이브러리 (표준 API — 그래프에 불필요) ---
+src/lib/lib8tion/
+src/lib/ST/CMSIS/
+src/lib/ST/STM32H7RSxx_HAL_Driver/
+# USB Device Library는 Core 코드만 유지 (프로젝트 USB 경로와 직접 결합)
+src/lib/ST/STM32_USB_Device_Library/*.md
+src/lib/ST/STM32_USB_Device_Library/*.html
+
+# --- QMK quantum: 컴파일되지 않는 업스트림 원본 제외 ---
+# 전체 미사용 서브시스템
+src/ap/modules/qmk/quantum/audio/
+src/ap/modules/qmk/quantum/backlight/
+src/ap/modules/qmk/quantum/bootmagic/
+src/ap/modules/qmk/quantum/encoder/
+src/ap/modules/qmk/quantum/keymap_extras/
+src/ap/modules/qmk/quantum/led_matrix/
+src/ap/modules/qmk/quantum/midi/
+src/ap/modules/qmk/quantum/os_detection/
+src/ap/modules/qmk/quantum/painter/
+src/ap/modules/qmk/quantum/pointing_device/
+src/ap/modules/qmk/quantum/rgb_matrix/
+src/ap/modules/qmk/quantum/split_common/
+src/ap/modules/qmk/quantum/unicode/
+src/ap/modules/qmk/quantum/wear_leveling/
+
+# debounce: 컴파일되는 3개 알고리즘만 유지
+src/ap/modules/qmk/quantum/debounce/*
+!src/ap/modules/qmk/quantum/debounce/asym_eager_defer_pk.c
+!src/ap/modules/qmk/quantum/debounce/sym_defer_pk.c
+!src/ap/modules/qmk/quantum/debounce/sym_eager_pk.c
+
+# process_keycode: 컴파일되는 4개(+헤더)만 유지
+src/ap/modules/qmk/quantum/process_keycode/*
+!src/ap/modules/qmk/quantum/process_keycode/process_key_override.c
+!src/ap/modules/qmk/quantum/process_keycode/process_key_override.h
+!src/ap/modules/qmk/quantum/process_keycode/process_grave_esc.c
+!src/ap/modules/qmk/quantum/process_keycode/process_grave_esc.h
+!src/ap/modules/qmk/quantum/process_keycode/process_tap_dance.c
+!src/ap/modules/qmk/quantum/process_keycode/process_tap_dance.h
+!src/ap/modules/qmk/quantum/process_keycode/process_rgb.c
+!src/ap/modules/qmk/quantum/process_keycode/process_rgb.h
+
+# quantum 최상위: 컴파일되지 않는 .c (헤더는 컴파일 코드가 참조하므로 유지)
+src/ap/modules/qmk/quantum/bitwise.c
+src/ap/modules/qmk/quantum/caps_word.c
+src/ap/modules/qmk/quantum/command.c
+src/ap/modules/qmk/quantum/crc.c
+src/ap/modules/qmk/quantum/deferred_exec.c
+src/ap/modules/qmk/quantum/digitizer.c
+src/ap/modules/qmk/quantum/dip_switch.c
+src/ap/modules/qmk/quantum/encoder.c
+src/ap/modules/qmk/quantum/haptic.c
+src/ap/modules/qmk/quantum/joystick.c
+src/ap/modules/qmk/quantum/leader.c
+src/ap/modules/qmk/quantum/led_tables.c
+src/ap/modules/qmk/quantum/main.c
+src/ap/modules/qmk/quantum/matrix.c
+src/ap/modules/qmk/quantum/matrix_common.c
+src/ap/modules/qmk/quantum/mousekey.c
+src/ap/modules/qmk/quantum/os_detection.c
+src/ap/modules/qmk/quantum/programmable_button.c
+src/ap/modules/qmk/quantum/repeat_key.c
+src/ap/modules/qmk/quantum/secure.c
+src/ap/modules/qmk/quantum/sync_timer.c
+src/ap/modules/qmk/quantum/tri_layer.c
+src/ap/modules/qmk/quantum/variable_trace.c
+src/ap/modules/qmk/quantum/wpm.c
