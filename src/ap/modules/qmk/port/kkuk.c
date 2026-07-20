@@ -3,7 +3,11 @@
 #ifdef KKUK_ENABLE
 
 
-#define KKUK_TIME_UNIT      10
+#define KKUK_TIME_UNIT         10
+#define KKUK_DELAY_TICKS_MIN   5    // 50ms
+#define KKUK_DELAY_TICKS_MAX   30   // 300ms
+#define KKUK_REPEAT_TICKS_MIN  5    // 50ms
+#define KKUK_REPEAT_TICKS_MAX  20   // 200ms
 
 
 
@@ -34,6 +38,7 @@ _Static_assert(sizeof(kkuk_config_t) == sizeof(uint32_t), "EECONFIG out of spec.
 static void via_qmk_kkuk_get_value(uint8_t *data);
 static void via_qmk_kkuk_set_value(uint8_t *data);
 static void via_qmk_kkuk_save(void);
+static bool kkuk_normalize_config(void);
 
 
 static kkuk_config_t kkuk_config;
@@ -58,9 +63,14 @@ void kkuk_init(void)
   {
     kkuk_config.mode        = 1;
     kkuk_config.enable      = false;
-    kkuk_config.delay_time  = 200;
-    kkuk_config.repeat_time = 80;
+    kkuk_config.delay_time  = 20;   // 200ms
+    kkuk_config.repeat_time = 8;    // 80ms
     eeconfig_flush_kkuk(true);
+  }
+
+  if (kkuk_normalize_config())
+  {
+    eeconfig_flush_kkuk(true);                                  // V251125R3: KKUK 정규화 경로 정리
   }
 
   logPrintf("[ON] KKUK\n");
@@ -85,8 +95,8 @@ void kkuk_idle(void)
     return;
   }
 
-  delay_time  = kkuk_config.delay_time;
-  repeat_time = kkuk_config.repeat_time;
+  delay_time  = (uint16_t)kkuk_config.delay_time * KKUK_TIME_UNIT;
+  repeat_time = (uint16_t)kkuk_config.repeat_time * KKUK_TIME_UNIT;
 
   if (!is_kkuk_mode)
   {
@@ -220,12 +230,12 @@ void via_qmk_kkuk_get_value(uint8_t *data)
       }    
     case id_qmk_kkuk_delay_time:
       {
-        value_data[0] = kkuk_config.delay_time / KKUK_TIME_UNIT;
+        value_data[0] = kkuk_config.delay_time;
         break;
       }         
     case id_qmk_kkuk_repeat_time:
       {
-        value_data[0] = kkuk_config.repeat_time / KKUK_TIME_UNIT;
+        value_data[0] = kkuk_config.repeat_time;
         break;
       }
   }
@@ -246,12 +256,12 @@ void via_qmk_kkuk_set_value(uint8_t *data)
       }
     case id_qmk_kkuk_delay_time:
       {
-        kkuk_config.delay_time = value_data[0] * KKUK_TIME_UNIT;
+        kkuk_config.delay_time = value_data[0];
         break;
       }      
     case id_qmk_kkuk_repeat_time:
       {
-        kkuk_config.repeat_time = value_data[0] * KKUK_TIME_UNIT;
+        kkuk_config.repeat_time = value_data[0];
         break;
       }
   }
@@ -260,6 +270,35 @@ void via_qmk_kkuk_set_value(uint8_t *data)
 void via_qmk_kkuk_save(void)
 {
   eeconfig_flush_kkuk(true);
+}
+
+static bool kkuk_normalize_config(void)
+{
+  bool dirty = false;
+
+  if (kkuk_config.delay_time < KKUK_DELAY_TICKS_MIN)
+  {
+    kkuk_config.delay_time = KKUK_DELAY_TICKS_MIN;
+    dirty = true;
+  }
+  else if (kkuk_config.delay_time > KKUK_DELAY_TICKS_MAX)
+  {
+    kkuk_config.delay_time = KKUK_DELAY_TICKS_MAX;
+    dirty = true;
+  }
+
+  if (kkuk_config.repeat_time < KKUK_REPEAT_TICKS_MIN)
+  {
+    kkuk_config.repeat_time = KKUK_REPEAT_TICKS_MIN;
+    dirty = true;
+  }
+  else if (kkuk_config.repeat_time > KKUK_REPEAT_TICKS_MAX)
+  {
+    kkuk_config.repeat_time = KKUK_REPEAT_TICKS_MAX;
+    dirty = true;
+  }
+
+  return dirty;
 }
 
 #endif

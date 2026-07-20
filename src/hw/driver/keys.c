@@ -1,4 +1,5 @@
 #include "keys.h"
+#include "log.h"                                                               // V251124R4: 키 초기화 실패 로깅
 
 
 #ifdef _USE_HW_KEYS
@@ -31,9 +32,23 @@ static DMA_HandleTypeDef handle_GPDMA1_Channel2;
 
 bool keysInit(void)
 {
-  keysInitGpio();
-  keysInitDma();
-  keysInitTimer();
+  if (keysInitGpio() != true)
+  {
+    logPrintf("[!] keysInitGpio 실패\n");                                      // V251124R4: GPIO 초기화 실패 감지
+    return false;
+  }
+
+  if (keysInitDma() != true)
+  {
+    logPrintf("[!] keysInitDma 실패\n");                                       // V251124R4: DMA 초기화 실패 감지
+    return false;
+  }
+
+  if (keysInitTimer() != true)
+  {
+    logPrintf("[!] keysInitTimer 실패\n");                                     // V251124R4: 타이머 초기화 실패 감지
+    return false;
+  }
 
 
 

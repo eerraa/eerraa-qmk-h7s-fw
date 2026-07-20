@@ -1,4 +1,5 @@
 #include "sys_port.h"
+#include "bootloader.h"
 
 
 
@@ -58,8 +59,8 @@ void via_qmk_sys_set_value(uint8_t *data)
   {
     case id_qmk_system_dfu:
       {
-        resetToBoot();
-        value_data[0] = 0;
+        bootloader_jump_deferred();  // V250310R6: VIA 응답 송신 이후 부트모드로 전환
+        value_data[0] = 1;           // V260311R1: Jump to Boot 토글은 VIA 요청값 echo를 유지해 응답 mismatch를 방지
         break;
       }    
     case id_qmk_system_eep_reset_0:

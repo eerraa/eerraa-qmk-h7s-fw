@@ -30,7 +30,7 @@ hwInit()
   ↳ eepromInit()
   ↳ eeprom_init()
   ↳ bootmode_init() / usb_monitor_init()
-  ↳ eepromAutoFactoryResetCheck()
+  ↳ hwRunFactoryResetWithRetry()
       ↳ sentinel 판독 (flag, cookie)
       ↳ 필요 시 전체 EEPROM 포맷
       ↳ eeprom_apply_factory_defaults(true) 호출
@@ -42,7 +42,8 @@ hwInit()
   ↳ usbBootModeLoad()
   ↳ usbInstabilityLoad()
 ```
-- 자동 초기화는 BootMode/USB monitor 로드 전에 완료되며, 실패하더라도 `false`를 반환하지 않고 단순히 경고 로그만 남깁니다.
+- `hwRunFactoryResetWithRetry()`에서 최대 3회까지 재시도하며, 실패할 때마다 `_DEF_LED1`을 3회 점멸하고 `eeprom_init()`로 QMK 미러를 재동기화합니다.
+- 재시도 후에도 실패하면 `hwInit()`이 false를 반환하고 `main()`이 LED 점멸 상태로 정지해 부팅을 차단합니다.
 - 성공 시 `[  ] EEPROM auto factory reset : success ...` 로그만 출력하고 추가 지연/재부팅 없이 다음 초기화 단계로 넘어갑니다.
 
 ## 5. 알고리즘 세부 절차 (`eepromAutoFactoryResetCheck`)
@@ -51,7 +52,8 @@ hwInit()
 3. **EEPROM 포맷** : `eepromFormat()` 실패 시 경고 로그 후 false를 반환합니다.
 4. **버퍼 재동기화 및 공용 초기화** : `eeprom_init()`를 호출해 QMK EEPROM 미러를 재설정한 뒤, `eeprom_apply_factory_defaults(true)`를 통해 아래 세 단계를 한 번에 수행합니다. (a) `eeconfig_disable()`/`eeconfig_init()`/`eeconfig_init_*()` (b) `usbBootModeApplyDefaults()`/`usb_monitor_storage_apply_defaults()` (c) `eeprom_restore_auto_factory_reset_sentinel()`로 플래그/쿠키 재기록.
 5. **센티넬 갱신** : 공용 초기화 루틴이 플래그와 쿠키를 모두 최신 빌드 쿠키로 덮어쓰고, 내부에서 `eeprom_flush_pending()`을 반복 호출해 비동기 큐를 소진합니다.
-6. **부팅 지속** : 모든 쓰기가 끝나면 `[  ] EEPROM auto factory reset : success ...` 로그만 남기고 곧바로 다음 초기화 단계로 넘어갑니다. VIA 경로가 예약한 경우에도 동일한 흐름을 사용합니다.
+6. **오류 처리 및 재시도** : 위 단계 중 하나라도 실패하면 `[!] EEPROM auto factory reset : retry X/Y` 로그를 남기고 `_DEF_LED1`을 세 번 깜빡인 뒤 `eeprom_init()`을 다시 호출해 재시도합니다. 세 번 모두 실패하면 `[!] ... failed after 3 attempts` 로그를 남기고 `hwInit()`이 false를 반환합니다.
+7. **부팅 지속** : 모든 쓰기가 끝나면 `[  ] EEPROM auto factory reset : success ...` 로그만 남기고 곧바로 다음 초기화 단계로 넘어갑니다. VIA 경로가 예약한 경우에도 동일한 흐름을 사용합니다.
 
 ## 6. BootMode & USB Monitor 연동
 - USER 데이터가 플래시에서 지워지면 `eeconfig_init_user_datablock()`이 호출되어 BootMode/USB monitor 기본값을 즉시 기록합니다. 자동 초기화 루틴도 동일한 함수를 이용하므로, 별도의 버전 마이그레이션 코드를 중복 작성할 필요가 없습니다.
@@ -67,9 +69,11 @@ hwInit()
 | 로그 | 의미/대응 |
 | --- | --- |
 | `[  ] EEPROM auto factory reset : begin ...` | 플래그/쿠키가 일치하지 않아 초기화를 시작했습니다. |
-| `[!] EEPROM auto factory reset : sentinel read fail` | EEPROM 드라이버에서 값을 읽지 못했습니다. I2C/Flash 구성을 확인하십시오. |
-| `[!] EEPROM auto factory reset : format fail` | `eepromFormat()` 실패. 재시도 시에도 실패하면 AUTO_FACTORY_RESET 옵션을 비활성화하고 원인을 조사합니다. |
-| `[!] EEPROM auto factory reset : cookie write fail` | 쿠키 저장 실패. 플래그를 0으로 되돌린 뒤 경고를 출력하므로 다음 부팅에서 다시 시도됩니다. |
+| `[!] EEPROM auto factory reset : sentinel read fail` | EEPROM 드라이버에서 값을 읽지 못했습니다. 부팅 중 3회까지 자동 재시도하며, 연속 실패 시 부팅이 중단됩니다. |
+| `[!] EEPROM auto factory reset : format fail` | `eepromFormat()` 실패. 각 재시도 사이에 `_DEF_LED1`이 세 번 점멸하며, 반복 실패 시 AUTO_FACTORY_RESET 옵션을 비활성화하고 원인을 조사합니다. |
+| `[!] EEPROM auto factory reset : cookie write fail` | 쿠키 저장 실패. 플래그를 0으로 되돌린 뒤 경고를 출력하고 동일 부팅 내에서 다시 시도합니다. |
+| `[!] EEPROM auto factory reset : retry X/Y` | 초기화 도중 오류가 발생해 다시 시도했습니다(`Y`는 최대 3회). |
+| `[!] EEPROM auto factory reset : failed after 3 attempts` | 재시도 한계에 도달했습니다. `main()`이 LED 점멸 상태로 정지합니다. |
 | `[  ] EEPROM auto factory reset : deferred clear scheduled` | VIA 또는 다른 경로에서 센티넬을 리셋했고, 다음 부팅에서 자동 초기화가 실행될 예정입니다. |
 
 > 자동 초기화 빌드를 테스트할 때는, 한 번 부팅해 로그를 확인한 뒤 다시 부팅해 플래그/쿠키가 유지되어 재초기화가 발생하지 않는지 검증해야 합니다.

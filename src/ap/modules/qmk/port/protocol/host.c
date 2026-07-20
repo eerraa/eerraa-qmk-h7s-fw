@@ -45,6 +45,7 @@ extern keymap_config_t keymap_config;
 static host_driver_t *driver;
 static uint16_t       last_system_usage   = 0;
 static uint16_t       last_consumer_usage = 0;
+static volatile uint8_t host_led_state    = 0;  // V251124R7: USB HID SET_REPORT로 수신한 LED 상태 캐시
 
 void host_set_driver(host_driver_t *d) {
     driver = d;
@@ -61,12 +62,28 @@ void    set_split_host_keyboard_leds(uint8_t led_state) {
 }
 #endif
 
-__WEAK uint8_t host_keyboard_leds(void) {
+void host_keyboard_leds_update(uint8_t led_state)
+{
+  host_led_state = led_state;  // V251124R7: IRQ 컨텍스트에서 전달된 LED 비트를 저장해 탭/홀드 후 재사용
+}
+
+__WEAK uint8_t host_keyboard_leds(void)
+{
 #ifdef SPLIT_KEYBOARD
-    if (!is_keyboard_master()) return split_led_state;
+  if (!is_keyboard_master())
+  {
+    return split_led_state;
+  }
 #endif
-    if (!driver) return 0;
-    return (*driver->keyboard_leds)();
+  if (driver && driver->keyboard_leds != NULL)
+  {
+    uint8_t leds = (*driver->keyboard_leds)();
+
+    host_led_state = leds;  // V251124R7: 드라이버 경로로 읽은 LED 상태를 캐시에 동기화
+    return leds;
+  }
+
+  return host_led_state;  // V251124R7: 드라이버가 없을 때는 최근 HID SET_REPORT 값으로 응답
 }
 
 led_t host_keyboard_led_state(void) {

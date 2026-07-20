@@ -30,7 +30,7 @@
 
 
 #define USBD_LANGID_STRING            1033
-#define USBD_MANUFACTURER_STRING      "BARAM"
+#define USBD_MANUFACTURER_STRING      "ERA"  // V251125R3: 사용자 표시용 제조사 문자열 교체
 #define USBD_PRODUCT_STRING_HS        KBD_NAME
 #define USBD_PRODUCT_STRING_FS        KBD_NAME
 #define USBD_CONFIGURATION_STRING_HS  "HID-K Config"

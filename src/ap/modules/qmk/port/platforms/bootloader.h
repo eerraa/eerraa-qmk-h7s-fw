@@ -21,4 +21,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 /* give code for your bootloader to come up if needed */
 void bootloader_jump(void);
+bool bootloader_jump_deferred(void);  // V250310R6: VIA 응답 송신 후 부트모드 진입 예약
 void mcu_reset(void);
+bool mcu_reset_deferred(void);        // V250310R6: VIA 응답 송신 후 일반 리셋 예약

@@ -17,7 +17,6 @@
 // #define _USE_HW_VCOM                        // hw_caps_usb.h 참고
 #define _USE_HW_WS2812                         // hw_caps_led.h 참고 (V251114R2: WS2812 캡 분리)
 #define HW_WS2812_MAX_CH            30
-#define HW_WS2812_CAPS              0
 #define HW_WS2812_RGB               0
 #define HW_WS2812_RGB_CNT           30
 #define AUTO_FACTORY_RESET_ENABLE   1            // V251112R3: Brick60 기본 빌드에서 EEPROM 자동 초기화 활성화 테스트
@@ -49,8 +48,17 @@
 #if defined(USB_MONITOR_ENABLE) && !defined(BOOTMODE_ENABLE)
 #  define BOOTMODE_ENABLE           1
 #endif
-
-#define TAPPING_TERM                200
+#define G_TERM_ENABLE                           // V251123R4: VIA TAPPING term/옵션 제어 활성화
+#ifdef G_TERM_ENABLE
+#  define TAPPING_TERM_PER_KEY
+#  define PERMISSIVE_HOLD_PER_KEY
+#  define HOLD_ON_OTHER_KEY_PRESS_PER_KEY
+#  define RETRO_TAPPING_PER_KEY
+#endif
+#define TAPDANCE_ENABLE                     // V251124R8: VIA Tap Dance 런타임 설정 활성화
+#ifdef TAPDANCE_ENABLE
+#  define TAP_DANCE_ENABLE
+#endif
 #define INDICATOR_ENABLE            // V251016R8: Brick60 전용 RGB 인디케이터 기능 플래그
 
 

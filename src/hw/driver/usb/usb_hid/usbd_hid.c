@@ -50,6 +50,7 @@
 #include "keys.h"
 #include "qbuffer.h"
 #include "report.h"
+#include "micros.h"                                          // V251124R1: 백그라운드 모니터 래퍼에서 타임스탬프 취득
 #include "usbd_hid_internal.h"           // V251009R9: 계측 전용 상수를 공유
 #include "usbd_hid_instrumentation.h"    // V251009R9: HID 계측 로직을 전용 모듈로 이관
 
@@ -1882,17 +1883,25 @@ static void usbHidMonitorTrackEnumeration(uint32_t now_us,
   }
 }
 
-void usbHidMonitorBackgroundTick(uint32_t now_us)                    // V251108R9 SOF 중단 감시
+void usbHidMonitorBackgroundService(void)                    // V251124R1: 모니터 OFF면 타임스탬프 취득 없이 즉시 리턴
 {
-  usbHidMonitorRefreshEventWindows(now_us);
-
-  bool monitor_enabled = usbInstabilityIsEnabled();
-  usbHidMonitorTrackEnumeration(now_us, monitor_enabled);
-
-  if (monitor_enabled == false)
+  if (usbInstabilityIsEnabled() == false)
   {
     return;
   }
+
+  usbHidMonitorBackgroundTick(micros());
+}
+
+void usbHidMonitorBackgroundTick(uint32_t now_us)                    // V251108R9 SOF 중단 감시
+{
+  if (usbInstabilityIsEnabled() == false)                          // V251124R1: 런타임 비활성 시 백그라운드 경로 차단
+  {
+    return;
+  }
+
+  usbHidMonitorRefreshEventWindows(now_us);
+  usbHidMonitorTrackEnumeration(now_us, true);
 
   USBD_HandleTypeDef *pdev = &USBD_Device;
 

@@ -136,9 +136,10 @@ static const bool rgblight_indicator_supported = false;  // V251120R1: 인디케
 #endif
 
 #define RGBLIGHT_INDICATOR_RANGE_TABLE_LENGTH (RGBLIGHT_INDICATOR_TARGET_NUM + 1)  // V251016R8: Caps/Scroll/Num + OFF
-static rgblight_indicator_range_t rgblight_indicator_range_table[RGBLIGHT_INDICATOR_RANGE_TABLE_LENGTH] = {0};
+static rgblight_indicator_range_t rgblight_indicator_range_table[RGBLIGHT_INDICATOR_SLOT_COUNT][RGBLIGHT_INDICATOR_RANGE_TABLE_LENGTH] = {0};  // V260310R4: BRICK65 dual-indicator 지원을 위해 슬롯별 범위 테이블로 확장
 
 #ifdef RGBLIGHT_USE_TIMER
+static void rgblight_timer_task(void);  // V251122R7: 인디케이터 경로에서 즉시 호출하므로 선행 선언
 #endif
 
 // V251012R2: Brick60 인디케이터 상태를 rgblight 내부에서 추적하기 위한 구조체
@@ -152,17 +153,11 @@ typedef struct {
     bool                        needs_render;
 } rgblight_indicator_state_t;
 
-static rgblight_indicator_state_t rgblight_indicator_state = {
-    .config = {.raw = 0},
-    .host_state = {.raw = 0},
-    .color = {0},
-    .range = {0, 0},
-    .overrides_all = false,
-    .active = false,
-    .needs_render = false,
-};
+static rgblight_indicator_state_t rgblight_indicator_state[RGBLIGHT_INDICATOR_SLOT_COUNT] = {0};  // V260310R4: 단일 상태를 슬롯 배열로 확장
+static rgblight_indicator_render_callback_t rgblight_indicator_render_callback = NULL;  // V260310R4: BRICK65 물리 인디케이터 렌더 경로
 
 static void rgblight_sethsv_noeeprom_old(uint8_t hue, uint8_t sat, uint8_t val);  // V251018R5: Pulse 제어 블록에서 재사용
+void rgblight_sethsv_eeprom_helper(uint8_t hue, uint8_t sat, uint8_t val, bool write_to_eeprom);  // V260310R5: 모드 전환 보정 경로에서 선행 참조
 
 #if defined(RGBLIGHT_EFFECT_PULSE_ON_PRESS) || defined(RGBLIGHT_EFFECT_PULSE_OFF_PRESS) || defined(RGBLIGHT_EFFECT_PULSE_ON_PRESS_HOLD) || defined(RGBLIGHT_EFFECT_PULSE_OFF_PRESS_HOLD)
 typedef struct {
@@ -378,6 +373,32 @@ static volatile bool    rgblight_host_led_pending    = false;  // V251018R1: USB
 static volatile uint8_t rgblight_host_led_raw_buffer = 0;
 static bool             rgblight_render_pending      = false;  // V251018R1: rgblight_set 실행을 주 루프에서 단일 처리
 
+static uint8_t rgblight_mode_transition_sat(uint8_t old_mode, uint8_t new_mode, uint8_t sat)
+{
+    if (sat != 0) {
+        return sat;
+    }
+
+    if (mode_base_table[old_mode] != RGBLIGHT_MODE_STATIC_LIGHT) {
+        return sat;
+    }
+
+    uint8_t new_base_mode = mode_base_table[new_mode];
+
+#ifdef RGBLIGHT_EFFECT_RAINBOW_MOOD
+    if (new_base_mode == RGBLIGHT_MODE_RAINBOW_MOOD) {
+        return UINT8_MAX;  // V260310R5: Solid Color 흰색(채도 0)에서 Rainbow Mood 진입 시 즉시 다색 효과가 보이도록 채도 복원
+    }
+#endif
+#ifdef RGBLIGHT_EFFECT_RAINBOW_SWIRL
+    if (new_base_mode == RGBLIGHT_MODE_RAINBOW_SWIRL) {
+        return UINT8_MAX;  // V260310R5: Solid Color 흰색(채도 0)에서 Rainbow Swirl 진입 시 즉시 다색 효과가 보이도록 채도 복원
+    }
+#endif
+
+    return sat;
+}
+
 static void rgblight_request_render(void)
 {
     rgblight_render_pending = true;
@@ -429,17 +450,49 @@ static bool rgblight_indicator_target_active_default(uint8_t target, led_t host_
 static rgblight_indicator_target_callback_t rgblight_indicator_target_callback =
     rgblight_indicator_target_active_default;  // V251016R8: 기본 Caps/Scroll/Num 매핑으로 초기화
 
-static void rgblight_indicator_apply_target_range(uint8_t target)
+static bool rgblight_indicator_slot_valid(uint8_t slot)
 {
+    return slot < RGBLIGHT_INDICATOR_SLOT_COUNT;
+}
+
+static bool rgblight_indicator_any_active(void)
+{
+    for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot) {
+        if (rgblight_indicator_state[slot].active) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool rgblight_indicator_any_pending_render(void)
+{
+    for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot) {
+        if (rgblight_indicator_state[slot].active && rgblight_indicator_state[slot].needs_render) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void rgblight_indicator_apply_target_range(uint8_t slot, uint8_t target)
+{
+    if (!rgblight_indicator_slot_valid(slot)) {
+        return;
+    }
+
     if (target > RGBLIGHT_INDICATOR_TARGET_NUM) {
         target = RGBLIGHT_INDICATOR_TARGET_OFF;  // V251016R8: 범위를 지정할 수 없는 타깃은 비활성 처리
     }
 
-    rgblight_indicator_range_t previous_range = rgblight_indicator_state.range;
-    bool                        previous_override = rgblight_indicator_state.overrides_all;
+    rgblight_indicator_state_t *state = &rgblight_indicator_state[slot];
+    rgblight_indicator_range_t  previous_range = state->range;
+    bool                        previous_override = state->overrides_all;
     rgblight_indicator_range_t  range = {0, 0};
     if (target < RGBLIGHT_INDICATOR_RANGE_TABLE_LENGTH) {
-        range = rgblight_indicator_range_table[target];
+        range = rgblight_indicator_range_table[slot][target];
     }
 
     bool overrides_all = false;
@@ -450,13 +503,13 @@ static void rgblight_indicator_apply_target_range(uint8_t target)
         }
     }
 
-    rgblight_indicator_state.range        = range;
-    rgblight_indicator_state.overrides_all = overrides_all;
+    state->range         = range;
+    state->overrides_all = overrides_all;
 
     bool range_changed = (previous_range.start != range.start) || (previous_range.count != range.count);
     if (range_changed || previous_override != overrides_all) {
-        if (rgblight_indicator_state.active) {
-            rgblight_indicator_state.needs_render = true;  // V251016R8: 범위 변화 시 오버레이 재적용 요청
+        if (state->active) {
+            state->needs_render = true;  // V251016R8: 범위 변화 시 오버레이 재적용 요청
         }
     }
 }
@@ -508,24 +561,26 @@ static rgb_led_t rgblight_indicator_compute_color(rgblight_indicator_config_t co
 }
 
 // V251016R9: 프레임 준비 로직이 호출부로 이관되어 오버레이 함수는 적용만 수행
-static void rgblight_indicator_apply_overlay(void)
+static void rgblight_indicator_apply_overlay(rgblight_indicator_state_t *state)
 {
     // V251121R1: 전체 오버레이는 재렌더 플래그와 무관하게 항상 적용해 우선순위를 유지
-    if (!rgblight_indicator_state.active) {
-        rgblight_indicator_state.needs_render = false;
+    if (state == NULL || !state->active) {
+        if (state != NULL) {
+            state->needs_render = false;
+        }
         return;
     }
 
-    rgblight_indicator_range_t range = rgblight_indicator_state.range;
+    rgblight_indicator_range_t range = state->range;
     if (range.count == 0) {
-        rgblight_indicator_state.needs_render = false;
+        state->needs_render = false;
         return;
     }
 
     uint16_t start = range.start;
     uint16_t count = range.count;
 
-    rgb_led_t  cached     = rgblight_indicator_state.color;
+    rgb_led_t  cached     = state->color;
     rgb_led_t *target_led = &led[start];
     rgb_led_t *target_end = target_led + count;
 
@@ -533,7 +588,7 @@ static void rgblight_indicator_apply_overlay(void)
         *target_led++ = cached;
     }
 
-    rgblight_indicator_state.needs_render = false;
+    state->needs_render = false;
 }
 
 static void rgblight_indicator_restore_pulse_effect(void)
@@ -547,18 +602,23 @@ static void rgblight_indicator_restore_pulse_effect(void)
 }
 
 // V251012R3: 인디케이터 상태 전이를 공통화해 중복 로직과 불필요한 rgblight_set 호출을 축소
-static void rgblight_indicator_commit_state(bool should_enable, bool request_render)
+static void rgblight_indicator_commit_state(uint8_t slot, bool should_enable, bool request_render)
 {
     if (!rgblight_indicator_supported) {
         return;  // V251120R1: 인디케이터 미지원 보드는 상태 머신을 비활성
     }
 
-    bool was_active  = rgblight_indicator_state.active;
-    bool was_pending = rgblight_indicator_state.needs_render;
+    if (!rgblight_indicator_slot_valid(slot)) {
+        return;
+    }
+
+    rgblight_indicator_state_t *state = &rgblight_indicator_state[slot];
+    bool                        was_active = state->active;
+    bool                        was_pending = state->needs_render;
     bool needs_render = should_enable && (request_render || !was_active || was_pending);
 
-    rgblight_indicator_state.active       = should_enable;
-    rgblight_indicator_state.needs_render = needs_render;
+    state->active       = should_enable;
+    state->needs_render = needs_render;
 
     if (should_enable) {
         if (!was_active || needs_render) {
@@ -570,6 +630,13 @@ static void rgblight_indicator_commit_state(bool should_enable, bool request_ren
     if (was_active) {
         if (rgblight_config.enable && is_static_effect(rgblight_config.mode)) {
             rgblight_mode_noeeprom(rgblight_config.mode);  // V251018R3: 정적 효과는 즉시 재렌더해 원본 상태 복구
+        } else {
+#ifdef RGBLIGHT_USE_TIMER
+            if (rgblight_status.timer_enabled) {
+                animation_status.next_timer_due = sync_timer_read();  // V251122R7: 인디케이터 종료 시 베이스 이펙트를 즉시 재계산하도록 만료 시각을 당김
+                rgblight_timer_task();  // V251122R7: 다음 틱을 기다리지 않고 오버레이가 남지 않게 즉시 프레임 재계산
+            }
+#endif
         }
 
         rgblight_indicator_restore_pulse_effect();  // V251121R2: CAPS OFF에서 Pulse 기본 상태를 즉시 재적용
@@ -594,46 +661,66 @@ void rgblight_indicator_set_target_callback(rgblight_indicator_target_callback_t
 
 void rgblight_indicator_set_ranges(const rgblight_indicator_range_t *ranges, uint8_t length)
 {
+    rgblight_indicator_set_ranges_at(0, ranges, length);  // V260310R4: 기존 단일 슬롯 API는 0번 슬롯으로 유지
+}
+
+void rgblight_indicator_set_ranges_at(uint8_t slot, const rgblight_indicator_range_t *ranges, uint8_t length)
+{
     if (!rgblight_indicator_supported) {
         return;  // V251120R1: 인디케이터 미지원 보드는 범위 설정을 비활성
+    }
+
+    if (!rgblight_indicator_slot_valid(slot)) {
+        return;
     }
 
     uint8_t limit = RGBLIGHT_INDICATOR_RANGE_TABLE_LENGTH;
 
     for (uint8_t index = 0; index < limit; ++index) {
         if (ranges != NULL && index < length) {
-            rgblight_indicator_range_table[index] = rgblight_indicator_sanitize_range(ranges[index]);
+            rgblight_indicator_range_table[slot][index] = rgblight_indicator_sanitize_range(ranges[index]);
         } else {
-            rgblight_indicator_range_table[index] = (rgblight_indicator_range_t){0, 0};
+            rgblight_indicator_range_table[slot][index] = (rgblight_indicator_range_t){0, 0};
         }
     }
 
-    rgblight_indicator_apply_target_range(rgblight_indicator_state.config.target);  // V251016R8: range_target 필드 제거로 즉시 재평가
+    rgblight_indicator_apply_target_range(slot, rgblight_indicator_state[slot].config.target);  // V260310R4: 슬롯별 범위를 즉시 재평가
 }
 
 // V251012R2: VIA 및 포트 계층에서 전달된 구성 변경을 반영
 // V251012R6: 내부 상태만 사용하도록 구성 조회 API 정리
 void rgblight_indicator_update_config(rgblight_indicator_config_t config)
 {
+    rgblight_indicator_update_config_at(0, config);  // V260310R4: 기존 단일 슬롯 API는 0번 슬롯으로 유지
+}
+
+void rgblight_indicator_update_config_at(uint8_t slot, rgblight_indicator_config_t config)
+{
     if (!rgblight_indicator_supported) {
         return;  // V251120R1: 인디케이터 미지원 보드는 구성 변경을 무시
     }
 
-    if (rgblight_indicator_state.config.raw == config.raw) {
+    if (!rgblight_indicator_slot_valid(slot)) {
+        return;
+    }
+
+    rgblight_indicator_state_t *state = &rgblight_indicator_state[slot];
+
+    if (state->config.raw == config.raw) {
         return;  // V251012R5: 동일 구성 반복 시 재계산과 재렌더를 생략
     }
 
-    rgblight_indicator_state.config = config;
-    rgblight_indicator_apply_target_range(config.target);  // V251016R8: 선택된 인디케이터 범위를 즉시 반영
+    state->config = config;
+    rgblight_indicator_apply_target_range(slot, config.target);  // V260310R4: 선택된 슬롯 범위를 즉시 반영
     if (config.target == RGBLIGHT_INDICATOR_TARGET_OFF) {
-        rgblight_indicator_state.color = (rgb_led_t){0};  // V251016R7: 인디케이터 비활성 구성은 HSV 변환 없이 캐시를 초기화
+        state->color = (rgb_led_t){0};  // V251016R7: 인디케이터 비활성 구성은 HSV 변환 없이 캐시를 초기화
     } else {
-        rgblight_indicator_state.color = rgblight_indicator_compute_color(config);  // V251012R4: 렌더링 시 재사용할 색상 캐시
+        state->color = rgblight_indicator_compute_color(config);  // V251012R4: 렌더링 시 재사용할 색상 캐시
     }
 
-    bool should_enable = rgblight_indicator_should_enable(config, rgblight_indicator_state.host_state);
+    bool should_enable = rgblight_indicator_should_enable(config, state->host_state);
 
-    rgblight_indicator_commit_state(should_enable, true);  // V251012R3: 구성 변경 시 즉시 재렌더링
+    rgblight_indicator_commit_state(slot, should_enable, true);  // V260310R4: 구성 변경 시 슬롯별 즉시 재렌더링
 }
 
 // V251012R2: 호스트 LED 상태 변화를 rgblight 인디케이터 파이프라인으로 전달
@@ -643,15 +730,26 @@ void rgblight_indicator_apply_host_led(led_t host_led_state)
         return;  // V251120R1: 인디케이터 미지원 보드에서는 호스트 LED 이벤트를 무시
     }
 
-    if (rgblight_indicator_state.host_state.raw == host_led_state.raw) {
-        return;  // V251012R5: 동일 상태 재전달 시 전이 검사를 건너뛰어 인터럽트 부하를 완화
+    bool changed = false;
+
+    for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot) {
+        rgblight_indicator_state_t *state = &rgblight_indicator_state[slot];
+
+        if (state->host_state.raw == host_led_state.raw) {
+            continue;  // V251012R5: 동일 상태 재전달 시 전이 검사를 건너뛰어 인터럽트 부하를 완화
+        }
+
+        state->host_state = host_led_state;
+        changed           = true;
+
+        bool should_enable = rgblight_indicator_should_enable(state->config, host_led_state);
+
+        rgblight_indicator_commit_state(slot, should_enable, false);  // V260310R4: 호스트 이벤트를 슬롯별로 평가
     }
 
-    rgblight_indicator_state.host_state = host_led_state;
-
-    bool should_enable = rgblight_indicator_should_enable(rgblight_indicator_state.config, host_led_state);
-
-    rgblight_indicator_commit_state(should_enable, false);  // V251012R3: 호스트 이벤트는 전이 감지만 수행
+    if (!changed) {
+        return;
+    }
 }
 
 void rgblight_indicator_post_host_event(led_t host_led_state)
@@ -663,6 +761,15 @@ void rgblight_indicator_post_host_event(led_t host_led_state)
     rgblight_host_led_raw_buffer = host_led_state.raw;
     rgblight_host_led_pending    = true;
 }  // V251018R1: IRQ 컨텍스트에서는 상태만 저장하고 실제 처리는 rgblight_task로 위임
+
+void rgblight_indicator_set_render_callback(rgblight_indicator_render_callback_t callback)
+{
+    if (!rgblight_indicator_supported) {
+        return;  // V260310R4: 인디케이터 미지원 보드는 물리 렌더 콜백을 사용하지 않음
+    }
+
+    rgblight_indicator_render_callback = callback;
+}
 
 void rgblight_set_clipping_range(uint8_t start_pos, uint8_t num_leds) {
     if (start_pos > RGBLIGHT_LED_COUNT) {
@@ -682,9 +789,12 @@ void rgblight_set_clipping_range(uint8_t start_pos, uint8_t num_leds) {
     rgblight_ranges.clipping_start_pos = start_pos;
     rgblight_ranges.clipping_num_leds  = num_leds;
 
-    if (rgblight_indicator_state.active) {
-        rgblight_indicator_state.needs_render = true;  // V251013R6: 범위 변경 시 인디케이터 버퍼 재적용 예약
-                                                        // V251013R7: 값이 바뀐 경우에만 플래그를 세팅
+    if (rgblight_indicator_any_active()) {
+        for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot) {
+            if (rgblight_indicator_state[slot].active) {
+                rgblight_indicator_state[slot].needs_render = true;  // V260310R4: 활성 슬롯 전체에 오버레이 재적용 예약
+            }
+        }
     }
 }
 
@@ -705,9 +815,12 @@ void rgblight_set_effect_range(uint8_t start_pos, uint8_t num_leds) {
     rgblight_ranges.effect_end_pos   = (uint8_t)end;
     rgblight_ranges.effect_num_leds  = num_leds;
 
-    if (rgblight_indicator_state.active) {
-        rgblight_indicator_state.needs_render = true;  // V251013R6: 효과 범위 갱신 시 재렌더링 플래그 설정
-                                                        // V251013R7: 값이 실제로 변한 경우에만 트리거
+    if (rgblight_indicator_any_active()) {
+        for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot) {
+            if (rgblight_indicator_state[slot].active) {
+                rgblight_indicator_state[slot].needs_render = true;  // V260310R4: 활성 슬롯 전체에 재렌더링 플래그 설정
+            }
+        }
     }
 }
 
@@ -819,12 +932,14 @@ void rgblight_init(void) {
 
     is_rgblight_initialized = true;
 
-    bool indicator_should_enable =
-        rgblight_indicator_should_enable(rgblight_indicator_state.config,
-                                         rgblight_indicator_state.host_state);
+    for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot) {
+        bool indicator_should_enable =
+            rgblight_indicator_should_enable(rgblight_indicator_state[slot].config,
+                                             rgblight_indicator_state[slot].host_state);
 
-    rgblight_indicator_commit_state(indicator_should_enable,
-                                    true); // V251012R8: 초기화 시점에서 직접 전이를 재평가해 즉시 렌더 요청
+        rgblight_indicator_commit_state(slot, indicator_should_enable,
+                                        true);  // V260310R4: 초기화 시점에서 슬롯별 전이를 재평가
+    }
 }
 
 void rgblight_reload_from_eeprom(void) {
@@ -906,6 +1021,9 @@ uint8_t rgblight_get_mode(void) {
 }
 
 void rgblight_mode_eeprom_helper(uint8_t mode, bool write_to_eeprom) {
+    uint8_t prev_mode = rgblight_config.mode;
+    uint8_t next_sat;
+
     if (!rgblight_config.enable) {
         return;
     }
@@ -931,7 +1049,8 @@ void rgblight_mode_eeprom_helper(uint8_t mode, bool write_to_eeprom) {
 #ifdef RGBLIGHT_USE_TIMER
     animation_status.restart = true;
 #endif
-    rgblight_sethsv_noeeprom(rgblight_config.hue, rgblight_config.sat, rgblight_config.val);
+    next_sat = rgblight_mode_transition_sat(prev_mode, rgblight_config.mode, rgblight_config.sat);
+    rgblight_sethsv_eeprom_helper(rgblight_config.hue, next_sat, rgblight_config.val, write_to_eeprom);
 }
 
 void rgblight_mode(uint8_t mode) {
@@ -1477,21 +1596,37 @@ static void rgblight_render_frame(void)
 {
     rgb_led_t *start_led;
     uint8_t    num_leds = rgblight_ranges.clipping_num_leds;
-    bool       indicator_supported = rgblight_indicator_supported;  // V251120R1: INDICATOR_ENABLE 상태에 따라 인디케이터 경로 분기
-    bool       indicator_active = indicator_supported && rgblight_indicator_state.active;
-    rgblight_indicator_range_t indicator_range = rgblight_indicator_state.range;
-    bool indicator_has_range = indicator_active && (indicator_range.count > 0);
-    bool indicator_overrides = indicator_has_range && rgblight_indicator_state.overrides_all;
-    bool indicator_ready     = indicator_active && indicator_has_range;
+    uint8_t clip_start       = rgblight_ranges.clipping_start_pos;
+    bool    indicator_overrides = false;
 
-    if (!indicator_ready) {
-        rgblight_indicator_state.needs_render = false;  // V251016R9: 비활성 프레임에서 대기 플래그 정리
-    } else if (!indicator_overrides) {
-        rgblight_indicator_state.needs_render = true;   // V251016R9: 부분 오버레이는 기본 이펙트 이후에 항상 재적용
+    if (clip_start >= RGBLIGHT_LED_COUNT) {
+        for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot) {
+            rgblight_indicator_state[slot].needs_render = false;
+        }
+        return;  // V251122R9: 클리핑 시작점이 범위를 벗어나면 전송을 생략해 OOB를 방지
     }
 
-    bool indicator_should_apply = indicator_ready &&
-                                  (indicator_overrides || rgblight_indicator_state.needs_render);  // V251121R1: 오버레이 우선순위를 항상 보장
+    for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot) {
+        rgblight_indicator_state_t *state = &rgblight_indicator_state[slot];
+
+        if (!rgblight_indicator_supported || !state->active || state->range.count == 0) {
+            state->needs_render = false;  // V260310R4: 비활성 슬롯 또는 외부 렌더 전용 슬롯은 버퍼 오버레이를 건너뛴다
+            continue;
+        }
+
+        if (state->overrides_all) {
+            indicator_overrides = true;
+        } else {
+            state->needs_render = true;   // V260310R4: 부분 오버레이 슬롯은 기본 이펙트 이후에 항상 재적용
+        }
+    }
+
+    if (num_leds == 0) {
+        for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot) {
+            rgblight_indicator_state[slot].needs_render = false;
+        }
+        return;
+    }
 
     if (!indicator_overrides) {
         if (!rgblight_config.enable) {
@@ -1518,18 +1653,38 @@ static void rgblight_render_frame(void)
 #endif
     }
 
-    if (indicator_should_apply) {
-        rgblight_indicator_apply_overlay();  // V251121R1: 인디케이터 활성 시 베이스 프레임 위에 항상 최종 오버레이 적용
+    for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot) {
+        rgblight_indicator_state_t *state = &rgblight_indicator_state[slot];
+
+        if (state->active && state->range.count > 0 &&
+            (state->overrides_all || state->needs_render)) {
+            rgblight_indicator_apply_overlay(state);  // V260310R4: 활성 슬롯 오버레이를 순차 적용
+        }
+    }
+
+    if (rgblight_indicator_supported && rgblight_indicator_render_callback != NULL) {
+        for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot) {
+            rgblight_indicator_state_t *state = &rgblight_indicator_state[slot];
+            rgb_led_t                   color = {0};
+
+            if (state->active) {
+                color = state->color;
+            } else {
+                state->needs_render = false;
+            }
+
+            rgblight_indicator_render_callback(slot, state->active, color);  // V260310R4: BRICK65 물리 인디케이터를 동일 프레임에 합성
+        }
     }
 
 #ifdef RGBLIGHT_LED_MAP
     rgb_led_t led0[RGBLIGHT_LED_COUNT];
-    for (uint8_t i = 0; i < RGBLIGHT_LED_COUNT; i++) {
-        led0[i] = led[pgm_read_byte(&led_map[i])];
+    for (uint8_t i = 0; i < num_leds; i++) {
+        led0[i] = led[pgm_read_byte(&led_map[clip_start + i])];  // V251122R8: 클리핑 범위만 매핑해 복사량 축소
     }
-    start_led = led0 + rgblight_ranges.clipping_start_pos;
+    start_led = led0;  // V251122R8: 부분 매핑에 맞춰 시작 포인터도 선형 버퍼로 조정
 #else
-    start_led = led + rgblight_ranges.clipping_start_pos;
+    start_led = led + clip_start;
 #endif
 
 #ifdef RGBW
@@ -1655,10 +1810,7 @@ static void rgblight_effect_dummy(animation_status_t *anim) {
 }
 
 void rgblight_timer_task(void) {
-    bool indicator_supported = rgblight_indicator_supported;
-    bool indicator_active    = indicator_supported && rgblight_indicator_state.active;
-
-    if (indicator_active && rgblight_indicator_state.needs_render) { // V251018R1: 렌더 예약만 수행
+    if (rgblight_indicator_supported && rgblight_indicator_any_pending_render()) {  // V260310R4: 활성 슬롯 중 재렌더가 필요한 경우만 큐잉
         rgblight_request_render();
     }
     if (!rgblight_status.timer_enabled) {
@@ -1681,35 +1833,35 @@ void rgblight_timer_task(void) {
 #    ifdef RGBLIGHT_EFFECT_BREATHING
     else if (rgblight_status.base_mode == RGBLIGHT_MODE_BREATHING) {
         // breathing mode
-        interval_time = get_interval_time(&RGBLED_BREATHING_INTERVALS[delta], 1, 100);
+        interval_time = get_interval_time(&RGBLED_BREATHING_INTERVALS[delta], 5, 100);  // V251123R3: Breathing Velocikey 범위를 5~100ms로 상향
         effect_func   = rgblight_effect_breathing;
     }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_RAINBOW_MOOD
     else if (rgblight_status.base_mode == RGBLIGHT_MODE_RAINBOW_MOOD) {
         // rainbow mood mode
-        interval_time = get_interval_time(&RGBLED_RAINBOW_MOOD_INTERVALS[delta], 5, 100);
+        interval_time = get_interval_time(&RGBLED_RAINBOW_MOOD_INTERVALS[delta], 10, 120);  // V251123R3: Rainbow Mood Velocikey 범위를 10~120ms로 확장
         effect_func   = rgblight_effect_rainbow_mood;
     }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_RAINBOW_SWIRL
     else if (rgblight_status.base_mode == RGBLIGHT_MODE_RAINBOW_SWIRL) {
         // rainbow swirl mode
-        interval_time = get_interval_time(&RGBLED_RAINBOW_SWIRL_INTERVALS[delta / 2], 1, 100);
+        interval_time = get_interval_time(&RGBLED_RAINBOW_SWIRL_INTERVALS[delta / 2], 5, 100);  // V251123R3: Rainbow Swirl Velocikey 최저 속도를 5ms로 상향
         effect_func   = rgblight_effect_rainbow_swirl;
     }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_SNAKE
     else if (rgblight_status.base_mode == RGBLIGHT_MODE_SNAKE) {
         // snake mode
-        interval_time = get_interval_time(&RGBLED_SNAKE_INTERVALS[delta / 2], 1, 200);
+        interval_time = get_interval_time(&RGBLED_SNAKE_INTERVALS[delta / 2], 10, 200);  // V251123R3: Snake Velocikey 최저 속도를 10ms로 조정
         effect_func   = rgblight_effect_snake;
     }
 #    endif
 #    ifdef RGBLIGHT_EFFECT_KNIGHT
     else if (rgblight_status.base_mode == RGBLIGHT_MODE_KNIGHT) {
         // knight mode
-        interval_time = get_interval_time(&RGBLED_KNIGHT_INTERVALS[delta], 5, 100);
+        interval_time = get_interval_time(&RGBLED_KNIGHT_INTERVALS[delta], 10, 100);  // V251123R3: Knight Velocikey 범위를 10~100ms로 조정
         effect_func   = rgblight_effect_knight;
     }
 #    endif
@@ -1873,8 +2025,8 @@ __attribute__((weak)) const uint8_t RGBLED_SNAKE_INTERVALS[] PROGMEM = {100, 50,
 void rgblight_effect_snake(animation_status_t *anim) {
     static uint8_t pos = 0;
     uint8_t        i, j;
-    int8_t         k;
     int8_t         increment = 1;
+    uint8_t        effect_span = rgblight_ranges.effect_num_leds;  // V251122R7: 효과 범위 기반 래핑을 위해 캐시
 
     if (anim->delta % 2) {
         increment = -1;
@@ -1888,7 +2040,7 @@ void rgblight_effect_snake(animation_status_t *anim) {
             pos = 0;
         }
         anim->pos = 1;
-    }
+        }
 #    endif
 
     for (i = 0; i < rgblight_ranges.effect_num_leds; i++) {
@@ -1900,12 +2052,12 @@ void rgblight_effect_snake(animation_status_t *anim) {
         ledp->w = 0;
 #    endif
         for (j = 0; j < RGBLIGHT_EFFECT_SNAKE_LENGTH; j++) {
-            k = pos + j * increment;
-            if (k > RGBLIGHT_LED_COUNT) {
-                k = k % (RGBLIGHT_LED_COUNT);
+            int16_t k = (int16_t)pos + (int16_t)j * increment;
+            if (k >= effect_span) {
+                k = k % effect_span;  // V251122R7: 전체 LED가 아닌 효과 범위 기준으로 래핑
             }
             if (k < 0) {
-                k = k + rgblight_ranges.effect_num_leds;
+                k = k + effect_span;  // V251122R7: 음수 래핑도 동일 기준 적용
             }
             if (i == k) {
                 sethsv(rgblight_config.hue, rgblight_config.sat, (uint8_t)(rgblight_config.val * (RGBLIGHT_EFFECT_SNAKE_LENGTH - j) / RGBLIGHT_EFFECT_SNAKE_LENGTH), ledp);
@@ -2190,6 +2342,16 @@ static void rgblight_flush_render_queue(void)
 
 void rgblight_task(void) {
     bool urgent_pending = rgblight_render_pending || rgblight_host_led_pending;
+    bool timer_disabled = !rgblight_status.timer_enabled;
+#ifdef VELOCIKEY_ENABLE
+    bool velocikey_on = rgblight_velocikey_enabled();
+#else
+    bool velocikey_on = false;
+#endif
+    if (!urgent_pending && timer_disabled && !velocikey_on) {
+        return;  // V251122R8: 긴급 이벤트, 타이머, Velocikey 모두 없을 때 250kHz 경로 부하를 줄이기 위해 즉시 반환
+    }
+
     if (!urgent_pending) {
         // V251122R6: 캐시 연동 게이트를 제거하고 단순 1ms 슬라이스로 복원해 스톨 리스크 해소
         static uint16_t rgblight_next_run = 0;  // V251121R5: 1kHz 슬라이스로 rgblight_task 호출 희박화
@@ -2234,19 +2396,45 @@ void rgblight_velocikey_toggle(void) {
     eeconfig_update_rgblight_current();
 }
 
+// V251123R1: VIA 연동을 위한 직접 설정 API
+void rgblight_velocikey_set(bool on, bool write_to_eeprom)
+{
+    if (rgblight_config.velocikey == on) {
+        return;
+    }
+
+    rgblight_config.velocikey = on;
+
+    if (write_to_eeprom) {
+        eeconfig_update_rgblight_current();
+    }
+}
+
 void rgblight_velocikey_accelerate(void) {
-    if (typing_speed < TYPING_SPEED_MAX_VALUE) typing_speed += (TYPING_SPEED_MAX_VALUE / 100);
+    if (typing_speed < TYPING_SPEED_MAX_VALUE) {
+        uint8_t step = (TYPING_SPEED_MAX_VALUE / 50);  // V251123R3: QMK 대비 2배 민감도로 가속(스텝 상향)
+        if (step == 0) {
+            step = 1;
+        }
+        uint16_t next = typing_speed + step;
+        typing_speed   = next > TYPING_SPEED_MAX_VALUE ? TYPING_SPEED_MAX_VALUE : (uint8_t)next;
+    }
 }
 
 void rgblight_velocikey_decelerate(void) {
     static uint16_t decay_timer = 0;
 
-    if (timer_elapsed(decay_timer) > 500 || decay_timer == 0) {
-        if (typing_speed > 0) typing_speed -= 1;
-        // Decay a little faster at half of max speed
-        if (typing_speed > TYPING_SPEED_MAX_VALUE / 2) typing_speed -= 1;
-        // Decay even faster at 3/4 of max speed
-        if (typing_speed > TYPING_SPEED_MAX_VALUE / 4 * 3) typing_speed -= 2;
+    if (timer_elapsed(decay_timer) > 250 || decay_timer == 0) {  // V251123R3: 250ms 주기로 감속해 QMK 대비 2배 민감도로 반응
+        if (typing_speed > 0) {
+            uint8_t dec = 1;  // QMK 기본 감속과 동일하게 시작
+            if (typing_speed > TYPING_SPEED_MAX_VALUE / 2) {
+                dec += 1;  // 중간 속도 이상 추가 감속
+            }
+            if (typing_speed > (TYPING_SPEED_MAX_VALUE * 3) / 4) {
+                dec += 2;  // 최고 속도 구간 감속 강화
+            }
+            typing_speed = (typing_speed > dec) ? typing_speed - dec : 0;
+        }
         decay_timer = timer_read();
     }
 }

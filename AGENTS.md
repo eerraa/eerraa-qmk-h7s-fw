@@ -8,8 +8,9 @@
 
 ## 2. 프로젝트 개요
 - 대상 보드: STM32H7S (내장 HS PHY) — 기본 USB 폴링 주기 8000Hz.
-- 지원 속도: HS 4k/2kHz, FS 1kHz. 정책은 HS 우선입니다.
+- 지원 속도: HS 8k/4k/2kHz, FS 1kHz. 정책은 FS 우선입니다.
 - 주요 기능: USB instability monitor (마이크로프레임 격차 감시, V250924R4), 단계적 폴링 다운그레이드 큐, QMK 포팅층.
+- 현재 `_DEF_FIRMWARE_VERSION`: **V251124R6**
 
 ## 3. 작업 전 체크리스트
 1. `_DEF_FIRMWARE_VERSION`과 보드 매크로를 `src/hw/hw_def.h`에서 확인합니다.
@@ -43,6 +44,15 @@ cmake --build build -j10
 - 별도의 **빌드 테스트 실행 명령**이 없다면 빌드 테스트는 생략합니다.
 - UF2 변환은 CMake 타깃 내부에서 자동으로 처리됩니다.
 
+## 6-1. 개발 도구 환경
+- 현재 WSL 환경은 `/home/theguru/.local/bin`이 `PATH` 앞쪽에 포함되도록 설정되어 있습니다.
+- `fd`와 `bat`은 각각 `/usr/bin/fdfind`, `/usr/bin/batcat`을 가리키는 심볼릭 링크로 설정되어 있습니다.
+- 저장소 탐색은 기본적으로 `rg`와 `fd`를 우선 사용합니다.
+- JSON/VIA 파일 검증은 `jq`를 우선 사용하고, 필요 시 Python 표준 JSON 파서로 대체합니다.
+- 소스 열람은 필요 시 `bat`을 사용할 수 있으며, Git diff 확인은 `delta`가 설치된 환경임을 전제로 합니다.
+- CMake 반복 빌드는 필요 시 `ninja-build`와 `ccache`를 활용할 수 있습니다. 기존 빌드 명령을 바꿀 때는 사용자 요청 또는 작업 목적에 맞는 경우로 제한합니다.
+- 포맷/정적 분석 도구로 `clang-format`, `clang-tidy`, `shellcheck`, `shfmt`, `dos2unix`, `universal-ctags`를 사용할 수 있습니다.
+
 ## 7. 디렉터리 힌트
 - `src/` : 펌웨어 소스 및 라이브러리 전반
 - `src/ap/` : 애플리케이션 계층과 QMK 포팅
@@ -56,7 +66,8 @@ cmake --build build -j10
 - 후속 PR이라면 기존 요약을 유지한 채 의미 있는 변경만 추가로 기술합니다.
 
 ## 9. 추가 주의사항
-- USB 모니터는 750ms 워밍업 후 HS 2048 마이크로프레임 또는 2.75초 타임아웃 조건을 만족하면 활성화됩니다.
+- USB 모니터는 구성 직후 50ms 홀드오프 후 HS 2048 프레임(약 256ms)/FS 128 프레임을 채우거나 2.05초 타임아웃 중 먼저 도달하면 활성화됩니다. 다운그레이드 ARM→COMMIT 지연은 2초입니다.
+- VIA에서 USB 모니터를 비활성화해도 이미 ARM/COMMIT된 다운그레이드·리셋 큐는 처리됩니다. 비활성화 요청 시 큐를 초기화하도록 수정 필요.
 - 타이머/USB 경로를 변경할 때는 8000Hz 스케줄링이 유지되는지 검증합니다.
 - QMK 업스트림 병합 시 `quantum/`을 먼저 비교하고, 이후 `port/`에서 플랫폼 수정을 재적용합니다.
 

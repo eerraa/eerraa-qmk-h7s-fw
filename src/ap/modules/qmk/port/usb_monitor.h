@@ -25,9 +25,12 @@ static inline void via_qmk_usb_monitor_command(uint8_t *data, uint8_t length)
   (void)length;
 }
 
+#ifndef USB_MONITOR_INIT_STUB_DEFINED
+#define USB_MONITOR_INIT_STUB_DEFINED                                     // V251123R6: usb_monitor_init 스텁 중복 정의 방지
 static inline void usb_monitor_init(void)
 {
 }
+#endif
 
 static inline void usb_monitor_storage_init(void)
 {
