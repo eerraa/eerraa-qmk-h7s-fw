@@ -1,7 +1,7 @@
 {
-  "name": "MAY65H",
+  "name": "MAY65",
   "vendorId": "0x4552",
-  "productId": "0x0031",
+  "productId": "0x0030",
   "matrix": {
     "rows": 5,
     "cols": 15
@@ -156,14 +156,14 @@
             },
             {
               "showIf": "{id_qmk_custom_ind_1_select} != 0",
-              "label": "Indicator 1 Brightness",
+              "label": "Indicator Brightness",
               "type": "range",
               "options": [0, 255],
               "content": ["id_qmk_custom_ind_1_brightness", 0, 2]
             },
             {
               "showIf": "{id_qmk_custom_ind_1_select} != 0",
-              "label": "Indicator 1 Color",
+              "label": "Indicator Color",
               "type": "color",
               "content": ["id_qmk_custom_ind_1_color", 0, 3]
             }
@@ -647,6 +647,16 @@
         "Split"
       ],
       [
+        "Enter",
+        "ANSI",
+        "ISO"
+      ],
+      [
+        "Left Shift",
+        "Unified",
+        "Split"
+      ],
+      [
         "BOTTOM ROW",
         "6.25U",
         "7U"
@@ -710,7 +720,17 @@
           "w": 1.5
         },
         "1,13\n\n\n1,0",
-        "1,14"
+        "1,14",
+        {
+          "x": 1.25,
+          "c": "#777777",
+          "w": 1.25,
+          "h": 2,
+          "w2": 1.5,
+          "h2": 1,
+          "x2": -0.25
+        },
+        "2,13\n\n\n1,1"
       ],
       [
         {
@@ -740,14 +760,18 @@
         {
           "c": "#cccccc"
         },
-        "2,14"
+        "2,14",
+        {
+          "x": 0.25
+        },
+        "2,12\n\n\n1,1"
       ],
       [
         {
           "c": "#aaaaaa",
           "w": 2.25
         },
-        "3,0",
+        "3,0\n\n\n2,0",
         {
           "c": "#cccccc"
         },
@@ -773,36 +797,46 @@
         {
           "c": "#cccccc"
         },
-        "3,14"
+        "3,14",
+        {
+          "x": 0.25,
+          "c": "#aaaaaa",
+          "w": 1.25
+        },
+        "3,0\n\n\n2,1",
+        {
+          "c": "#cccccc"
+        },
+        "3,1\n\n\n2,1"
       ],
       [
         {
           "c": "#aaaaaa",
           "w": 1.25
         },
-        "4,0\n\n\n1,0",
+        "4,0\n\n\n3,0",
         {
           "w": 1.25
         },
-        "4,1\n\n\n1,0",
+        "4,1\n\n\n3,0",
         {
           "w": 1.25
         },
-        "4,2\n\n\n1,0",
+        "4,2\n\n\n3,0",
         {
           "c": "#cccccc",
           "w": 6.25
         },
-        "4,7\n\n\n1,0",
+        "4,7\n\n\n3,0",
         {
           "c": "#aaaaaa",
           "w": 1.25
         },
-        "4,10\n\n\n1,0",
+        "4,10\n\n\n3,0",
         {
           "w": 1.25
         },
-        "4,11\n\n\n1,0",
+        "4,11\n\n\n3,0",
         {
           "x": 0.5,
           "c": "#777777"
@@ -817,22 +851,22 @@
           "c": "#aaaaaa",
           "w": 1.5
         },
-        "4,0\n\n\n1,1",
-        "4,1\n\n\n1,1",
+        "4,0\n\n\n3,1",
+        "4,1\n\n\n3,1",
         {
           "w": 1.5
         },
-        "4,2\n\n\n1,1",
+        "4,2\n\n\n3,1",
         {
           "c": "#cccccc",
           "w": 7
         },
-        "4,7\n\n\n1,1",
+        "4,7\n\n\n3,1",
         {
           "c": "#aaaaaa",
           "w": 1.5
         },
-        "4,11\n\n\n1,1"
+        "4,11\n\n\n3,1"
       ]
     ]
   }
