@@ -32,6 +32,7 @@
 #include "timer.h"
 #include "wait.h"
 #include "version.h" // for QMK_BUILDDATE used in EEPROM magic
+#include "era_state_sync.h"  // V260821R1: GET 0x06 리비전 봉투. TX는 raw_hid_send가 아니라 via_hid_task enqueue.
 
 #if defined(AUDIO_ENABLE)
 #    include "audio.h"
@@ -141,6 +142,7 @@ void via_set_layout_options(uint32_t value) {
         value = value >> 8;
         target--;
     }
+    era_state_sync_bump_config();  // V260821R1: layout options는 CONFIG domain
 }
 
 #if defined(AUDIO_ENABLE)
@@ -337,6 +339,12 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
                     command_data[4] = value & 0xFF;
                     break;
                 }
+                case id_era_state_sync: {  // V260821R1: 버퍼만 채운다. 실제 TX는 via_hid_task → usbHidEnqueueViaResponse.
+                    if (!era_state_sync_via_command(data, length)) {
+                        *command_id = id_unhandled;
+                    }
+                    break;
+                }
                 default: {
                     // The value ID is not known
                     // Return the unhandled state
@@ -375,10 +383,12 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
         }
         case id_dynamic_keymap_set_keycode: {
             dynamic_keymap_set_keycode(command_data[0], command_data[1], command_data[2], (command_data[3] << 8) | command_data[4]);
+            era_state_sync_bump_keymap();  // V260821R1
             break;
         }
         case id_dynamic_keymap_reset: {
             dynamic_keymap_reset();
+            era_state_sync_bump_keymap();  // V260821R1
             break;
         }
         case id_custom_set_value:
@@ -414,10 +424,12 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
             uint16_t offset = (command_data[0] << 8) | command_data[1];
             uint16_t size   = command_data[2]; // size <= 28
             dynamic_keymap_macro_set_buffer(offset, size, &command_data[3]);
+            era_state_sync_bump_macro();  // V260821R1
             break;
         }
         case id_dynamic_keymap_macro_reset: {
             dynamic_keymap_macro_reset();
+            era_state_sync_bump_macro();  // V260821R1
             break;
         }
         case id_dynamic_keymap_get_layer_count: {
@@ -434,6 +446,7 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
             uint16_t offset = (command_data[0] << 8) | command_data[1];
             uint16_t size   = command_data[2]; // size <= 28
             dynamic_keymap_set_buffer(offset, size, &command_data[3]);
+            era_state_sync_bump_keymap();  // V260821R1
             break;
         }
 #ifdef ENCODER_MAP_ENABLE
@@ -445,6 +458,7 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
         }
         case id_dynamic_keymap_set_encoder: {
             dynamic_keymap_set_encoder(command_data[0], command_data[1], command_data[2] != 0, (command_data[3] << 8) | command_data[4]);
+            era_state_sync_bump_keymap();  // V260821R1
             break;
         }
 #endif

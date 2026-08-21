@@ -5,6 +5,19 @@ Claude auto-memory는 Codex CLI와 공유되지 않으므로 공용 사실은 �
 
 ---
 
+## 2026-08-21 — VIA GET 0x06 리비전과 exact-ms term (V260821R1)
+
+**결정**:
+1. GET_KEYBOARD_VALUE selector `0x06` 리비전 봉투는 vendored `via.c` GET switch에서 버퍼만 채운다. `raw_hid_send` stub는 비워 두고, 실제 TX는 기존 `via_hid_task` → `usbHidEnqueueViaResponse` 단일 생산자를 유지한다.
+2. Global exact-ms는 channel 15 ID 5, TD0–TD7 exact-ms는 channel 16 ID 41–48, wire는 2-byte big-endian uint16 ms. 기존 ID는 삭제/재할당하지 않는다.
+3. exact SET은 100–500만 허용하고 범위 밖은 거절한다. load/sync는 유효한 uint16을 20ms 격자로 되돌리지 않는다. legacy GET만 floor-to-20ms 투영한다.
+4. CONFIG revision은 값이 실제로 바뀐 tapping/tapdance SET 뒤에 올린다. KEYMAP/MACRO revision은 VIA keymap/macro write 명령 뒤에 올린다.
+5. `_DEF_FIRMWARE_VERSION`을 `V260821R1`로 올려 AUTO_FACTORY_RESET 쿠키를 갱신한다. Brick60은 `AUTO_FACTORY_RESET_ENABLE 1`이므로 이 이미지 첫 부팅에서 EEPROM이 공장 초기화된다.
+
+**검증**: `tools/era_via_host_tests/run.ps1` (exact/legacy vector + GET 0x06 + single-producer source check).
+
+---
+
 ## 2026-07-20 — 에이전트 협업 재설정: graphify 지식그래프 도입 및 문서 체계 개편
 
 **결정**:

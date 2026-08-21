@@ -29,7 +29,8 @@
 
 | Value ID | VIA 단위/범위 | 설명 |
 | --- | --- | --- |
-| `id_qmk_tapping_global_term` | `value_data[0] × 10ms` (VIA dropdown 10~50 → 100~500ms) | `tapping_term_normalize()`로 100~500ms, 20ms 스텝으로 정규화 후 저장. |
+| `id_qmk_tapping_global_term` | `value_data[0] × 10ms` (VIA dropdown 10~50 → 100~500ms) | legacy SET은 `tapping_term_normalize()`로 100~500ms, 20ms 스텝 내림. legacy GET은 저장된 exact 값을 같은 격자로 투영만 하고 저장값을 바꾸지 않는다. |
+| `id_qmk_tapping_global_term_exact` | 2-byte big-endian ms (V260821R1) | 100~500 정수만 허용. 격자 없음. 99/501과 2바이트 미만 패킷은 거절하고 저장값을 유지한다. |
 | `id_qmk_tapping_permissive_hold` | 0/1 토글 | Mod-Tap에서 인터럽트 시에도 HOLD로 전환할지 여부. |
 | `id_qmk_tapping_hold_on_other_key_press` | 0/1 토글 | 다른 키가 눌리면 즉시 HOLD로 강제할지 여부. |
 | `id_qmk_tapping_retro_tapping` | 0/1 토글 | 탭-홀드 릴리즈 시점이 지났을 때 TAP으로 판정할지 여부. |
@@ -58,7 +59,9 @@ VIA 커스텀 명령 수신 (`via_custom_value_command_kb`)
 - EEPROM이 지워졌을 때(`eeconfig_init_user_datablock()` 호출)도 `tapping_term_storage_apply_defaults()` → `tapping_term_storage_flush(true)`가 실행되어 동일 흐름으로 재초기화됩니다.
 
 ## 6. 정규화·유효성 규칙
-- 범위: 100~500ms(`TAPPING_TERM_MIN/MAX_MS`), 스텝: 20ms(`TAPPING_TERM_STEP_MS`). VIA는 10ms 단위 값을 보내지만 `tapping_term_normalize()`가 스텝에 맞게 내림 정규화합니다.
+- 범위: 100~500ms(`TAPPING_TERM_MIN/MAX_MS`). legacy SET만 20ms 스텝(`TAPPING_TERM_STEP_MS`)으로 내림한다. exact SET은 범위만 검사하고 격자를 적용하지 않는다.
+- load/`tapping_term_sync_state_from_storage()`는 유효한 uint16 term을 20ms 격자로 되돌리지 않는다 (V260821R1).
+- 값이 실제로 바뀐 SET만 EEPROM dirty와 CONFIG revision을 올린다. 동일 값 SET은 no-op이다.
 - 불리언 필드는 0/1만 허용. 그 외 값, 시그니처 불일치(`0x50415447`), 버전 불일치(1)가 감지되면 기본값으로 덮어쓴 뒤 dirty 플래그를 세팅합니다.
 - 기본값 적용 시 `eeconfig_flag_tapping_term(true)`로 dirty 마크를 남겨 즉시/차후 flush 대상에 포함시킵니다.
 
@@ -82,6 +85,6 @@ VIA 커스텀 명령 수신 (`via_custom_value_command_kb`)
 3. EEPROM 초기화/펌웨어 업데이트 후에는 기본값(200ms)으로 돌아가므로 필요 시 다시 설정합니다.
 
 ## 10. 운영 체크 포인트
-- 정규화 로직이 20ms 스텝으로 내림 적용되므로 130ms와 같이 스텝에 맞지 않는 값은 120ms로 저장됩니다. VIA 에코(SET 후 GET)로 수신 값을 확인하십시오.
+- legacy dropdown으로 130ms를 보내면 120ms로 저장된다. exact ID로 137ms를 보내면 137ms가 저장되고, legacy GET만 12(120ms)를 돌려준다.
 - `id_custom_set_value`/`get_value` 패킷 길이가 4바이트 미만이면 `id_unhandled`로 응답하므로 클라이언트는 표준 32바이트 RAW HID 패킷을 유지해야 합니다.
 - 별도 로그가 없으므로 값 확인은 VIA UI 재조회 또는 RAW HID 응답을 통해 수행합니다. EEPROM dirty 플래그는 Save 이후에만 클리어됩니다.

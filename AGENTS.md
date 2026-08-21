@@ -11,7 +11,7 @@
 - 지원 속도: HS 8k/4k/2kHz, FS 1kHz. 정책은 FS 우선입니다.
 - 주요 기능: USB instability monitor, 단계적 폴링 다운그레이드 큐, QMK 포팅층, VIA/Vial 지원.
 - 지원 키보드(5종, `src/ap/modules/qmk/keyboards/` 하위): `era/keynetix/may65`(최근 작업 보드), `era/intigrity80`, `era/sirind/{brick60,brick65,sculpturei}`
-- 현재 `_DEF_FIRMWARE_VERSION`: **V260720R1** (기준은 항상 `src/hw/hw_def.h`)
+- 현재 `_DEF_FIRMWARE_VERSION`: **V260821R1** (기준은 항상 `src/hw/hw_def.h`)
 
 ## 3. 지식그래프 (graphify) — 코드 탐색 1순위
 이 리포에는 지식그래프가 `graphify-out/`에 커밋되어 있습니다. 스코프는 `.graphifyignore`가 정의하며, "실제 컴파일되는 코드 + 프로젝트 문서"만 포함합니다.
@@ -68,7 +68,7 @@ cmake --build build -j10
 
 ## 9. PR 작성 지침
 - PR 제목과 본문은 한국어로 작성합니다.
-- 변경 요약과 테스트 결과를 명시하고, 현재 펌웨어 버전 문자열(예: `V260720R1`)을 포함합니다.
+- 변경 요약과 테스트 결과를 명시하고, 현재 펌웨어 버전 문자열(예: `V260821R1`)을 포함합니다.
 - 후속 PR이라면 기존 요약을 유지한 채 의미 있는 변경만 추가로 기술합니다.
 
 ## 10. 추가 주의사항

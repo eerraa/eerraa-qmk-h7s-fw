@@ -14,7 +14,7 @@
 | `src/ap/modules/qmk/port/tapdance.{c,h}` | `tapdance_init()`, `tapdance_handle_via_command()` | VIA 채널 16 처리, EEPROM 저장/로드, 상태머신(Vial 호환) 구현. |
 | `src/ap/modules/qmk/quantum/quantum.c` | `get_record_keycode()` 내 `translate_kb_to_tap_dance()` (214~241행, V251125R1) | `QK_KB_0~7` 커스텀 키코드를 `TD(0)~TD(7)`으로 치환. |
 | `src/ap/modules/qmk/qmk.c` | `tapdance_init()` 호출 (qmk.c:24) | 부팅 시 Tap Dance 설정 초기 로드. |
-| `src/hw/hw_def.h` | `_DEF_FIRMWARE_VERSION` | 펌웨어 버전 문자열 (문서 작성 시점 `V260720R1`; 최신 값은 항상 `src/hw/hw_def.h` 참조). |
+| `src/hw/hw_def.h` | `_DEF_FIRMWARE_VERSION` | 펌웨어 버전 문자열 (최신 값은 항상 `src/hw/hw_def.h` 참조). |
 
 ## 3. EEPROM 슬롯 & 데이터 구조
 | 심볼/크기 | 오프셋 (`EECONFIG_USER_DATABLOCK` 기준) | 필드 | 설명 |
@@ -27,7 +27,8 @@
 ## 4. VIA UI·명령 매핑
 - 채널 ID: `id_qmk_tapdance`(16).
 - Value ID: 슬롯당 5개, `(16, base+0..4)` = tap, hold, double tap, tap+hold, term. 슬롯 1의 base=1 → 1~5, 슬롯 8의 base=36 → 36~40.
-- Term 단위: VIA dropdown 10~50 → 실제 ms = 값×10 (100~500ms). 내부에서 최소/최대/20ms 단위로 정규화.
+- Term 단위: VIA dropdown 10~50 → 실제 ms = 값×10 (100~500ms). legacy SET만 최소/최대/20ms 단위로 정규화한다.
+- Exact term ID (V260821R1): channel 16, IDs 41–48 = TD0–TD7, 2-byte big-endian ms, 100–500만 허용. load 경로에서 20ms 격자로 되돌리지 않는다.
 - `id_custom_set_value`: 값 적용 후 즉시 에코(`tapdance_get_value`)로 응답. `id_custom_save`: EEPROM flush.
 
 ### VIA JSON (VIA3 `customKeycodes`)
@@ -75,7 +76,7 @@ process_tap_dance.c
 
 ## 7. Term 동작
 - 슬롯별 term만 사용하며 글로벌 `TAPPING_TERM`/`g_tapping_term`과 완전히 독립.
-- 범위: 100~500ms, 20ms 스텝 정규화. 범위 밖 값/손상 데이터는 200ms로 복원.
+- 범위: 100~500ms. legacy SET만 20ms 스텝 정규화. exact SET은 범위 밖을 거절하고 저장값을 유지. 손상 슬롯(시그니처/버전/범위)은 init에서 200ms 기본값으로 복원.
 
 ## 8. 키코드/매핑 요약
 - VIA TD0~TD7 → `QK_KB_0`~`QK_KB_7` → `TD(0)`~`TD(7)` (`quantum/quantum.c`의 `get_record_keycode()` 내 `translate_kb_to_tap_dance()` 치환, V251125R1).

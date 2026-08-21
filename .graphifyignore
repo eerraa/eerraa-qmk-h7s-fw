@@ -8,6 +8,7 @@
 .vscode/
 prj/
 LICENSE
+tools/era_via_host_tests/
 
 # --- 벤더 라이브러리 (표준 API — 그래프에 불필요) ---
 src/lib/lib8tion/

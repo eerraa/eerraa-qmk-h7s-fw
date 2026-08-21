@@ -63,7 +63,9 @@ void via_hid_init(void)
 
 void raw_hid_send(uint8_t *data, uint8_t length)
 {
-  
+  (void)data;
+  (void)length;
+  // V260821R1: VIA TX 생산자는 via_hid_task의 enqueue 하나다. 이 stub를 채우지 않는다.
 }
 
 void via_hid_receive(uint8_t *data, uint8_t length)

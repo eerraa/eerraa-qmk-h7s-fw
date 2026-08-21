@@ -102,6 +102,7 @@ enum via_keyboard_value_id {
     id_switch_matrix_state = 0x03,
     id_firmware_version    = 0x04,
     id_device_indication   = 0x05,
+    id_era_state_sync      = 0x06,  // V260821R1: GET_KEYBOARD_VALUE 리비전 봉투
 };
 
 enum via_channel_id {
@@ -175,6 +176,7 @@ enum via_qmk_tapping_value {
     id_qmk_tapping_permissive_hold         = 2,
     id_qmk_tapping_hold_on_other_key_press = 3,
     id_qmk_tapping_retro_tapping           = 4,
+    id_qmk_tapping_global_term_exact       = 5,  // V260821R1: 2-byte BE exact ms
 };
 
 // V251124R8: VIA TAPDANCE value ID 매핑
@@ -226,6 +228,15 @@ enum via_qmk_tapdance_value {
     id_qmk_tapdance_8_dtap  = 38,
     id_qmk_tapdance_8_thold = 39,
     id_qmk_tapdance_8_term  = 40,
+
+    id_qmk_tapdance_1_term_exact = 41,  // V260821R1: TD0–TD7 exact ms, channel 16
+    id_qmk_tapdance_2_term_exact = 42,
+    id_qmk_tapdance_3_term_exact = 43,
+    id_qmk_tapdance_4_term_exact = 44,
+    id_qmk_tapdance_5_term_exact = 45,
+    id_qmk_tapdance_6_term_exact = 46,
+    id_qmk_tapdance_7_term_exact = 47,
+    id_qmk_tapdance_8_term_exact = 48,
 };
 
 // V251012R2: 커스텀 인디케이터 제어 값 ID
