@@ -1525,13 +1525,13 @@
     "semantic_hash": "8f2bc78426ef99dc94ac9f59ded98c93"
   },
   "src/hw/driver/usb/usb_hid/usbd_hid.c": {
-    "mtime": 1787496111.498864,
-    "ast_hash": "39916291c3940dcdedd92bfd940641e1",
+    "mtime": 1787516755.5078714,
+    "ast_hash": "d62ddc778b7237959715b795f71f458e",
     "semantic_hash": ""
   },
   "src/hw/driver/usb/usb_hid/usbd_hid.h": {
-    "mtime": 1787493870.2390625,
-    "ast_hash": "1257e80af8544ed2abb70d464dde8fed",
+    "mtime": 1787516692.5347173,
+    "ast_hash": "687829532caaa22dad96b6c9f31c1fbf",
     "semantic_hash": ""
   },
   "src/hw/driver/usb/usb_hid/usbd_hid_internal.h": {
@@ -1620,8 +1620,8 @@
     "semantic_hash": "79e3792b34c127bf9635e5d299f89bc4"
   },
   "src/hw/hw_def.h": {
-    "mtime": 1787493253.8369205,
-    "ast_hash": "bff9b0a2e172e5c12b2a6ded5b9c7301",
+    "mtime": 1787516769.9384904,
+    "ast_hash": "28695c6e2dd51b20450ee025d170b23f",
     "semantic_hash": ""
   },
   "src/lib/ST/STM32_USB_Device_Library/Core/Inc/usbd_conf_template.h": {
@@ -1715,8 +1715,8 @@
     "semantic_hash": "259f6df270e971ac853c4193c40a0640"
   },
   "docs/DECISIONS.md": {
-    "mtime": 1787512409.1870782,
-    "ast_hash": "aa69ccbe10371b5ab02e1b1b9eca37b1",
+    "mtime": 1787517339.2289987,
+    "ast_hash": "449723d5c35938a07002ea0a1d033bb5",
     "semantic_hash": ""
   },
   "docs/eeprom.md": {
@@ -1830,8 +1830,8 @@
     "semantic_hash": ""
   },
   "docs/features_usb_diagnostics.md": {
-    "mtime": 1787507940.4377577,
-    "ast_hash": "4309bafc465fa62501ec62ccb81e5f53",
+    "mtime": 1787517349.370157,
+    "ast_hash": "c365cb1d7705a076421759c49943d5dc",
     "semantic_hash": ""
   }
 }

@@ -118,10 +118,7 @@
   "118": "USB conf 템플릿",
   "119": "debounce.h",
   "121": "USBD_GetEpDesc",
-  "122": "matrix_get_row",
-  "123": "timer.c",
   "124": "asym_eager_defer_pk.c",
-  "125": "debounce.h",
   "126": "rgblight_sethsv_range",
   "129": "via_qmk_version",
   "130": "is_sequencer_track_active"
