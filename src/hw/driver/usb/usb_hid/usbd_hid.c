@@ -904,11 +904,16 @@ bool USBD_HID_SendReport(uint8_t *report,
       if (diagnostic_session_id != 0U)
       {
         // V260823R2: 활성 세션만 원 요청 시각을 연결해 비활성 8k 경로의 임계구역 비용을 없앤다.
+        // 표식은 전송보다 먼저 세운다. USB ISR이 그 사이에 완료를 보고할 수 있다.
         usbDiagnosticsOnReportTransferStarted(diagnostic_request_us,
                                               diagnostic_session_id,
                                               queued_reports);
       }
-      (void)USBD_LL_Transmit(pdev, HID_EPIN_ADDR, report, len);
+      if (USBD_LL_Transmit(pdev, HID_EPIN_ADDR, report, len) != USBD_OK)
+      {
+        usbHidEpRelease(p_hhid, HID_EPIN_ADDR);                        // V260824R1: 무장 실패 시 즉시 해제
+        ret = false;
+      }
     }
   }
 
@@ -936,7 +941,11 @@ bool USBD_HID_SendReportEXK(uint8_t *report, uint16_t len)
     if (usbHidEpTryAcquire(p_hhid, HID_EXK_EP_IN))                     // V260824R1: EXK EP만 점유
     {
       ret = true;
-      (void)USBD_LL_Transmit(pdev, HID_EXK_EP_IN, report, len);
+      if (USBD_LL_Transmit(pdev, HID_EXK_EP_IN, report, len) != USBD_OK)
+      {
+        usbHidEpRelease(p_hhid, HID_EXK_EP_IN);                        // V260824R1: 무장 실패 시 즉시 해제
+        ret = false;
+      }
     }
   }
 
@@ -1115,11 +1124,15 @@ uint8_t USBD_HID_SOF(USBD_HandleTypeDef *pdev)
   {
     // V260824R1: VIA 응답도 동일한 EP busy 규약에 편입한다. 이전에는 이 경로가 규약을
     //            우회해 "IN 전송 진행 중"이라는 불변식 자체가 성립하지 않았다.
-    if (usbHidEpTryAcquire((USBD_HID_HandleTypeDef *)pdev->pClassDataCmsit[pdev->classId],
-                           HID_VIA_EP_IN))
+    USBD_HID_HandleTypeDef *hhid = (USBD_HID_HandleTypeDef *)pdev->pClassDataCmsit[pdev->classId];
+
+    if (usbHidEpTryAcquire(hhid, HID_VIA_EP_IN))
     {
       qbufferRead(&via_report_q, (uint8_t *)via_hid_usb_report, 1);
-      USBD_LL_Transmit(pdev, HID_VIA_EP_OUT, via_hid_usb_report, sizeof(via_hid_usb_report));
+      if (USBD_LL_Transmit(pdev, HID_VIA_EP_OUT, via_hid_usb_report, sizeof(via_hid_usb_report)) != USBD_OK)
+      {
+        usbHidEpRelease(hhid, HID_VIA_EP_IN);                          // V260824R1: 무장 실패 시 즉시 해제
+      }
       USBD_LL_PrepareReceive(pdev, HID_VIA_EP_OUT, via_hid_usb_report, sizeof(via_hid_usb_report));
     }
   }

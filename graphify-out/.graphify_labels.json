@@ -114,12 +114,14 @@
   "112": "SSD1306 레지스터",
   "113": "W25Q128FV 헤더",
   "114": "EEPROM 에뮬 설정",
+  "115": "matrix_get_row",
+  "116": "debounce.h",
   "117": "usb.h BootMode 타입",
   "118": "USB conf 템플릿",
   "119": "debounce.h",
+  "120": "via_qmk_kkuk_command",
   "121": "USBD_GetEpDesc",
   "124": "asym_eager_defer_pk.c",
   "126": "rgblight_sethsv_range",
-  "129": "via_qmk_version",
-  "130": "is_sequencer_track_active"
+  "129": "via_qmk_version"
 }

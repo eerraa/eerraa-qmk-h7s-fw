@@ -38,8 +38,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "src_ap_ap_apinit",
-      "community": 27,
-      "community_name": "ap \uba54\uc778 \ub8e8\ud504",
+      "community": 56,
+      "community_name": "\ub4dc\ub77c\uc774\ubc84 \ucd08\uae30\ud654\u00b7\ub85c\uadf8",
       "norm_label": "apinit()"
     },
     {
@@ -907,8 +907,8 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_keyboards_era_sirind_brick65_port_indicator_port_indicator_render",
-      "community": 66,
-      "community_name": "\uc778\ub514\ucf00\uc774\ud130 \ud3ec\ud2b8 (brick65)",
+      "community": 30,
+      "community_name": "\ubcf4\ub4dc\ubcc4 WS2812 \ub4dc\ub77c\uc774\ubc84",
       "norm_label": "indicator_render()"
     },
     {
@@ -918,8 +918,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_keyboards_era_sirind_brick65_port_indicator_port_c_rgb_led_t",
-      "community": 66,
-      "community_name": "\uc778\ub514\ucf00\uc774\ud130 \ud3ec\ud2b8 (brick65)",
+      "community": 30,
+      "community_name": "\ubcf4\ub4dc\ubcc4 WS2812 \ub4dc\ub77c\uc774\ubc84",
       "norm_label": "rgb_led_t"
     },
     {
@@ -1710,8 +1710,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_eeconfig_port",
-      "community": 67,
-      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
+      "community": 55,
+      "community_name": "Tapping Term \ud3ec\ud2b8",
       "norm_label": "eeconfig_port.c"
     },
     {
@@ -2029,8 +2029,8 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_kill_switch_kill_switch_process",
-      "community": 15,
-      "community_name": "send_string\u00b7\ud0a4 \uc804\uc1a1 \uc720\ud2f8",
+      "community": 12,
+      "community_name": "\uc561\uc158 \uc2e4\ud589 \ucf54\uc5b4",
       "norm_label": "kill_switch_process()"
     },
     {
@@ -2040,8 +2040,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_kill_switch_c_keyrecord_t",
-      "community": 15,
-      "community_name": "send_string\u00b7\ud0a4 \uc804\uc1a1 \uc720\ud2f8",
+      "community": 12,
+      "community_name": "\uc561\uc158 \uc2e4\ud589 \ucf54\uc5b4",
       "norm_label": "keyrecord_t"
     },
     {
@@ -2106,8 +2106,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_kill_switch_h_src_ap_modules_qmk_port_kill_switch",
-      "community": 67,
-      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
+      "community": 55,
+      "community_name": "Tapping Term \ud3ec\ud2b8",
       "norm_label": "kill_switch.h"
     },
     {
@@ -2117,8 +2117,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_kkuk_c_src_ap_modules_qmk_port_kkuk",
-      "community": 48,
-      "community_name": "kill_switch\u00b7kkuk",
+      "community": 120,
+      "community_name": "via_qmk_kkuk_command",
       "norm_label": "kkuk.c"
     },
     {
@@ -2128,8 +2128,8 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_kkuk_kkuk_init",
-      "community": 48,
-      "community_name": "kill_switch\u00b7kkuk",
+      "community": 120,
+      "community_name": "via_qmk_kkuk_command",
       "norm_label": "kkuk_init()"
     },
     {
@@ -2139,8 +2139,8 @@
       "source_location": "L82",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_kkuk_kkuk_idle",
-      "community": 15,
-      "community_name": "send_string\u00b7\ud0a4 \uc804\uc1a1 \uc720\ud2f8",
+      "community": 12,
+      "community_name": "\uc561\uc158 \uc2e4\ud589 \ucf54\uc5b4",
       "norm_label": "kkuk_idle()"
     },
     {
@@ -2172,8 +2172,8 @@
       "source_location": "L190",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_kkuk_via_qmk_kkuk_command",
-      "community": 48,
-      "community_name": "kill_switch\u00b7kkuk",
+      "community": 120,
+      "community_name": "via_qmk_kkuk_command",
       "norm_label": "via_qmk_kkuk_command()"
     },
     {
@@ -2183,8 +2183,8 @@
       "source_location": "L230",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_kkuk_via_qmk_kkuk_get_value",
-      "community": 48,
-      "community_name": "kill_switch\u00b7kkuk",
+      "community": 120,
+      "community_name": "via_qmk_kkuk_command",
       "norm_label": "via_qmk_kkuk_get_value()"
     },
     {
@@ -2194,8 +2194,8 @@
       "source_location": "L256",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_kkuk_via_qmk_kkuk_set_value",
-      "community": 48,
-      "community_name": "kill_switch\u00b7kkuk",
+      "community": 120,
+      "community_name": "via_qmk_kkuk_command",
       "norm_label": "via_qmk_kkuk_set_value()"
     },
     {
@@ -2205,8 +2205,8 @@
       "source_location": "L282",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_kkuk_via_qmk_kkuk_save",
-      "community": 48,
-      "community_name": "kill_switch\u00b7kkuk",
+      "community": 120,
+      "community_name": "via_qmk_kkuk_command",
       "norm_label": "via_qmk_kkuk_save()"
     },
     {
@@ -2216,8 +2216,8 @@
       "source_location": "L287",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_kkuk_kkuk_normalize_config",
-      "community": 48,
-      "community_name": "kill_switch\u00b7kkuk",
+      "community": 120,
+      "community_name": "via_qmk_kkuk_command",
       "norm_label": "kkuk_normalize_config()"
     },
     {
@@ -2227,8 +2227,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_kkuk_h_src_ap_modules_qmk_port_kkuk",
-      "community": 67,
-      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
+      "community": 55,
+      "community_name": "Tapping Term \ud3ec\ud2b8",
       "norm_label": "kkuk.h"
     },
     {
@@ -2282,8 +2282,8 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_matrix_matrix_get_row",
-      "community": 9,
-      "community_name": "keyboard \ud0dc\uc2a4\ud06c\u00b7\ub9e4\ud2b8\ub9ad\uc2a4 \ube0c\ub9ac\uc9c0",
+      "community": 115,
+      "community_name": "matrix_get_row",
       "norm_label": "matrix_get_row()"
     },
     {
@@ -2293,8 +2293,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_matrix_c_matrix_row_t",
-      "community": 9,
-      "community_name": "keyboard \ud0dc\uc2a4\ud06c\u00b7\ub9e4\ud2b8\ub9ad\uc2a4 \ube0c\ub9ac\uc9c0",
+      "community": 115,
+      "community_name": "matrix_get_row",
       "norm_label": "matrix_row_t"
     },
     {
@@ -2623,8 +2623,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_mousekey_config_h_src_ap_modules_qmk_port_mousekey_config",
-      "community": 67,
-      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
+      "community": 55,
+      "community_name": "Tapping Term \ud3ec\ud2b8",
       "norm_label": "mousekey_config.h"
     },
     {
@@ -2656,8 +2656,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_platforms_bootloader_c_src_ap_modules_qmk_port_platforms_bootloader",
-      "community": 62,
-      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "bootloader.c"
     },
     {
@@ -2667,8 +2667,8 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_platforms_bootloader_bootloader_schedule_deferred_reset",
-      "community": 62,
-      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "bootloader_schedule_deferred_reset()"
     },
     {
@@ -2678,8 +2678,8 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_platforms_bootloader_bootloader_jump",
-      "community": 44,
-      "community_name": "HID \uacc4\uce21\u00b7micros",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "bootloader_jump()"
     },
     {
@@ -2689,8 +2689,8 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_platforms_bootloader_bootloader_jump_deferred",
-      "community": 62,
-      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "bootloader_jump_deferred()"
     },
     {
@@ -2700,8 +2700,8 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_platforms_bootloader_mcu_reset",
-      "community": 62,
-      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "mcu_reset()"
     },
     {
@@ -2711,8 +2711,8 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_platforms_bootloader_mcu_reset_deferred",
-      "community": 62,
-      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "mcu_reset_deferred()"
     },
     {
@@ -2854,8 +2854,8 @@
       "source_location": "L222",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_platforms_eeprom_eeprom_req_clean",
-      "community": 62,
-      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "eeprom_req_clean()"
     },
     {
@@ -3052,8 +3052,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_platforms_eeprom_h_src_ap_modules_qmk_port_platforms_eeprom",
-      "community": 62,
-      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "eeprom.h"
     },
     {
@@ -3074,8 +3074,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_platforms_platform_deps",
-      "community": 67,
-      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
+      "community": 55,
+      "community_name": "Tapping Term \ud3ec\ud2b8",
       "norm_label": "platform_deps.h"
     },
     {
@@ -3085,8 +3085,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_platforms_printf",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 62,
+      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
       "norm_label": "printf.h"
     },
     {
@@ -3096,8 +3096,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_platforms_progmem",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 47,
+      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
       "norm_label": "progmem.h"
     },
     {
@@ -3228,8 +3228,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_platforms_timer_c_src_ap_modules_qmk_port_platforms_timer",
-      "community": 34,
-      "community_name": "Key Override\u00b7\uc6d0\uc0f7 \ubaa8\ub4dc",
+      "community": 17,
+      "community_name": "ST USB Device Core",
       "norm_label": "timer.c"
     },
     {
@@ -3239,8 +3239,8 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_platforms_timer_timer_init",
-      "community": 34,
-      "community_name": "Key Override\u00b7\uc6d0\uc0f7 \ubaa8\ub4dc",
+      "community": 17,
+      "community_name": "ST USB Device Core",
       "norm_label": "timer_init()"
     },
     {
@@ -3250,8 +3250,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_platforms_timer_timer_clear",
-      "community": 34,
-      "community_name": "Key Override\u00b7\uc6d0\uc0f7 \ubaa8\ub4dc",
+      "community": 17,
+      "community_name": "ST USB Device Core",
       "norm_label": "timer_clear()"
     },
     {
@@ -3294,8 +3294,8 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_platforms_timer_timer_elapsed32",
-      "community": 34,
-      "community_name": "Key Override\u00b7\uc6d0\uc0f7 \ubaa8\ub4dc",
+      "community": 17,
+      "community_name": "ST USB Device Core",
       "norm_label": "timer_elapsed32()"
     },
     {
@@ -3382,8 +3382,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_port",
-      "community": 67,
-      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
+      "community": 55,
+      "community_name": "Tapping Term \ud3ec\ud2b8",
       "norm_label": "port.h"
     },
     {
@@ -3547,8 +3547,8 @@
       "source_location": "L156",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_protocol_host_host_mouse_send",
-      "community": 14,
-      "community_name": "HID \ub9ac\ud3ec\ud2b8 \ud0c0\uc785 \uc815\uc758",
+      "community": 26,
+      "community_name": "\ub85c\uae45\u00b7\uceec\ub7ec \uc720\ud2f8",
       "norm_label": "host_mouse_send()"
     },
     {
@@ -3558,8 +3558,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_protocol_host_c_report_mouse_t",
-      "community": 14,
-      "community_name": "HID \ub9ac\ud3ec\ud2b8 \ud0c0\uc785 \uc815\uc758",
+      "community": 26,
+      "community_name": "\ub85c\uae45\u00b7\uceec\ub7ec \uc720\ud2f8",
       "norm_label": "report_mouse_t"
     },
     {
@@ -3734,8 +3734,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_protocol_host_h_src_ap_modules_qmk_port_protocol_host",
-      "community": 12,
-      "community_name": "\uc561\uc158 \uc2e4\ud589 \ucf54\uc5b4",
+      "community": 14,
+      "community_name": "HID \ub9ac\ud3ec\ud2b8 \ud0c0\uc785 \uc815\uc758",
       "norm_label": "host.h"
     },
     {
@@ -3745,8 +3745,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_protocol_host_driver",
-      "community": 12,
-      "community_name": "\uc561\uc158 \uc2e4\ud589 \ucf54\uc5b4",
+      "community": 14,
+      "community_name": "HID \ub9ac\ud3ec\ud2b8 \ud0c0\uc785 \uc815\uc758",
       "norm_label": "host_driver.h"
     },
     {
@@ -3789,8 +3789,8 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_protocol_report_is_key_pressed",
-      "community": 12,
-      "community_name": "\uc561\uc158 \uc2e4\ud589 \ucf54\uc5b4",
+      "community": 15,
+      "community_name": "send_string\u00b7\ud0a4 \uc804\uc1a1 \uc720\ud2f8",
       "norm_label": "is_key_pressed()"
     },
     {
@@ -3888,8 +3888,8 @@
       "source_location": "L272",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_protocol_report_clear_keys_from_report",
-      "community": 15,
-      "community_name": "send_string\u00b7\ud0a4 \uc804\uc1a1 \uc720\ud2f8",
+      "community": 12,
+      "community_name": "\uc561\uc158 \uc2e4\ud589 \ucf54\uc5b4",
       "norm_label": "clear_keys_from_report()"
     },
     {
@@ -3921,8 +3921,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_protocol_report_h_src_ap_modules_qmk_port_protocol_report",
-      "community": 12,
-      "community_name": "\uc561\uc158 \uc2e4\ud589 \ucf54\uc5b4",
+      "community": 87,
+      "community_name": "\ubc84\uc804 VIA \ud3ec\ud2b8",
       "norm_label": "report.h"
     },
     {
@@ -3954,8 +3954,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_sys_port_c_src_ap_modules_qmk_port_sys_port",
-      "community": 62,
-      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "sys_port.c"
     },
     {
@@ -3965,8 +3965,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_sys_port_via_qmk_system",
-      "community": 62,
-      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "via_qmk_system()"
     },
     {
@@ -3976,8 +3976,8 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_sys_port_via_qmk_sys_set_value",
-      "community": 62,
-      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "via_qmk_sys_set_value()"
     },
     {
@@ -3987,8 +3987,8 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_sys_port_via_qmk_sys_get_value",
-      "community": 62,
-      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "via_qmk_sys_get_value()"
     },
     {
@@ -3998,8 +3998,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_sys_port_h_src_ap_modules_qmk_port_sys_port",
-      "community": 62,
-      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "sys_port.h"
     },
     {
@@ -4361,8 +4361,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_tapdance_h_src_ap_modules_qmk_port_tapdance",
-      "community": 67,
-      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
+      "community": 55,
+      "community_name": "Tapping Term \ud3ec\ud2b8",
       "norm_label": "tapdance.h"
     },
     {
@@ -4581,8 +4581,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_port_tapping_term_h_src_ap_modules_qmk_port_tapping_term",
-      "community": 67,
-      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
+      "community": 55,
+      "community_name": "Tapping Term \ud3ec\ud2b8",
       "norm_label": "tapping_term.h"
     },
     {
@@ -4724,8 +4724,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_qmk_c_src_ap_modules_qmk_qmk",
-      "community": 67,
-      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
+      "community": 48,
+      "community_name": "kill_switch\u00b7kkuk",
       "norm_label": "qmk.c"
     },
     {
@@ -4801,8 +4801,8 @@
       "source_location": "L113",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_qmk_cliqmk",
-      "community": 67,
-      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
+      "community": 48,
+      "community_name": "kill_switch\u00b7kkuk",
       "norm_label": "cliqmk()"
     },
     {
@@ -4812,8 +4812,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_qmk_c_cli_args_t",
-      "community": 67,
-      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
+      "community": 48,
+      "community_name": "kill_switch\u00b7kkuk",
       "norm_label": "cli_args_t"
     },
     {
@@ -4834,8 +4834,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_c_src_ap_modules_qmk_quantum_action",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "action.c"
     },
     {
@@ -4845,8 +4845,8 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_get_hold_on_other_key_press",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "get_hold_on_other_key_press()"
     },
     {
@@ -4856,8 +4856,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_c_keyrecord_t",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "keyrecord_t"
     },
     {
@@ -4867,8 +4867,8 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_get_retro_tapping",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "get_retro_tapping()"
     },
     {
@@ -4878,8 +4878,8 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_action_exec",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 7,
+      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
       "norm_label": "action_exec()"
     },
     {
@@ -4889,8 +4889,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_c_keyevent_t",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 7,
+      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
       "norm_label": "keyevent_t"
     },
     {
@@ -4900,8 +4900,8 @@
       "source_location": "L146",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_should_swap_hands",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "should_swap_hands()"
     },
     {
@@ -4911,8 +4911,8 @@
       "source_location": "L154",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_set_swap_hands_state",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "set_swap_hands_state()"
     },
     {
@@ -4922,8 +4922,8 @@
       "source_location": "L165",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_swap_hands_on",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "swap_hands_on()"
     },
     {
@@ -4933,8 +4933,8 @@
       "source_location": "L169",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_swap_hands_off",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "swap_hands_off()"
     },
     {
@@ -4944,8 +4944,8 @@
       "source_location": "L173",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_swap_hands_toggle",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "swap_hands_toggle()"
     },
     {
@@ -4955,8 +4955,8 @@
       "source_location": "L177",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_is_swap_hands_on",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "is_swap_hands_on()"
     },
     {
@@ -4966,8 +4966,8 @@
       "source_location": "L185",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_process_hand_swap",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "process_hand_swap()"
     },
     {
@@ -4977,8 +4977,8 @@
       "source_location": "L219",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_process_record_nocache",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "process_record_nocache()"
     },
     {
@@ -4988,8 +4988,8 @@
       "source_location": "L230",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_process_record_quantum",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "process_record_quantum()"
     },
     {
@@ -4999,8 +4999,8 @@
       "source_location": "L234",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_post_process_record_quantum",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "post_process_record_quantum()"
     },
     {
@@ -5021,8 +5021,8 @@
       "source_location": "L269",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_process_record",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "process_record()"
     },
     {
@@ -5032,8 +5032,8 @@
       "source_location": "L287",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_process_record_handler",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "process_record_handler()"
     },
     {
@@ -5054,8 +5054,8 @@
       "source_location": "L365",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_process_action",
-      "community": 7,
-      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "process_action()"
     },
     {
@@ -5065,8 +5065,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_c_action_t",
-      "community": 7,
-      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "action_t"
     },
     {
@@ -5120,8 +5120,8 @@
       "source_location": "L1030",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_register_mods",
-      "community": 7,
-      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "register_mods()"
     },
     {
@@ -5131,8 +5131,8 @@
       "source_location": "L1041",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_unregister_mods",
-      "community": 7,
-      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "unregister_mods()"
     },
     {
@@ -5142,8 +5142,8 @@
       "source_location": "L1052",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_register_weak_mods",
-      "community": 7,
-      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "register_weak_mods()"
     },
     {
@@ -5153,8 +5153,8 @@
       "source_location": "L1063",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_unregister_weak_mods",
-      "community": 7,
-      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "unregister_weak_mods()"
     },
     {
@@ -5197,8 +5197,8 @@
       "source_location": "L1112",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_is_tap_record",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "is_tap_record()"
     },
     {
@@ -5208,8 +5208,8 @@
       "source_location": "L1134",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_is_tap_action",
-      "community": 7,
-      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "is_tap_action()"
     },
     {
@@ -5219,8 +5219,8 @@
       "source_location": "L1162",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_debug_event",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 7,
+      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
       "norm_label": "debug_event()"
     },
     {
@@ -5241,8 +5241,8 @@
       "source_location": "L1180",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_debug_action",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "debug_action()"
     },
     {
@@ -5252,8 +5252,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_h_src_ap_modules_qmk_quantum_action",
-      "community": 64,
-      "community_name": "rgblight \uc0c1\ud0dc \uc870\ud68c\u00b7VIA",
+      "community": 87,
+      "community_name": "\ubc84\uc804 VIA \ud3ec\ud2b8",
       "norm_label": "action.h"
     },
     {
@@ -5461,8 +5461,8 @@
       "source_location": "L168",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_layer_layer_on",
-      "community": 7,
-      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
+      "community": 11,
+      "community_name": "\uc561\uc158 \ub808\uc774\uc5b4",
       "norm_label": "layer_on()"
     },
     {
@@ -5472,8 +5472,8 @@
       "source_location": "L176",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_layer_layer_off",
-      "community": 7,
-      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
+      "community": 11,
+      "community_name": "\uc561\uc158 \ub808\uc774\uc5b4",
       "norm_label": "layer_off()"
     },
     {
@@ -5538,8 +5538,8 @@
       "source_location": "L232",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_layer_update_source_layers_cache_impl",
-      "community": 11,
-      "community_name": "\uc561\uc158 \ub808\uc774\uc5b4",
+      "community": 81,
+      "community_name": "via_hid RAW HID \ube0c\ub9ac\uc9c0",
       "norm_label": "update_source_layers_cache_impl()"
     },
     {
@@ -5549,8 +5549,8 @@
       "source_location": "L244",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_layer_read_source_layers_cache_impl",
-      "community": 11,
-      "community_name": "\uc561\uc158 \ub808\uc774\uc5b4",
+      "community": 81,
+      "community_name": "via_hid RAW HID \ube0c\ub9ac\uc9c0",
       "norm_label": "read_source_layers_cache_impl()"
     },
     {
@@ -5560,8 +5560,8 @@
       "source_location": "L260",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_layer_update_source_layers_cache",
-      "community": 11,
-      "community_name": "\uc561\uc158 \ub808\uc774\uc5b4",
+      "community": 81,
+      "community_name": "via_hid RAW HID \ube0c\ub9ac\uc9c0",
       "norm_label": "update_source_layers_cache()"
     },
     {
@@ -5571,8 +5571,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_layer_c_keypos_t",
-      "community": 11,
-      "community_name": "\uc561\uc158 \ub808\uc774\uc5b4",
+      "community": 81,
+      "community_name": "via_hid RAW HID \ube0c\ub9ac\uc9c0",
       "norm_label": "keypos_t"
     },
     {
@@ -5582,8 +5582,8 @@
       "source_location": "L277",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_layer_read_source_layers_cache",
-      "community": 11,
-      "community_name": "\uc561\uc158 \ub808\uc774\uc5b4",
+      "community": 81,
+      "community_name": "via_hid RAW HID \ube0c\ub9ac\uc9c0",
       "norm_label": "read_source_layers_cache()"
     },
     {
@@ -5593,8 +5593,8 @@
       "source_location": "L299",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_layer_store_or_get_action",
-      "community": 11,
-      "community_name": "\uc561\uc158 \ub808\uc774\uc5b4",
+      "community": 81,
+      "community_name": "via_hid RAW HID \ube0c\ub9ac\uc9c0",
       "norm_label": "store_or_get_action()"
     },
     {
@@ -5604,8 +5604,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_layer_c_action_t",
-      "community": 11,
-      "community_name": "\uc561\uc158 \ub808\uc774\uc5b4",
+      "community": 81,
+      "community_name": "via_hid RAW HID \ube0c\ub9ac\uc9c0",
       "norm_label": "action_t"
     },
     {
@@ -5615,8 +5615,8 @@
       "source_location": "L323",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_layer_layer_switch_get_layer",
-      "community": 11,
-      "community_name": "\uc561\uc158 \ub808\uc774\uc5b4",
+      "community": 81,
+      "community_name": "via_hid RAW HID \ube0c\ub9ac\uc9c0",
       "norm_label": "layer_switch_get_layer()"
     },
     {
@@ -5626,8 +5626,8 @@
       "source_location": "L349",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_layer_layer_switch_get_action",
-      "community": 11,
-      "community_name": "\uc561\uc158 \ub808\uc774\uc5b4",
+      "community": 81,
+      "community_name": "via_hid RAW HID \ube0c\ub9ac\uc9c0",
       "norm_label": "layer_switch_get_action()"
     },
     {
@@ -5659,8 +5659,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_layer_h_src_ap_modules_qmk_quantum_action_layer",
-      "community": 64,
-      "community_name": "rgblight \uc0c1\ud0dc \uc870\ud68c\u00b7VIA",
+      "community": 87,
+      "community_name": "\ubc84\uc804 VIA \ud3ec\ud2b8",
       "norm_label": "action_layer.h"
     },
     {
@@ -5846,8 +5846,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_tapping_h_src_ap_modules_qmk_quantum_action_tapping",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "action_tapping.h"
     },
     {
@@ -5945,8 +5945,8 @@
       "source_location": "L101",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_util_get_oneshot_layer_state",
-      "community": 7,
-      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "get_oneshot_layer_state()"
     },
     {
@@ -6066,8 +6066,8 @@
       "source_location": "L211",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_util_is_oneshot_layer_active",
-      "community": 7,
-      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "is_oneshot_layer_active()"
     },
     {
@@ -6176,8 +6176,8 @@
       "source_location": "L335",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_util_get_mods",
-      "community": 34,
-      "community_name": "Key Override\u00b7\uc6d0\uc0f7 \ubaa8\ub4dc",
+      "community": 12,
+      "community_name": "\uc561\uc158 \uc2e4\ud589 \ucf54\uc5b4",
       "norm_label": "get_mods()"
     },
     {
@@ -6187,8 +6187,8 @@
       "source_location": "L342",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_util_add_mods",
-      "community": 7,
-      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "add_mods()"
     },
     {
@@ -6198,8 +6198,8 @@
       "source_location": "L349",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_util_del_mods",
-      "community": 7,
-      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "del_mods()"
     },
     {
@@ -6242,8 +6242,8 @@
       "source_location": "L378",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_util_add_weak_mods",
-      "community": 7,
-      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "add_weak_mods()"
     },
     {
@@ -6253,8 +6253,8 @@
       "source_location": "L385",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_util_del_weak_mods",
-      "community": 7,
-      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "del_weak_mods()"
     },
     {
@@ -6275,8 +6275,8 @@
       "source_location": "L399",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_util_clear_weak_mods",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 7,
+      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
       "norm_label": "clear_weak_mods()"
     },
     {
@@ -6462,8 +6462,8 @@
       "source_location": "L548",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_util_neutralize_flashing_modifiers",
-      "community": 7,
-      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
+      "community": 15,
+      "community_name": "send_string\u00b7\ud0a4 \uc804\uc1a1 \uc720\ud2f8",
       "norm_label": "neutralize_flashing_modifiers()"
     },
     {
@@ -6473,8 +6473,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_util_h_src_ap_modules_qmk_quantum_action_util",
-      "community": 15,
-      "community_name": "send_string\u00b7\ud0a4 \uc804\uc1a1 \uc720\ud2f8",
+      "community": 12,
+      "community_name": "\uc561\uc158 \uc2e4\ud589 \ucf54\uc5b4",
       "norm_label": "action_util.h"
     },
     {
@@ -6484,8 +6484,8 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_util_add_key",
-      "community": 15,
-      "community_name": "send_string\u00b7\ud0a4 \uc804\uc1a1 \uc720\ud2f8",
+      "community": 12,
+      "community_name": "\uc561\uc158 \uc2e4\ud589 \ucf54\uc5b4",
       "norm_label": "add_key()"
     },
     {
@@ -6495,8 +6495,8 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_util_del_key",
-      "community": 15,
-      "community_name": "send_string\u00b7\ud0a4 \uc804\uc1a1 \uc720\ud2f8",
+      "community": 12,
+      "community_name": "\uc561\uc158 \uc2e4\ud589 \ucf54\uc5b4",
       "norm_label": "del_key()"
     },
     {
@@ -6506,8 +6506,8 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_action_util_clear_keys",
-      "community": 15,
-      "community_name": "send_string\u00b7\ud0a4 \uc804\uc1a1 \uc720\ud2f8",
+      "community": 12,
+      "community_name": "\uc561\uc158 \uc2e4\ud589 \ucf54\uc5b4",
       "norm_label": "clear_keys()"
     },
     {
@@ -6528,8 +6528,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_bitwise",
-      "community": 64,
-      "community_name": "rgblight \uc0c1\ud0dc \uc870\ud68c\u00b7VIA",
+      "community": 87,
+      "community_name": "\ubc84\uc804 VIA \ud3ec\ud2b8",
       "norm_label": "bitwise.h"
     },
     {
@@ -6550,8 +6550,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_color_c_src_ap_modules_qmk_quantum_color",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 47,
+      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
       "norm_label": "color.c"
     },
     {
@@ -6561,8 +6561,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_color_hsv_to_rgb_impl",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 47,
+      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
       "norm_label": "hsv_to_rgb_impl()"
     },
     {
@@ -6572,8 +6572,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_color_c_rgb",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 47,
+      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
       "norm_label": "rgb"
     },
     {
@@ -6583,8 +6583,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_color_c_hsv",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 47,
+      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
       "norm_label": "hsv"
     },
     {
@@ -6594,8 +6594,8 @@
       "source_location": "L100",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_color_hsv_to_rgb",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 47,
+      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
       "norm_label": "hsv_to_rgb()"
     },
     {
@@ -6605,8 +6605,8 @@
       "source_location": "L108",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_color_hsv_to_rgb_nocie",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 47,
+      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
       "norm_label": "hsv_to_rgb_nocie()"
     },
     {
@@ -6616,8 +6616,8 @@
       "source_location": "L113",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_color_convert_rgb_to_rgbw",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 47,
+      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
       "norm_label": "convert_rgb_to_rgbw()"
     },
     {
@@ -6627,8 +6627,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_color_c_rgb_led_t",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 47,
+      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
       "norm_label": "rgb_led_t"
     },
     {
@@ -6638,8 +6638,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_color_h_src_ap_modules_qmk_quantum_color",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 47,
+      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
       "norm_label": "color.h"
     },
     {
@@ -6649,8 +6649,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_command",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 44,
+      "community_name": "HID \uacc4\uce21\u00b7micros",
       "norm_label": "command.h"
     },
     {
@@ -6671,8 +6671,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_debounce",
-      "community": 17,
-      "community_name": "ST USB Device Core",
+      "community": 116,
+      "community_name": "debounce.h",
       "norm_label": "debounce.h"
     },
     {
@@ -6836,8 +6836,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_debounce_sym_eager_pk",
-      "community": 17,
-      "community_name": "ST USB Device Core",
+      "community": 116,
+      "community_name": "debounce.h",
       "norm_label": "sym_eager_pk.c"
     },
     {
@@ -6847,8 +6847,8 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_debounce_sym_eager_pk_debounce_sym_eager_pk_init",
-      "community": 17,
-      "community_name": "ST USB Device Core",
+      "community": 116,
+      "community_name": "debounce.h",
       "norm_label": "debounce_sym_eager_pk_init()"
     },
     {
@@ -6858,8 +6858,8 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_debounce_sym_eager_pk_debounce_sym_eager_pk_free",
-      "community": 17,
-      "community_name": "ST USB Device Core",
+      "community": 116,
+      "community_name": "debounce.h",
       "norm_label": "debounce_sym_eager_pk_free()"
     },
     {
@@ -6869,8 +6869,8 @@
       "source_location": "L72",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_debounce_sym_eager_pk_debounce_sym_eager_pk_run",
-      "community": 17,
-      "community_name": "ST USB Device Core",
+      "community": 116,
+      "community_name": "debounce.h",
       "norm_label": "debounce_sym_eager_pk_run()"
     },
     {
@@ -6880,8 +6880,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_debounce_sym_eager_pk_c_matrix_row_t",
-      "community": 17,
-      "community_name": "ST USB Device Core",
+      "community": 116,
+      "community_name": "debounce.h",
       "norm_label": "matrix_row_t"
     },
     {
@@ -6891,8 +6891,8 @@
       "source_location": "L104",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_debounce_sym_eager_pk_update_debounce_counters",
-      "community": 17,
-      "community_name": "ST USB Device Core",
+      "community": 116,
+      "community_name": "debounce.h",
       "norm_label": "update_debounce_counters()"
     },
     {
@@ -6902,8 +6902,8 @@
       "source_location": "L125",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_debounce_sym_eager_pk_transfer_matrix_values",
-      "community": 17,
-      "community_name": "ST USB Device Core",
+      "community": 116,
+      "community_name": "debounce.h",
       "norm_label": "transfer_matrix_values()"
     },
     {
@@ -7177,8 +7177,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_dip_switch",
-      "community": 64,
-      "community_name": "rgblight \uc0c1\ud0dc \uc870\ud68c\u00b7VIA",
+      "community": 47,
+      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
       "norm_label": "dip_switch.h"
     },
     {
@@ -7870,8 +7870,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_encoder",
-      "community": 64,
-      "community_name": "rgblight \uc0c1\ud0dc \uc870\ud68c\u00b7VIA",
+      "community": 47,
+      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
       "norm_label": "encoder.h"
     },
     {
@@ -7892,8 +7892,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_joystick",
-      "community": 12,
-      "community_name": "\uc561\uc158 \uc2e4\ud589 \ucf54\uc5b4",
+      "community": 87,
+      "community_name": "\ubc84\uc804 VIA \ud3ec\ud2b8",
       "norm_label": "joystick.h"
     },
     {
@@ -8068,8 +8068,8 @@
       "source_location": "L245",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_keyboard_mark_all_real_key_masks_dirty",
-      "community": 9,
-      "community_name": "keyboard \ud0dc\uc2a4\ud06c\u00b7\ub9e4\ud2b8\ub9ad\uc2a4 \ube0c\ub9ac\uc9c0",
+      "community": 115,
+      "community_name": "matrix_get_row",
       "norm_label": "mark_all_real_key_masks_dirty()"
     },
     {
@@ -8079,8 +8079,8 @@
       "source_location": "L252",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_keyboard_refresh_real_key_mask",
-      "community": 9,
-      "community_name": "keyboard \ud0dc\uc2a4\ud06c\u00b7\ub9e4\ud2b8\ub9ad\uc2a4 \ube0c\ub9ac\uc9c0",
+      "community": 115,
+      "community_name": "matrix_get_row",
       "norm_label": "refresh_real_key_mask()"
     },
     {
@@ -8090,8 +8090,8 @@
       "source_location": "L265",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_keyboard_keyboard_keymap_real_keys_invalidate",
-      "community": 9,
-      "community_name": "keyboard \ud0dc\uc2a4\ud06c\u00b7\ub9e4\ud2b8\ub9ad\uc2a4 \ube0c\ub9ac\uc9c0",
+      "community": 115,
+      "community_name": "matrix_get_row",
       "norm_label": "keyboard_keymap_real_keys_invalidate()"
     },
     {
@@ -8112,8 +8112,8 @@
       "source_location": "L278",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_keyboard_get_real_keys",
-      "community": 9,
-      "community_name": "keyboard \ud0dc\uc2a4\ud06c\u00b7\ub9e4\ud2b8\ub9ad\uc2a4 \ube0c\ub9ac\uc9c0",
+      "community": 115,
+      "community_name": "matrix_get_row",
       "norm_label": "get_real_keys()"
     },
     {
@@ -8123,8 +8123,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_keyboard_c_matrix_row_t",
-      "community": 9,
-      "community_name": "keyboard \ud0dc\uc2a4\ud06c\u00b7\ub9e4\ud2b8\ub9ad\uc2a4 \ube0c\ub9ac\uc9c0",
+      "community": 115,
+      "community_name": "matrix_get_row",
       "norm_label": "matrix_row_t"
     },
     {
@@ -8134,8 +8134,8 @@
       "source_location": "L293",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_keyboard_get_cached_real_keys",
-      "community": 9,
-      "community_name": "keyboard \ud0dc\uc2a4\ud06c\u00b7\ub9e4\ud2b8\ub9ad\uc2a4 \ube0c\ub9ac\uc9c0",
+      "community": 115,
+      "community_name": "matrix_get_row",
       "norm_label": "get_cached_real_keys()"
     },
     {
@@ -8145,8 +8145,8 @@
       "source_location": "L304",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_keyboard_popcount_more_than_one",
-      "community": 9,
-      "community_name": "keyboard \ud0dc\uc2a4\ud06c\u00b7\ub9e4\ud2b8\ub9ad\uc2a4 \ube0c\ub9ac\uc9c0",
+      "community": 115,
+      "community_name": "matrix_get_row",
       "norm_label": "popcount_more_than_one()"
     },
     {
@@ -8156,8 +8156,8 @@
       "source_location": "L309",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_keyboard_has_ghost_in_row",
-      "community": 9,
-      "community_name": "keyboard \ud0dc\uc2a4\ud06c\u00b7\ub9e4\ud2b8\ub9ad\uc2a4 \ube0c\ub9ac\uc9c0",
+      "community": 115,
+      "community_name": "matrix_get_row",
       "norm_label": "has_ghost_in_row()"
     },
     {
@@ -8343,8 +8343,8 @@
       "source_location": "L601",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_keyboard_generate_tick_event",
-      "community": 54,
-      "community_name": "\uc561\uc158 \ud0dc\ud551 \ucf54\uc5b4",
+      "community": 7,
+      "community_name": "\uc561\uc158\u00b7\ud638\uc2a4\ud2b8 \ub9ac\ud3ec\ud2b8 \uc804\uc1a1",
       "norm_label": "generate_tick_event()"
     },
     {
@@ -8860,8 +8860,8 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_led_last_led_activity_elapsed",
-      "community": 34,
-      "community_name": "Key Override\u00b7\uc6d0\uc0f7 \ubaa8\ub4dc",
+      "community": 17,
+      "community_name": "ST USB Device Core",
       "norm_label": "last_led_activity_elapsed()"
     },
     {
@@ -8981,8 +8981,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_led_tables",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 47,
+      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
       "norm_label": "led_tables.h"
     },
     {
@@ -8992,8 +8992,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_logging_debug_c_src_ap_modules_qmk_quantum_logging_debug",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 62,
+      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
       "norm_label": "debug.c"
     },
     {
@@ -9003,8 +9003,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_logging_debug_h_src_ap_modules_qmk_quantum_logging_debug",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 62,
+      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
       "norm_label": "debug.h"
     },
     {
@@ -9014,8 +9014,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_logging_print_c_src_ap_modules_qmk_quantum_logging_print",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 62,
+      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
       "norm_label": "print.c"
     },
     {
@@ -9025,8 +9025,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_logging_print_null_sendchar_func",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 62,
+      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
       "norm_label": "null_sendchar_func()"
     },
     {
@@ -9036,8 +9036,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_logging_print_print_set_sendchar",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 62,
+      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
       "norm_label": "print_set_sendchar()"
     },
     {
@@ -9047,8 +9047,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "sendchar_func_t",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 62,
+      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
       "norm_label": "sendchar_func_t"
     },
     {
@@ -9058,8 +9058,8 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_logging_print_putchar",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 62,
+      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
       "norm_label": "putchar_()"
     },
     {
@@ -9069,8 +9069,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_logging_print_h_src_ap_modules_qmk_quantum_logging_print",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 62,
+      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
       "norm_label": "print.h"
     },
     {
@@ -9080,8 +9080,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_logging_sendchar_c_src_ap_modules_qmk_quantum_logging_sendchar",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 62,
+      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
       "norm_label": "sendchar.c"
     },
     {
@@ -9091,8 +9091,8 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_logging_sendchar_sendchar",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 62,
+      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
       "norm_label": "sendchar()"
     },
     {
@@ -9102,8 +9102,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_logging_sendchar_h_src_ap_modules_qmk_quantum_logging_sendchar",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 62,
+      "community_name": "RTC \ub4dc\ub77c\uc774\ubc84",
       "norm_label": "sendchar.h"
     },
     {
@@ -9113,8 +9113,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_matrix",
-      "community": 17,
-      "community_name": "ST USB Device Core",
+      "community": 116,
+      "community_name": "debounce.h",
       "norm_label": "matrix.h"
     },
     {
@@ -9300,8 +9300,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_mousekey_h_src_ap_modules_qmk_quantum_mousekey",
-      "community": 64,
-      "community_name": "rgblight \uc0c1\ud0dc \uc870\ud68c\u00b7VIA",
+      "community": 26,
+      "community_name": "\ub85c\uae45\u00b7\uceec\ub7ec \uc720\ud2f8",
       "norm_label": "mousekey.h"
     },
     {
@@ -9344,8 +9344,8 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_process_keycode_process_grave_esc_process_grave_esc",
-      "community": 34,
-      "community_name": "Key Override\u00b7\uc6d0\uc0f7 \ubaa8\ub4dc",
+      "community": 12,
+      "community_name": "\uc561\uc158 \uc2e4\ud589 \ucf54\uc5b4",
       "norm_label": "process_grave_esc()"
     },
     {
@@ -9355,8 +9355,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_process_keycode_process_grave_esc_c_keyrecord_t",
-      "community": 34,
-      "community_name": "Key Override\u00b7\uc6d0\uc0f7 \ubaa8\ub4dc",
+      "community": 12,
+      "community_name": "\uc561\uc158 \uc2e4\ud589 \ucf54\uc5b4",
       "norm_label": "keyrecord_t"
     },
     {
@@ -9509,8 +9509,8 @@
       "source_location": "L396",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_process_keycode_process_key_override_key_override_task",
-      "community": 34,
-      "community_name": "Key Override\u00b7\uc6d0\uc0f7 \ubaa8\ub4dc",
+      "community": 9,
+      "community_name": "keyboard \ud0dc\uc2a4\ud06c\u00b7\ub9e4\ud2b8\ub9ad\uc2a4 \ube0c\ub9ac\uc9c0",
       "norm_label": "key_override_task()"
     },
     {
@@ -9619,8 +9619,8 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_process_keycode_process_tap_dance_tap_dance_pair_on_each_tap",
-      "community": 47,
-      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
+      "community": 31,
+      "community_name": "\ud0a4\ucf54\ub4dc \ubcc0\ud658\u00b7\ub9ac\ud3ec\ud2b8",
       "norm_label": "tap_dance_pair_on_each_tap()"
     },
     {
@@ -9630,8 +9630,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_process_keycode_process_tap_dance_c_tap_dance_state_t",
-      "community": 47,
-      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
+      "community": 31,
+      "community_name": "\ud0a4\ucf54\ub4dc \ubcc0\ud658\u00b7\ub9ac\ud3ec\ud2b8",
       "norm_label": "tap_dance_state_t"
     },
     {
@@ -9641,8 +9641,8 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_process_keycode_process_tap_dance_tap_dance_pair_finished",
-      "community": 47,
-      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
+      "community": 31,
+      "community_name": "\ud0a4\ucf54\ub4dc \ubcc0\ud658\u00b7\ub9ac\ud3ec\ud2b8",
       "norm_label": "tap_dance_pair_finished()"
     },
     {
@@ -9652,8 +9652,8 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_process_keycode_process_tap_dance_tap_dance_pair_reset",
-      "community": 47,
-      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
+      "community": 31,
+      "community_name": "\ud0a4\ucf54\ub4dc \ubcc0\ud658\u00b7\ub9ac\ud3ec\ud2b8",
       "norm_label": "tap_dance_pair_reset()"
     },
     {
@@ -9663,8 +9663,8 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_process_keycode_process_tap_dance_tap_dance_dual_role_on_each_tap",
-      "community": 47,
-      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
+      "community": 31,
+      "community_name": "\ud0a4\ucf54\ub4dc \ubcc0\ud658\u00b7\ub9ac\ud3ec\ud2b8",
       "norm_label": "tap_dance_dual_role_on_each_tap()"
     },
     {
@@ -9674,8 +9674,8 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_process_keycode_process_tap_dance_tap_dance_dual_role_finished",
-      "community": 47,
-      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
+      "community": 31,
+      "community_name": "\ud0a4\ucf54\ub4dc \ubcc0\ud658\u00b7\ub9ac\ud3ec\ud2b8",
       "norm_label": "tap_dance_dual_role_finished()"
     },
     {
@@ -9685,8 +9685,8 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_process_keycode_process_tap_dance_tap_dance_dual_role_reset",
-      "community": 47,
-      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
+      "community": 31,
+      "community_name": "\ud0a4\ucf54\ub4dc \ubcc0\ud658\u00b7\ub9ac\ud3ec\ud2b8",
       "norm_label": "tap_dance_dual_role_reset()"
     },
     {
@@ -9861,8 +9861,8 @@
       "source_location": "L85",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_quantum_extract_mod_bits",
-      "community": 47,
-      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
+      "community": 2,
+      "community_name": "\ud000\ud140 \ucf54\uc5b4\u00b7\ubd80\ud2b8\ub85c\ub354 \ub9ac\uc14b",
       "norm_label": "extract_mod_bits()"
     },
     {
@@ -9872,8 +9872,8 @@
       "source_location": "L110",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_quantum_do_code16",
-      "community": 47,
-      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
+      "community": 2,
+      "community_name": "\ud000\ud140 \ucf54\uc5b4\u00b7\ubd80\ud2b8\ub85c\ub354 \ub9ac\uc14b",
       "norm_label": "do_code16()"
     },
     {
@@ -9883,8 +9883,8 @@
       "source_location": "L114",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_quantum_register_code16",
-      "community": 47,
-      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
+      "community": 31,
+      "community_name": "\ud0a4\ucf54\ub4dc \ubcc0\ud658\u00b7\ub9ac\ud3ec\ud2b8",
       "norm_label": "register_code16()"
     },
     {
@@ -9894,8 +9894,8 @@
       "source_location": "L123",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_quantum_unregister_code16",
-      "community": 47,
-      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
+      "community": 31,
+      "community_name": "\ud0a4\ucf54\ub4dc \ubcc0\ud658\u00b7\ub9ac\ud3ec\ud2b8",
       "norm_label": "unregister_code16()"
     },
     {
@@ -9905,8 +9905,8 @@
       "source_location": "L137",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_quantum_tap_code16_delay",
-      "community": 47,
-      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
+      "community": 2,
+      "community_name": "\ud000\ud140 \ucf54\uc5b4\u00b7\ubd80\ud2b8\ub85c\ub354 \ub9ac\uc14b",
       "norm_label": "tap_code16_delay()"
     },
     {
@@ -9916,8 +9916,8 @@
       "source_location": "L149",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_quantum_tap_code16",
-      "community": 47,
-      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
+      "community": 2,
+      "community_name": "\ud000\ud140 \ucf54\uc5b4\u00b7\ubd80\ud2b8\ub85c\ub354 \ub9ac\uc14b",
       "norm_label": "tap_code16()"
     },
     {
@@ -10026,8 +10026,8 @@
       "source_location": "L203",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_quantum_reset_keyboard",
-      "community": 2,
-      "community_name": "\ud000\ud140 \ucf54\uc5b4\u00b7\ubd80\ud2b8\ub85c\ub354 \ub9ac\uc14b",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "reset_keyboard()"
     },
     {
@@ -10070,8 +10070,8 @@
       "source_location": "L249",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_quantum_get_event_keycode",
-      "community": 11,
-      "community_name": "\uc561\uc158 \ub808\uc774\uc5b4",
+      "community": 81,
+      "community_name": "via_hid RAW HID \ube0c\ub9ac\uc9c0",
       "norm_label": "get_event_keycode()"
     },
     {
@@ -10081,8 +10081,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_quantum_c_keyevent_t",
-      "community": 11,
-      "community_name": "\uc561\uc158 \ub808\uc774\uc5b4",
+      "community": 81,
+      "community_name": "via_hid RAW HID \ube0c\ub9ac\uc9c0",
       "norm_label": "keyevent_t"
     },
     {
@@ -10268,8 +10268,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_repeat_key",
-      "community": 64,
-      "community_name": "rgblight \uc0c1\ud0dc \uc870\ud68c\u00b7VIA",
+      "community": 87,
+      "community_name": "\ubc84\uc804 VIA \ud3ec\ud2b8",
       "norm_label": "repeat_key.h"
     },
     {
@@ -10664,8 +10664,8 @@
       "source_location": "L648",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_rgblight_rgblight_rgblight_indicator_set_target_callback",
-      "community": 61,
-      "community_name": "\uc778\ub514\ucf00\uc774\ud130 \ud3ec\ud2b8 (brick60)",
+      "community": 53,
+      "community_name": "\uc778\ub514\ucf00\uc774\ud130 \ud3ec\ud2b8 (intigrity80)",
       "norm_label": "rgblight_indicator_set_target_callback()"
     },
     {
@@ -10675,8 +10675,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "rgblight_indicator_target_callback_t",
-      "community": 61,
-      "community_name": "\uc778\ub514\ucf00\uc774\ud130 \ud3ec\ud2b8 (brick60)",
+      "community": 53,
+      "community_name": "\uc778\ub514\ucf00\uc774\ud130 \ud3ec\ud2b8 (intigrity80)",
       "norm_label": "rgblight_indicator_target_callback_t"
     },
     {
@@ -10752,8 +10752,8 @@
       "source_location": "L765",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_rgblight_rgblight_rgblight_indicator_set_render_callback",
-      "community": 65,
-      "community_name": "\uc778\ub514\ucf00\uc774\ud130 \ud3ec\ud2b8 (may65)",
+      "community": 66,
+      "community_name": "\uc778\ub514\ucf00\uc774\ud130 \ud3ec\ud2b8 (brick65)",
       "norm_label": "rgblight_indicator_set_render_callback()"
     },
     {
@@ -10763,8 +10763,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "rgblight_indicator_render_callback_t",
-      "community": 65,
-      "community_name": "\uc778\ub514\ucf00\uc774\ud130 \ud3ec\ud2b8 (may65)",
+      "community": 66,
+      "community_name": "\uc778\ub514\ucf00\uc774\ud130 \ud3ec\ud2b8 (brick65)",
       "norm_label": "rgblight_indicator_render_callback_t"
     },
     {
@@ -12182,8 +12182,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_rgblight_rgblight_h_src_ap_modules_qmk_quantum_rgblight_rgblight",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 47,
+      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
       "norm_label": "rgblight.h"
     },
     {
@@ -12204,8 +12204,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_rgblight_rgblight_drivers_c_src_ap_modules_qmk_quantum_rgblight_rgblight_drivers",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 47,
+      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
       "norm_label": "rgblight_drivers.c"
     },
     {
@@ -12215,8 +12215,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_rgblight_rgblight_drivers_h_src_ap_modules_qmk_quantum_rgblight_rgblight_drivers",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 47,
+      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
       "norm_label": "rgblight_drivers.h"
     },
     {
@@ -12446,8 +12446,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_send_string_send_string_h_src_ap_modules_qmk_quantum_send_string_send_string",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 47,
+      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
       "norm_label": "send_string.h"
     },
     {
@@ -12457,8 +12457,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_send_string_send_string_keycodes",
-      "community": 58,
-      "community_name": "\ud0a4\ub9f5 \uc778\ud2b8\ub85c\uc2a4\ud399\uc158",
+      "community": 47,
+      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
       "norm_label": "send_string_keycodes.h"
     },
     {
@@ -12534,8 +12534,8 @@
       "source_location": "L72",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_sequencer_sequencer_is_sequencer_track_active",
-      "community": 130,
-      "community_name": "is_sequencer_track_active",
+      "community": 29,
+      "community_name": "\uc2dc\ud000\uc11c \ucf54\uc5b4",
       "norm_label": "is_sequencer_track_active()"
     },
     {
@@ -12545,8 +12545,8 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_sequencer_sequencer_sequencer_set_track_activation",
-      "community": 130,
-      "community_name": "is_sequencer_track_active",
+      "community": 29,
+      "community_name": "\uc2dc\ud000\uc11c \ucf54\uc5b4",
       "norm_label": "sequencer_set_track_activation()"
     },
     {
@@ -12556,8 +12556,8 @@
       "source_location": "L85",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_sequencer_sequencer_sequencer_toggle_track_activation",
-      "community": 130,
-      "community_name": "is_sequencer_track_active",
+      "community": 29,
+      "community_name": "\uc2dc\ud000\uc11c \ucf54\uc5b4",
       "norm_label": "sequencer_toggle_track_activation()"
     },
     {
@@ -12567,8 +12567,8 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_sequencer_sequencer_sequencer_toggle_single_active_track",
-      "community": 130,
-      "community_name": "is_sequencer_track_active",
+      "community": 29,
+      "community_name": "\uc2dc\ud000\uc11c \ucf54\uc5b4",
       "norm_label": "sequencer_toggle_single_active_track()"
     },
     {
@@ -12798,8 +12798,8 @@
       "source_location": "L260",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_sequencer_sequencer_sequencer_get_step_duration",
-      "community": 29,
-      "community_name": "\uc2dc\ud000\uc11c \ucf54\uc5b4",
+      "community": 73,
+      "community_name": "\uc2dc\ud000\uc11c \ud398\uc774\uc988 \ud0dc\uc2a4\ud06c",
       "norm_label": "sequencer_get_step_duration()"
     },
     {
@@ -12886,8 +12886,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_sequencer_tests_midi_mock_h_src_ap_modules_qmk_quantum_sequencer_tests_midi_mock",
-      "community": 73,
-      "community_name": "\uc2dc\ud000\uc11c \ud398\uc774\uc988 \ud0dc\uc2a4\ud06c",
+      "community": 72,
+      "community_name": "\uc2dc\ud000\uc11c \ud14c\uc2a4\ud2b8 \ubaa9",
       "norm_label": "midi_mock.h"
     },
     {
@@ -13502,8 +13502,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_ap_modules_qmk_quantum_util",
-      "community": 64,
-      "community_name": "rgblight \uc0c1\ud0dc \uc870\ud68c\u00b7VIA",
+      "community": 47,
+      "community_name": "EEPROM \ud329\ud1a0\ub9ac \uae30\ubcf8\uac12",
       "norm_label": "util.h"
     },
     {
@@ -13986,8 +13986,8 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "src_bsp_bsp_millis",
-      "community": 81,
-      "community_name": "via_hid RAW HID \ube0c\ub9ac\uc9c0",
+      "community": 49,
+      "community_name": "\ud000\ud140 \ud5e4\ub354 \ubaa8\uc74c",
       "norm_label": "millis()"
     },
     {
@@ -14074,8 +14074,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_bsp_device_stm32h7rsxx_it_c_src_bsp_device_stm32h7rsxx_it",
-      "community": 82,
-      "community_name": "HID \ub9ac\ud3ec\ud2b8 \uc804\uc1a1 \uacbd\ub85c",
+      "community": 67,
+      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
       "norm_label": "stm32h7rsxx_it.c"
     },
     {
@@ -14085,8 +14085,8 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "src_bsp_device_stm32h7rsxx_it_nmi_handler",
-      "community": 82,
-      "community_name": "HID \ub9ac\ud3ec\ud2b8 \uc804\uc1a1 \uacbd\ub85c",
+      "community": 67,
+      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
       "norm_label": "nmi_handler()"
     },
     {
@@ -14096,8 +14096,8 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "src_bsp_device_stm32h7rsxx_it_hardfault_handler",
-      "community": 82,
-      "community_name": "HID \ub9ac\ud3ec\ud2b8 \uc804\uc1a1 \uacbd\ub85c",
+      "community": 67,
+      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
       "norm_label": "hardfault_handler()"
     },
     {
@@ -14107,8 +14107,8 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "src_bsp_device_stm32h7rsxx_it_memmanage_handler",
-      "community": 82,
-      "community_name": "HID \ub9ac\ud3ec\ud2b8 \uc804\uc1a1 \uacbd\ub85c",
+      "community": 67,
+      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
       "norm_label": "memmanage_handler()"
     },
     {
@@ -14118,8 +14118,8 @@
       "source_location": "L74",
       "_origin": "ast",
       "id": "src_bsp_device_stm32h7rsxx_it_busfault_handler",
-      "community": 82,
-      "community_name": "HID \ub9ac\ud3ec\ud2b8 \uc804\uc1a1 \uacbd\ub85c",
+      "community": 67,
+      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
       "norm_label": "busfault_handler()"
     },
     {
@@ -14129,8 +14129,8 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "src_bsp_device_stm32h7rsxx_it_usagefault_handler",
-      "community": 82,
-      "community_name": "HID \ub9ac\ud3ec\ud2b8 \uc804\uc1a1 \uacbd\ub85c",
+      "community": 67,
+      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
       "norm_label": "usagefault_handler()"
     },
     {
@@ -14140,8 +14140,8 @@
       "source_location": "L103",
       "_origin": "ast",
       "id": "src_bsp_device_stm32h7rsxx_it_svc_handler",
-      "community": 82,
-      "community_name": "HID \ub9ac\ud3ec\ud2b8 \uc804\uc1a1 \uacbd\ub85c",
+      "community": 67,
+      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
       "norm_label": "svc_handler()"
     },
     {
@@ -14151,8 +14151,8 @@
       "source_location": "L110",
       "_origin": "ast",
       "id": "src_bsp_device_stm32h7rsxx_it_debugmon_handler",
-      "community": 82,
-      "community_name": "HID \ub9ac\ud3ec\ud2b8 \uc804\uc1a1 \uacbd\ub85c",
+      "community": 67,
+      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
       "norm_label": "debugmon_handler()"
     },
     {
@@ -14162,8 +14162,8 @@
       "source_location": "L117",
       "_origin": "ast",
       "id": "src_bsp_device_stm32h7rsxx_it_pendsv_handler",
-      "community": 82,
-      "community_name": "HID \ub9ac\ud3ec\ud2b8 \uc804\uc1a1 \uacbd\ub85c",
+      "community": 67,
+      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
       "norm_label": "pendsv_handler()"
     },
     {
@@ -14173,8 +14173,8 @@
       "source_location": "L124",
       "_origin": "ast",
       "id": "src_bsp_device_stm32h7rsxx_it_systick_handler",
-      "community": 82,
-      "community_name": "HID \ub9ac\ud3ec\ud2b8 \uc804\uc1a1 \uacbd\ub85c",
+      "community": 67,
+      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
       "norm_label": "systick_handler()"
     },
     {
@@ -14184,8 +14184,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_bsp_device_stm32h7rsxx_it_h_src_bsp_device_stm32h7rsxx_it",
-      "community": 82,
-      "community_name": "HID \ub9ac\ud3ec\ud2b8 \uc804\uc1a1 \uacbd\ub85c",
+      "community": 67,
+      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
       "norm_label": "stm32h7rsxx_it.h"
     },
     {
@@ -15372,8 +15372,8 @@
       "source_location": "L140",
       "_origin": "ast",
       "id": "src_common_hw_src_cli_cliopen",
-      "community": 27,
-      "community_name": "ap \uba54\uc778 \ub8e8\ud504",
+      "community": 56,
+      "community_name": "\ub4dc\ub77c\uc774\ubc84 \ucd08\uae30\ud654\u00b7\ub85c\uadf8",
       "norm_label": "cliopen()"
     },
     {
@@ -15493,8 +15493,8 @@
       "source_location": "L240",
       "_origin": "ast",
       "id": "src_common_hw_src_cli_cliwrite",
-      "community": 33,
-      "community_name": "CLI \ucf54\uc5b4",
+      "community": 27,
+      "community_name": "ap \uba54\uc778 \ub8e8\ud504",
       "norm_label": "cliwrite()"
     },
     {
@@ -15515,8 +15515,8 @@
       "source_location": "L457",
       "_origin": "ast",
       "id": "src_common_hw_src_cli_clilineclean",
-      "community": 33,
-      "community_name": "CLI \ucf54\uc5b4",
+      "community": 27,
+      "community_name": "ap \uba54\uc778 \ub8e8\ud504",
       "norm_label": "clilineclean()"
     },
     {
@@ -15702,8 +15702,8 @@
       "source_location": "L755",
       "_origin": "ast",
       "id": "src_common_hw_src_cli_clishowlist",
-      "community": 35,
-      "community_name": "CDC \uc0c1\uc704 \uacc4\uce35",
+      "community": 33,
+      "community_name": "CLI \ucf54\uc5b4",
       "norm_label": "clishowlist()"
     },
     {
@@ -15713,8 +15713,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_common_hw_src_cli_c_cli_args_t",
-      "community": 35,
-      "community_name": "CDC \uc0c1\uc704 \uacc4\uce35",
+      "community": 33,
+      "community_name": "CLI \ucf54\uc5b4",
       "norm_label": "cli_args_t"
     },
     {
@@ -15724,8 +15724,8 @@
       "source_location": "L772",
       "_origin": "ast",
       "id": "src_common_hw_src_cli_climemorydump",
-      "community": 35,
-      "community_name": "CDC \uc0c1\uc704 \uacc4\uce35",
+      "community": 33,
+      "community_name": "CLI \ucf54\uc5b4",
       "norm_label": "climemorydump()"
     },
     {
@@ -16692,8 +16692,8 @@
       "source_location": "L198",
       "_origin": "ast",
       "id": "src_hw_driver_eeprom_zd24c128_eepromwaitready",
-      "community": 81,
-      "community_name": "via_hid RAW HID \ube0c\ub9ac\uc9c0",
+      "community": 42,
+      "community_name": "\ud50c\ub798\uc2dc EEPROM \uc5d0\ubbac\ub808\uc774\uc158",
       "norm_label": "eepromwaitready()"
     },
     {
@@ -17000,8 +17000,8 @@
       "source_location": "L269",
       "_origin": "ast",
       "id": "src_hw_driver_i2c_i2cisdeviceready",
-      "community": 81,
-      "community_name": "via_hid RAW HID \ube0c\ub9ac\uc9c0",
+      "community": 32,
+      "community_name": "I2C \ub4dc\ub77c\uc774\ubc84",
       "norm_label": "i2cisdeviceready()"
     },
     {
@@ -17088,8 +17088,8 @@
       "source_location": "L455",
       "_origin": "ast",
       "id": "src_hw_driver_i2c_i2cwritea16bytes",
-      "community": 42,
-      "community_name": "\ud50c\ub798\uc2dc EEPROM \uc5d0\ubbac\ub808\uc774\uc158",
+      "community": 32,
+      "community_name": "I2C \ub4dc\ub77c\uc774\ubc84",
       "norm_label": "i2cwritea16bytes()"
     },
     {
@@ -17154,8 +17154,8 @@
       "source_location": "L533",
       "_origin": "ast",
       "id": "src_hw_driver_i2c_i2cgetreadywaitstats",
-      "community": 32,
-      "community_name": "I2C \ub4dc\ub77c\uc774\ubc84",
+      "community": 42,
+      "community_name": "\ud50c\ub798\uc2dc EEPROM \uc5d0\ubbac\ub808\uc774\uc158",
       "norm_label": "i2cgetreadywaitstats()"
     },
     {
@@ -17165,8 +17165,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "i2c_ready_wait_stats_t",
-      "community": 32,
-      "community_name": "I2C \ub4dc\ub77c\uc774\ubc84",
+      "community": 42,
+      "community_name": "\ud50c\ub798\uc2dc EEPROM \uc5d0\ubbac\ub808\uc774\uc158",
       "norm_label": "i2c_ready_wait_stats_t"
     },
     {
@@ -17220,8 +17220,8 @@
       "source_location": "L654",
       "_origin": "ast",
       "id": "src_hw_driver_i2c_clii2c",
-      "community": 81,
-      "community_name": "via_hid RAW HID \ube0c\ub9ac\uc9c0",
+      "community": 32,
+      "community_name": "I2C \ub4dc\ub77c\uc774\ubc84",
       "norm_label": "clii2c()"
     },
     {
@@ -17231,8 +17231,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_hw_driver_i2c_c_cli_args_t",
-      "community": 81,
-      "community_name": "via_hid RAW HID \ube0c\ub9ac\uc9c0",
+      "community": 32,
+      "community_name": "I2C \ub4dc\ub77c\uc774\ubc84",
       "norm_label": "cli_args_t"
     },
     {
@@ -17539,8 +17539,8 @@
       "source_location": "L108",
       "_origin": "ast",
       "id": "src_hw_driver_log_logboot",
-      "community": 27,
-      "community_name": "ap \uba54\uc778 \ub8e8\ud504",
+      "community": 56,
+      "community_name": "\ub4dc\ub77c\uc774\ubc84 \ucd08\uae30\ud654\u00b7\ub85c\uadf8",
       "norm_label": "logboot()"
     },
     {
@@ -17561,8 +17561,8 @@
       "source_location": "L124",
       "_origin": "ast",
       "id": "src_hw_driver_log_logbufprintf",
-      "community": 82,
-      "community_name": "HID \ub9ac\ud3ec\ud2b8 \uc804\uc1a1 \uacbd\ub85c",
+      "community": 27,
+      "community_name": "ap \uba54\uc778 \ub8e8\ud504",
       "norm_label": "logbufprintf()"
     },
     {
@@ -17572,8 +17572,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "log_buf_t",
-      "community": 82,
-      "community_name": "HID \ub9ac\ud3ec\ud2b8 \uc804\uc1a1 \uacbd\ub85c",
+      "community": 27,
+      "community_name": "ap \uba54\uc778 \ub8e8\ud504",
       "norm_label": "log_buf_t"
     },
     {
@@ -17583,8 +17583,8 @@
       "source_location": "L158",
       "_origin": "ast",
       "id": "src_hw_driver_log_logprintf",
-      "community": 82,
-      "community_name": "HID \ub9ac\ud3ec\ud2b8 \uc804\uc1a1 \uacbd\ub85c",
+      "community": 67,
+      "community_name": "\ud3ec\ud2b8 \ud5e4\ub354 \ubaa8\uc74c",
       "norm_label": "logprintf()"
     },
     {
@@ -18133,8 +18133,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_hw_driver_reset",
-      "community": 44,
-      "community_name": "HID \uacc4\uce21\u00b7micros",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "reset.c"
     },
     {
@@ -18144,8 +18144,8 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "src_hw_driver_reset_resetinit",
-      "community": 44,
-      "community_name": "HID \uacc4\uce21\u00b7micros",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "resetinit()"
     },
     {
@@ -18155,8 +18155,8 @@
       "source_location": "L97",
       "_origin": "ast",
       "id": "src_hw_driver_reset_resetlog",
-      "community": 44,
-      "community_name": "HID \uacc4\uce21\u00b7micros",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "resetlog()"
     },
     {
@@ -18166,8 +18166,8 @@
       "source_location": "L102",
       "_origin": "ast",
       "id": "src_hw_driver_reset_resettoboot",
-      "community": 44,
-      "community_name": "HID \uacc4\uce21\u00b7micros",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "resettoboot()"
     },
     {
@@ -18177,8 +18177,8 @@
       "source_location": "L108",
       "_origin": "ast",
       "id": "src_hw_driver_reset_resettoreset",
-      "community": 44,
-      "community_name": "HID \uacc4\uce21\u00b7micros",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "resettoreset()"
     },
     {
@@ -18188,8 +18188,8 @@
       "source_location": "L113",
       "_origin": "ast",
       "id": "src_hw_driver_reset_resetgetbits",
-      "community": 44,
-      "community_name": "HID \uacc4\uce21\u00b7micros",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "resetgetbits()"
     },
     {
@@ -18199,8 +18199,8 @@
       "source_location": "L118",
       "_origin": "ast",
       "id": "src_hw_driver_reset_resetsetbits",
-      "community": 44,
-      "community_name": "HID \uacc4\uce21\u00b7micros",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "resetsetbits()"
     },
     {
@@ -18210,8 +18210,8 @@
       "source_location": "L123",
       "_origin": "ast",
       "id": "src_hw_driver_reset_resetsetbootmode",
-      "community": 44,
-      "community_name": "HID \uacc4\uce21\u00b7micros",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "resetsetbootmode()"
     },
     {
@@ -18221,8 +18221,8 @@
       "source_location": "L129",
       "_origin": "ast",
       "id": "src_hw_driver_reset_resetgetbootmode",
-      "community": 44,
-      "community_name": "HID \uacc4\uce21\u00b7micros",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "resetgetbootmode()"
     },
     {
@@ -18232,8 +18232,8 @@
       "source_location": "L136",
       "_origin": "ast",
       "id": "src_hw_driver_reset_clireset",
-      "community": 44,
-      "community_name": "HID \uacc4\uce21\u00b7micros",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "clireset()"
     },
     {
@@ -18243,8 +18243,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_hw_driver_reset_c_cli_args_t",
-      "community": 44,
-      "community_name": "HID \uacc4\uce21\u00b7micros",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "cli_args_t"
     },
     {
@@ -18386,8 +18386,8 @@
       "source_location": "L199",
       "_origin": "ast",
       "id": "src_hw_driver_rtc_rtcsetreg",
-      "community": 44,
-      "community_name": "HID \uacc4\uce21\u00b7micros",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "rtcsetreg()"
     },
     {
@@ -18397,8 +18397,8 @@
       "source_location": "L212",
       "_origin": "ast",
       "id": "src_hw_driver_rtc_rtcgetreg",
-      "community": 44,
-      "community_name": "HID \uacc4\uce21\u00b7micros",
+      "community": 22,
+      "community_name": "USB \ucf54\uc5b4\u00b7BootMode \uad00\ub9ac",
       "norm_label": "rtcgetreg()"
     },
     {
@@ -18529,8 +18529,8 @@
       "source_location": "L248",
       "_origin": "ast",
       "id": "src_hw_driver_spi_spitransferdma",
-      "community": 81,
-      "community_name": "via_hid RAW HID \ube0c\ub9ac\uc9c0",
+      "community": 49,
+      "community_name": "\ud000\ud140 \ud5e4\ub354 \ubaa8\uc74c",
       "norm_label": "spitransferdma()"
     },
     {
@@ -19266,8 +19266,8 @@
       "source_location": "L258",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_cdc_usbd_cdc_usbd_cdc_init",
-      "community": 16,
-      "community_name": "usbd_conf (HAL PCD \uc5f0\ub3d9)",
+      "community": 39,
+      "community_name": "USB \ucee8\ud2b8\ub864 \uc694\uccad (ctlreq)",
       "norm_label": "usbd_cdc_init()"
     },
     {
@@ -19299,8 +19299,8 @@
       "source_location": "L403",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_cdc_usbd_cdc_usbd_cdc_setup",
-      "community": 39,
-      "community_name": "USB \ucee8\ud2b8\ub864 \uc694\uccad (ctlreq)",
+      "community": 38,
+      "community_name": "\uc790\ub3d9 \ud329\ud1a0\ub9ac \ub9ac\uc14b\u00b7IRQ \ud578\ub4e4\ub7ec",
       "norm_label": "usbd_cdc_setup()"
     },
     {
@@ -19310,8 +19310,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_cdc_usbd_cdc_c_usbd_setupreqtypedef",
-      "community": 39,
-      "community_name": "USB \ucee8\ud2b8\ub864 \uc694\uccad (ctlreq)",
+      "community": 38,
+      "community_name": "\uc790\ub3d9 \ud329\ud1a0\ub9ac \ub9ac\uc14b\u00b7IRQ \ud578\ub4e4\ub7ec",
       "norm_label": "usbd_setupreqtypedef"
     },
     {
@@ -20902,7 +20902,7 @@
       "label": "USBD_HID_SendReportEXK()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L924",
+      "source_location": "L929",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_sendreportexk",
       "community": 77,
@@ -20913,7 +20913,7 @@
       "label": "USBD_HID_GetPollingInterval()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L952",
+      "source_location": "L961",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_getpollinginterval",
       "community": 77,
@@ -20924,7 +20924,7 @@
       "label": "USBD_HID_GetUsrStrDescriptor()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L976",
+      "source_location": "L985",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_getusrstrdescriptor",
       "community": 5,
@@ -20935,18 +20935,18 @@
       "label": "USBD_HID_GetFSCfgDesc()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L991",
+      "source_location": "L1000",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_getfscfgdesc",
-      "community": 39,
-      "community_name": "USB \ucee8\ud2b8\ub864 \uc694\uccad (ctlreq)",
+      "community": 77,
+      "community_name": "\ud0c0\uc774\uba38 \ud3ec\ud2b8\u00b7\ud0a4\ubcf4\ub4dc \ucd08\uae30\ud654",
       "norm_label": "usbd_hid_getfscfgdesc()"
     },
     {
       "label": "USBD_HID_GetHSCfgDesc()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1011",
+      "source_location": "L1020",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_gethscfgdesc",
       "community": 77,
@@ -20957,7 +20957,7 @@
       "label": "USBD_HID_GetOtherSpeedCfgDesc()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1050",
+      "source_location": "L1059",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_getotherspeedcfgdesc",
       "community": 39,
@@ -20968,7 +20968,7 @@
       "label": "USBD_HID_DataIn()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1072",
+      "source_location": "L1081",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_datain",
       "community": 77,
@@ -20979,7 +20979,7 @@
       "label": "USBD_HID_DataOut()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1091",
+      "source_location": "L1100",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_dataout",
       "community": 39,
@@ -20990,18 +20990,18 @@
       "label": "USBD_HID_SOF()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1112",
+      "source_location": "L1121",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_sof",
-      "community": 16,
-      "community_name": "usbd_conf (HAL PCD \uc5f0\ub3d9)",
+      "community": 77,
+      "community_name": "\ud0c0\uc774\uba38 \ud3ec\ud2b8\u00b7\ud0a4\ubcf4\ub4dc \ucd08\uae30\ud654",
       "norm_label": "usbd_hid_sof()"
     },
     {
       "label": "USBD_HID_GetDeviceQualifierDesc()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1136",
+      "source_location": "L1149",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_getdevicequalifierdesc",
       "community": 77,
@@ -21012,7 +21012,7 @@
       "label": "usbHidUpdateWakeUp()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1144",
+      "source_location": "L1157",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidupdatewakeup",
       "community": 77,
@@ -21023,7 +21023,7 @@
       "label": "usbHidSetViaReceiveFunc()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1163",
+      "source_location": "L1176",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsetviareceivefunc",
       "community": 37,
@@ -21034,18 +21034,18 @@
       "label": "usbHidEnqueueViaResponse()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1169",
+      "source_location": "L1182",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidenqueueviaresponse",
-      "community": 37,
-      "community_name": "EEPROM \ube44\ub3d9\uae30 \ud050",
+      "community": 49,
+      "community_name": "\ud000\ud140 \ud5e4\ub354 \ubaa8\uc74c",
       "norm_label": "usbhidenqueueviaresponse()"
     },
     {
       "label": "usbHidSendReport()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1196",
+      "source_location": "L1209",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsendreport",
       "community": 77,
@@ -21056,7 +21056,7 @@
       "label": "usbHidSendReportEXK()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1243",
+      "source_location": "L1256",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsendreportexk",
       "community": 77,
@@ -21067,7 +21067,7 @@
       "label": "usbHidSetStatusLed()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1272",
+      "source_location": "L1285",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsetstatusled",
       "community": 77,
@@ -21089,7 +21089,7 @@
       "label": "usbHidBackupTimerOffsetUs()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1277",
+      "source_location": "L1290",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidbackuptimeroffsetus",
       "community": 77,
@@ -21100,7 +21100,7 @@
       "label": "usbHidInitTimer()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1287",
+      "source_location": "L1300",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidinittimer",
       "community": 77,
@@ -21111,7 +21111,7 @@
       "label": "HAL_TIM_Base_MspInit()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1337",
+      "source_location": "L1350",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_hal_tim_base_mspinit",
       "community": 77,
@@ -21133,7 +21133,7 @@
       "label": "HAL_TIM_Base_MspDeInit()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1351",
+      "source_location": "L1364",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_hal_tim_base_mspdeinit",
       "community": 77,
@@ -21144,7 +21144,7 @@
       "label": "TIM2_IRQHandler()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1364",
+      "source_location": "L1377",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_tim2_irqhandler",
       "community": 77,
@@ -21155,7 +21155,7 @@
       "label": "HAL_TIM_PWM_PulseFinishedCallback()",
       "file_type": "code",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1369",
+      "source_location": "L1382",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_hal_tim_pwm_pulsefinishedcallback",
       "community": 77,
@@ -21543,8 +21543,8 @@
       "source_location": "L603",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usbd_conf_usbd_ll_transmit",
-      "community": 16,
-      "community_name": "usbd_conf (HAL PCD \uc5f0\ub3d9)",
+      "community": 77,
+      "community_name": "\ud0c0\uc774\uba38 \ud3ec\ud2b8\u00b7\ud0a4\ubcf4\ub4dc \ucd08\uae30\ud654",
       "norm_label": "usbd_ll_transmit()"
     },
     {
@@ -21554,8 +21554,8 @@
       "source_location": "L623",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usbd_conf_usbd_ll_preparereceive",
-      "community": 16,
-      "community_name": "usbd_conf (HAL PCD \uc5f0\ub3d9)",
+      "community": 75,
+      "community_name": "\uacf5\ud1b5 \ucf54\uc5b4 \uc720\ud2f8 (qbuffer/crc)",
       "norm_label": "usbd_ll_preparereceive()"
     },
     {
@@ -58942,7 +58942,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1155",
+      "source_location": "L1168",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidupdatewakeup",
@@ -59182,7 +59182,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1114",
+      "source_location": "L1123",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_sof",
@@ -59194,7 +59194,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1192",
+      "source_location": "L1205",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidenqueueviaresponse",
@@ -59338,7 +59338,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1302",
+      "source_location": "L1315",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidinittimer",
@@ -60090,7 +60090,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1186",
+      "source_location": "L1199",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidenqueueviaresponse",
@@ -60102,7 +60102,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1225",
+      "source_location": "L1238",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsendreport",
@@ -60114,7 +60114,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1257",
+      "source_location": "L1270",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsendreportexk",
@@ -60162,7 +60162,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1378",
+      "source_location": "L1391",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_hal_tim_pwm_pulsefinishedcallback",
@@ -60174,7 +60174,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1121",
+      "source_location": "L1131",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_sof",
@@ -60246,7 +60246,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1371",
+      "source_location": "L1384",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_hal_tim_pwm_pulsefinishedcallback",
@@ -60258,7 +60258,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1114",
+      "source_location": "L1123",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_sof",
@@ -60270,7 +60270,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1220",
+      "source_location": "L1233",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsendreport",
@@ -66764,7 +66764,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L978",
+      "source_location": "L987",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_getusrstrdescriptor",
@@ -66788,7 +66788,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1188",
+      "source_location": "L1201",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidenqueueviaresponse",
@@ -66800,7 +66800,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1151",
+      "source_location": "L1164",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidupdatewakeup",
@@ -66942,7 +66942,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1085",
+      "source_location": "L1094",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_datain",
@@ -66966,7 +66966,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1212",
+      "source_location": "L1225",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsendreport",
@@ -66978,7 +66978,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1259",
+      "source_location": "L1272",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsendreportexk",
@@ -70124,7 +70124,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1279",
+      "source_location": "L1292",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidbackuptimeroffsetus",
@@ -70160,7 +70160,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1013",
+      "source_location": "L1022",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_gethscfgdesc",
@@ -70172,7 +70172,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L962",
+      "source_location": "L971",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_getpollinginterval",
@@ -73600,7 +73600,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1083",
+      "source_location": "L1092",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_datain",
@@ -73624,7 +73624,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1209",
+      "source_location": "L1222",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsendreport",
@@ -73636,7 +73636,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1259",
+      "source_location": "L1272",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsendreportexk",
@@ -73672,7 +73672,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1211",
+      "source_location": "L1224",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsendreport",
@@ -73684,7 +73684,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1231",
+      "source_location": "L1244",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsendreport",
@@ -73696,7 +73696,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L907",
+      "source_location": "L908",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_sendreport",
@@ -73708,7 +73708,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1085",
+      "source_location": "L1094",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_datain",
@@ -73720,7 +73720,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1227",
+      "source_location": "L1240",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsendreport",
@@ -73732,7 +73732,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1259",
+      "source_location": "L1272",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsendreportexk",
@@ -74046,7 +74046,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L979",
+      "source_location": "L988",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_getusrstrdescriptor",
@@ -74152,7 +74152,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1351",
+      "source_location": "L1364",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74163,7 +74163,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1337",
+      "source_location": "L1350",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74174,7 +74174,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1369",
+      "source_location": "L1382",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74197,7 +74197,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1364",
+      "source_location": "L1377",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74208,7 +74208,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1072",
+      "source_location": "L1081",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74219,7 +74219,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1091",
+      "source_location": "L1100",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74252,7 +74252,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1136",
+      "source_location": "L1149",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74263,7 +74263,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L991",
+      "source_location": "L1000",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74274,7 +74274,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1011",
+      "source_location": "L1020",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74285,7 +74285,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1050",
+      "source_location": "L1059",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74296,7 +74296,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L952",
+      "source_location": "L961",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74307,7 +74307,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L976",
+      "source_location": "L985",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74340,7 +74340,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L924",
+      "source_location": "L929",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74362,7 +74362,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1112",
+      "source_location": "L1121",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74373,7 +74373,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1277",
+      "source_location": "L1290",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74395,7 +74395,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1169",
+      "source_location": "L1182",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74428,7 +74428,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1287",
+      "source_location": "L1300",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74439,7 +74439,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1196",
+      "source_location": "L1209",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74450,7 +74450,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1243",
+      "source_location": "L1256",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74461,7 +74461,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1272",
+      "source_location": "L1285",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74472,7 +74472,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1163",
+      "source_location": "L1176",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74483,7 +74483,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1144",
+      "source_location": "L1157",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_c_src_hw_driver_usb_usb_hid_usbd_hid",
@@ -74507,7 +74507,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L936",
+      "source_location": "L941",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_sendreportexk",
@@ -74519,7 +74519,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1118",
+      "source_location": "L1129",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_sof",
@@ -74555,10 +74555,46 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1076",
+      "source_location": "L1085",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_datain",
+      "target": "src_hw_driver_usb_usb_hid_usbd_hid_usbhideprelease",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
+      "source_location": "L914",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_sendreport",
+      "target": "src_hw_driver_usb_usb_hid_usbd_hid_usbhideprelease",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
+      "source_location": "L946",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_sendreportexk",
+      "target": "src_hw_driver_usb_usb_hid_usbd_hid_usbhideprelease",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
+      "source_location": "L1134",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_sof",
       "target": "src_hw_driver_usb_usb_hid_usbd_hid_usbhideprelease",
       "confidence_score": 1.0
     },
@@ -74638,7 +74674,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1072",
+      "source_location": "L1081",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -74650,7 +74686,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1091",
+      "source_location": "L1100",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -74686,7 +74722,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L952",
+      "source_location": "L961",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -74710,7 +74746,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1112",
+      "source_location": "L1121",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -74722,7 +74758,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1144",
+      "source_location": "L1157",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -74819,7 +74855,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1381",
+      "source_location": "L1394",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_hal_tim_pwm_pulsefinishedcallback",
@@ -74832,7 +74868,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L911",
+      "source_location": "L912",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_sendreport",
@@ -74843,7 +74879,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1216",
+      "source_location": "L1229",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsendreport",
@@ -74855,7 +74891,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1399",
+      "source_location": "L1412",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_hal_tim_pwm_pulsefinishedcallback",
@@ -74868,7 +74904,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L939",
+      "source_location": "L944",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_sendreportexk",
@@ -74879,7 +74915,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1253",
+      "source_location": "L1266",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsendreportexk",
@@ -74892,7 +74928,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L993",
+      "source_location": "L1002",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_getfscfgdesc",
@@ -74904,7 +74940,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1014",
+      "source_location": "L1023",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_gethscfgdesc",
@@ -74916,7 +74952,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1052",
+      "source_location": "L1061",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_getotherspeedcfgdesc",
@@ -74928,7 +74964,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1102",
+      "source_location": "L1111",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_dataout",
@@ -74940,7 +74976,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1123",
+      "source_location": "L1136",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_sof",
@@ -74952,7 +74988,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1122",
+      "source_location": "L1132",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbd_hid_sof",
@@ -74963,7 +74999,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1237",
+      "source_location": "L1250",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsendreport",
@@ -74975,7 +75011,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1265",
+      "source_location": "L1278",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsendreportexk",
@@ -74988,7 +75024,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1207",
+      "source_location": "L1220",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsendreport",
@@ -75000,7 +75036,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1250",
+      "source_location": "L1263",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidsendreportexk",
@@ -75010,7 +75046,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1272",
+      "source_location": "L1285",
       "weight": 1.0,
       "context": "return_type",
       "_origin": "ast",
@@ -75023,7 +75059,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1326",
+      "source_location": "L1339",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidinittimer",
@@ -75034,7 +75070,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1337",
+      "source_location": "L1350",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -75046,7 +75082,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1351",
+      "source_location": "L1364",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -75058,7 +75094,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/hw/driver/usb/usb_hid/usbd_hid.c",
-      "source_location": "L1369",
+      "source_location": "L1382",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -80937,5 +80973,5 @@
       "source_file": "docs/features_tapping.md"
     }
   ],
-  "built_at_commit": "52ce9d2cf3a4ba753322526336f12d66065aebe2"
+  "built_at_commit": "79ba0e18242cc3f5cece551c7ac1fe5c61f50d24"
 }

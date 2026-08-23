@@ -1525,8 +1525,8 @@
     "semantic_hash": "8f2bc78426ef99dc94ac9f59ded98c93"
   },
   "src/hw/driver/usb/usb_hid/usbd_hid.c": {
-    "mtime": 1787516755.5078714,
-    "ast_hash": "d62ddc778b7237959715b795f71f458e",
+    "mtime": 1787517538.3684807,
+    "ast_hash": "efcf67161466bb1540cbf1322c576e9c",
     "semantic_hash": ""
   },
   "src/hw/driver/usb/usb_hid/usbd_hid.h": {
