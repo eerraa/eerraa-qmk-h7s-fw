@@ -1,16 +1,16 @@
 # Graph Report - eerraa-qmk-h7s-fw-via2  (2026-08-24)
 
 ## Corpus Check
-- 364 files · ~206,392 words
+- 364 files · ~206,906 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2177 nodes · 4878 edges · 125 communities (121 shown, 4 thin omitted)
+- 2177 nodes · 4878 edges · 127 communities (123 shown, 4 thin omitted)
 - Extraction: 76% EXTRACTED · 24% INFERRED · 0% AMBIGUOUS · INFERRED: 1149 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `79ba0e18`
+- Built from commit: `8f1f23b4`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -107,6 +107,8 @@
 - usb.h BootMode 타입
 - debounce.h
 - via_qmk_kkuk_command
+- cliPrintf
+- millis
 - asym_eager_defer_pk.c
 - rgblight_sethsv_range
 - via_qmk_version
@@ -141,7 +143,7 @@
 ## Hyperedges (group relationships)
 - **VIA 커스텀 채널 기능군 (ch13 USB / ch15 Tapping / ch16 TapDance over RAW HID)** — docs_features_bootmode_via_channel13, docs_features_tapping_runtime_tapping_term, docs_features_tapdance_tap_dance_feature, docs_features_keyinput_via_raw_hid_path [INFERRED 0.85]
 
-## Communities (125 total, 4 thin omitted)
+## Communities (127 total, 4 thin omitted)
 
 ### Community 0 - "디바운스 알고리즘/프로파일"
 Cohesion: 0.18
@@ -220,8 +222,8 @@ Cohesion: 0.17
 Nodes (25): __IO, USBD_ClassTypeDef, USBD_CompositeClassTypeDef, USBD_HandleTypeDef, USBD_CMPSIT_AddClass(), USBD_CMPSIT_AddConfDesc(), USBD_CMPSIT_AddToConfDesc(), USBD_CMPSIT_AssignEp() (+17 more)
 
 ### Community 20 - "CLI GUI"
-Cohesion: 0.17
-Nodes (34): cli_gui_api_t, cliPrintf(), cliPutch(), addCh_Or_InsCh(), addChar(), addPrintf(), addStr(), clear() (+26 more)
+Cohesion: 0.19
+Nodes (28): cli_gui_api_t, cliPutch(), addCh_Or_InsCh(), addChar(), addPrintf(), addStr(), clear(), clearToEol() (+20 more)
 
 ### Community 21 - "매트릭스 스캔·계측"
 Cohesion: 0.17
@@ -248,8 +250,8 @@ Cohesion: 0.19
 Nodes (18): timer_elapsed(), report_mouse_t, host_mouse_send(), register_mouse(), adjust_speed(), report_mouse_t, calc_inertia(), mousekey_clear() (+10 more)
 
 ### Community 27 - "ap 메인 루프"
-Cohesion: 0.13
-Nodes (21): log_buf_t, cliAdd(), cliInit(), cliLineClean(), cliOpenLog(), cliWrite(), flashInit(), i2cInit() (+13 more)
+Cohesion: 0.12
+Nodes (23): log_buf_t, apInit(), cliAdd(), cliInit(), cliOpen(), cliOpenLog(), cliWrite(), flashInit() (+15 more)
 
 ### Community 28 - "VIA 코어"
 Cohesion: 0.12
@@ -268,12 +270,12 @@ Cohesion: 0.16
 Nodes (24): tapdance_get_term_ms(), get_oneshot_mods(), get_weak_mods(), keyrecord_t, tap_dance_state_t, preprocess_tap_dance(), process_tap_dance(), _process_tap_dance_action_fn() (+16 more)
 
 ### Community 32 - "I2C 드라이버"
-Cohesion: 0.12
-Nodes (20): I2C_HandleTypeDef, cli_args_t, cliI2C(), delayUs(), HAL_I2C_ErrorCallback(), HAL_I2C_MspDeInit(), HAL_I2C_MspInit(), i2cBegin() (+12 more)
+Cohesion: 0.14
+Nodes (15): cli_args_t, cliI2C(), delayUs(), i2cBegin(), i2cGetTimming(), i2cIsDeviceReady(), i2cLogTimingOnce(), i2cReadByte() (+7 more)
 
 ### Community 33 - "CLI 코어"
-Cohesion: 0.12
-Nodes (21): cli_t, _write(), cli_args_t, __WEAK, cliLineAdd(), cliLineChange(), cliLoopIdle(), cliMemoryDump() (+13 more)
+Cohesion: 0.16
+Nodes (16): cli_t, _write(), __WEAK, cliLineAdd(), cliLineChange(), cliLineClean(), cliLoopIdle(), cliParseArgs() (+8 more)
 
 ### Community 34 - "Key Override·원샷 모드"
 Cohesion: 0.19
@@ -336,8 +338,8 @@ Cohesion: 0.17
 Nodes (13): kill_switch_init(), kill_switch_is_use(), via_qmk_kill_switch_get_value(), via_qmk_kill_switch_save(), via_qmk_kill_switch_set_value(), via_qmk_kill_swtich_command(), keyrecord_t, kkuk_process() (+5 more)
 
 ### Community 49 - "퀀텀 헤더 모음"
-Cohesion: 0.15
-Nodes (20): eeprom_get_write_pending_count(), millis(), cli_args_t, cliEeprom(), EE_EndOfCleanup_UserCallback(), eepromFormat(), eepromGetLength(), eepromInit() (+12 more)
+Cohesion: 0.17
+Nodes (17): eeprom_get_write_pending_count(), cli_args_t, cliEeprom(), EE_EndOfCleanup_UserCallback(), eepromFormat(), eepromGetLength(), eepromInit(), eepromInitMPU() (+9 more)
 
 ### Community 50 - "rgblight 설정 저장"
 Cohesion: 0.33
@@ -360,8 +362,8 @@ Cohesion: 0.12
 Nodes (18): keyrecord_t, get_hold_on_other_key_press(), get_permissive_hold(), get_retro_tapping(), get_tapping_term(), tapping_term_apply_defaults_locked(), tapping_term_commit(), tapping_term_get_value() (+10 more)
 
 ### Community 56 - "드라이버 초기화·로그"
-Cohesion: 0.12
-Nodes (12): apInit(), apMain(), cliLoopIdle(), cliOpen(), ledInit(), ledOff(), ledOn(), ledToggle() (+4 more)
+Cohesion: 0.14
+Nodes (9): apMain(), cliLoopIdle(), ledInit(), ledOff(), ledOn(), ledToggle(), struct(), main() (+1 more)
 
 ### Community 57 - "UF2 변환 도구"
 Cohesion: 0.24
@@ -499,6 +501,14 @@ Nodes (7): HSV, RGB, rgb_led_t, rgblight_get_hsv(), rgblight_hsv_to_rgb(), seths
 Cohesion: 0.48
 Nodes (6): kkuk_init(), kkuk_normalize_config(), via_qmk_kkuk_command(), via_qmk_kkuk_get_value(), via_qmk_kkuk_save(), via_qmk_kkuk_set_value()
 
+### Community 122 - "cliPrintf"
+Cohesion: 0.24
+Nodes (12): cli_args_t, cliMemoryDump(), cliMoveDown(), cliMoveUp(), cliPrintf(), cliShowCursor(), cliShowList(), guiMove() (+4 more)
+
+### Community 123 - "millis"
+Cohesion: 0.29
+Nodes (8): I2C_HandleTypeDef, millis(), HAL_I2C_ErrorCallback(), HAL_I2C_MspDeInit(), HAL_I2C_MspInit(), i2cGetChannelFromHandle(), spiTransferDMA(), usbHidEnqueueViaResponse()
+
 ### Community 124 - "asym_eager_defer_pk.c"
 Cohesion: 0.60
 Nodes (4): matrix_row_t, debounce_asym_eager_defer_pk_run(), transfer_matrix_values(), update_debounce_counters_and_transfer_if_expired()
@@ -515,11 +525,11 @@ Nodes (6): rgblight_sethsv_master(), rgblight_sethsv_range(), rgblight_sethsv_sl
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `millis()` connect `퀀텀 헤더 모음` to `I2C 드라이버`, `Key Override·원샷 모드`, `CDC 상위 계층`, `QSPI 플래시 (W25Q16JV)`, `액션·호스트 리포트 전송`, `CLI 부가 명령·펌웨어 태그`, `플래시 EEPROM 에뮬레이션`, `액션 실행 코어`, `타이머 포트·키보드 초기화`, `SPI 드라이버`, `kill_switch·kkuk`, `ST USB Device Core`, `UART·CLI 입출력`, `매트릭스 스캔·계측`, `USB 코어·BootMode 관리`, `드라이버 초기화·로그`, `로깅·컬러 유틸`, `보드별 WS2812 드라이버`?**
+- **Why does `millis()` connect `millis` to `QSPI 플래시 (W25Q16JV)`, `액션·호스트 리포트 전송`, `액션 실행 코어`, `ST USB Device Core`, `매트릭스 스캔·계측`, `USB 코어·BootMode 관리`, `로깅·컬러 유틸`, `보드별 WS2812 드라이버`, `I2C 드라이버`, `Key Override·원샷 모드`, `CDC 상위 계층`, `CLI 부가 명령·펌웨어 태그`, `플래시 EEPROM 에뮬레이션`, `SPI 드라이버`, `kill_switch·kkuk`, `퀀텀 헤더 모음`, `UART·CLI 입출력`, `드라이버 초기화·로그`, `타이머 포트·키보드 초기화`?**
   _High betweenness centrality (0.138) - this node is a cross-community bridge._
-- **Why does `logPrintf()` connect `포트 헤더 모음` to `디바운스 알고리즘/프로파일`, `QSPI 플래시 (W25Q16JV)`, `USB 디스크립터 3종`, `액션 실행 코어`, `usbd_conf (HAL PCD 연동)`, `매트릭스 스캔·계측`, `USB 코어·BootMode 관리`, `Tap Dance 퀀텀 처리`, `ap 메인 루프`, `I2C 드라이버`, `CLI 코어`, `CDC 상위 계층`, `CLI 부가 명령·펌웨어 태그`, `ZD24C128 EEPROM 드라이버`, `플래시 EEPROM 에뮬레이션`, `kill_switch·kkuk`, `퀀텀 헤더 모음`, `UART·CLI 입출력`, `USB 모니터 포트`, `타이머 포트·키보드 초기화`, `HID 리포트 전송 경로`, `via_qmk_kkuk_command`?**
+- **Why does `logPrintf()` connect `포트 헤더 모음` to `디바운스 알고리즘/프로파일`, `QSPI 플래시 (W25Q16JV)`, `USB 디스크립터 3종`, `액션 실행 코어`, `usbd_conf (HAL PCD 연동)`, `매트릭스 스캔·계측`, `USB 코어·BootMode 관리`, `Tap Dance 퀀텀 처리`, `ap 메인 루프`, `I2C 드라이버`, `CLI 코어`, `CDC 상위 계층`, `CLI 부가 명령·펌웨어 태그`, `ZD24C128 EEPROM 드라이버`, `플래시 EEPROM 에뮬레이션`, `kill_switch·kkuk`, `퀀텀 헤더 모음`, `UART·CLI 입출력`, `USB 모니터 포트`, `타이머 포트·키보드 초기화`, `HID 리포트 전송 경로`, `via_qmk_kkuk_command`, `millis`?**
   _High betweenness centrality (0.124) - this node is a cross-community bridge._
-- **Why does `timer_read()` connect `액션·호스트 리포트 전송` to `Key Override·원샷 모드`, `퀀텀 코어·부트로더 리셋`, `rgblight 코어`, `keyboard 태스크·매트릭스 브리지`, `시퀀서 페이즈 태스크`, `ST USB Device Core`, `퀀텀 헤더 모음`, `I2C/SPI CLI 보조`, `Tap Dance 포트`, `로깅·컬러 유틸`, `시퀀서 코어`, `키코드 변환·리포트`?**
+- **Why does `timer_read()` connect `액션·호스트 리포트 전송` to `Key Override·원샷 모드`, `퀀텀 코어·부트로더 리셋`, `rgblight 코어`, `keyboard 태스크·매트릭스 브리지`, `시퀀서 페이즈 태스크`, `ST USB Device Core`, `I2C/SPI CLI 보조`, `Tap Dance 포트`, `로깅·컬러 유틸`, `millis`, `시퀀서 코어`, `키코드 변환·리포트`?**
   _High betweenness centrality (0.095) - this node is a cross-community bridge._
 - **Are the 19 inferred relationships involving `TEST_F()` (e.g. with `get_beat_duration()` and `get_step_duration()`) actually correct?**
   _`TEST_F()` has 19 INFERRED edges - model-reasoned connections that need verification._

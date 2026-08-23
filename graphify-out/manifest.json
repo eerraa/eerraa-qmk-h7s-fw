@@ -1715,8 +1715,8 @@
     "semantic_hash": "259f6df270e971ac853c4193c40a0640"
   },
   "docs/DECISIONS.md": {
-    "mtime": 1787517339.2289987,
-    "ast_hash": "449723d5c35938a07002ea0a1d033bb5",
+    "mtime": 1787519104.4716978,
+    "ast_hash": "c9cac193e51988744a10b2c9f1a12472",
     "semantic_hash": ""
   },
   "docs/eeprom.md": {
@@ -1830,8 +1830,8 @@
     "semantic_hash": ""
   },
   "docs/features_usb_diagnostics.md": {
-    "mtime": 1787517349.370157,
-    "ast_hash": "c365cb1d7705a076421759c49943d5dc",
+    "mtime": 1787519134.741786,
+    "ast_hash": "2341323da0522969d46e1a2181775ea7",
     "semantic_hash": ""
   }
 }

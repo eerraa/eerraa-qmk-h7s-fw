@@ -38,8 +38,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "src_ap_ap_apinit",
-      "community": 56,
-      "community_name": "\ub4dc\ub77c\uc774\ubc84 \ucd08\uae30\ud654\u00b7\ub85c\uadf8",
+      "community": 27,
+      "community_name": "ap \uba54\uc778 \ub8e8\ud504",
       "norm_label": "apinit()"
     },
     {
@@ -13986,8 +13986,8 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "src_bsp_bsp_millis",
-      "community": 49,
-      "community_name": "\ud000\ud140 \ud5e4\ub354 \ubaa8\uc74c",
+      "community": 123,
+      "community_name": "millis",
       "norm_label": "millis()"
     },
     {
@@ -15372,8 +15372,8 @@
       "source_location": "L140",
       "_origin": "ast",
       "id": "src_common_hw_src_cli_cliopen",
-      "community": 56,
-      "community_name": "\ub4dc\ub77c\uc774\ubc84 \ucd08\uae30\ud654\u00b7\ub85c\uadf8",
+      "community": 27,
+      "community_name": "ap \uba54\uc778 \ub8e8\ud504",
       "norm_label": "cliopen()"
     },
     {
@@ -15515,8 +15515,8 @@
       "source_location": "L457",
       "_origin": "ast",
       "id": "src_common_hw_src_cli_clilineclean",
-      "community": 27,
-      "community_name": "ap \uba54\uc778 \ub8e8\ud504",
+      "community": 33,
+      "community_name": "CLI \ucf54\uc5b4",
       "norm_label": "clilineclean()"
     },
     {
@@ -15581,8 +15581,8 @@
       "source_location": "L597",
       "_origin": "ast",
       "id": "src_common_hw_src_cli_cliprintf",
-      "community": 20,
-      "community_name": "CLI GUI",
+      "community": 122,
+      "community_name": "cliPrintf",
       "norm_label": "cliprintf()"
     },
     {
@@ -15702,8 +15702,8 @@
       "source_location": "L755",
       "_origin": "ast",
       "id": "src_common_hw_src_cli_clishowlist",
-      "community": 33,
-      "community_name": "CLI \ucf54\uc5b4",
+      "community": 122,
+      "community_name": "cliPrintf",
       "norm_label": "clishowlist()"
     },
     {
@@ -15713,8 +15713,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_common_hw_src_cli_c_cli_args_t",
-      "community": 33,
-      "community_name": "CLI \ucf54\uc5b4",
+      "community": 122,
+      "community_name": "cliPrintf",
       "norm_label": "cli_args_t"
     },
     {
@@ -15724,8 +15724,8 @@
       "source_location": "L772",
       "_origin": "ast",
       "id": "src_common_hw_src_cli_climemorydump",
-      "community": 33,
-      "community_name": "CLI \ucf54\uc5b4",
+      "community": 122,
+      "community_name": "cliPrintf",
       "norm_label": "climemorydump()"
     },
     {
@@ -15735,8 +15735,8 @@
       "source_location": "L832",
       "_origin": "ast",
       "id": "src_common_hw_src_cli_clishowcursor",
-      "community": 33,
-      "community_name": "CLI \ucf54\uc5b4",
+      "community": 122,
+      "community_name": "cliPrintf",
       "norm_label": "clishowcursor()"
     },
     {
@@ -15746,8 +15746,8 @@
       "source_location": "L844",
       "_origin": "ast",
       "id": "src_common_hw_src_cli_climoveup",
-      "community": 33,
-      "community_name": "CLI \ucf54\uc5b4",
+      "community": 122,
+      "community_name": "cliPrintf",
       "norm_label": "climoveup()"
     },
     {
@@ -15757,8 +15757,8 @@
       "source_location": "L849",
       "_origin": "ast",
       "id": "src_common_hw_src_cli_climovedown",
-      "community": 33,
-      "community_name": "CLI \ucf54\uc5b4",
+      "community": 122,
+      "community_name": "cliPrintf",
       "norm_label": "climovedown()"
     },
     {
@@ -15845,8 +15845,8 @@
       "source_location": "L119",
       "_origin": "ast",
       "id": "src_common_hw_src_cli_gui_guimove",
-      "community": 20,
-      "community_name": "CLI GUI",
+      "community": 122,
+      "community_name": "cliPrintf",
       "norm_label": "guimove()"
     },
     {
@@ -16043,8 +16043,8 @@
       "source_location": "L492",
       "_origin": "ast",
       "id": "src_common_hw_src_cli_gui_guisetscrollarea",
-      "community": 20,
-      "community_name": "CLI GUI",
+      "community": 122,
+      "community_name": "cliPrintf",
       "norm_label": "guisetscrollarea()"
     },
     {
@@ -16054,8 +16054,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "uint_fast8_t",
-      "community": 20,
-      "community_name": "CLI GUI",
+      "community": 122,
+      "community_name": "cliPrintf",
       "norm_label": "uint_fast8_t"
     },
     {
@@ -16065,8 +16065,8 @@
       "source_location": "L504",
       "_origin": "ast",
       "id": "src_common_hw_src_cli_gui_scroll",
-      "community": 20,
-      "community_name": "CLI GUI",
+      "community": 122,
+      "community_name": "cliPrintf",
       "norm_label": "scroll()"
     },
     {
@@ -16076,8 +16076,8 @@
       "source_location": "L513",
       "_origin": "ast",
       "id": "src_common_hw_src_cli_gui_insertline",
-      "community": 20,
-      "community_name": "CLI GUI",
+      "community": 122,
+      "community_name": "cliPrintf",
       "norm_label": "insertline()"
     },
     {
@@ -16901,8 +16901,8 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "src_hw_driver_i2c_i2cgetchannelfromhandle",
-      "community": 32,
-      "community_name": "I2C \ub4dc\ub77c\uc774\ubc84",
+      "community": 123,
+      "community_name": "millis",
       "norm_label": "i2cgetchannelfromhandle()"
     },
     {
@@ -16912,8 +16912,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "i2c_handletypedef",
-      "community": 32,
-      "community_name": "I2C \ub4dc\ub77c\uc774\ubc84",
+      "community": 123,
+      "community_name": "millis",
       "norm_label": "i2c_handletypedef"
     },
     {
@@ -17187,8 +17187,8 @@
       "source_location": "L567",
       "_origin": "ast",
       "id": "src_hw_driver_i2c_hal_i2c_errorcallback",
-      "community": 32,
-      "community_name": "I2C \ub4dc\ub77c\uc774\ubc84",
+      "community": 123,
+      "community_name": "millis",
       "norm_label": "hal_i2c_errorcallback()"
     },
     {
@@ -17198,8 +17198,8 @@
       "source_location": "L589",
       "_origin": "ast",
       "id": "src_hw_driver_i2c_hal_i2c_mspinit",
-      "community": 32,
-      "community_name": "I2C \ub4dc\ub77c\uc774\ubc84",
+      "community": 123,
+      "community_name": "millis",
       "norm_label": "hal_i2c_mspinit()"
     },
     {
@@ -17209,8 +17209,8 @@
       "source_location": "L630",
       "_origin": "ast",
       "id": "src_hw_driver_i2c_hal_i2c_mspdeinit",
-      "community": 32,
-      "community_name": "I2C \ub4dc\ub77c\uc774\ubc84",
+      "community": 123,
+      "community_name": "millis",
       "norm_label": "hal_i2c_mspdeinit()"
     },
     {
@@ -17539,8 +17539,8 @@
       "source_location": "L108",
       "_origin": "ast",
       "id": "src_hw_driver_log_logboot",
-      "community": 56,
-      "community_name": "\ub4dc\ub77c\uc774\ubc84 \ucd08\uae30\ud654\u00b7\ub85c\uadf8",
+      "community": 27,
+      "community_name": "ap \uba54\uc778 \ub8e8\ud504",
       "norm_label": "logboot()"
     },
     {
@@ -18529,8 +18529,8 @@
       "source_location": "L248",
       "_origin": "ast",
       "id": "src_hw_driver_spi_spitransferdma",
-      "community": 49,
-      "community_name": "\ud000\ud140 \ud5e4\ub354 \ubaa8\uc74c",
+      "community": 123,
+      "community_name": "millis",
       "norm_label": "spitransferdma()"
     },
     {
@@ -21037,8 +21037,8 @@
       "source_location": "L1182",
       "_origin": "ast",
       "id": "src_hw_driver_usb_usb_hid_usbd_hid_usbhidenqueueviaresponse",
-      "community": 49,
-      "community_name": "\ud000\ud140 \ud5e4\ub354 \ubaa8\uc74c",
+      "community": 123,
+      "community_name": "millis",
       "norm_label": "usbhidenqueueviaresponse()"
     },
     {
@@ -23143,15 +23143,15 @@
       "norm_label": "features_usb_diagnostics.md"
     },
     {
-      "label": "USB \uc804\ub2ec \uc9c4\ub2e8 \uac00\uc774\ub4dc (V260823R2)",
+      "label": "USB \uc804\ub2ec \uc9c4\ub2e8 \uac00\uc774\ub4dc (V260824R1)",
       "file_type": "document",
       "source_file": "docs/features_usb_diagnostics.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "docs_features_usb_diagnostics_usb_\uc804\ub2ec_\uc9c4\ub2e8_\uac00\uc774\ub4dc_v260823r2",
+      "id": "docs_features_usb_diagnostics_usb_\uc804\ub2ec_\uc9c4\ub2e8_\uac00\uc774\ub4dc_v260824r1",
       "community": 68,
       "community_name": "\ubcf4\ub4dc\ubcc4 \uc0c1\ud0dc LED \ucf5c\ubc31",
-      "norm_label": "usb \u110c\u1165\u11ab\u1103\u1161\u11af \u110c\u1175\u11ab\u1103\u1161\u11ab \u1100\u1161\u110b\u1175\u1103\u1173 (v260823r2)"
+      "norm_label": "usb \u110c\u1165\u11ab\u1103\u1161\u11af \u110c\u1175\u11ab\u1103\u1161\u11ab \u1100\u1161\u110b\u1175\u1103\u1173 (v260824r1)"
     },
     {
       "label": "1. \ubaa9\uc801\uacfc \ube44\ubaa9\ud45c",
@@ -79916,7 +79916,7 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "docs_features_usb_diagnostics",
-      "target": "docs_features_usb_diagnostics_usb_\uc804\ub2ec_\uc9c4\ub2e8_\uac00\uc774\ub4dc_v260823r2",
+      "target": "docs_features_usb_diagnostics_usb_\uc804\ub2ec_\uc9c4\ub2e8_\uac00\uc774\ub4dc_v260824r1",
       "confidence_score": 1.0
     },
     {
@@ -79926,7 +79926,7 @@
       "source_location": "L3",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "docs_features_usb_diagnostics_usb_\uc804\ub2ec_\uc9c4\ub2e8_\uac00\uc774\ub4dc_v260823r2",
+      "source": "docs_features_usb_diagnostics_usb_\uc804\ub2ec_\uc9c4\ub2e8_\uac00\uc774\ub4dc_v260824r1",
       "target": "docs_features_usb_diagnostics_1_\ubaa9\uc801\uacfc_\ube44\ubaa9\ud45c",
       "confidence_score": 1.0
     },
@@ -79937,7 +79937,7 @@
       "source_location": "L12",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "docs_features_usb_diagnostics_usb_\uc804\ub2ec_\uc9c4\ub2e8_\uac00\uc774\ub4dc_v260823r2",
+      "source": "docs_features_usb_diagnostics_usb_\uc804\ub2ec_\uc9c4\ub2e8_\uac00\uc774\ub4dc_v260824r1",
       "target": "docs_features_usb_diagnostics_2_\uce21\uc815_\uacbd\uacc4",
       "confidence_score": 1.0
     },
@@ -79948,7 +79948,7 @@
       "source_location": "L29",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "docs_features_usb_diagnostics_usb_\uc804\ub2ec_\uc9c4\ub2e8_\uac00\uc774\ub4dc_v260823r2",
+      "source": "docs_features_usb_diagnostics_usb_\uc804\ub2ec_\uc9c4\ub2e8_\uac00\uc774\ub4dc_v260824r1",
       "target": "docs_features_usb_diagnostics_3_\ub7f0\ud0c0\uc784_\uad6c\uc870\uc640_\ube44\uc6a9",
       "confidence_score": 1.0
     },
@@ -79959,7 +79959,7 @@
       "source_location": "L52",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "docs_features_usb_diagnostics_usb_\uc804\ub2ec_\uc9c4\ub2e8_\uac00\uc774\ub4dc_v260823r2",
+      "source": "docs_features_usb_diagnostics_usb_\uc804\ub2ec_\uc9c4\ub2e8_\uac00\uc774\ub4dc_v260824r1",
       "target": "docs_features_usb_diagnostics_4_32\ubc14\uc774\ud2b8_via_\uacc4\uc57d",
       "confidence_score": 1.0
     },
@@ -79970,7 +79970,7 @@
       "source_location": "L105",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "docs_features_usb_diagnostics_usb_\uc804\ub2ec_\uc9c4\ub2e8_\uac00\uc774\ub4dc_v260823r2",
+      "source": "docs_features_usb_diagnostics_usb_\uc804\ub2ec_\uc9c4\ub2e8_\uac00\uc774\ub4dc_v260824r1",
       "target": "docs_features_usb_diagnostics_5_\uc138\uc158_\uc5f0\uacb0_\uc2e4\ud328_\uc758\ubbf8\ub860",
       "confidence_score": 1.0
     },
@@ -79981,7 +79981,7 @@
       "source_location": "L113",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "docs_features_usb_diagnostics_usb_\uc804\ub2ec_\uc9c4\ub2e8_\uac00\uc774\ub4dc_v260823r2",
+      "source": "docs_features_usb_diagnostics_usb_\uc804\ub2ec_\uc9c4\ub2e8_\uac00\uc774\ub4dc_v260824r1",
       "target": "docs_features_usb_diagnostics_6_\uc6b4\uc601_\ubc0f_\uac80\uc99d",
       "confidence_score": 1.0
     },
@@ -80973,5 +80973,5 @@
       "source_file": "docs/features_tapping.md"
     }
   ],
-  "built_at_commit": "79ba0e18242cc3f5cece551c7ac1fe5c61f50d24"
+  "built_at_commit": "8f1f23b435995b58607f2ba6010437117c84bf56"
 }

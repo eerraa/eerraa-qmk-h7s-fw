@@ -121,6 +121,8 @@
   "119": "debounce.h",
   "120": "via_qmk_kkuk_command",
   "121": "USBD_GetEpDesc",
+  "122": "cliPrintf",
+  "123": "millis",
   "124": "asym_eager_defer_pk.c",
   "126": "rgblight_sethsv_range",
   "129": "via_qmk_version"
