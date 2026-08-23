@@ -1,6 +1,5 @@
 #include "uf2.h"
 #include "usb.h"
-#include "boot/boot.h"
 
 
 
@@ -58,7 +57,7 @@ bool tud_msc_start_stop_cb(uint8_t lun, uint8_t power_condition, bool start, boo
     {
       // unload disk storage
       logPrintf("ejected\n");
-      bootJumpFirm();
+      uf2RequestFirmStart(false);                                // V260824R1: 이젝트도 점프 대신 리셋 경로로 통일
     }
   }
 

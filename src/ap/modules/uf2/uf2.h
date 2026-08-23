@@ -109,6 +109,7 @@ typedef struct
 
 void uf2Init(void);
 void uf2Update(void);
+void uf2RequestFirmStart(bool is_update_req);                    // V260824R1: 점프 대신 리셋으로 펌웨어 시작을 요청한다
 
 int  uf2_write_block(uint32_t block_no, uint8_t *data, WriteState *state);
 void uf2_flash_complete(WriteState *state);

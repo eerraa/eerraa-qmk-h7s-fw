@@ -27,18 +27,21 @@
 
 #include "uf2.h"
 #include "boot/boot.h"
+#include "usb.h"                                                 // V260824R1: tud_disconnect() 사용
 
 
 //--------------------------------------------------------------------+
 //
 //--------------------------------------------------------------------+
 #define BPB_SECTOR_SIZE           (512)
+#define UF2_CSW_DRAIN_DELAY_MS    (500)                          // V260824R1: 마지막 CSW 송신 완료 대기
+#define UF2_DETACH_DELAY_MS       (100)                          // V260824R1: 호스트가 디태치를 확정할 최소 시간
 
 
 static uint32_t _flash_size;
 static uint16_t _flash_crc = 0;
 static uint32_t _flash_len = 0;
-static bool is_jump_fw = false;
+static bool is_reset_req = false;                                // V260824R1: 점프 대신 시스템 리셋으로 펌웨어를 시작한다
 
 
 
@@ -105,19 +108,35 @@ void uf2_flash_write(WriteState *state, uint32_t addr, void const *data, uint32_
   _flash_len += len;
 }
 
-void uf2_flash_complete(WriteState *state)
+// V260824R1: UF2 완료·이젝트 시 점프 대신 시스템 리셋으로 펌웨어를 시작한다.
+//            점프 경로는 USB를 전기적으로 분리하지 못해 호스트가 재열거를
+//            수행하지 않는 경우가 있었다. 리셋 경로는 전원 재인가와 동일하다.
+void uf2RequestFirmStart(bool is_update_req)
 {
-  uint16_t err_code;
+  uint32_t boot_param;
 
-  if (is_jump_fw)
+  if (is_reset_req)
     return;
 
-  err_code = bootUpdateFirm();
-  logPrintf("[%s] bootUpdateFirm()\n", err_code==OK?"OK":"E_");
-  if (err_code == OK)
+  if (is_update_req)
   {
-    is_jump_fw = true;
+    boot_param  = resetGetBootMode();
+    boot_param |= (1<<MODE_BIT_UPDATE);
+    resetSetBootMode(boot_param);                                // V260824R1: RTC 백업 레지스터에 예약 (리셋 후에도 보존)
+    logPrintf("[  ] uf2 update reserved\n");
   }
+
+  is_reset_req = true;
+}
+
+void uf2_flash_complete(WriteState *state)
+{
+  (void)state;
+
+  // V260824R1: 수 초가 걸리는 플래시 소거/복사를 USB 콜백에서 수행하면
+  //            tud_task() 가 멈춰 호스트가 타임아웃한다.
+  //            실제 복사는 리셋 이후 bootUp() 의 MODE_BIT_UPDATE 경로가 담당한다.
+  uf2RequestFirmStart(true);
 }
 
 //--------------------------------------------------------------------+
@@ -148,19 +167,26 @@ void uf2Update(void)
   switch(state)
   {
     case 0:
-      if (is_jump_fw)
-      {      
+      if (is_reset_req)
+      {
         pre_time = millis();
         state = 1;
       }
       break;
 
     case 1:
-      if (millis()-pre_time >= 500)
+      if (millis()-pre_time >= UF2_CSW_DRAIN_DELAY_MS)
       {
-        is_jump_fw = false;
-        bootJumpFirm();  
-        state = 0;
+        tud_disconnect();                                        // V260824R1: DCTL.SDIS 로 실제 전기적 디태치
+        pre_time = millis();
+        state = 2;
+      }
+      break;
+
+    case 2:
+      if (millis()-pre_time >= UF2_DETACH_DELAY_MS)
+      {
+        resetToReset();                                          // V260824R1: 전원 재인가와 동일한 경로로 펌웨어 시작
       }
       break;
   }

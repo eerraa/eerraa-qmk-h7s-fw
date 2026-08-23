@@ -6,7 +6,7 @@
 #include "bsp.h"
 
 
-#define _DEF_FIRMWATRE_VERSION    "V251001R1"
+#define _DEF_FIRMWATRE_VERSION    "V260824R1"
 #define _DEF_BOARD_NAME           "ERA-QMK-H7S-BOOT"
 
 
