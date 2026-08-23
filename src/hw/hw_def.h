@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 // 펌웨어/보드 식별 정보
 // ---------------------------------------------------------------------------
-#define _DEF_FIRMWARE_VERSION       "V260821R1"   // V260821R1: VIA GET 0x06 리비전 + exact-ms TAPPING/TD term
+#define _DEF_FIRMWARE_VERSION       "V260823R1"   // V260823R1: MOUSEKEY VIA 페이지 + exact-ms JSON 노출 + state-sync 보강
 #define _DEF_BOARD_NAME             "ERA-QMK-H7S-FW"  // V251125R3: 사용자 표시용 보드명 ERA로 변경
 
 

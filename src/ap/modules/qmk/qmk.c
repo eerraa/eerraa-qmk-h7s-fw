@@ -23,6 +23,9 @@ bool qmkInit(void)
 #ifdef TAPDANCE_ENABLE
   tapdance_init();                                 // V251124R8: VIA TAPDANCE 설정 초기 로드
 #endif
+#ifdef MOUSEKEY_ENABLE
+  mousekey_config_init();                          // V260823R1: VIA MOUSE 설정 초기 로드 (keyboard_init 전에 mk_* 반영)
+#endif
 
   keyboard_setup();
   keyboard_init();

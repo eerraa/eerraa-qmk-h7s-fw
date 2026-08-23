@@ -489,8 +489,58 @@ __ALIGN_BEGIN static uint8_t HID_EXK_ReportDesc[HID_EXK_REPORT_DESC_SIZE] __ALIG
   0x95, 0x01,               //   Report Count (1)
   0x75, 0x10,               //   Report Size (16)
   0x81, 0x00,               //   Input (Data, Array, Absolute)
+  0xC0,                     // End Collection
+
+  // V260823R1: MOUSE 리포트 (report_mouse_t = report_id + buttons + x + y + v + h = 6B)
+  0x05, 0x01,               // Usage Page (Generic Desktop)
+  0x09, 0x02,               // Usage (Mouse)
+  0xA1, 0x01,               // Collection (Application)
+  0x85, REPORT_ID_MOUSE,    //   Report ID
+  0x09, 0x01,               //   Usage (Pointer)
+  0xA1, 0x00,               //   Collection (Physical)
+  0x05, 0x09,               //     Usage Page (Button)
+  0x19, 0x01,               //     Usage Minimum (Button 1)
+  0x29, 0x05,               //     Usage Maximum (Button 5)
+  0x15, 0x00,               //     Logical Minimum (0)
+  0x25, 0x01,               //     Logical Maximum (1)
+  0x95, 0x05,               //     Report Count (5)
+  0x75, 0x01,               //     Report Size (1)
+  0x81, 0x02,               //     Input (Data, Variable, Absolute)
+  0x95, 0x01,               //     Report Count (1)
+  0x75, 0x03,               //     Report Size (3)
+  0x81, 0x03,               //     Input (Constant)
+  0x05, 0x01,               //     Usage Page (Generic Desktop)
+  0x09, 0x30,               //     Usage (X)
+  0x09, 0x31,               //     Usage (Y)
+  0x15, 0x81,               //     Logical Minimum (-127)
+  0x25, 0x7F,               //     Logical Maximum (127)
+  0x95, 0x02,               //     Report Count (2)
+  0x75, 0x08,               //     Report Size (8)
+  0x81, 0x06,               //     Input (Data, Variable, Relative)
+  0x09, 0x38,               //     Usage (Wheel)
+  0x15, 0x81,               //     Logical Minimum (-127)
+  0x25, 0x7F,               //     Logical Maximum (127)
+  0x95, 0x01,               //     Report Count (1)
+  0x75, 0x08,               //     Report Size (8)
+  0x81, 0x06,               //     Input (Data, Variable, Relative)
+  0x05, 0x0C,               //     Usage Page (Consumer)
+  0x0A, 0x38, 0x02,         //     Usage (AC Pan)
+  0x15, 0x81,               //     Logical Minimum (-127)
+  0x25, 0x7F,               //     Logical Maximum (127)
+  0x95, 0x01,               //     Report Count (1)
+  0x75, 0x08,               //     Report Size (8)
+  0x81, 0x06,               //     Input (Data, Variable, Relative)
+  0xC0,                     //   End Collection
   0xC0                      // End Collection
 };
+
+// V260823R1: 리포트 디스크립터가 선언한 크기와 QMK 구조체 크기는 반드시 같아야 한다.
+//            어긋나면 호스트가 리포트를 잘못 해석하므로 링크가 아니라 컴파일에서 막는다.
+#ifdef MOUSE_SHARED_EP
+_Static_assert(sizeof(report_mouse_t) == 6U, "MOUSE 리포트 디스크립터(6B)와 report_mouse_t 크기가 다르다.");
+_Static_assert(sizeof(report_mouse_t) <= HID_EXK_EP_SIZE, "MOUSE 리포트가 EXK 엔드포인트 크기를 넘는다.");
+#endif
+_Static_assert(sizeof(report_extra_t) == 3U, "SYSTEM/CONSUMER 리포트 디스크립터(3B)와 report_extra_t 크기가 다르다.");
 
 static USBD_HID_HandleTypeDef *p_hhid = NULL;
 static uint8_t HIDInEpAdd = HID_EPIN_ADDR;
@@ -686,7 +736,9 @@ static uint8_t USBD_HID_Init(USBD_HandleTypeDef *pdev, uint8_t cfgidx)
 
     qbufferCreateBySize(&report_q, (uint8_t *)report_buf, sizeof(report_info_t), 128); 
     qbufferCreateBySize(&via_report_q, (uint8_t *)via_report_q_buf, sizeof(via_report_info_t), 128); 
-    qbufferCreateBySize(&report_exk_q, (uint8_t *)report_exk_buf, sizeof(report_info_t), 128); 
+    // V260823R1: 원소 크기를 exk_report_info_t로 교정. 기존의 report_info_t는 HW_KEYS_PRESS_MAX+2(22)라
+    //            실제 원소 9바이트보다 커서, qbufferRead가 스택의 9바이트 지역변수에 22바이트를 썼다.
+    qbufferCreateBySize(&report_exk_q, (uint8_t *)report_exk_buf, sizeof(exk_report_info_t), 128); 
 
     logPrintf("[OK] USB Hid\n");
     logPrintf("     Keyboard\n");

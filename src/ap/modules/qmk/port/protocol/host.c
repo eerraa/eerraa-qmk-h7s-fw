@@ -161,7 +161,6 @@ void host_mouse_send(report_mouse_t *report) {
     }
 #endif
 
-    if (!driver) return;
 #ifdef MOUSE_SHARED_EP
     report->report_id = REPORT_ID_MOUSE;
 #endif
@@ -170,7 +169,7 @@ void host_mouse_send(report_mouse_t *report) {
     report->boot_x = (report->x > 127) ? 127 : ((report->x < -127) ? -127 : report->x);
     report->boot_y = (report->y > 127) ? 127 : ((report->y < -127) ? -127 : report->y);
 #endif
-    (*driver->send_mouse)(report);
+    usbHidSendReportEXK((uint8_t *)report, sizeof(report_mouse_t));  // V260823R1: shared 엔드포인트로 마우스 리포트 전송
 }
 
 void host_system_send(uint16_t usage) {

@@ -86,6 +86,7 @@ file(GLOB QMK_SRC_FILES CONFIGURE_DEPENDS
   ${QMK_ROOT_PATH}/quantum/send_string/*.c
   ${QMK_ROOT_PATH}/quantum/process_keycode/process_key_override.c
   ${QMK_ROOT_PATH}/quantum/process_keycode/process_grave_esc.c
+  ${QMK_ROOT_PATH}/quantum/mousekey.c                        # V260823R1: 마우스 키 엔진
 
 
   # ${QMK_KEYBOARD_PATH}/*.c
@@ -123,6 +124,13 @@ add_compile_definitions(DYNAMIC_KEYMAP_ENABLE)
 add_compile_definitions(KEY_OVERRIDE_ENABLE)
 # add_compile_definitions(HOLD_ON_OTHER_KEY_PRESS) // QMK와 디폴트와 매치하지 않음
 add_compile_definitions(EXTRAKEY_ENABLE)
+
+# V260823R1: 마우스 리포트는 EXK(shared) 인터페이스의 리포트 ID 2로 내보낸다.
+#            인터페이스 0(키보드)은 손대지 않는다. NKRO는 도입하지 않았다 — 근거는 docs/DECISIONS.md.
+add_compile_definitions(MOUSEKEY_ENABLE)
+add_compile_definitions(MOUSE_ENABLE)        # V260823R1: report.c의 마우스 리포트 헬퍼를 켠다
+add_compile_definitions(MOUSE_SHARED_EP)
+add_compile_definitions(ERA_MOUSEKEY_RUNTIME_DELTA)
 
 
 add_compile_definitions(QMK_KEYBOARD_H="quantum.h")
