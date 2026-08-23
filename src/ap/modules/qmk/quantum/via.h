@@ -121,6 +121,7 @@ enum via_channel_id {
     id_qmk_key_response       = 14,  // V251115R1: VIA 디바운스 프로필 제어 채널
     id_qmk_tapping            = 15,  // V251123R4: VIA TAPPING 제어 채널
     id_qmk_tapdance           = 16,  // V251124R8: VIA TAPDANCE 제어 채널
+    id_qmk_mousekey           = 17,  // V260823R1: VIA MOUSE 제어 채널 (참조 QMK 13번은 H7S에서 USB POLLING이 점유)
 };
 
 enum via_qmk_backlight_value {
@@ -237,6 +238,16 @@ enum via_qmk_tapdance_value {
     id_qmk_tapdance_6_term_exact = 46,
     id_qmk_tapdance_7_term_exact = 47,
     id_qmk_tapdance_8_term_exact = 48,
+};
+
+// V260823R1: VIA MOUSE 제어 값 ID (참조 QMK era_mousekey_via.c와 동일한 1..6 배치)
+enum via_qmk_mousekey_value {
+    id_qmk_mousekey_cursor_min_speed    = 1,
+    id_qmk_mousekey_cursor_max_speed    = 2,
+    id_qmk_mousekey_cursor_acceleration = 3,
+    id_qmk_mousekey_cursor_interval     = 4,
+    id_qmk_mousekey_wheel_interval      = 5,
+    id_qmk_mousekey_wheel_acceleration  = 6,
 };
 
 // V251012R2: 커스텀 인디케이터 제어 값 ID

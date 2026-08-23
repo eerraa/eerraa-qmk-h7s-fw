@@ -65,8 +65,10 @@ bool era_state_sync_via_command(uint8_t *data, uint8_t length)
   uint8_t tag_hi;
   uint8_t tag_lo;
   uint8_t i;
+  bool    valid;
 
-  if (data == NULL || length < 6U)
+  // V260823R1: 봉투는 32바이트 고정이다. 짧은 리포트는 봉투가 아니므로 여기서 답하지 않는다.
+  if (data == NULL || length < 32U)
   {
     return false;
   }
@@ -79,7 +81,15 @@ bool era_state_sync_via_command(uint8_t *data, uint8_t length)
   tag_hi  = data[4];
   tag_lo  = data[5];
 
-  for (i = 2U; i < 32U && i < length; i++)
+  // V260823R1: 요청 봉투는 version/tag를 뺀 전 구간이 0이어야 한다. 아니면 INVALID로 답한다.
+  //            (호스트가 봉투를 만들지 못한 상태를 리비전 불일치와 구분하기 위한 상태값이다.)
+  valid = (data[3] == 0U);
+  for (i = 6U; i < 32U; i++)
+  {
+    valid = valid && (data[i] == 0U);
+  }
+
+  for (i = 2U; i < 32U; i++)
   {
     data[i] = 0U;
   }
@@ -94,6 +104,12 @@ bool era_state_sync_via_command(uint8_t *data, uint8_t length)
   {
     data[3] = ERA_STATE_SYNC_STATUS_UNSUPPORTED_VERSION;
     return true;  // V260821R1: 응답은 via_hid_task enqueue. raw_hid_send를 부르지 않는다.
+  }
+
+  if (valid == false)
+  {
+    data[3] = ERA_STATE_SYNC_STATUS_INVALID;
+    return true;  // V260823R1
   }
 
   data[3] = ERA_STATE_SYNC_STATUS_OK;

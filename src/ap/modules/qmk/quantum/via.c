@@ -401,6 +401,9 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
         case id_eeprom_reset: {
             via_eeprom_set_valid(false);
             eeconfig_init_via();
+            era_state_sync_bump_keymap();  // V260823R1: EEPROM 초기화는 세 도메인 전부를 바꾼다
+            era_state_sync_bump_macro();
+            era_state_sync_bump_config();
             break;
         }
 #endif

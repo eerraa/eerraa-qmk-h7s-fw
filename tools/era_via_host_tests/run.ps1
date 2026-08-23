@@ -19,6 +19,8 @@ Copy-Item (Join-Path $Qmk "port\tapdance.c") $Sandbox
 Copy-Item (Join-Path $Qmk "port\tapdance.h") $Sandbox
 Copy-Item (Join-Path $Qmk "port\era_state_sync.c") $Sandbox
 Copy-Item (Join-Path $Qmk "port\era_state_sync.h") $Sandbox
+Copy-Item (Join-Path $Qmk "port\mousekey_config.c") $Sandbox
+Copy-Item (Join-Path $Qmk "port\mousekey_config.h") $Sandbox
 Copy-Item (Join-Path $Inc "port.h") $Sandbox
 Copy-Item (Join-Path $Inc "quantum.h") $Sandbox
 Copy-Item (Join-Path $Inc "wait.h") $Sandbox
@@ -35,6 +37,8 @@ $argsList = @(
     "-Wno-unused-function",
     "-include", (Join-Path $Inc "force_host.h"),
     "-DEECONFIG_USER_DATA_SIZE=512",
+    "-DMOUSEKEY_ENABLE",
+    "-DERA_MOUSEKEY_RUNTIME_DELTA",
     "-I$Sandbox",
     "-I$Inc",
     "-I$Qmk\quantum",
@@ -45,6 +49,7 @@ $argsList = @(
     (Join-Path $Sandbox "era_state_sync.c"),
     (Join-Path $Sandbox "tapping_term.c"),
     (Join-Path $Sandbox "tapdance.c"),
+    (Join-Path $Sandbox "mousekey_config.c"),
     "-o", $Out
 )
 

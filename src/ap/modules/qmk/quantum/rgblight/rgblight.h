@@ -435,6 +435,7 @@ void     rgblight_update_qword(uint64_t qword);
 uint64_t eeconfig_read_rgblight(void);
 void     eeconfig_update_rgblight(uint64_t val);
 void     eeconfig_update_rgblight_current(void);
+void     eeconfig_flush_rgblight_current(bool force);
 void     eeconfig_update_rgblight_default(void);
 void     eeconfig_debug_rgblight(void);
 

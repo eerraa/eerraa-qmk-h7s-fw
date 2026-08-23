@@ -877,8 +877,23 @@ void eeconfig_update_rgblight(uint64_t val) {
 #endif
 }
 
+// V260823R3: VIA 슬라이더 조작 시 고빈도 EEPROM 쓰기로 인한 블로킹 방지 디바운스
+static bool rgblight_eeprom_dirty = false;
+static uint16_t rgblight_eeprom_timer = 0;
+#define RGBLIGHT_EEPROM_DEBOUNCE_MS 100
+
 void eeconfig_update_rgblight_current(void) {
-    eeconfig_update_rgblight(rgblight_config.raw);
+    rgblight_eeprom_dirty = true;
+    rgblight_eeprom_timer = timer_read();
+}
+
+void eeconfig_flush_rgblight_current(bool force) {
+    if (rgblight_eeprom_dirty) {
+        if (force || timer_elapsed(rgblight_eeprom_timer) >= RGBLIGHT_EEPROM_DEBOUNCE_MS) {
+            eeconfig_update_rgblight(rgblight_config.raw);
+            rgblight_eeprom_dirty = false;
+        }
+    }
 }
 
 void eeconfig_update_rgblight_default(void) {
@@ -2348,6 +2363,10 @@ void rgblight_task(void) {
 #else
     bool velocikey_on = false;
 #endif
+
+    // V260823R3: EEPROM 디바운스 처리
+    eeconfig_flush_rgblight_current(false);
+
     if (!urgent_pending && timer_disabled && !velocikey_on) {
         return;  // V251122R8: 긴급 이벤트, 타이머, Velocikey 모두 없을 때 250kHz 경로 부하를 줄이기 위해 즉시 반환
     }

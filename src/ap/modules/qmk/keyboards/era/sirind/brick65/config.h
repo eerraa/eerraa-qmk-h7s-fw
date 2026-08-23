@@ -70,7 +70,7 @@
 #define RGBLIGHT_DEFAULT_ON         true
 #define RGBLIGHT_DEFAULT_HUE        0
 #define RGBLIGHT_DEFAULT_SAT        0
-#define RGBLIGHT_DEFAULT_VAL        191   // V260310R3: BRICK65 underglow 기본 밝기를 white 75%로 상향
+#define RGBLIGHT_DEFAULT_VAL        153   // V260823R1: BRICK65 underglow 기본 밝기를 최대값(255)의 60%인 153으로 조정
 #define RGBLIGHT_INDICATOR_SLOT_COUNT 2   // V260310R4: BRICK65는 indicator 2개를 독립 슬롯으로 운용
 #define RGBLIGHT_LED_COUNT          HW_WS2812_RGB_CNT
 #define RGBLIGHT_LIMIT_VAL          255

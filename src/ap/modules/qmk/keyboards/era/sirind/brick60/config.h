@@ -72,7 +72,7 @@
 #define RGBLIGHT_DEFAULT_ON         true
 #define RGBLIGHT_DEFAULT_HUE        0
 #define RGBLIGHT_DEFAULT_SAT        0
-#define RGBLIGHT_DEFAULT_VAL        128
+#define RGBLIGHT_DEFAULT_VAL        101   // V260823R1: VIA 슬라이더 128 표기에 맞춰 역산 적용 (101 * 255 / 200 = 128)
 #define RGBLIGHT_LED_COUNT          HW_WS2812_RGB_CNT
 #define RGBLIGHT_LIMIT_VAL          200
 #define RGBLIGHT_SAT_STEP           8

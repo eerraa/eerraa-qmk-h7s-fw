@@ -69,7 +69,7 @@
 #define RGBLIGHT_DEFAULT_ON         false // V260720R1: underglow 기본값 OFF (EEPROM 팩토리 초기화 시 1회 적용)
 #define RGBLIGHT_DEFAULT_HUE        0
 #define RGBLIGHT_DEFAULT_SAT        0
-#define RGBLIGHT_DEFAULT_VAL        191
+#define RGBLIGHT_DEFAULT_VAL        153   // V260823R1: MAY65 underglow 기본 밝기를 최대값(255)의 60%인 153으로 조정
 #define RGBLIGHT_INDICATOR_SLOT_COUNT 1   // V260428R1: MAY65 VIA 인디케이터는 1개 슬롯만 노출
 #define RGBLIGHT_LED_COUNT          HW_WS2812_RGB_CNT
 #define RGBLIGHT_LIMIT_VAL          255

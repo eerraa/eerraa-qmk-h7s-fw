@@ -7,6 +7,7 @@
 #include "eeconfig.h"
 #include "usb.h"
 #include "via.h"
+#include "era_state_sync.h"  // V260823R1: USB 모니터 토글 변경 시 CONFIG revision
 
 usb_monitor_config_t usb_monitor_config = {0};                  // V251112R6: 기본값은 usb_monitor_init()에서만 정의
 
@@ -77,8 +78,14 @@ void via_qmk_usb_monitor_command(uint8_t *data, uint8_t length)
     case id_custom_set_value:
     {
       bool enable = value_data[0] != 0U;
+      bool before = usbInstabilityIsEnabled();
+
       usbInstabilityStore(enable);
       value_data[0] = (uint8_t)usbInstabilityIsEnabled();
+      if (usbInstabilityIsEnabled() != before)
+      {
+        era_state_sync_bump_config();  // V260823R1: 실제로 값이 바뀐 SET에서만 revision을 올린다
+      }
       break;
     }
 

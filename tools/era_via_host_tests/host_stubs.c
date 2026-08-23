@@ -70,3 +70,17 @@ void process_action(keyrecord_t *record, action_t action) {
     (void)record;
     (void)action;
 }
+
+// V260823R1: quantum/mousekey.c 대신 엔진 런타임 변수만 둔다.
+// mousekey_config.c가 여기에 무엇을 쓰는지가 곧 테스트 대상이다.
+uint8_t mk_delay             = 0;
+uint8_t mk_interval          = 0;
+uint8_t mk_max_speed         = 0;
+uint8_t mk_time_to_max       = 0;
+uint8_t mk_wheel_delay       = 0;
+uint8_t mk_wheel_interval    = 0;
+uint8_t mk_wheel_max_speed   = 0;
+uint8_t mk_wheel_time_to_max = 0;
+uint8_t mk_move_delta        = 0;
+uint8_t mk_wheel_delta       = 0;
+
