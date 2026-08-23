@@ -27,7 +27,7 @@
 ## 4. VIA UI·명령 매핑
 - 채널 ID: `id_qmk_tapdance`(16).
 - Value ID: 슬롯당 5개, `(16, base+0..4)` = tap, hold, double tap, tap+hold, term. 슬롯 1의 base=1 → 1~5, 슬롯 8의 base=36 → 36~40.
-- Term 단위: VIA dropdown 10~50 → 실제 ms = 값×10 (100~500ms). legacy SET만 최소/최대/20ms 단위로 정규화한다.
+- Term 단위: V260823R1부터 VIA JSON은 exact-ms range(`id_qmk_tapdance_N_term_exact`, channel 16 ID 41~48, 100~500ms, 1ms 단위)만 노출한다. legacy dropdown ID(값×10, 20ms 정규화)는 하위 호환을 위해 펌웨어에 남아 있다.
 - Exact term ID (V260821R1): channel 16, IDs 41–48 = TD0–TD7, 2-byte big-endian ms, 100–500만 허용. load 경로에서 20ms 격자로 되돌리지 않는다.
 - `id_custom_set_value`: 값 적용 후 즉시 에코(`tapdance_get_value`)로 응답. `id_custom_save`: EEPROM flush.
 

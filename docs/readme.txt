@@ -4,11 +4,11 @@
 
 1. 펌웨어 파일 구성
 
-   키보드이름-V260821R1.uf2
+   키보드이름-V260823R1.uf2
      - 키보드 본체에 올리는 펌웨어 파일입니다.
      - 디바운스 모드/딜레이를 VIA에서 실시간 조정할 수 있으므로 추가 변형 이미지는 제공하지 않습니다. 이 하나의 UF2만 사용하면 됩니다.
 
-   키보드이름-VIA-V260821R1.JSON
+   키보드이름-VIA-V260823R1.JSON
      - VIA(usevia.app)에서 키보드를 인식하고, 디바운스/USB 설정/기타 기능을 노출하기 위한 Draft Definition 파일입니다.
      - 키맵을 편집하기 전에 반드시 한 번 로드해야 합니다.
 
@@ -76,8 +76,9 @@
 
 2-7. 탭핑 설정 (TAPPING TERM, 실시간 변경)
 
-   - VIA GLOBAL SETTINGS의 TAPPING 섹션에서 조정합니다.
-   - 항목: Global Tapping Term(기본 200 ms), Permissive Hold, Hold on Other Key Press, Retro Tapping.
+   - VIA CONFIGURE → FEATURE → TAPPING에서 조정합니다.
+   - 항목: Global Tapping Term (ms)(기본 200 ms), Permissive Hold, Hold on Other Key Press, Retro Tapping.
+   - V260821R1부터 Global Tapping Term은 20 ms 단위 드롭다운이 아니라 100~500 ms를 1 ms 단위로 입력하는 값입니다.
    - 값을 바꾼 뒤 SAVE(또는 VIA 저장)을 누르면 EEPROM에 보존됩니다.
 
 2-8. 탭댄스(Tap Dance) 설정 & 키코드 사용법
@@ -86,7 +87,7 @@
    - 지정 가능한 키코드는 https://docs.qmk.fm/keycodes 참고.
    - 설정 위치: VIA CONFIGURE → TAPDANCE 메뉴.
      · On Tap / On Hold / On Double Tap / Tap+Hold를 슬롯별로 지정. 비워 두면 해당 동작은 실행되지 않으며, 비어 있으면 Tap을 대신 사용하는 폴백이 적용됩니다.
-     · Term은 슬롯별 탭/홀드 판정 시간(100~500 ms, 20 ms 스텝)으로 글로벌 TAPPING_TERM과 독립적입니다. 기본값 200 ms.
+     · Term (ms)는 슬롯별 탭/홀드 판정 시간(100~500 ms, 1 ms 단위)으로 글로벌 TAPPING_TERM과 독립적입니다. 기본값 200 ms.
    - 적용/저장: 변경 시 즉시 RAM에 반영되며, Save를 누르면 EEPROM에 저장되어 재부팅 후에도 유지됩니다.
    - 키맵 배치: VIA KEYMAP 탭 하단 CUSTOM 섹션의 “Tap Dance” 그룹에서 TD0~TD7을 골라 배치합니다. UI TD0~TD7은 내부 슬롯 0~7과 1:1로 연결됩니다.
    - 동작 예시 (Vial과 동일한 로직):
@@ -98,6 +99,23 @@
      1) TAPDANCE에서 TD0 슬롯에 On Tap=“KC_A”, On Hold=“MO(1)”, Term=200 ms로 설정.
      2) CONFIGURE 화면에서 원하는 위치에 TD0를 배치.
      3) 짧게 누르면 A, 길게 누르면 레이어1. 더블탭 동작이 필요하면 On Double Tap을 추가합니다.
+
+2-9. 마우스 키 (MOUSE)
+
+   - VIA CONFIGURE → FEATURE → MOUSE에서 조정합니다. 키맵에는 KEYMAP 탭에서 Mouse ↑/↓/←/→, Mouse Btn1~8, Mouse Wh ↑/↓/←/→ 키코드를 배치합니다.
+   - Cursor Start Speed: 키를 누른 직후 한 번에 움직이는 픽셀 수(1~8 px). 조준 정밀도를 결정합니다.
+   - Cursor Top Speed: 가속이 끝난 뒤의 한 번 이동량(8~64 px). 화면이 넓을수록 큰 값이 편합니다.
+   - Cursor Acceleration: Start에서 Top까지 걸리는 시간(0.5~2.0초). Off를 고르면 가속 없이 Start Speed로 고정됩니다.
+   - Cursor Steps Per Second: 초당 이동 이벤트 수(50~200 /s). 값이 클수록 움직임이 부드러워지며, 가속 시간은 그대로 유지됩니다.
+   - Wheel Rate: 초당 휠 이벤트 수(6~50 /s).
+   - Wheel Acceleration: Off / Mild / Strong 3단계.
+   - 기본값은 Start 4 px, Top 16 px, 가속 1.0초, 100 /s입니다. 값을 바꾼 뒤 SAVE를 누르면 EEPROM에 보존됩니다.
+
+2-10. 동시 입력(롤오버)
+
+   - 이 키보드는 별도 설정 없이 **최대 20키 동시 입력**을 지원합니다. 켜고 끄는 옵션이 없으며 항상 켜져 있습니다.
+   - 오래된 BIOS/UEFI나 KVM처럼 HID 부트 프로토콜만 읽는 환경에서는 앞 6키가 동작합니다. 부팅·BIOS 진입에는 문제가 없습니다.
+   - 21키 이상을 동시에 누르면 초과분은 무시됩니다.
 
 3. VIA 사용 절차
 
@@ -134,11 +152,11 @@ Firmware Guide
 
 1. Firmware package contents
 
-   KeyboardName-V260821R1.uf2
+   KeyboardName-V260823R1.uf2
      - Flash this UF2 onto the keyboard.
      - Debounce mode/delay are runtime-configurable in VIA, so no alternate images are shipped—use this single UF2.
 
-   KeyboardName-VIA-V260821R1.JSON
+   KeyboardName-VIA-V260823R1.JSON
      - VIA Draft Definition so the keyboard is recognized and USB/debounce/feature controls appear.
      - Load it once before editing the keymap.
 
@@ -206,8 +224,9 @@ Firmware Guide
 
 2-7. Tapping settings (TAPPING TERM, runtime adjustable)
 
-   - VIA GLOBAL SETTINGS → TAPPING.
-   - Labels: Global Tapping Term (default 200 ms), Permissive Hold, Hold on Other Key Press, Retro Tapping.
+   - VIA CONFIGURE → FEATURE → TAPPING.
+   - Labels: Global Tapping Term (ms) (default 200 ms), Permissive Hold, Hold on Other Key Press, Retro Tapping.
+   - Since V260821R1 the global term is a 100–500 ms numeric field with 1 ms resolution, not a 20 ms dropdown.
    - Click SAVE in VIA to store to EEPROM.
 
 2-8. Tap Dance configuration & keycode usage
@@ -216,7 +235,7 @@ Firmware Guide
    - KC keycodes are listed at https://docs.qmk.fm/keycodes.
    - Where to set: VIA CONFIGURE → TAPDANCE.
      · On Tap / On Hold / On Double Tap / Tap+Hold per slot. Empty fields skip that action and use Tap as a fallback where applicable.
-     · Term is a per-slot tap/hold window (100–500 ms, 20 ms step), independent of the global TAPPING_TERM. Default 200 ms.
+     · Term (ms) is a per-slot tap/hold window (100–500 ms, 1 ms resolution), independent of the global TAPPING_TERM. Default 200 ms.
    - Apply/save: changes take effect immediately in RAM; click Save to store to EEPROM so they persist after reboot.
    - Keymap placement: in VIA KEYMAP, open the CUSTOM section and choose TD0–TD7 under “Tap Dance,” then place them. UI TD0–TD7 map 1:1 to internal slots 0–7.
    - Behavior (matches Vial Tap Dance):
@@ -228,6 +247,23 @@ Firmware Guide
      1) In TAPDANCE, set TD0: On Tap = “KC_A”, On Hold = “MO(1)”, Term = 200 ms.
      2) Place TD0 on the desired key position.
      3) Short press sends A; long press switches to layer 1. Add On Double Tap if needed.
+
+2-9. Mouse keys (MOUSE)
+
+   - VIA CONFIGURE → FEATURE → MOUSE. Place Mouse arrows, Mouse Btn1-8 and Mouse Wh keycodes from the KEYMAP tab.
+   - Cursor Start Speed: pixels moved per event right after the key goes down (1-8 px). This is what aiming precision costs.
+   - Cursor Top Speed: pixels per event once acceleration is finished (8-64 px). Wider screens want a larger value.
+   - Cursor Acceleration: time to climb from Start to Top (0.5-2.0 s). Off holds the cursor at Start Speed with no ramp.
+   - Cursor Steps Per Second: movement events per second (50-200 /s). Higher is smoother and leaves the ramp duration unchanged.
+   - Wheel Rate: wheel events per second (6-50 /s).
+   - Wheel Acceleration: Off / Mild / Strong.
+   - Defaults are Start 4 px, Top 16 px, a 1.0 s ramp and 100 /s. Click SAVE to store to EEPROM.
+
+2-10. Rollover
+
+   - Up to **20 keys at once**, always on. There is no setting to turn it on or off.
+   - On old BIOS/UEFI screens or KVMs that only read the HID boot protocol you get the first 6 keys, so booting and BIOS entry work.
+   - Press more than 20 keys at once and the extras are ignored.
 
 3. How to use VIA
 

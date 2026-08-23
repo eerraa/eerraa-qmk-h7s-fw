@@ -5,6 +5,48 @@ Claude auto-memory는 Codex CLI와 공유되지 않으므로 공용 사실은 �
 
 ---
 
+## 2026-08-23 — MOUSE VIA 페이지 · exact-ms JSON 노출 · state-sync 보강 (V260823R1)
+
+**배경**: custom VIA 앱(`the-via-eerraa`)과 custom QMK(`qmk_firmware_eerraa`)의 Non-Split ERA 기능을 이 H7S 코드베이스에 맞추는 작업. 검증 + 이식을 함께 수행했다.
+
+**검증 결과 (V260821R1 exact-ms / state-sync)**:
+1. exact-ms 배치(channel 15 ID 5, channel 16 ID 41~48, 2-byte BE, 100~500)는 앱이 번들한 정의(`the-via-eerraa/public/definitions/era/v3/1163001890.json`)와 **정확히 일치**했다. 앱의 `ExactMillisecondControl`은 `type: "range"` + `id_*_term_exact` 이름 + `options: [100, 500]`으로 트리거되고, 2바이트 BE로 읽고 쓴다.
+2. **공식 VIA 호환 vs Custom VIA JSON 관리 분리**:
+   - **이 리포(`eerraa-qmk-h7s-fw-via`)**: 공식 웹 VIA(`usevia.app`) 호환용 드롭다운(dropdown) 방식을 유지한다.
+   - **Custom VIA 앱(`the-via-eerraa`)**: `era-definitions/custom/v3/`에서 exact-ms `range` 슬라이더([100, 500]) 및 `exactMsFamily: "h7s"` 계약을 적용한 JSON을 별도로 관리한다.
+   - 펌웨어 C 계층은 공식 VIA의 legacy dropdown GET/SET과 Custom VIA의 exact-ms 2-byte BE GET/SET을 모두 완벽하게 지원하는 듀얼 호환 구조로 동작한다.
+3. **결함 ②**: `era_state_sync_via_command()`에 INVALID 판정 팔이 없어 `ERA_STATE_SYNC_STATUS_INVALID` 상수가 죽어 있었고, 길이 검사도 6바이트였다. 참조 구현과 앱 파서(`parseStateSyncEnvelope`)가 모두 32바이트 봉투 + 전 구간 0을 요구하므로 그에 맞췄다.
+4. **결함 ③**: CONFIG revision이 tapping/tapdance/layout options에서만 올라갔다. 참조는 `nvm_eeprom_changed_kb` 캐치올로 모든 EEPROM 설정 쓰기에서 올린다. 이 포팅층에는 그 훅이 없으므로 채널별로 **값이 실제로 바뀐 SET에서만** 올리도록 추가했다: 디바운스(14), KKUK(12), SOCD(10/11), 인디케이터(0), BootMode(13), USB 모니터(13), 그리고 `id_eeprom_reset`(세 도메인 전부).
+5. **결함 ④ — 기존 이미지의 스택 오버플로**: `report_exk_q`가 원소 크기를 `sizeof(report_info_t)`(=`HW_KEYS_PRESS_MAX`+2 = **22**)로 생성하고 있었는데, 실제 원소는 `exk_report_info_t`(변경 전 **9바이트**)였다. `qbuffer`는 생성 시 받은 size만큼 복사하므로:
+   - `qbufferRead(q, (uint8_t *)&report_info, 1)`이 스택의 9바이트 지역변수에 **22바이트를 쓴다 → 13바이트 스택 오버플로**. EXK 재시도 큐를 드레인할 때마다 발생한다.
+   - `qbufferWrite`는 반대로 9바이트 지역변수에서 22바이트를 읽는다.
+   - 백킹 배열(`exk_report_info_t[128]` = 1152B)도 큐가 2816B로 가정하므로 인덱스 52부터 배열 밖을 침범한다.
+
+   발화 조건은 "EXK 전송이 BUSY로 실패해 큐에 적재된 뒤 드레인될 때"다. 미디어/시스템 키를 누른 순간 HID EP가 바쁜 경우에만 생기므로 드물어 현장에서 드러나지 않았다. `sizeof(exk_report_info_t)`로 교정했다. **NKRO 때문에 생긴 문제가 아니라 이번 조사에서 발견한 기존 결함**이며, EP를 32B로 키우면(원소 33B > 22B) 이번에는 반대로 절단이 되므로 어느 쪽이든 수정이 필요했다.
+
+**신규 결정 (이식)**:
+1. **마우스는 EXK 인터페이스의 리포트 ID 2로 내보낸다.** 리포트가 6바이트라 **기존 8바이트 엔드포인트에 그대로 들어가므로 엔드포인트 크기·FIFO 배분·인터페이스 개수가 모두 그대로다.** 인터페이스 0(키보드)은 한 바이트도 건드리지 않았다.
+2. **NKRO는 구현했다가 되돌렸다 (오너 결정 2026-08-23).** 기본 상태가 이미 전환 없이 20키(`HW_KEYS_PRESS_MAX` = 20)이므로 240키로 늘리는 기능적 실익이 없는 반면, NKRO 리포트(32B)를 실으려면 EXK EP를 8B → 32B로 키워야 해서 **NKRO를 켜지 않는 사용자까지 재열거와 RAM +3KB(재시도 큐 1152B → 4224B)를 부담**한다. 6KRO↔NKRO 토글은 "부트 호환이냐 동시입력이냐"의 교환을 사용자에게 떠넘기는 장치인데, 현재 구성은 그 교환 자체가 없다. 상세와 재도입 시 설계는 `docs/features_usb_hid_reports.md` §5.
+3. **VIA 채널 번호는 참조 QMK와 다르다.** 참조는 MOUSE=13을 쓰지만 이 코드베이스에서 13은 USB POLLING이 점유하므로 **MOUSE=17**을 새로 할당했다. value id 1~6 배치는 참조와 동일하게 유지했다. VIA는 정의를 (vendorId, productId)별로 캐시하므로 H7S 정의가 별도인 이상 번호 일치는 요구되지 않는다.
+4. MOUSE 페이지는 참조 `era_mousekey.c`의 의미론을 그대로 옮겼다: 최고 속도와 가속 시간은 저장하지 않고 파생하며, 가속 off는 최고 속도가 아니라 **첫 스텝 속도**로 고정한다. 실측 기본값(Start 4px / Top 16px / 램프 1.0초 / 100 이벤트/초)도 참조의 2026-08-18 측정치를 그대로 쓴다. 근거는 `docs/features_mousekey.md` §6.
+5. `MOUSEKEY_MOVE_DELTA` / `MOUSEKEY_WHEEL_DELTA`를 `ERA_MOUSEKEY_RUNTIME_DELTA` 아래에서만 변수로 승격했다(참조와 동일한 fork). 이 페이지가 유일한 쓰기 주체다.
+6. `_DEF_FIRMWARE_VERSION`을 `V260823R1`로 올렸다. **5개 보드 모두 `AUTO_FACTORY_RESET_ENABLE 1`이므로 이 이미지 첫 부팅에서 EEPROM이 공장 초기화된다.** 신규 `EECONFIG_USER_MOUSEKEY` 슬롯(+152, 16B)은 그 경로에서 채워지고, 초기화가 없더라도 시그니처 불일치로 기본값이 기록된다.
+
+**인터페이스 0의 부트 규격 편차 (조사 결과 + 유지 결정, 오너 2026-08-23)**: 이번 작업 중 확인한 사실이며 **V260823R1 이전부터 있던 상태**다. 전문은 `docs/features_usb_hid_reports.md` §3~4.
+- `HW_KEYS_PRESS_MAX`가 20이라 인터페이스 0의 IN 리포트는 **22바이트/20키 배열**이다. 빌드 이미지에서 추출한 디스크립터가 `95 14 75 08`(REPORT_COUNT 20)로 이를 확증한다. **6KRO가 아니다.**
+- 그럼에도 BIOS에서 동작해 온 이유는 22바이트의 **앞 8바이트가 부트 포맷과 바이트 단위로 같기** 때문이다.
+- 규격 편차 두 가지: ① `SET_PROTOCOL(boot)` 이후에도 8바이트로 줄이지 않는다. ② 인터페이스 0의 `GET_REPORT`에 핸들러가 없어 STALL된다.
+- **결정: 둘 다 고치지 않는다.** 고치려면 재시도 큐와 SOF 드레인이 얽힌 8000Hz 송신 경로를 프로토콜 상태에 따라 가변 길이로 바꿔야 하고, 현장 실패 보고가 없다.
+- 이 사실이 NKRO를 되돌린 판단의 근거이기도 하다(위 신규 결정 2번).
+
+**알려진 한계(수용)**: `mk_time_to_max`가 1바이트라 Cursor Acceleration의 도달 범위가 갱신 주기에 따라 좁아진다. 200 /s(5ms)에서 상한은 1.275초이므로 JSON이 함께 제시하는 1.5s·2.0s는 조용히 잘린다. 참조 QMK도 같은 옵션 목록·같은 동작이고, 주기별로 옵션 목록을 바꾸는 것은 VIA 정의 형식으로 표현할 수 없다. **되읽기가 실제 값을 정직하게 보고하는 것**으로 계약을 맞췄고, 호스트 테스트가 이를 검증한다(`docs/features_mousekey.md` §6-2).
+
+**검증**: 5개 보드 전부 빌드 성공(경고 0). `tools/era_via_host_tests/run.ps1` 통과 — 기존 exact-ms/state-sync 케이스에 MOUSE 단위 환산(최고속도 반올림, 램프 시간 보존, 가속 off의 첫 스텝 고정, 클램프 정직성)과 state-sync INVALID 팔을 추가했다. EXK 리포트 디스크립터는 파서로 검증(129바이트, 컬렉션 균형, 리포트별 크기 MOUSE 6B / SYSTEM 3B / CONSUMER 3B)했고 같은 계약을 `usbd_hid.c`의 `_Static_assert` 3개로 고정했다. **실기 검증은 아직 하지 않았다** — USB 재열거, 마우스 키 동작, 미디어 키, 8kHz 유지 여부는 실기에서 확인이 필요하다.
+
+**남은 항목(이 리포 밖)**: `the-via-eerraa`의 `public/definitions/era_advanced.json`에는 H7S 보드 중 `brick60-h7s`(0x45520022) 하나만 등록되어 있다. MAY65(0x0030)·INTIGRITY80(0x0028)·BRICK65(0x0023)·SCULPTUREI(0x0034)는 `stateSync`/`exactMsFamily` 미등록이라 앱이 state-sync 폴링을 하지 않는다. exact-ms 컨트롤은 JSON의 `options: [100, 500]`이 fallback을 이기므로 정상 동작한다.
+
+---
+
 ## 2026-08-21 — VIA GET 0x06 리비전과 exact-ms term (V260821R1)
 
 **결정**:

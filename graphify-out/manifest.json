@@ -25,9 +25,9 @@
     "semantic_hash": "f19bdbbe1fccad7ebf6849736f9bcdb3"
   },
   "src/ap/modules/qmk/keyboards/era/intigrity80/json/INTIGRITY80-VIA.JSON": {
-    "mtime": 1787298075.2655234,
+    "mtime": 1787478317.7045841,
     "ast_hash": "34dbbbddc8c066fde9afccddcd370311",
-    "semantic_hash": "34dbbbddc8c066fde9afccddcd370311"
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/keyboards/era/intigrity80/json/intigrity80.json": {
     "mtime": 1787298075.2655234,
@@ -45,9 +45,9 @@
     "semantic_hash": "924c3e7b7da0cc3ba869784cfa012617"
   },
   "src/ap/modules/qmk/keyboards/era/intigrity80/port/indicator_port.c": {
-    "mtime": 1787298075.2665231,
-    "ast_hash": "802a4928f2a2fa144b085ec63625c07b",
-    "semantic_hash": "802a4928f2a2fa144b085ec63625c07b"
+    "mtime": 1787419541.0178692,
+    "ast_hash": "09fc617693579695c2c331d89951610c",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/keyboards/era/intigrity80/port/indicator_port.h": {
     "mtime": 1787298075.2665231,
@@ -55,14 +55,14 @@
     "semantic_hash": "a5a3a8093e7d0c8fa02da4136e620d9b"
   },
   "src/ap/modules/qmk/keyboards/era/intigrity80/port/via_port.c": {
-    "mtime": 1787298075.2665231,
-    "ast_hash": "16154326752aeabaebce5c6543a2c1de",
-    "semantic_hash": "16154326752aeabaebce5c6543a2c1de"
+    "mtime": 1787470850.9665835,
+    "ast_hash": "4999c1dabe6533720132b435177f586e",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/keyboards/era/keynetix/may65/config.h": {
-    "mtime": 1787298075.2675252,
-    "ast_hash": "03908b406bcdfbd526d5f33f5cad86e4",
-    "semantic_hash": "03908b406bcdfbd526d5f33f5cad86e4"
+    "mtime": 1787480619.98414,
+    "ast_hash": "f848d58d57c581eefdfa7810f2e9375d",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/keyboards/era/keynetix/may65/info.json": {
     "mtime": 1787298075.2675252,
@@ -70,9 +70,9 @@
     "semantic_hash": "f19bdbbe1fccad7ebf6849736f9bcdb3"
   },
   "src/ap/modules/qmk/keyboards/era/keynetix/may65/json/MAY65-H7S-VIA.JSON": {
-    "mtime": 1787298075.2675252,
+    "mtime": 1787478317.7051015,
     "ast_hash": "7848bf1951a4b478e55e7dac83d9278a",
-    "semantic_hash": "7848bf1951a4b478e55e7dac83d9278a"
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/keyboards/era/keynetix/may65/json/may65.json": {
     "mtime": 1787298075.2685235,
@@ -90,9 +90,9 @@
     "semantic_hash": "d6e8bd5b449aa4c75a7a5a178d617410"
   },
   "src/ap/modules/qmk/keyboards/era/keynetix/may65/port/indicator_port.c": {
-    "mtime": 1787298075.2695234,
-    "ast_hash": "0de9c8bbf7b573d8c3730394a1ee2425",
-    "semantic_hash": "0de9c8bbf7b573d8c3730394a1ee2425"
+    "mtime": 1787419541.0249789,
+    "ast_hash": "8eba915de8eb7fbb5accb2810d5bb746",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/keyboards/era/keynetix/may65/port/indicator_port.h": {
     "mtime": 1787298075.2695234,
@@ -100,14 +100,14 @@
     "semantic_hash": "d270d40ccd56c19981f20095a998c676"
   },
   "src/ap/modules/qmk/keyboards/era/keynetix/may65/port/via_port.c": {
-    "mtime": 1787298075.2695234,
-    "ast_hash": "16154326752aeabaebce5c6543a2c1de",
-    "semantic_hash": "16154326752aeabaebce5c6543a2c1de"
+    "mtime": 1787470850.9675846,
+    "ast_hash": "4999c1dabe6533720132b435177f586e",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/keyboards/era/sirind/brick60/config.h": {
-    "mtime": 1787298075.2705278,
-    "ast_hash": "308603445ba04c78934727ab3bf74b60",
-    "semantic_hash": "308603445ba04c78934727ab3bf74b60"
+    "mtime": 1787480567.1252391,
+    "ast_hash": "7027d8c315c7cfc5751ebffbe196a646",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/keyboards/era/sirind/brick60/info.json": {
     "mtime": 1787298075.2705278,
@@ -115,9 +115,9 @@
     "semantic_hash": "f19bdbbe1fccad7ebf6849736f9bcdb3"
   },
   "src/ap/modules/qmk/keyboards/era/sirind/brick60/json/BRICK60-H7S-VIA.JSON": {
-    "mtime": 1787298075.2705278,
+    "mtime": 1787478317.7061417,
     "ast_hash": "69db2d897701f370891561615bc7ae57",
-    "semantic_hash": "69db2d897701f370891561615bc7ae57"
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/keyboards/era/sirind/brick60/json/brick60-h7s.json": {
     "mtime": 1787298075.2715275,
@@ -135,9 +135,9 @@
     "semantic_hash": "924c3e7b7da0cc3ba869784cfa012617"
   },
   "src/ap/modules/qmk/keyboards/era/sirind/brick60/port/indicator_port.c": {
-    "mtime": 1787298075.2715275,
-    "ast_hash": "8e77f09165c02b7af0089066397c3ef6",
-    "semantic_hash": "8e77f09165c02b7af0089066397c3ef6"
+    "mtime": 1787419541.0336142,
+    "ast_hash": "32ba9011fb66179abdcbc4d900f81715",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/keyboards/era/sirind/brick60/port/indicator_port.h": {
     "mtime": 1787298075.2725277,
@@ -145,14 +145,14 @@
     "semantic_hash": "a5a3a8093e7d0c8fa02da4136e620d9b"
   },
   "src/ap/modules/qmk/keyboards/era/sirind/brick60/port/via_port.c": {
-    "mtime": 1787298075.2725277,
-    "ast_hash": "16154326752aeabaebce5c6543a2c1de",
-    "semantic_hash": "16154326752aeabaebce5c6543a2c1de"
+    "mtime": 1787470850.9685836,
+    "ast_hash": "4999c1dabe6533720132b435177f586e",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/keyboards/era/sirind/brick65/config.h": {
-    "mtime": 1787298075.2725277,
-    "ast_hash": "9f466e432972c2fd96fde635eae1b4f0",
-    "semantic_hash": "9f466e432972c2fd96fde635eae1b4f0"
+    "mtime": 1787480617.1399262,
+    "ast_hash": "cea123b8172fa309cdfe566495b576ee",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/keyboards/era/sirind/brick65/info.json": {
     "mtime": 1787298075.2725277,
@@ -160,9 +160,9 @@
     "semantic_hash": "f19bdbbe1fccad7ebf6849736f9bcdb3"
   },
   "src/ap/modules/qmk/keyboards/era/sirind/brick65/json/BRICK65-H7S-VIA.JSON": {
-    "mtime": 1787298075.2735276,
+    "mtime": 1787478317.7066667,
     "ast_hash": "52e746c45db436505d7cc5ec4c218ac1",
-    "semantic_hash": "52e746c45db436505d7cc5ec4c218ac1"
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/keyboards/era/sirind/brick65/json/brick65-h7s.json": {
     "mtime": 1787298075.2735276,
@@ -180,9 +180,9 @@
     "semantic_hash": "d6e8bd5b449aa4c75a7a5a178d617410"
   },
   "src/ap/modules/qmk/keyboards/era/sirind/brick65/port/indicator_port.c": {
-    "mtime": 1787298075.2745283,
-    "ast_hash": "ee6df15761e13307c8992d2926a5f041",
-    "semantic_hash": "ee6df15761e13307c8992d2926a5f041"
+    "mtime": 1787419541.0401523,
+    "ast_hash": "bc76542fc9f67347b685aff92faca87d",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/keyboards/era/sirind/brick65/port/indicator_port.h": {
     "mtime": 1787298075.2745283,
@@ -190,9 +190,9 @@
     "semantic_hash": "d270d40ccd56c19981f20095a998c676"
   },
   "src/ap/modules/qmk/keyboards/era/sirind/brick65/port/via_port.c": {
-    "mtime": 1787298075.2750323,
-    "ast_hash": "16154326752aeabaebce5c6543a2c1de",
-    "semantic_hash": "16154326752aeabaebce5c6543a2c1de"
+    "mtime": 1787470850.970584,
+    "ast_hash": "4999c1dabe6533720132b435177f586e",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/keyboards/era/sirind/sculpturei/config.h": {
     "mtime": 1787298075.2750323,
@@ -205,9 +205,9 @@
     "semantic_hash": "c00d2322fda3daa6fc3347a5b7c9c4ba"
   },
   "src/ap/modules/qmk/keyboards/era/sirind/sculpturei/json/SCULPTUREI-VIA.JSON": {
-    "mtime": 1787298075.2760372,
+    "mtime": 1787478317.7071867,
     "ast_hash": "30a368accfcc8e73704390f374d7f57a",
-    "semantic_hash": "30a368accfcc8e73704390f374d7f57a"
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/keyboards/era/sirind/sculpturei/json/sculpturei.json": {
     "mtime": 1787298075.2760372,
@@ -225,9 +225,9 @@
     "semantic_hash": "d6e8bd5b449aa4c75a7a5a178d617410"
   },
   "src/ap/modules/qmk/keyboards/era/sirind/sculpturei/port/indicator_port.c": {
-    "mtime": 1787298075.2780378,
-    "ast_hash": "9a3e46a839d833d9b2542c8bcf908c9f",
-    "semantic_hash": "9a3e46a839d833d9b2542c8bcf908c9f"
+    "mtime": 1787419541.0482006,
+    "ast_hash": "d6944dbda3dc2ffa525f251198d97e84",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/keyboards/era/sirind/sculpturei/port/indicator_port.h": {
     "mtime": 1787298075.2780378,
@@ -235,14 +235,14 @@
     "semantic_hash": "d270d40ccd56c19981f20095a998c676"
   },
   "src/ap/modules/qmk/keyboards/era/sirind/sculpturei/port/via_port.c": {
-    "mtime": 1787298075.2780378,
-    "ast_hash": "16154326752aeabaebce5c6543a2c1de",
-    "semantic_hash": "16154326752aeabaebce5c6543a2c1de"
+    "mtime": 1787470850.971584,
+    "ast_hash": "4999c1dabe6533720132b435177f586e",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/port/bootmode.c": {
-    "mtime": 1787298075.279039,
-    "ast_hash": "e752d1f5c6fbc52a10b6eb86c2c3939b",
-    "semantic_hash": "e752d1f5c6fbc52a10b6eb86c2c3939b"
+    "mtime": 1787419571.0025904,
+    "ast_hash": "76af7b424bf0cac0ad640ccaee01b683",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/port/bootmode.h": {
     "mtime": 1787298075.279039,
@@ -250,9 +250,9 @@
     "semantic_hash": "277f4a21cf045ee8f799cf9d3aafc797"
   },
   "src/ap/modules/qmk/port/debounce_profile.c": {
-    "mtime": 1787298075.279039,
-    "ast_hash": "52b2b9a3d831cd3f792773366301e5b4",
-    "semantic_hash": "52b2b9a3d831cd3f792773366301e5b4"
+    "mtime": 1787420870.4970365,
+    "ast_hash": "afcdfddba7efd8a7027a6dafa3a15588",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/port/debounce_profile.h": {
     "mtime": 1787298075.279039,
@@ -260,14 +260,14 @@
     "semantic_hash": "f2ebf586e88266d7863a645bf67091d3"
   },
   "src/ap/modules/qmk/port/eeconfig_port.c": {
-    "mtime": 1787298075.279039,
-    "ast_hash": "7c13288080a37e38a3d452c90f66ad01",
-    "semantic_hash": "7c13288080a37e38a3d452c90f66ad01"
+    "mtime": 1787419370.7011926,
+    "ast_hash": "22487cefa569a6dcfe15d6a5b4076b9d",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/port/kill_switch.c": {
-    "mtime": 1787298075.279039,
-    "ast_hash": "0183a51cc23a7c272401ddf96ce6d2ee",
-    "semantic_hash": "0183a51cc23a7c272401ddf96ce6d2ee"
+    "mtime": 1787419486.8181608,
+    "ast_hash": "8cce9629b870ce84fd3b1042f3d48bc2",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/port/kill_switch.h": {
     "mtime": 1787298075.279039,
@@ -275,9 +275,9 @@
     "semantic_hash": "7402dfd9f769c3e0c0b018c8954712ae"
   },
   "src/ap/modules/qmk/port/kkuk.c": {
-    "mtime": 1787298075.279039,
-    "ast_hash": "bd05227c8869e0036174e8642e099232",
-    "semantic_hash": "bd05227c8869e0036174e8642e099232"
+    "mtime": 1787419486.8121624,
+    "ast_hash": "6178f0ecd35e0854050c08fbc9e77387",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/port/kkuk.h": {
     "mtime": 1787298075.2805424,
@@ -380,19 +380,19 @@
     "semantic_hash": "a74c546f47b55ecbe5a39e87b3b6a5ea"
   },
   "src/ap/modules/qmk/port/port.h": {
-    "mtime": 1787298075.283547,
-    "ast_hash": "6bb22ae6be40015c159db7ff954a713f",
-    "semantic_hash": "6bb22ae6be40015c159db7ff954a713f"
+    "mtime": 1787470850.9540634,
+    "ast_hash": "3e11b5ecf473044cab68f903c889eba3",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/port/protocol/host.c": {
-    "mtime": 1787298075.2850199,
-    "ast_hash": "867fbb88e877454181861289825a2ccf",
-    "semantic_hash": "867fbb88e877454181861289825a2ccf"
+    "mtime": 1787470850.9540634,
+    "ast_hash": "b2a64ebc2300ee4f0760e89790256b51",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/port/protocol/host.h": {
-    "mtime": 1787298075.2850199,
+    "mtime": 1787470850.9540634,
     "ast_hash": "1a686b28dfb3cfaa03518817f9e63081",
-    "semantic_hash": "1a686b28dfb3cfaa03518817f9e63081"
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/port/protocol/host_driver.h": {
     "mtime": 1787298075.2850199,
@@ -440,9 +440,9 @@
     "semantic_hash": "611460c83a0929335aa6c93de05c6c18"
   },
   "src/ap/modules/qmk/port/usb_monitor.c": {
-    "mtime": 1787298075.2865226,
-    "ast_hash": "2231a10eb1201bd9f530973fa2f4f06d",
-    "semantic_hash": "2231a10eb1201bd9f530973fa2f4f06d"
+    "mtime": 1787419585.9255562,
+    "ast_hash": "83bc261ba5ee1d8db12be60fefaa7444",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/port/usb_monitor.h": {
     "mtime": 1787298075.2865226,
@@ -475,9 +475,9 @@
     "semantic_hash": "2523f9cf04801f3696b7885eba6a54c6"
   },
   "src/ap/modules/qmk/qmk.c": {
-    "mtime": 1787298075.2875292,
-    "ast_hash": "b420588f75df039c28768a6747670e55",
-    "semantic_hash": "b420588f75df039c28768a6747670e55"
+    "mtime": 1787419370.7011926,
+    "ast_hash": "0b8b022f95c209554c2ceb6248ac0ce1",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/qmk.h": {
     "mtime": 1787298075.2885275,
@@ -760,9 +760,9 @@
     "semantic_hash": "9d36cb7841c0873cf8ca0d6e8b0887cf"
   },
   "src/ap/modules/qmk/quantum/mousekey.h": {
-    "mtime": 1787298075.358055,
-    "ast_hash": "1287a4a2921416f0d601e8634547ff31",
-    "semantic_hash": "1287a4a2921416f0d601e8634547ff31"
+    "mtime": 1787419027.2648404,
+    "ast_hash": "fa37b16485119376b7b9b261ad1d3c8e",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/quantum/os_detection.h": {
     "mtime": 1787298075.358055,
@@ -850,14 +850,14 @@
     "semantic_hash": "2b83bfe51a48beba6dcfaf0bec38945d"
   },
   "src/ap/modules/qmk/quantum/rgblight/rgblight.c": {
-    "mtime": 1787298075.3926492,
-    "ast_hash": "f9a67452c8153a5d885a81ea469daf92",
-    "semantic_hash": "f9a67452c8153a5d885a81ea469daf92"
+    "mtime": 1787482190.9284952,
+    "ast_hash": "4e0c04acc5ed615a5725472605111d62",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/quantum/rgblight/rgblight.h": {
-    "mtime": 1787298075.3926492,
-    "ast_hash": "73b702649c3a4a33da01648e665ce9d0",
-    "semantic_hash": "73b702649c3a4a33da01648e665ce9d0"
+    "mtime": 1787482123.6625628,
+    "ast_hash": "dea7ff5071ae3baa5ce7fbfa49e96cba",
+    "semantic_hash": ""
   },
   "src/ap/modules/qmk/quantum/rgblight/rgblight_breathe_table.h": {
     "mtime": 1787298075.3926492,
@@ -960,13 +960,13 @@
     "semantic_hash": "315b8b1e40ecf0de42b6bb7ee499f587"
   },
   "src/ap/modules/qmk/quantum/via.c": {
-    "mtime": 1787301701.6705904,
-    "ast_hash": "056a8b324ca0f4505ebded5c1869fb66",
+    "mtime": 1787419585.9265583,
+    "ast_hash": "db37ad94fc53edb4e968add353ea849d",
     "semantic_hash": ""
   },
   "src/ap/modules/qmk/quantum/via.h": {
-    "mtime": 1787301701.648268,
-    "ast_hash": "1aa78dac8b3d32823c27686e110b053d",
+    "mtime": 1787470850.9615781,
+    "ast_hash": "cd21b53c027cde1d6c02d865dd15edf7",
     "semantic_hash": ""
   },
   "src/ap/modules/qmk/quantum/virtser.h": {
@@ -1465,9 +1465,9 @@
     "semantic_hash": "03f336b0047f55fcd0c683f799cf5ec4"
   },
   "src/hw/driver/usb/usb.c": {
-    "mtime": 1787298075.4283898,
+    "mtime": 1787482676.9463272,
     "ast_hash": "8ab671d079b260e83518e5047e183f65",
-    "semantic_hash": "8ab671d079b260e83518e5047e183f65"
+    "semantic_hash": ""
   },
   "src/hw/driver/usb/usb.h": {
     "mtime": 1787298075.4283898,
@@ -1505,9 +1505,9 @@
     "semantic_hash": "c47988c112a76211d290f594ca8990da"
   },
   "src/hw/driver/usb/usb_cmp/usbd_cmp.c": {
-    "mtime": 1787298075.4313927,
+    "mtime": 1787470850.9435022,
     "ast_hash": "ee15be8176004e40be8d54179725cd09",
-    "semantic_hash": "ee15be8176004e40be8d54179725cd09"
+    "semantic_hash": ""
   },
   "src/hw/driver/usb/usb_cmp/usbd_cmp.h": {
     "mtime": 1787298075.4313927,
@@ -1535,14 +1535,14 @@
     "semantic_hash": "8f2bc78426ef99dc94ac9f59ded98c93"
   },
   "src/hw/driver/usb/usb_hid/usbd_hid.c": {
-    "mtime": 1787298075.433393,
-    "ast_hash": "8f082a69d5d446f2e674bc6ea42afb4b",
-    "semantic_hash": "8f082a69d5d446f2e674bc6ea42afb4b"
+    "mtime": 1787482672.3720243,
+    "ast_hash": "1a92e66d96d7c6d34981e681865f00ff",
+    "semantic_hash": ""
   },
   "src/hw/driver/usb/usb_hid/usbd_hid.h": {
-    "mtime": 1787298075.433393,
-    "ast_hash": "209f351c1f59e94202214dfe0c1ee26f",
-    "semantic_hash": "209f351c1f59e94202214dfe0c1ee26f"
+    "mtime": 1787470850.9176567,
+    "ast_hash": "4adc8998e4663cb2cdee281929d2728b",
+    "semantic_hash": ""
   },
   "src/hw/driver/usb/usb_hid/usbd_hid_instrumentation.c": {
     "mtime": 1787298075.433393,
@@ -1640,8 +1640,8 @@
     "semantic_hash": "79e3792b34c127bf9635e5d299f89bc4"
   },
   "src/hw/hw_def.h": {
-    "mtime": 1787301750.5662608,
-    "ast_hash": "26483cef16573e0cb65658133d0b6be4",
+    "mtime": 1787482696.870195,
+    "ast_hash": "a298091c396069891a779a41725a3858",
     "semantic_hash": ""
   },
   "src/lib/ST/STM32_USB_Device_Library/Core/Inc/usbd_conf_template.h": {
@@ -1715,8 +1715,8 @@
     "semantic_hash": "e1570a74a229f5add839ca162eb70295"
   },
   "AGENTS.md": {
-    "mtime": 1787302204.9999235,
-    "ast_hash": "4b7a43910eb138bd8faf3ee0e6b4edea",
+    "mtime": 1787471375.995779,
+    "ast_hash": "4d004b639e8fd8e7686ffa9cdc867f67",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1735,8 +1735,8 @@
     "semantic_hash": "259f6df270e971ac853c4193c40a0640"
   },
   "docs/DECISIONS.md": {
-    "mtime": 1787302183.7507534,
-    "ast_hash": "6ced6a85eb28b558cefe97f871aec1a0",
+    "mtime": 1787478330.3216362,
+    "ast_hash": "4bfd1361f7eedad3de7cc9fa924aa49a",
     "semantic_hash": ""
   },
   "docs/eeprom.md": {
@@ -1765,13 +1765,13 @@
     "semantic_hash": "8a38ed184237e59096e584c0fbb0dbe0"
   },
   "docs/features_tapdance.md": {
-    "mtime": 1787302205.0009243,
-    "ast_hash": "05df25d0d8b452baee166fcb5587902d",
+    "mtime": 1787420413.7538025,
+    "ast_hash": "0a9cda6ed94552c02c38a49a06e4259c",
     "semantic_hash": ""
   },
   "docs/features_tapping.md": {
-    "mtime": 1787302165.5340044,
-    "ast_hash": "5e89a9109dd1c99549167544ddc92308",
+    "mtime": 1787420413.7538025,
+    "ast_hash": "0e4f12213b10b108fe585e2fb74a78cb",
     "semantic_hash": ""
   },
   "docs/freeze_retro.md": {
@@ -1780,8 +1780,8 @@
     "semantic_hash": "48b0aa2d014eb211d2556f85c8d4e4a9"
   },
   "docs/readme.txt": {
-    "mtime": 1787302215.1063051,
-    "ast_hash": "88365803dd9ef95a8f762eacfae4d071",
+    "mtime": 1787471066.4917262,
+    "ast_hash": "4d9bd4b40345471c6a11af208ac90876",
     "semantic_hash": ""
   },
   "docs/rgblight.md": {
@@ -1790,9 +1790,9 @@
     "semantic_hash": "11ff84d91610d074139144f96943b1f1"
   },
   "src/ap/modules/qmk/CMakeLists.txt": {
-    "mtime": 1787298075.2635238,
-    "ast_hash": "790ab6816193ebff76f3631d90cbb5a5",
-    "semantic_hash": "790ab6816193ebff76f3631d90cbb5a5"
+    "mtime": 1787470850.9076555,
+    "ast_hash": "a12fde59ed8bd6c998a510321141b5cd",
+    "semantic_hash": ""
   },
   ".claude/settings.json": {
     "mtime": 1787298075.2436774,
@@ -1800,13 +1800,38 @@
     "semantic_hash": ""
   },
   "src/ap/modules/qmk/port/era_state_sync.c": {
-    "mtime": 1787302229.4212253,
-    "ast_hash": "bf7b4f77e932c5a1bb9d603f0821587e",
+    "mtime": 1787419400.0996592,
+    "ast_hash": "80128604d7b31da053f929e1d2e44ec1",
     "semantic_hash": ""
   },
   "src/ap/modules/qmk/port/era_state_sync.h": {
     "mtime": 1787301660.4065478,
     "ast_hash": "90bb5dee9eddcf7e909b9ad532bbcfef",
+    "semantic_hash": ""
+  },
+  "src/ap/modules/qmk/port/mousekey_config.c": {
+    "mtime": 1787419273.7665849,
+    "ast_hash": "ae446624c29cf35782e2820eb6e51228",
+    "semantic_hash": ""
+  },
+  "src/ap/modules/qmk/port/mousekey_config.h": {
+    "mtime": 1787419080.9315233,
+    "ast_hash": "28e45fc4d57fe2eba672db5bda4ec6fd",
+    "semantic_hash": ""
+  },
+  "src/ap/modules/qmk/quantum/mousekey.c": {
+    "mtime": 1787418995.8532858,
+    "ast_hash": "e06e622605b72ed24eccaca28fad4df7",
+    "semantic_hash": ""
+  },
+  "docs/features_mousekey.md": {
+    "mtime": 1787471066.480477,
+    "ast_hash": "1d61581dd7911d20657f9cd002cda881",
+    "semantic_hash": ""
+  },
+  "docs/features_usb_hid_reports.md": {
+    "mtime": 1787470977.185843,
+    "ast_hash": "2ea0d206945501aaeb19ca2f92ab4887",
     "semantic_hash": ""
   }
 }

@@ -11,7 +11,7 @@
 - 지원 속도: HS 8k/4k/2kHz, FS 1kHz. 정책은 FS 우선입니다.
 - 주요 기능: USB instability monitor, 단계적 폴링 다운그레이드 큐, QMK 포팅층, VIA/Vial 지원.
 - 지원 키보드(5종, `src/ap/modules/qmk/keyboards/` 하위): `era/keynetix/may65`(최근 작업 보드), `era/intigrity80`, `era/sirind/{brick60,brick65,sculpturei}`
-- 현재 `_DEF_FIRMWARE_VERSION`: **V260821R1** (기준은 항상 `src/hw/hw_def.h`)
+- 현재 `_DEF_FIRMWARE_VERSION`: **V260823R1** (기준은 항상 `src/hw/hw_def.h`)
 
 ## 3. 지식그래프 (graphify) — 코드 탐색 1순위
 이 리포에는 지식그래프가 `graphify-out/`에 커밋되어 있습니다. 스코프는 `.graphifyignore`가 정의하며, "실제 컴파일되는 코드 + 프로젝트 문서"만 포함합니다.
@@ -56,6 +56,7 @@ cmake --build build -j10
 - 별도의 **빌드 테스트 실행 명령**이 없다면 빌드 테스트는 생략합니다.
 - UF2 변환은 CMake 타깃 내부에서 자동으로 처리됩니다 (`tools/uf2/uf2conv.py`, family `0xFFFF0002`).
 - JSON/VIA 파일 검증은 `jq` 또는 Python 표준 JSON 파서를 사용합니다. 도구별 경로 전제(WSL 심볼릭 링크 등)는 두지 않습니다.
+- VIA 값 계층(tapping/tapdance exact-ms, MOUSE 단위 환산, state-sync 봉투)을 건드리면 호스트 단위 테스트를 실행합니다: `pwsh -NoProfile -File tools/era_via_host_tests/run.ps1`. mingw gcc로 해당 유닛만 호스트에서 빌드해 돌리므로 보드가 필요 없습니다.
 
 ## 8. 디렉터리 힌트
 - `src/` : 펌웨어 소스 및 라이브러리 전반
@@ -96,6 +97,8 @@ cmake --build build -j10
 - **EEPROM/BootMode/자동 초기화**: `src/hw/driver/eeprom/`, `src/hw/driver/eeprom_auto_factory_reset.c`, `src/ap/modules/qmk/port/port.h`의 `EECONFIG_USER_BOOTMODE` — 문서: `docs/eeprom.md`, `docs/features_bootmode.md`, `docs/features_auto_factory_reset.md`
 - **키 입력/디바운스**: `src/hw/driver/keys.c`, `src/ap/modules/qmk/port/matrix*.c` — 문서: `docs/features_keyinput.md`
 - **Tap Dance / Tapping**: `src/ap/modules/qmk/port/tapdance.c`, `quantum/process_keycode/process_tap_dance.c` — 문서: `docs/features_tapdance.md`, `docs/features_tapping.md`
+- **마우스 키**: `src/ap/modules/qmk/port/mousekey_config.c`, `quantum/mousekey.c` — 문서: `docs/features_mousekey.md`
+- **USB HID 리포트 구성/동시 입력**: `src/hw/driver/usb/usb_hid/usbd_hid.c`의 `HID_KEYBOARD_ReportDesc`·`HID_EXK_ReportDesc`, `src/hw/hw_caps_keys.h`의 `HW_KEYS_PRESS_MAX` — 문서: `docs/features_usb_hid_reports.md`
 - **LED/RGB**: `src/hw/driver/led.c`, `src/hw/driver/ws2812.c`, QMK 헬퍼는 `src/ap/modules/qmk/quantum/rgblight/` — 문서: `docs/rgblight.md`
 - **로깅/CLI**: `src/hw/driver/log.c`, `src/hw/driver/uart.c`, USB CLI 진입점은 `src/hw/driver/usb/usb.c`의 `cliBoot`
 - **빌드/툴체인**: `tools/` 디렉터리 일체 (CMake 헬퍼, UF2 변환, ST-LINK 로더)

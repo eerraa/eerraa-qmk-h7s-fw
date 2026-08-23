@@ -121,8 +121,13 @@
   "119": "debounce.h",
   "120": "keys.c",
   "121": "USBD_GetEpDesc",
-  "122": "rgblight_hsv_to_rgb",
+  "122": "matrix_get_row",
   "123": "timer.c",
   "124": "asym_eager_defer_pk.c",
-  "125": "loader.c"
+  "125": "debounce.h",
+  "126": "rgblight_sethsv_range",
+  "127": "HAL_TIM_PWM_PulseFinishedCallback",
+  "128": "debounce_profile_default_config",
+  "129": "via_qmk_version",
+  "130": "is_sequencer_track_active"
 }

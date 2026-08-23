@@ -68,7 +68,6 @@ src/ap/modules/qmk/quantum/led_tables.c
 src/ap/modules/qmk/quantum/main.c
 src/ap/modules/qmk/quantum/matrix.c
 src/ap/modules/qmk/quantum/matrix_common.c
-src/ap/modules/qmk/quantum/mousekey.c
 src/ap/modules/qmk/quantum/os_detection.c
 src/ap/modules/qmk/quantum/programmable_button.c
 src/ap/modules/qmk/quantum/repeat_key.c

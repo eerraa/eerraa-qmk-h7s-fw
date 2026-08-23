@@ -13,7 +13,7 @@
 | `src/ap/modules/qmk/port/port.h` | `EECONFIG_USER_TAPPING_TERM` | USER 데이터 블록 내 TAPPING_TERM 저장 슬롯(오프셋 +52, 12B). |
 | `src/ap/modules/qmk/port/eeconfig_port.c` | `tapping_term_storage_apply_defaults()`, `tapping_term_storage_flush()` | EEPROM 초기화 경로(수동/자동 초기화 포함)에서 기본값을 기록하고 즉시 저장합니다. |
 | 각 키보드 `port/via_port.c` (예: `src/ap/modules/qmk/keyboards/era/sirind/brick60/port/via_port.c`) | `via_custom_value_command_kb()` | VIA 커스텀 채널 분기. `id_qmk_tapping`(채널 15)으로 유입된 명령을 `tapping_term_handle_via_command()`로 라우팅합니다. |
-| 각 키보드 VIA JSON (예: `src/ap/modules/qmk/keyboards/era/sirind/brick60/json/BRICK60-H7S-VIA.JSON`) | `TAPPING` 섹션 | VIA UI에 TAPPING_TERM dropdown(100~500ms, 20ms 스텝)과 옵션 토글을 노출합니다. |
+| 각 키보드 VIA JSON (예: `src/ap/modules/qmk/keyboards/era/sirind/brick60/json/BRICK60-H7S-VIA.JSON`) | `TAPPING` 섹션 | V260823R1부터 exact-ms range(`id_qmk_tapping_global_term_exact`, 100~500ms, 1ms 단위)와 옵션 토글을 노출합니다. legacy dropdown 항목은 JSON에서 제거됐지만 펌웨어는 하위 호환을 위해 계속 응답합니다. |
 
 ## 3. EEPROM 슬롯 & 데이터 구조
 | 심볼/크기 | 오프셋 (`EECONFIG_USER_DATABLOCK` 기준) | 필드 | 설명 |
@@ -80,7 +80,7 @@ VIA 커스텀 명령 수신 (`via_custom_value_command_kb`)
 - 시그니처/버전이 바뀌거나 범위를 벗어난 값이 저장되어도 `tapping_term_init()` 단계에서 기본값으로 복원하고 저장소를 dirty 표시하므로, 다음 `id_custom_save` 시점에 정상화된 값이 기록됩니다.
 
 ## 9. 사용 방법
-1. VIA `TAPPING` 섹션에서 Global Tapping Term(100~500ms, 20ms 스텝)과 각 옵션 토글을 변경합니다. 설정 즉시 런타임에 반영됩니다.
+1. VIA `TAPPING` 섹션에서 Global Tapping Term (ms)(100~500ms, 1ms 단위)과 각 옵션 토글을 변경합니다. 설정 즉시 런타임에 반영됩니다.
 2. 값을 유지하려면 VIA의 Save(또는 `id_custom_save`)를 눌러 EEPROM에 기록합니다. Save를 누르지 않으면 재부팅 시 이전 저장 값으로 롤백됩니다.
 3. EEPROM 초기화/펌웨어 업데이트 후에는 기본값(200ms)으로 돌아가므로 필요 시 다시 설정합니다.
 
