@@ -2,6 +2,9 @@
 
 #ifdef KKUK_ENABLE
 
+#include <string.h>
+#include "era_state_sync.h"  // V260823R1: KKUK 값 변경 시 CONFIG revision
+
 
 #define KKUK_TIME_UNIT         10
 #define KKUK_DELAY_TICKS_MIN   5    // 50ms
@@ -194,7 +197,16 @@ void via_qmk_kkuk_command(uint8_t *data, uint8_t length)
   {
     case id_custom_set_value:
       {
+        uint8_t before[3] = {value_id_and_data[0], 0, 0};
+        uint8_t after[3]  = {value_id_and_data[0], 0, 0};
+
+        via_qmk_kkuk_get_value(before);                 // V260823R1: 실제로 값이 바뀐 SET에서만 revision을 올린다
         via_qmk_kkuk_set_value(value_id_and_data);
+        via_qmk_kkuk_get_value(after);
+        if (memcmp(before, after, sizeof(before)) != 0)
+        {
+          era_state_sync_bump_config();
+        }
         break;
       }
     case id_custom_get_value:

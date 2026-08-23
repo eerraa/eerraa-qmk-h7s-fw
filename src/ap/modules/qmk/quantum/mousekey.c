@@ -24,6 +24,17 @@
 #include "debug.h"
 #include "mousekey.h"
 
+#ifdef ERA_MOUSEKEY_RUNTIME_DELTA
+// V260823R1: VIA MOUSE 페이지가 이벤트당 스텝 크기를 런타임으로 쓴다.
+// 업스트림은 두 값이 매크로이므로, 이 빌드에서만 변수로 승격하고 이후 사용처는 매크로 재정의로 흡수한다.
+uint8_t mk_move_delta  = MOUSEKEY_MOVE_DELTA;
+uint8_t mk_wheel_delta = MOUSEKEY_WHEEL_DELTA;
+#    undef MOUSEKEY_MOVE_DELTA
+#    define MOUSEKEY_MOVE_DELTA mk_move_delta
+#    undef MOUSEKEY_WHEEL_DELTA
+#    define MOUSEKEY_WHEEL_DELTA mk_wheel_delta
+#endif
+
 static inline int8_t times_inv_sqrt2(int8_t x) {
     // 181/256 (0.70703125) is used as an approximation for 1/sqrt(2)
     // because it is close to the exact value which is 0.707106781

@@ -4,6 +4,7 @@
 
 #include "usb.h"
 #include "via.h"
+#include "era_state_sync.h"  // V260823R1: BootMode 선택값 변경 시 CONFIG revision
 
 // V251108R3: VIA 선택값을 리셋 전까지 보류하고 Apply 요청은 메인 루프에서 처리
 static UsbBootMode_t pending_boot_mode = USB_BOOT_MODE_FS_1K;
@@ -47,11 +48,16 @@ void via_qmk_usb_bootmode_command(uint8_t *data, uint8_t length)
       if (*value_id == id_qmk_usb_bootmode_select)
       {
         UsbBootMode_t req_mode = bootmode_decode_via_value(value_data[0]);      // V251113R1: VIA 옵션 순서와 열거형 순서를 분리
+        UsbBootMode_t prev_mode = pending_boot_mode;
         if (req_mode < USB_BOOT_MODE_MAX)
         {
           pending_boot_mode = req_mode;  // V251108R1: 값만 보류, 실제 적용은 Apply 토글 시점
         }
         value_data[0] = bootmode_encode_via_value(pending_boot_mode);
+        if (pending_boot_mode != prev_mode)
+        {
+          era_state_sync_bump_config();  // V260823R1: GET이 새 값을 돌려주게 된 경우에만 revision을 올린다
+        }
       }
       else if (*value_id == id_qmk_usb_bootmode_apply)
       {

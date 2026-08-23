@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 // 펌웨어/보드 식별 정보
 // ---------------------------------------------------------------------------
-#define _DEF_FIRMWARE_VERSION       "V260720R1"   // V260720R1: MAY65 underglow 기본값 OFF 적용
+#define _DEF_FIRMWARE_VERSION       "V260823R2"   // V260823R2: 자동 USB 복구 제거 + 읽기 전용 세션 진단
 #define _DEF_BOARD_NAME             "ERA-QMK-H7S-FW"  // V251125R3: 사용자 표시용 보드명 ERA로 변경
 
 
@@ -64,11 +64,6 @@
 #ifndef _DEF_ENABLE_MATRIX_TIMING_PROBE
 #define _DEF_ENABLE_MATRIX_TIMING_PROBE   0       // V251010R4: 기본값은 비활성화, 필요 시 보드/빌드에서 재정의
 #endif
-
-#ifndef _DEF_ENABLE_USB_HID_TIMING_PROBE
-#define _DEF_ENABLE_USB_HID_TIMING_PROBE  0       // V251009R5: usbd_hid 계측 기본 비활성화, 필요 시 빌드 옵션으로만 활성화
-#endif
-
 
 // ---------------------------------------------------------------------------
 // 하드웨어 사용 선언 (기능별 분리 헤더)

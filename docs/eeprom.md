@@ -9,7 +9,7 @@
 - **하드웨어 드라이버**  
   - **외부 EEPROM (`src/hw/driver/eeprom/zd24c128.c`)**: 32바이트 페이지 버퍼, FastMode Plus(1MHz) I2C, Ready wait 로그. 현재 보드에서 사용되는 유일한 실 구현입니다.  
   - **플래시 에뮬 (`src/hw/driver/eeprom/emul.c`)**: STM32H7S 내장 플래시에 변수를 저장하며, 8비트 API와 비동기 Clean-up 상태 머신을 갖습니다. (테스트 미실시)
-- **BootMode/AUTO_FACTORY_RESET 연동**: `usbBootModeWriteRaw()`와 `eeprom_apply_factory_defaults()`가 EEPROM 큐를 공유하여, BootMode·USB 모니터·센티넬이 동일 경로에서 초기화됩니다.
+- **BootMode/AUTO_FACTORY_RESET 연동**: `usbBootModeWriteRaw()`와 `eeprom_apply_factory_defaults()`가 EEPROM 큐를 공유하여 BootMode와 센티넬을 초기화합니다. V260823R2 USB 진단은 RAM 전용입니다.
 
 ## 2. 주요 정책
 1. **HS 8 kHz 유지**  
@@ -20,7 +20,7 @@
    - `qbufferAvailable()` 기반 하이워터 마크/오버플로 카운터를 CLI에서 확인할 수 있습니다.
 3. **공용 초기화 흐름**  
    - VIA EEPROM CLEAR, AUTO_FACTORY_RESET 모두 `eepromScheduleDeferredFactoryReset()` → 재부팅 → `eeprom_apply_factory_defaults()` 경로를 공유합니다.  
-   - BootMode/USB 모니터 기본값과 AUTO_CLEAR 센티넬도 동일 루틴에서 처리됩니다.
+   - BootMode 기본값과 AUTO_CLEAR 센티넬도 동일 루틴에서 처리됩니다.
 4. **클린업/Ready Wait 관측 가능성**  
    - `cli eeprom info`는 큐 상태 외에도 `emul cleanup busy/last/wait/cnt`를 출력합니다.  
      - 외부 EEPROM에서는 값이 항상 0입니다.  
@@ -43,7 +43,7 @@
 ## 4. 테스트 가이드 요약
 1. `brick60` 키보드 설정으로 빌드 후 보드 플래시.
 2. 부팅 직후 `cli eeprom info` 실행 → 큐 및 클린업 초기값 확인.
-3. VIA에서 `docs/brick60.layout.json` 업로드 후 부팅 시 출력되는 `[I2C] ready wait summary ...`를 기록하고, `cli eeprom info`의 `ready wait count/max/last`가 기대대로 증가하는지 점검.
+3. VIA에서 `src/ap/modules/qmk/keyboards/era/sirind/brick60/json/BRICK60-H7S-VIA.JSON` 업로드 후 부팅 시 출력되는 `[I2C] ready wait summary ...`를 기록하고, `cli eeprom info`의 `ready wait count/max/last`가 기대대로 증가하는지 점검.
 4. 필요 시 `cli eeprom write`로 AUTO_FACTORY_RESET 센티넬을 손상시키고 전원을 재투입, 재부팅 과정에서 큐가 안전하게 비워지는지 확인.
 5. 내부 플래시 에뮬 빌드가 필요한 경우 `EEPROM_CHIP_EMUL` 설정으로 동일 절차를 반복해 Clean-up 계측이 갱신되는지 검증.
 
@@ -51,7 +51,7 @@
 | 항목 | 상태 | 비고 |
 | --- | --- | --- |
 | 플래시 에뮬 멀티바이트 Unlock/Lock 최소화 | **장기 권장** | Clean-up 상태 머신과 오류 롤백을 재설계해야 하므로 안정성 우선으로 현행 유지 |
-| VIA+USB Monitor 스트레스 테스트 자동화 | **장기 권장** | 현재는 수동 테스트 절차만 존재 |
+| USB 진단 장기 실기 측정 | **장기 권장** | host 계약 테스트는 자동화되었고 허브/케이블 조합 실측은 별도 필요 |
 | 내부 플래시 에뮬 경로 실기 검증 | **미실시** | 코드 수준 리팩터링 완료, 테스트 환경 부재로 미검증 |
 
 ## 6. 참고

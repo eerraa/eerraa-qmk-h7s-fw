@@ -1,7 +1,6 @@
 #include "ap.h"
 #include "qmk/qmk.h"
-#include "usb.h"                                             // V251123R7: USB 디버그 스냅샷 참조
-#include "usbd_hid.h"                                      // V251108R9 USB SOF 모니터 백그라운드 훅
+#include "usb.h"
 
 
 void cliUpdate(void);
@@ -32,8 +31,7 @@ void apMain(void)
     }
 
     cliUpdate();
-    usbProcess();                                               // V250924R2 USB 안정성 이벤트 처리
-    usbHidMonitorBackgroundService();                           // V251124R1: 모니터 OFF 시 타임스탬프 취득을 건너뛰는 래퍼
+    usbProcess();                                               // V260823R2: 사용자 요청 BootMode/reset 큐만 처리
     qmkUpdate();
   }
 }

@@ -45,14 +45,12 @@
 #include "usb.h"                                                // V250923R1 Boot mode aware intervals
 #include <string.h>                                             // V251108R8: VIA 큐 헬퍼에서 memset 사용
 
-#include "cli.h"
 #include "log.h"
-#include "keys.h"
 #include "qbuffer.h"
 #include "report.h"
-#include "micros.h"                                          // V251124R1: 백그라운드 모니터 래퍼에서 타임스탬프 취득
-#include "usbd_hid_internal.h"           // V251009R9: 계측 전용 상수를 공유
-#include "usbd_hid_instrumentation.h"    // V251009R9: HID 계측 로직을 전용 모듈로 이관
+#include "micros.h"
+#include "usbd_hid_internal.h"
+#include "usb_diagnostics.h"             // V260823R2: 실제 HID 전달/하드 이벤트 진단 코어
 
 
 #if HW_USB_LOG == 1
@@ -65,15 +63,6 @@
 #else
 #define logDebug(...) 
 #endif
-
-typedef enum                                                // V251109R2 다운그레이드 이벤트 구분
-{
-  USB_MONITOR_EVENT_SOF = 0,
-  USB_MONITOR_EVENT_ENUM,
-  USB_MONITOR_EVENT_SPEED,
-  USB_MONITOR_EVENT_SUSPEND
-} usb_monitor_event_t;
-
 
 static uint8_t USBD_HID_Init(USBD_HandleTypeDef *pdev, uint8_t cfgidx);
 static uint8_t USBD_HID_DeInit(USBD_HandleTypeDef *pdev, uint8_t cfgidx);
@@ -95,39 +84,20 @@ static uint8_t *USBD_HID_GetUsrStrDescriptor(struct _USBD_HandleTypeDef *pdev, u
 #endif
 
 
-static void cliCmd(cli_args_t *args);
 static bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev);
 static void usbHidInitTimer(void);
 static uint32_t usbHidBackupTimerOffsetUs(void);                       // V251012R1 FS 백업 전송 지연 재조정
-#ifdef USB_MONITOR_ENABLE
-static void usbHidMonitorSof(uint32_t now_us);                          // V250924R2 SOF 안정성 추적
-static void usbHidMonitorProcessDelta(uint32_t now_us, uint32_t delta_us);  // V251108R9 SOF 간격 평가
-static void usbHidMonitorPrimeTimeout(uint32_t now_us);                 // V251108R9 SOF 누락 타임아웃 갱신
-static bool usbHidMonitorCommitDowngrade(uint32_t      now_us,
-                                         uint32_t      delta_us,
-                                         uint32_t      expected_us,
-                                         usb_monitor_event_t event);    // V251109R2 공통 다운그레이드 처리
-static void usbHidMonitorTrackEnumeration(uint32_t now_us,
-                                          bool     monitor_enabled);    // V251109R1 열거 실패 감시
-static void usbHidMonitorHandleSpeedChange(uint32_t now_us);            // V251109R2 속도 변동 감시
-static void usbHidMonitorHandleSuspend(uint32_t now_us);                // V251109R2 서스펜드 감시
-static void usbHidMonitorBumpPersistent(uint32_t now_us, usb_monitor_event_t event); // V251109R2 persistent 점수
-static void usbHidMonitorRefreshEventWindows(uint32_t now_us);          // V251109R2 이벤트 윈도우 만료 처리
-static UsbBootMode_t usbHidResolveDowngradeTarget(void);                // V250924R2 다운그레이드 대상 계산
-void usbHidMonitorBackgroundTick(uint32_t now_us);                      // V251108R9 SOF 중단 감시
-#if HW_USB_LOG == 1
-static const char *usbHidMonitorEventLabel(usb_monitor_event_t event);  // V251109R2 이벤트 문자열
-#endif
-#endif
-
-
-
 
 
 typedef struct
 {
+  uint32_t diagnostic_request_us;
+  uint16_t diagnostic_session_id;
   uint8_t  buf[HID_KEYBOARD_REPORT_SIZE];
-} report_info_t;
+} report_info_t;  // V260823R2: 큐 대기까지 포함한 요청→DataIn 지연을 보존
+
+_Static_assert(sizeof(report_info_t) == (HID_KEYBOARD_REPORT_SIZE + 6U),
+               "진단 메타데이터가 키보드 리포트 큐를 불필요하게 패딩한다.");  // V260823R2
 
 typedef struct
 {
@@ -489,131 +459,77 @@ __ALIGN_BEGIN static uint8_t HID_EXK_ReportDesc[HID_EXK_REPORT_DESC_SIZE] __ALIG
   0x95, 0x01,               //   Report Count (1)
   0x75, 0x10,               //   Report Size (16)
   0x81, 0x00,               //   Input (Data, Array, Absolute)
+  0xC0,                     // End Collection
+
+  // V260823R1: MOUSE 리포트 (report_mouse_t = report_id + buttons + x + y + v + h = 6B)
+  0x05, 0x01,               // Usage Page (Generic Desktop)
+  0x09, 0x02,               // Usage (Mouse)
+  0xA1, 0x01,               // Collection (Application)
+  0x85, REPORT_ID_MOUSE,    //   Report ID
+  0x09, 0x01,               //   Usage (Pointer)
+  0xA1, 0x00,               //   Collection (Physical)
+  0x05, 0x09,               //     Usage Page (Button)
+  0x19, 0x01,               //     Usage Minimum (Button 1)
+  0x29, 0x05,               //     Usage Maximum (Button 5)
+  0x15, 0x00,               //     Logical Minimum (0)
+  0x25, 0x01,               //     Logical Maximum (1)
+  0x95, 0x05,               //     Report Count (5)
+  0x75, 0x01,               //     Report Size (1)
+  0x81, 0x02,               //     Input (Data, Variable, Absolute)
+  0x95, 0x01,               //     Report Count (1)
+  0x75, 0x03,               //     Report Size (3)
+  0x81, 0x03,               //     Input (Constant)
+  0x05, 0x01,               //     Usage Page (Generic Desktop)
+  0x09, 0x30,               //     Usage (X)
+  0x09, 0x31,               //     Usage (Y)
+  0x15, 0x81,               //     Logical Minimum (-127)
+  0x25, 0x7F,               //     Logical Maximum (127)
+  0x95, 0x02,               //     Report Count (2)
+  0x75, 0x08,               //     Report Size (8)
+  0x81, 0x06,               //     Input (Data, Variable, Relative)
+  0x09, 0x38,               //     Usage (Wheel)
+  0x15, 0x81,               //     Logical Minimum (-127)
+  0x25, 0x7F,               //     Logical Maximum (127)
+  0x95, 0x01,               //     Report Count (1)
+  0x75, 0x08,               //     Report Size (8)
+  0x81, 0x06,               //     Input (Data, Variable, Relative)
+  0x05, 0x0C,               //     Usage Page (Consumer)
+  0x0A, 0x38, 0x02,         //     Usage (AC Pan)
+  0x15, 0x81,               //     Logical Minimum (-127)
+  0x25, 0x7F,               //     Logical Maximum (127)
+  0x95, 0x01,               //     Report Count (1)
+  0x75, 0x08,               //     Report Size (8)
+  0x81, 0x06,               //     Input (Data, Variable, Relative)
+  0xC0,                     //   End Collection
   0xC0                      // End Collection
 };
+
+// V260823R1: 리포트 디스크립터가 선언한 크기와 QMK 구조체 크기는 반드시 같아야 한다.
+//            어긋나면 호스트가 리포트를 잘못 해석하므로 링크가 아니라 컴파일에서 막는다.
+#ifdef MOUSE_SHARED_EP
+_Static_assert(sizeof(report_mouse_t) == 6U, "MOUSE 리포트 디스크립터(6B)와 report_mouse_t 크기가 다르다.");
+_Static_assert(sizeof(report_mouse_t) <= HID_EXK_EP_SIZE, "MOUSE 리포트가 EXK 엔드포인트 크기를 넘는다.");
+#endif
+_Static_assert(sizeof(report_extra_t) == 3U, "SYSTEM/CONSUMER 리포트 디스크립터(3B)와 report_extra_t 크기가 다르다.");
 
 static USBD_HID_HandleTypeDef *p_hhid = NULL;
 static uint8_t HIDInEpAdd = HID_EPIN_ADDR;
 extern USBD_HandleTypeDef USBD_Device;
 static TIM_HandleTypeDef htim2;
 
-#ifdef USB_MONITOR_ENABLE  // V251009R6: USB 불안정성 감시 블록을 독립 매크로로 분리
-enum
-{ 
-  USB_SOF_MONITOR_CONFIG_HOLDOFF_MS   = 50U,                                               // V251108R9 재협상/재개 지연 최소화
-  USB_SOF_MONITOR_WARMUP_TIMEOUT_MS   = USB_SOF_MONITOR_CONFIG_HOLDOFF_MS + USB_BOOT_MONITOR_CONFIRM_DELAY_MS, // V250924R3 워밍업 최대 시간(ms)
-  USB_SOF_MONITOR_WARMUP_FRAMES_HS    = 2048U,                                             // V250924R3 HS 안정성 확인 프레임 수
-  USB_SOF_MONITOR_WARMUP_FRAMES_FS    = 128U,                                              // V250924R3 FS 안정성 확인 프레임 수
-  USB_SOF_MONITOR_CONFIG_HOLDOFF_US   = USB_SOF_MONITOR_CONFIG_HOLDOFF_MS * 1000UL,        // 구성 직후 워밍업 지연(us)
-  USB_SOF_MONITOR_WARMUP_TIMEOUT_US   = USB_SOF_MONITOR_WARMUP_TIMEOUT_MS * 1000UL,        // 워밍업 최대 시간(us)
-  USB_SOF_MONITOR_RESUME_HOLDOFF_US   = 50U * 1000UL,                                      // V251108R9 일시중지 해제 후 감시 재개 지연(us)
-  USB_SOF_MONITOR_RECOVERY_DELAY_US   = 50U * 1000UL,                                      // 다운그레이드 실패 후 지연(us)
-  USB_SOF_MONITOR_NO_SOF_TIMEOUT_FACTOR = 64U,                                            // V251108R9 SOF 누락 감시용 시간 배수
-  USB_ENUM_MONITOR_ATTEMPT_TIMEOUT_MS = 250U,                                             // V251109R1 열거 시도 타임아웃(ms)
-  USB_ENUM_MONITOR_FAIL_THRESHOLD     = 3U,                                               // V251109R1 열거 실패 다운그레이드 임계
-  USB_ENUM_MONITOR_SCORE_CAP          = 5U,                                               // V251109R1 열거 실패 점수 상한
-  USB_ENUM_MONITOR_RECOVERY_MS        = 1000U,                                            // V251109R1 열거 안정 여부 감쇠(ms)
-  USB_SOF_MONITOR_SPEED_WINDOW_US     = 1000U * 1000UL,                                   // V251109R2 HS 재협상 평균 재시도(≤1s)에 맞춘 윈도우
-  USB_SOF_MONITOR_SPEED_THRESHOLD     = 3U,                                               // V251109R2 1초 내 3회 이상이면 비정상으로 간주
-  USB_SOF_MONITOR_SUSPEND_WINDOW_US   = 1500U * 1000UL,                                   // V251109R2 Selective Suspend 허용 간격(>1.5s)
-  USB_SOF_MONITOR_SUSPEND_THRESHOLD   = 3U,                                               // V251109R2 1.5s 내 3회 서스펜드는 비정상
-  USB_SOF_MONITOR_PERSISTENT_THRESHOLD = 3U,                                              // V251109R2 영구 점수 임계 (세 번째 이벤트에서 다운그레이드)
-  USB_SOF_MONITOR_WARMUP_GRACE_US     = 200U * 1000UL,                                    // V251109R2 워밍업 완화 기간(us)
-  USB_BOOT_MONITOR_CONFIRM_DELAY_US   = USB_BOOT_MONITOR_CONFIRM_DELAY_MS * 1000UL          // 다운그레이드 확인 대기(us)
-};
-
-#define USB_ENUM_MONITOR_ATTEMPT_TIMEOUT_US (USB_ENUM_MONITOR_ATTEMPT_TIMEOUT_MS * 1000UL)
-#define USB_ENUM_MONITOR_RECOVERY_US       (USB_ENUM_MONITOR_RECOVERY_MS * 1000UL)
-
-typedef struct
+// V260823R2: ST USB 속도 값을 진단 계약의 안정된 값으로 정규화한다.
+static uint8_t usbHidDiagnosticsSpeedCode(uint8_t speed)
 {
-  uint32_t prev_tick_us;                                          // V250924R2 직전 SOF 타임스탬프(us)
-  uint32_t last_decay_us;                                         // 점수 감소 시각(us)
-  uint32_t slow_last_decay_us;                                    // V251108R9 느린 점수 감소/증가 기준 시각(us)
-  uint32_t holdoff_end_us;                                        // 다운그레이드 홀드오프 종료 시각(us)
-  uint32_t warmup_deadline_us;                                    // 워밍업 타임아웃 시각(us)
-  uint32_t no_sof_deadline_us;                                    // V251108R9 SOF 미수신 타임아웃 시각(us)
-  uint32_t expected_us;                                           // V250924R4 속도별 기대 SOF 주기(us)
-  uint32_t stable_threshold_us;                                   // V250924R4 정상 범위 상한(us)
-  uint32_t decay_interval_us;                                     // 점수 감쇠 주기(us)
-  uint32_t slow_decay_interval_us;                                // V251108R9 느린 점수 감쇠 주기(us)
-  uint32_t speed_change_window_us;                                // V251109R2 속도 변동 감시 윈도우(us)
-  uint32_t suspend_window_us;                                     // V251109R2 서스펜드 감시 윈도우(us)
-  uint32_t warmup_grace_deadline_us;                              // V251109R2 워밍업 완화 기한(us)
-  uint16_t warmup_good_frames;                                    // V250924R3 누적 정상 프레임 수
-  uint16_t warmup_target_frames;                                  // V250924R3 요구되는 정상 프레임 한계
-  uint8_t  degrade_threshold;                                     // V250924R4 다운그레이드 임계 점수
-  uint8_t  slow_degrade_threshold;                                // V251108R9 느린 점수 임계
-  uint8_t  event_score_cap;                                       // V251108R9 속도별 단일 이벤트 점수 상한
-  uint8_t  active_speed;                                          // V250924R4 캐시된 USB 속도 코드
-  uint8_t  score;                                                 // V250924R2 누적 불안정 점수
-  uint8_t  slow_score;                                            // V251108R9 느린 불안정 점수
-  uint8_t  speed_change_count;                                    // V251109R2 속도 변동 누적
-  uint8_t  suspend_count;                                         // V251109R2 서스펜드 누적
-  uint8_t  persistent_score;                                      // V251109R2 속도/서스펜드 전용 점수
-  uint8_t  persistent_threshold;                                  // V251109R2 persistent 다운그레이드 임계
-  bool     warmup_complete;                                       // V250924R3 워밍업 완료 여부
-  bool     warmup_grace_active;                                   // V251109R2 워밍업 완화 적용 여부
-} usb_sof_monitor_t;
-
-static usb_sof_monitor_t sof_monitor = {0};                       // V250924R2 SOF 안정성 상태
-static uint8_t           sof_prev_dev_state = USBD_STATE_DEFAULT; // V250924R2 마지막 USB 장치 상태
-static bool              sof_prev_suspended = false;              // V251109R2 직전 서스펜드 상태
-
-typedef struct                                             // V251109R1 USB 열거 실패 감시 상태
-{
-  uint32_t attempt_deadline_us;
-  uint32_t stable_since_us;
-  uint8_t  fail_score;
-  uint8_t  pending_state;
-  bool     waiting_config;
-} usb_enumeration_monitor_t;
-
-static usb_enumeration_monitor_t enum_monitor = {0};
-
-static void usbHidSofMonitorApplySpeedParams(uint8_t speed_code)  // V250924R4 속도별 모니터링 파라미터 캐시
-{
-  sof_monitor.active_speed = speed_code;
-
-  switch (speed_code)
+  if (speed == USBD_SPEED_HIGH)
   {
-    case USBD_SPEED_HIGH:
-      sof_monitor.expected_us        = 125U;
-      sof_monitor.stable_threshold_us = 180U;                       // V251108R9 HS 환경 허용 오차 축소
-      sof_monitor.decay_interval_us  = 4000U;
-      sof_monitor.slow_decay_interval_us = 12000U;                  // V251108R9 느린 점수 감쇠 (약 12ms)
-      sof_monitor.degrade_threshold  = 10U;
-      sof_monitor.slow_degrade_threshold = 4U;
-      sof_monitor.event_score_cap    = 6U;
-      sof_monitor.persistent_threshold = USB_SOF_MONITOR_PERSISTENT_THRESHOLD;
-      sof_monitor.warmup_target_frames = USB_SOF_MONITOR_WARMUP_FRAMES_HS;
-      break;
-    case USBD_SPEED_FULL:
-      sof_monitor.expected_us        = 1000U;
-      sof_monitor.stable_threshold_us = 1500U;                      // V251108R9 FS 허용 오차 축소
-      sof_monitor.decay_interval_us  = 20000U;
-      sof_monitor.slow_decay_interval_us = 60000U;                  // V251108R9 느린 점수 감쇠 (약 60ms)
-      sof_monitor.degrade_threshold  = 5U;
-      sof_monitor.slow_degrade_threshold = 3U;
-      sof_monitor.event_score_cap    = 4U;
-      sof_monitor.persistent_threshold = USB_SOF_MONITOR_PERSISTENT_THRESHOLD;
-      sof_monitor.warmup_target_frames = USB_SOF_MONITOR_WARMUP_FRAMES_FS;
-      break;
-    default:
-      sof_monitor.expected_us        = 0U;
-      sof_monitor.stable_threshold_us = 0U;
-      sof_monitor.decay_interval_us  = 0U;
-      sof_monitor.degrade_threshold  = 0U;
-      sof_monitor.slow_decay_interval_us = 0U;
-      sof_monitor.slow_degrade_threshold = 0U;
-      sof_monitor.event_score_cap    = 0U;
-      sof_monitor.persistent_threshold = 0U;
-      sof_monitor.warmup_target_frames = 0U;
-      break;
+    return USB_DIAGNOSTICS_SPEED_HIGH;
   }
+  if (speed == USBD_SPEED_FULL)
+  {
+    return USB_DIAGNOSTICS_SPEED_FULL;
+  }
+  return USB_DIAGNOSTICS_SPEED_UNKNOWN;
 }
-
-#endif  // USB_MONITOR_ENABLE  // V251010R5: 모니터 전용 정의 영역을 조기 종료해 일반 HID 경로가 항상 컴파일되도록 조정
 
 
 /**
@@ -686,14 +602,19 @@ static uint8_t USBD_HID_Init(USBD_HandleTypeDef *pdev, uint8_t cfgidx)
 
     qbufferCreateBySize(&report_q, (uint8_t *)report_buf, sizeof(report_info_t), 128); 
     qbufferCreateBySize(&via_report_q, (uint8_t *)via_report_q_buf, sizeof(via_report_info_t), 128); 
-    qbufferCreateBySize(&report_exk_q, (uint8_t *)report_exk_buf, sizeof(report_info_t), 128); 
+    // V260823R1: 원소 크기를 exk_report_info_t로 교정. 기존의 report_info_t는 HW_KEYS_PRESS_MAX+2(22)라
+    //            실제 원소 9바이트보다 커서, qbufferRead가 스택의 9바이트 지역변수에 22바이트를 썼다.
+    qbufferCreateBySize(&report_exk_q, (uint8_t *)report_exk_buf, sizeof(exk_report_info_t), 128); 
 
     logPrintf("[OK] USB Hid\n");
     logPrintf("     Keyboard\n");
-    cliAdd("usbhid", cliCmd);
 
     usbHidInitTimer();
   }
+
+  // V260823R2: 최초 구성과 재구성을 항상 카운트하되 타임스탬프는 세션 중에만 읽는다.
+  usbDiagnosticsOnUsbConfigured(usbDiagnosticsIsActive() ? micros() : 0U,
+                                usbHidDiagnosticsSpeedCode(pdev->dev_speed));
 
   return (uint8_t)USBD_OK;
 }
@@ -923,7 +844,11 @@ uint8_t USBD_HID_EP0_RxReady(USBD_HandleTypeDef *pdev)
   * @param  buff: pointer to report
   * @retval status
   */
-bool USBD_HID_SendReport(uint8_t *report, uint16_t len)
+bool USBD_HID_SendReport(uint8_t *report,
+                         uint16_t len,
+                         uint32_t diagnostic_request_us,
+                         uint16_t diagnostic_session_id,
+                         uint16_t queued_reports)
 {
   USBD_HandleTypeDef *pdev = &USBD_Device;
   bool ret = false;
@@ -939,6 +864,13 @@ bool USBD_HID_SendReport(uint8_t *report, uint16_t len)
     {
       ret = true;
       p_hhid->state = USBD_HID_BUSY;
+      if (diagnostic_session_id != 0U)
+      {
+        // V260823R2: 활성 세션만 원 요청 시각을 연결해 비활성 8k 경로의 임계구역 비용을 없앤다.
+        usbDiagnosticsOnReportTransferStarted(diagnostic_request_us,
+                                              diagnostic_session_id,
+                                              queued_reports);
+      }
       (void)USBD_LL_Transmit(pdev, HID_EPIN_ADDR, report, len);
     }
   }
@@ -1113,11 +1045,10 @@ static uint8_t USBD_HID_DataIn(USBD_HandleTypeDef *pdev, uint8_t epnum)
     return (uint8_t)USBD_OK;
   }
   
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-  usbHidInstrumentationOnDataIn();                                    // V251009R7: HID 계측 활성 시에만 IN 완료 계수 갱신
-
-  usbHidMeasureRateTime();                                            // V251009R7: 폴링 간격 측정은 계측 옵션에 따라 컴파일
-#endif
+  if (usbDiagnosticsIsActive())
+  {
+    usbDiagnosticsOnReportTransferCompleted(micros());                // V260823R2: 실제 키보드 IN 완료 시각
+  }
 
   return (uint8_t)USBD_OK;
 }
@@ -1145,33 +1076,6 @@ static uint8_t USBD_HID_DataOut(USBD_HandleTypeDef *pdev, uint8_t epnum)
 
 uint8_t USBD_HID_SOF(USBD_HandleTypeDef *pdev)
 {
-#if defined(USB_MONITOR_ENABLE) || _DEF_ENABLE_USB_HID_TIMING_PROBE
-  bool need_sof_timestamp = false;
-#if defined(USB_MONITOR_ENABLE)
-  bool monitor_enabled = usbInstabilityIsEnabled();
-  if (monitor_enabled)
-  {
-    need_sof_timestamp = true;
-  }
-#endif
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-  need_sof_timestamp = true;
-#endif
-  if (need_sof_timestamp)                                             // V251108R8: 필요 시에만 micros()를 호출해 ISR 부하 절감
-  {
-    uint32_t sof_now_us = usbHidInstrumentationNow();                 // V251009R7: SOF 타임스탬프는 모니터/계측 공용으로 취득
-#if defined(USB_MONITOR_ENABLE)
-    if (monitor_enabled)                                              // V251108R1: VIA 토글로 모니터 동작 제어
-    {
-      usbHidMonitorSof(sof_now_us);                                   // V251009R7: 모니터 활성 시 타임스탬프 전달
-    }
-#endif
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-    usbHidInstrumentationOnSof(sof_now_us);                           // V251009R7: 계측 활성 시 샘플 윈도우 갱신
-#endif
-  }
-#endif
-
   if (qbufferAvailable(&via_report_q) && (millis()-via_report_pre_time) >= via_report_time)
   {
     qbufferRead(&via_report_q, (uint8_t *)via_hid_usb_report, 1);
@@ -1250,36 +1154,48 @@ bool usbHidEnqueueViaResponse(const uint8_t *p_data, uint8_t length)
 
 bool usbHidSendReport(uint8_t *p_data, uint16_t length)
 {
-  report_info_t report_info;
+  report_info_t report_info = {0};
+  uint16_t      diagnostic_session_id = 0U;
+  uint32_t      diagnostic_request_us = 0U;
 
   if (length > HID_KEYBOARD_REPORT_SIZE)
+  {
     return false;
+  }
 
   if (!USBD_is_suspended())
   {
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-    usbHidInstrumentationMarkReportStart();                            // V251009R7: 계측 시에만 리포트 시작 타임스탬프 기록
-#endif
+    if (usbDiagnosticsIsActive())
+    {
+      diagnostic_session_id = usbDiagnosticsGetSessionId();
+      diagnostic_request_us = micros();                            // V260823R2: 실제 리포트 요청 경계
+    }
 
     memcpy(hid_buf, p_data, length);
-    if (USBD_HID_SendReport((uint8_t *)hid_buf, HID_KEYBOARD_REPORT_SIZE))
-    {
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-      uint32_t queued_reports = qbufferAvailable(&report_q);           // V251009R7: 큐 깊이 스냅샷도 계측 활성 시에만 계산
-      usbHidInstrumentationOnImmediateSendSuccess(queued_reports);     // V251009R7: 즉시 전송 성공 계측 조건부 실행
-#endif
-    }
-    else
+    if (!USBD_HID_SendReport((uint8_t *)hid_buf,
+                             HID_KEYBOARD_REPORT_SIZE,
+                             diagnostic_request_us,
+                             diagnostic_session_id,
+                             (uint16_t)qbufferAvailable(&report_q)))
     {
       memcpy(report_info.buf, p_data, length);
-      qbufferWrite(&report_q, (uint8_t *)&report_info, 1);
-    }    
+      report_info.diagnostic_request_us = diagnostic_request_us;
+      report_info.diagnostic_session_id = diagnostic_session_id;
+      if (qbufferWrite(&report_q, (uint8_t *)&report_info, 1) != true)
+      {
+        usbDiagnosticsOnReportQueueDrop(usbDiagnosticsIsActive() ? micros() : 0U);  // V260823R2
+      }
+      else if (diagnostic_session_id != 0U)
+      {
+        usbDiagnosticsOnReportQueueDepth((uint16_t)qbufferAvailable(&report_q));
+      }
+    }
   }
   else
   {
     usbHidUpdateWakeUp(&USBD_Device);
   }
-  
+
   return true;
 }
 
@@ -1297,7 +1213,10 @@ bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length)
     {
       report_info.len = length;
       memcpy(report_info.buf, p_data, length);
-      qbufferWrite(&report_exk_q, (uint8_t *)&report_info, 1);        
+      if (qbufferWrite(&report_exk_q, (uint8_t *)&report_info, 1) != true)
+      {
+        usbDiagnosticsOnReportQueueDrop(usbDiagnosticsIsActive() ? micros() : 0U);  // V260823R2: EXK/마우스 드롭도 하드 이벤트
+      }
     }    
   }
   else
@@ -1307,636 +1226,6 @@ bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length)
   
   return true;
 }
-
-#ifdef USB_MONITOR_ENABLE  // V251010R5: 모니터 비활성 빌드에서도 HID 본체가 유지되도록 함수 정의를 개별 가드로 분리
-
-static UsbBootMode_t usbHidResolveDowngradeTarget(void)            // V250924R2 현재 모드 대비 하위 폴링 모드 계산
-{
-  UsbBootMode_t cur_mode = usbBootModeGet();
-
-  switch (cur_mode)
-  {
-    case USB_BOOT_MODE_HS_8K:
-      return USB_BOOT_MODE_HS_4K;
-    case USB_BOOT_MODE_HS_4K:
-      return USB_BOOT_MODE_HS_2K;
-    case USB_BOOT_MODE_HS_2K:
-      return USB_BOOT_MODE_FS_1K;
-    default:
-      return USB_BOOT_MODE_MAX;
-  }
-}
-
-static void usbHidMonitorPrimeTimeout(uint32_t now_us)             // V251108R9 SOF 누락 감시 타임아웃 초기화
-{
-  uint32_t guard_window = USB_SOF_MONITOR_WARMUP_TIMEOUT_US;
-
-  if (sof_monitor.expected_us > 0U)
-  {
-    guard_window = sof_monitor.expected_us * USB_SOF_MONITOR_NO_SOF_TIMEOUT_FACTOR;
-    if (guard_window == 0U)
-    {
-      guard_window = sof_monitor.expected_us;
-    }
-  }
-
-  sof_monitor.no_sof_deadline_us = now_us + guard_window;
-}
-
-static void usbHidMonitorSof(uint32_t now_us)
-{
-  USBD_HandleTypeDef *pdev = &USBD_Device;
-
-  if (pdev->dev_state != sof_prev_dev_state)
-  {
-    sof_monitor.prev_tick_us       = now_us;
-    sof_monitor.score              = 0U;
-    sof_monitor.slow_score         = 0U;
-    sof_monitor.last_decay_us      = now_us;
-    sof_monitor.slow_last_decay_us = now_us;
-    sof_monitor.holdoff_end_us =
-        (pdev->dev_state == USBD_STATE_CONFIGURED) ? (now_us + USB_SOF_MONITOR_CONFIG_HOLDOFF_US) : now_us;
-    sof_monitor.warmup_deadline_us =
-        (pdev->dev_state == USBD_STATE_CONFIGURED) ? (now_us + USB_SOF_MONITOR_WARMUP_TIMEOUT_US) : now_us;
-    sof_monitor.warmup_good_frames = 0U;
-    sof_monitor.warmup_complete    = false;
-    usbHidSofMonitorApplySpeedParams((pdev->dev_state == USBD_STATE_CONFIGURED) ? pdev->dev_speed : 0xFFU);
-    usbHidMonitorPrimeTimeout(now_us);
-    sof_monitor.speed_change_count     = 0U;
-    sof_monitor.suspend_count          = 0U;
-    sof_monitor.persistent_score       = 0U;
-    sof_monitor.speed_change_window_us = 0U;          // V251109R3: 이벤트 창을 첫 발생 기준으로 초기화
-    sof_monitor.suspend_window_us      = 0U;          // V251109R3: 서스펜드 창 초기화
-    sof_monitor.warmup_grace_active    = false;
-    sof_monitor.warmup_grace_deadline_us = 0U;
-    sof_prev_dev_state             = pdev->dev_state;
-  }
-
-  if (pdev->dev_state != USBD_STATE_CONFIGURED)
-  {
-    sof_monitor.prev_tick_us       = now_us;
-    sof_monitor.score              = 0U;
-    sof_monitor.slow_score         = 0U;
-    sof_monitor.last_decay_us      = now_us;
-    sof_monitor.slow_last_decay_us = now_us;
-    sof_monitor.holdoff_end_us     = now_us;
-    sof_monitor.warmup_deadline_us = now_us;
-    sof_monitor.warmup_good_frames = 0U;
-    sof_monitor.warmup_complete    = false;
-    usbHidSofMonitorApplySpeedParams(0xFFU);
-    usbHidMonitorPrimeTimeout(now_us);
-    sof_monitor.speed_change_count     = 0U;
-    sof_monitor.suspend_count          = 0U;
-    sof_monitor.persistent_score       = 0U;
-    sof_monitor.speed_change_window_us = 0U;          // V251109R3: 구성 전에는 창을 비활성화
-    sof_monitor.suspend_window_us      = 0U;          // V251109R3
-    sof_monitor.warmup_grace_active    = false;
-    sof_monitor.warmup_grace_deadline_us = 0U;
-    return;
-  }
-
-  bool is_suspended = USBD_is_suspended();
-
-  if (is_suspended)
-  {
-    if (sof_prev_suspended == false)
-    {
-      usbHidMonitorHandleSuspend(now_us);
-    }
-    sof_prev_suspended = true;
-    sof_monitor.prev_tick_us        = now_us;
-    sof_monitor.score               = 0U;
-    if (sof_monitor.slow_score > 0U)
-    {
-      sof_monitor.slow_score--;
-    }
-    sof_monitor.holdoff_end_us      = now_us + USB_SOF_MONITOR_RESUME_HOLDOFF_US;
-    sof_monitor.warmup_deadline_us  = now_us + USB_SOF_MONITOR_WARMUP_TIMEOUT_US;
-    sof_monitor.warmup_good_frames  = 0U;
-    sof_monitor.warmup_complete     = false;
-    sof_monitor.last_decay_us       = now_us;
-    sof_monitor.slow_last_decay_us  = now_us;
-    usbHidSofMonitorApplySpeedParams(pdev->dev_speed);
-    usbHidMonitorPrimeTimeout(now_us);
-    return;
-  }
-  else
-  {
-    sof_prev_suspended = false;
-  }
-
-  if (pdev->dev_speed != USBD_SPEED_HIGH && pdev->dev_speed != USBD_SPEED_FULL)
-  {
-    sof_monitor.prev_tick_us       = now_us;
-    sof_monitor.score              = 0U;
-    sof_monitor.slow_score         = 0U;
-    sof_monitor.last_decay_us      = now_us;
-    sof_monitor.slow_last_decay_us = now_us;
-    sof_monitor.warmup_deadline_us = now_us;
-    sof_monitor.warmup_good_frames = 0U;
-    sof_monitor.warmup_complete    = false;
-    usbHidSofMonitorApplySpeedParams(0xFFU);
-    usbHidMonitorPrimeTimeout(now_us);
-    return;
-  }
-
-  if (pdev->dev_speed != sof_monitor.active_speed)
-  {
-    usbHidMonitorHandleSpeedChange(now_us);
-    usbHidSofMonitorApplySpeedParams(pdev->dev_speed);
-    sof_monitor.score              = 0U;
-    if (sof_monitor.slow_score > 0U)
-    {
-      sof_monitor.slow_score--;
-    }
-    sof_monitor.last_decay_us      = now_us;
-    sof_monitor.slow_last_decay_us = now_us;
-    sof_monitor.holdoff_end_us     = now_us + USB_SOF_MONITOR_CONFIG_HOLDOFF_US;
-    sof_monitor.warmup_deadline_us = now_us + USB_SOF_MONITOR_WARMUP_TIMEOUT_US;
-    sof_monitor.warmup_good_frames = 0U;
-    sof_monitor.warmup_complete    = false;
-    usbHidMonitorPrimeTimeout(now_us);
-  }
-
-  if (sof_monitor.prev_tick_us == 0U)
-  {
-    sof_monitor.prev_tick_us = now_us;
-    sof_monitor.last_decay_us = now_us;
-    sof_monitor.slow_last_decay_us = now_us;
-    usbHidMonitorPrimeTimeout(now_us);
-    return;
-  }
-
-  uint32_t delta_us = now_us - sof_monitor.prev_tick_us;
-  sof_monitor.prev_tick_us = now_us;
-
-  usbHidMonitorProcessDelta(now_us, delta_us);
-}
-
-static void usbHidMonitorProcessDelta(uint32_t now_us, uint32_t delta_us)
-{
-  uint32_t expected_us            = sof_monitor.expected_us;
-  uint32_t stable_threshold       = sof_monitor.stable_threshold_us;
-  uint32_t decay_interval_us      = sof_monitor.decay_interval_us;
-  uint32_t slow_decay_interval_us = sof_monitor.slow_decay_interval_us;
-  uint8_t  degrade_threshold      = sof_monitor.degrade_threshold;
-  uint8_t  slow_degrade_threshold = sof_monitor.slow_degrade_threshold;
-  uint8_t  event_score_cap        = sof_monitor.event_score_cap;
-  uint16_t warmup_target_frames   = sof_monitor.warmup_target_frames;
-
-  if (expected_us == 0U)
-  {
-    return;
-  }
-
-  usbHidMonitorPrimeTimeout(now_us);                               // V251108R9 SOF 누락 감시 타임아웃 갱신
-
-  if (now_us < sof_monitor.holdoff_end_us)
-  {
-    sof_monitor.last_decay_us      = now_us;
-    sof_monitor.slow_last_decay_us = now_us;
-    return;
-  }
-
-  if (sof_monitor.warmup_complete == false)
-  {
-    if (sof_monitor.warmup_grace_active)
-    {
-      if (now_us <= sof_monitor.warmup_grace_deadline_us)
-      {
-        warmup_target_frames = (uint16_t)(warmup_target_frames / 2U);
-        if (warmup_target_frames == 0U)
-        {
-          warmup_target_frames = 1U;
-        }
-      }
-      else
-      {
-        sof_monitor.warmup_grace_active = false;
-      }
-    }
-
-    if (delta_us < stable_threshold)
-    {
-      if (sof_monitor.warmup_good_frames < warmup_target_frames)
-      {
-        sof_monitor.warmup_good_frames++;
-      }
-    }
-    else
-    {
-      sof_monitor.warmup_good_frames = 0U;
-    }
-
-    if (sof_monitor.warmup_good_frames >= warmup_target_frames || now_us >= sof_monitor.warmup_deadline_us)
-    {
-      sof_monitor.warmup_complete   = true;
-      sof_monitor.last_decay_us     = now_us;
-      sof_monitor.slow_last_decay_us = now_us;
-      sof_monitor.warmup_grace_active = false;
-    }
-    else
-    {
-      return;
-    }
-  }
-
-  if (delta_us < stable_threshold)
-  {
-    if (sof_monitor.score > 0U && decay_interval_us > 0U)
-    {
-      if ((now_us - sof_monitor.last_decay_us) >= decay_interval_us)
-      {
-        sof_monitor.score--;
-        sof_monitor.last_decay_us = now_us;
-      }
-    }
-
-    if (sof_monitor.slow_score > 0U && slow_decay_interval_us > 0U)
-    {
-      if ((now_us - sof_monitor.slow_last_decay_us) >= slow_decay_interval_us)
-      {
-        sof_monitor.slow_score--;
-        sof_monitor.slow_last_decay_us = now_us;
-      }
-    }
-    return;
-  }
-
-  uint32_t missed_frames = (delta_us + expected_us - 1U) / expected_us;
-  uint8_t  delta_score   = 1U;
-  uint32_t burst_points  = 0U;
-
-  if (missed_frames > 1U)
-  {
-    burst_points = missed_frames - 1U;
-  }
-
-  if (burst_points > event_score_cap)
-  {
-    burst_points = event_score_cap;
-  }
-
-  if (burst_points > 0U)
-  {
-    if (burst_points > 0xFFU)
-    {
-      burst_points = 0xFFU;
-    }
-    delta_score = (uint8_t)burst_points;
-  }
-
-  if (delta_score < 1U)
-  {
-    delta_score = 1U;
-  }
-
-  if (sof_monitor.score <= (uint8_t)(0xFFU - delta_score))
-  {
-    sof_monitor.score += delta_score;
-  }
-  else
-  {
-    sof_monitor.score = 0xFFU;
-  }
-
-  sof_monitor.last_decay_us = now_us;
-
-  if (sof_monitor.slow_score < 0xFFU)
-  {
-    sof_monitor.slow_score++;
-  }
-  sof_monitor.slow_last_decay_us = now_us;
-
-  bool need_degrade = false;
-
-  if (degrade_threshold > 0U && sof_monitor.score >= degrade_threshold)
-  {
-    need_degrade = true;
-  }
-
-  if (slow_degrade_threshold > 0U && sof_monitor.slow_score >= slow_degrade_threshold)
-  {
-    need_degrade = true;
-  }
-
-  if (need_degrade == false)
-  {
-    return;
-  }
-
-  (void)usbHidMonitorCommitDowngrade(now_us, delta_us, expected_us, USB_MONITOR_EVENT_SOF);
-}
-
-static bool usbHidMonitorCommitDowngrade(uint32_t      now_us,
-                                         uint32_t      delta_us,
-                                         uint32_t      expected_us,
-                                         usb_monitor_event_t event)
-{
-  bool downgrade_requested = false;
-  UsbBootMode_t next_mode = usbHidResolveDowngradeTarget();
-
-  if (next_mode < USB_BOOT_MODE_MAX)
-  {
-    uint32_t now_ms = millis();
-    usb_boot_downgrade_result_t request_result = usbRequestBootModeDowngrade(next_mode,
-                                                                             delta_us,
-                                                                             expected_us,
-                                                                             now_ms);
-
-    if (request_result == USB_BOOT_DOWNGRADE_ARMED || request_result == USB_BOOT_DOWNGRADE_CONFIRMED)
-    {
-      sof_monitor.holdoff_end_us = now_us + USB_BOOT_MONITOR_CONFIRM_DELAY_US;
-      downgrade_requested = true;
-    }
-    else
-    {
-      sof_monitor.holdoff_end_us = now_us + USB_SOF_MONITOR_RECOVERY_DELAY_US;
-    }
-  }
-  else
-  {
-    sof_monitor.holdoff_end_us = now_us + USB_SOF_MONITOR_RECOVERY_DELAY_US;
-  }
-
-  sof_monitor.score      = 0U;
-  sof_monitor.slow_score = 0U;
-  sof_monitor.persistent_score = 0U;
-  sof_monitor.speed_change_count = 0U;
-  sof_monitor.suspend_count = 0U;
-  sof_monitor.speed_change_window_us = 0U;            // V251109R3: 새 이벤트까지만 창 유지
-  sof_monitor.suspend_window_us = 0U;                 // V251109R3
-  sof_monitor.warmup_grace_active = false;
-#if HW_USB_LOG == 1
-  if (downgrade_requested)
-  {
-    logPrintf("[!] USB Monitor downgrade (%s)\n", usbHidMonitorEventLabel(event));
-  }
-#endif
-
-  return downgrade_requested;
-}
-
-#if HW_USB_LOG == 1
-static const char *usbHidMonitorEventLabel(usb_monitor_event_t event)
-{
-  switch (event)
-  {
-    case USB_MONITOR_EVENT_ENUM:
-      return "enum";
-    case USB_MONITOR_EVENT_SPEED:
-      return "speed";
-    case USB_MONITOR_EVENT_SUSPEND:
-      return "suspend";
-    case USB_MONITOR_EVENT_SOF:
-    default:
-      return "sof";
-  }
-}
-#endif
-
-static void usbHidMonitorBumpPersistent(uint32_t now_us, usb_monitor_event_t event)
-{
-  if (sof_monitor.persistent_score < 0xFFU)
-  {
-    sof_monitor.persistent_score++;
-  }
-
-  if (sof_monitor.persistent_threshold == 0U)
-  {
-    return;
-  }
-
-  if (sof_monitor.persistent_score >= sof_monitor.persistent_threshold)
-  {
-    uint32_t expected_us = (sof_monitor.expected_us > 0U) ? sof_monitor.expected_us : 125U;
-    uint32_t delta_us = USB_ENUM_MONITOR_ATTEMPT_TIMEOUT_US;
-
-    if (event == USB_MONITOR_EVENT_SPEED)
-    {
-      delta_us = USB_SOF_MONITOR_SPEED_WINDOW_US;
-    }
-    else if (event == USB_MONITOR_EVENT_SUSPEND)
-    {
-      delta_us = USB_SOF_MONITOR_SUSPEND_WINDOW_US;
-    }
-
-    (void)usbHidMonitorCommitDowngrade(now_us, delta_us, expected_us, event);
-  }
-}
-
-static void usbHidMonitorHandleSpeedChange(uint32_t now_us)
-{
-  if (sof_monitor.warmup_target_frames == 0U)
-  {
-    sof_monitor.speed_change_count = 0U;
-    sof_monitor.speed_change_window_us = 0U;          // V251109R3: 창 비활성화
-    return;
-  }
-
-  if (sof_monitor.speed_change_count == 0U || now_us >= sof_monitor.speed_change_window_us)
-  {
-    sof_monitor.speed_change_count = 0U;
-    sof_monitor.speed_change_window_us = now_us + USB_SOF_MONITOR_SPEED_WINDOW_US;  // V251109R3: 첫 이벤트 기준 고정 창
-  }
-
-  if (sof_monitor.warmup_complete)
-  {
-    sof_monitor.warmup_grace_active = true;
-    sof_monitor.warmup_grace_deadline_us = now_us + USB_SOF_MONITOR_WARMUP_GRACE_US;
-  }
-
-  if (sof_monitor.speed_change_count < 0xFFU)
-  {
-    sof_monitor.speed_change_count++;
-  }
-
-  if (sof_monitor.speed_change_count >= USB_SOF_MONITOR_SPEED_THRESHOLD)
-  {
-    sof_monitor.speed_change_count = 0U;
-    sof_monitor.speed_change_window_us = now_us + USB_SOF_MONITOR_SPEED_WINDOW_US;  // V251109R3: 새 창 시작
-    usbHidMonitorBumpPersistent(now_us, USB_MONITOR_EVENT_SPEED);
-  }
-}
-
-static void usbHidMonitorHandleSuspend(uint32_t now_us)
-{
-  if (sof_monitor.warmup_target_frames == 0U)
-  {
-    sof_monitor.suspend_count = 0U;
-    sof_monitor.suspend_window_us = 0U;               // V251109R3: 창 비활성화
-    return;
-  }
-
-  if (sof_monitor.suspend_count == 0U || now_us >= sof_monitor.suspend_window_us)
-  {
-    sof_monitor.suspend_count = 0U;
-    sof_monitor.suspend_window_us = now_us + USB_SOF_MONITOR_SUSPEND_WINDOW_US;  // V251109R3: 첫 이벤트 기준 창
-  }
-
-  if (sof_monitor.warmup_complete)
-  {
-    sof_monitor.warmup_grace_active = true;
-    sof_monitor.warmup_grace_deadline_us = now_us + USB_SOF_MONITOR_WARMUP_GRACE_US;
-  }
-
-  if (sof_monitor.suspend_count < 0xFFU)
-  {
-    sof_monitor.suspend_count++;
-  }
-
-  if (sof_monitor.suspend_count >= USB_SOF_MONITOR_SUSPEND_THRESHOLD)
-  {
-    sof_monitor.suspend_count = 0U;
-    sof_monitor.suspend_window_us = now_us + USB_SOF_MONITOR_SUSPEND_WINDOW_US;  // V251109R3: 새 창 시작
-    usbHidMonitorBumpPersistent(now_us, USB_MONITOR_EVENT_SUSPEND);
-  }
-}
-
-static void usbHidMonitorRefreshEventWindows(uint32_t now_us)
-{
-  if (sof_monitor.speed_change_count > 0U && now_us >= sof_monitor.speed_change_window_us)
-  {
-    sof_monitor.speed_change_count = 0U;
-    sof_monitor.speed_change_window_us = 0U;          // V251109R3: 만료 시 창 초기화
-  }
-
-  if (sof_monitor.suspend_count > 0U && now_us >= sof_monitor.suspend_window_us)
-  {
-    sof_monitor.suspend_count = 0U;
-    sof_monitor.suspend_window_us = 0U;               // V251109R3
-  }
-
-  if (sof_monitor.warmup_grace_active && now_us >= sof_monitor.warmup_grace_deadline_us)
-  {
-    sof_monitor.warmup_grace_active = false;
-  }
-}
-
-static void usbHidMonitorTrackEnumeration(uint32_t now_us,
-                                          bool     monitor_enabled)
-{
-  USBD_HandleTypeDef *pdev = &USBD_Device;
-  uint8_t dev_state = pdev->dev_state;
-
-  if (dev_state == USBD_STATE_CONFIGURED)
-  {
-    enum_monitor.waiting_config = false;
-    enum_monitor.pending_state  = dev_state;
-
-    if (enum_monitor.fail_score > 0U)
-    {
-      if (enum_monitor.stable_since_us == 0U)
-      {
-        enum_monitor.stable_since_us = now_us;
-      }
-      else if ((now_us - enum_monitor.stable_since_us) >= USB_ENUM_MONITOR_RECOVERY_US)
-      {
-        enum_monitor.fail_score--;
-        enum_monitor.stable_since_us = (enum_monitor.fail_score > 0U) ? now_us : 0U;
-      }
-    }
-    else
-    {
-      enum_monitor.stable_since_us = now_us;
-    }
-    return;
-  }
-
-  enum_monitor.stable_since_us = 0U;
-
-  if (dev_state == USBD_STATE_DEFAULT || dev_state == USBD_STATE_ADDRESSED)
-  {
-    if (enum_monitor.waiting_config == false || enum_monitor.pending_state != dev_state)
-    {
-      enum_monitor.waiting_config    = true;
-      enum_monitor.pending_state     = dev_state;
-      enum_monitor.attempt_deadline_us = now_us + USB_ENUM_MONITOR_ATTEMPT_TIMEOUT_US;
-      return;
-    }
-
-    if (enum_monitor.waiting_config && now_us >= enum_monitor.attempt_deadline_us)
-    {
-      if (enum_monitor.fail_score < USB_ENUM_MONITOR_SCORE_CAP)
-      {
-        enum_monitor.fail_score++;
-      }
-      enum_monitor.attempt_deadline_us = now_us + USB_ENUM_MONITOR_ATTEMPT_TIMEOUT_US;
-
-      if (monitor_enabled && enum_monitor.fail_score >= USB_ENUM_MONITOR_FAIL_THRESHOLD)
-      {
-        uint32_t expected_us = (sof_monitor.expected_us > 0U) ? sof_monitor.expected_us : 125U;
-        (void)usbHidMonitorCommitDowngrade(now_us,
-                                           USB_ENUM_MONITOR_ATTEMPT_TIMEOUT_US,
-                                           expected_us,
-                                           USB_MONITOR_EVENT_ENUM);
-        enum_monitor.fail_score     = 0U;
-        enum_monitor.waiting_config = false;
-        enum_monitor.pending_state  = dev_state;
-      }
-    }
-  }
-  else
-  {
-    enum_monitor.waiting_config = false;
-    enum_monitor.pending_state  = dev_state;
-  }
-}
-
-void usbHidMonitorBackgroundService(void)                    // V251124R1: 모니터 OFF면 타임스탬프 취득 없이 즉시 리턴
-{
-  if (usbInstabilityIsEnabled() == false)
-  {
-    return;
-  }
-
-  usbHidMonitorBackgroundTick(micros());
-}
-
-void usbHidMonitorBackgroundTick(uint32_t now_us)                    // V251108R9 SOF 중단 감시
-{
-  if (usbInstabilityIsEnabled() == false)                          // V251124R1: 런타임 비활성 시 백그라운드 경로 차단
-  {
-    return;
-  }
-
-  usbHidMonitorRefreshEventWindows(now_us);
-  usbHidMonitorTrackEnumeration(now_us, true);
-
-  USBD_HandleTypeDef *pdev = &USBD_Device;
-
-  if (pdev->dev_state != USBD_STATE_CONFIGURED)
-  {
-    return;
-  }
-
-  if (USBD_is_suspended())
-  {
-    return;
-  }
-
-  if (sof_monitor.prev_tick_us == 0U || sof_monitor.expected_us == 0U)
-  {
-    return;
-  }
-
-  if (sof_monitor.warmup_complete == false)
-  {
-    return;
-  }
-
-  if (now_us < sof_monitor.no_sof_deadline_us)
-  {
-    return;
-  }
-
-  uint32_t delta_us = now_us - sof_monitor.prev_tick_us;
-  sof_monitor.prev_tick_us = now_us;
-
-  usbHidMonitorProcessDelta(now_us, delta_us);
-}
-
-#endif  // USB_MONITOR_ENABLE  // V251010R5: 모니터 전용 함수 정의 범위 분리 완료
 
 
 __weak void usbHidSetStatusLed(uint8_t led_bits)
@@ -2038,22 +1327,22 @@ void TIM2_IRQHandler(void)
 
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 {
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-  usbHidInstrumentationOnTimerPulse();                                 // V251009R7: 계측 타이머 후크를 조건부 실행
-#endif
   if (qbufferAvailable(&report_q) > 0)
   {
     if (p_hhid->state == USBD_HID_IDLE)
     {
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-      uint32_t queued_reports = qbufferAvailable(&report_q);          // V250928R3 큐에 남은 리포트 수 기록 (계측 활성 시)
-#endif
+      report_info_t report_info;
+      uint16_t queued_reports = (uint16_t)qbufferAvailable(&report_q);
 
-      qbufferRead(&report_q, (uint8_t *)hid_buf, 1);
-      USBD_HID_SendReport((uint8_t *)hid_buf, HID_KEYBOARD_REPORT_SIZE);
-#if _DEF_ENABLE_USB_HID_TIMING_PROBE
-      usbHidInstrumentationOnReportDequeued(queued_reports);           // V251009R7: 큐 처리 계측을 조건부 실행
-#endif
+      if (qbufferRead(&report_q, (uint8_t *)&report_info, 1) == true)
+      {
+        memcpy(hid_buf, report_info.buf, HID_KEYBOARD_REPORT_SIZE);
+        (void)USBD_HID_SendReport((uint8_t *)hid_buf,
+                                  HID_KEYBOARD_REPORT_SIZE,
+                                  report_info.diagnostic_request_us,
+                                  report_info.diagnostic_session_id,
+                                  queued_reports);                    // V260823R2: 큐 대기 시간을 유지한 전송
+      }
     }
   }
 
@@ -2072,10 +1361,3 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 
   return;
 }
-
-#ifdef _USE_HW_CLI
-void cliCmd(cli_args_t *args)
-{
-  usbHidInstrumentationHandleCli(args);
-}
-#endif

@@ -9,6 +9,7 @@
 #include "process_keycode/process_tap_dance.h"
 #include "timer.h"                                        // V251127R1: Tap Dance 내부 가상 keyevent 타임스탬프
 #include "wait.h"
+#include "era_state_sync.h"                               // V260821R1: exact/legacy term·action 변경 시 CONFIG revision
 
 
 #define TAPDANCE_SIGNATURE        (0x4E414454UL)   // "TDAN" // V251124R8: Tap Dance EEPROM 시그니처
@@ -21,6 +22,8 @@
 #define TAPDANCE_VALUE_STRIDE     (5U)
 #define TAPDANCE_VALUE_MAX_ID     (TAPDANCE_SLOT_COUNT * TAPDANCE_VALUE_STRIDE)
 #define TAPDANCE_FIELD_TERM       (4U)
+#define TAPDANCE_EXACT_TERM_ID_BASE (41U)                 // V260821R1: TD0 exact = 41 … TD7 exact = 48
+#define TAPDANCE_EXACT_TERM_ID_MAX  (TAPDANCE_EXACT_TERM_ID_BASE + TAPDANCE_SLOT_COUNT - 1U)
 
 enum
 {
@@ -124,10 +127,13 @@ EECONFIG_DEBOUNCE_HELPER(tapdance, EECONFIG_USER_TAPDANCE, tapdance_storage);
 
 static uint8_t               tapdance_slot_index(uint8_t value_id);
 static uint8_t               tapdance_field_index(uint8_t value_id);
+static bool                  tapdance_is_exact_term_id(uint8_t value_id);
 static bool                  tapdance_is_storage_valid(const tapdance_storage_t *storage);
 static uint16_t              tapdance_normalize_term(uint16_t term_ms);
+static uint16_t              tapdance_legacy_units(uint16_t term_ms);
 static void                  tapdance_apply_defaults_locked(void);
 static void                  tapdance_sync_state_from_storage(void);
+static void                  tapdance_commit(bool changed);
 static bool                  tapdance_keycode_is_valid(uint16_t keycode);
 static bool                  tapdance_set_value(uint8_t value_id, uint8_t *value_data, uint8_t length);
 static void                  tapdance_get_value(uint8_t value_id, uint8_t *value_data, uint8_t length);
@@ -457,8 +463,17 @@ static void tapdance_on_reset(tap_dance_state_t *state, void *user_data)
   tapdance_dance_state[user->slot_index] = 0;
 }
 
+static bool tapdance_is_exact_term_id(uint8_t value_id)
+{
+  return value_id >= TAPDANCE_EXACT_TERM_ID_BASE && value_id <= TAPDANCE_EXACT_TERM_ID_MAX;
+}
+
 static uint8_t tapdance_slot_index(uint8_t value_id)
 {
+  if (tapdance_is_exact_term_id(value_id))
+  {
+    return (uint8_t)(value_id - TAPDANCE_EXACT_TERM_ID_BASE);
+  }
   if (value_id < 1U || value_id > TAPDANCE_VALUE_MAX_ID)
   {
     return TAPDANCE_SLOT_COUNT;
@@ -515,6 +530,11 @@ static uint16_t tapdance_normalize_term(uint16_t term_ms)
   return normalized;
 }
 
+static uint16_t tapdance_legacy_units(uint16_t term_ms)
+{
+  return tapdance_normalize_term(term_ms) / TAPDANCE_TERM_UNIT_MS;  // V260821R1: exact 저장값을 20ms 격자로 내림해 legacy GET
+}
+
 static void tapdance_apply_defaults_locked(void)
 {
   for (uint8_t i = 0; i < TAPDANCE_SLOT_COUNT; i++)
@@ -533,29 +553,26 @@ static void tapdance_apply_defaults_locked(void)
 
 static void tapdance_sync_state_from_storage(void)
 {
-  bool dirty = false;
-
   for (uint8_t i = 0; i < TAPDANCE_SLOT_COUNT; i++)
   {
     tapdance_slot_storage_t *slot_storage = &tapdance_storage.slots[i];
     tapdance_slot_state_t   *slot_state   = &tapdance_state[i];
 
-    slot_state->term_ms = tapdance_normalize_term(slot_storage->term_ms);
+    slot_state->term_ms = slot_storage->term_ms;                // V260821R1: load/sync에서 20ms 격자로 되돌리지 않는다
     for (uint8_t a = 0; a < TAPDANCE_ACTION_COUNT; a++)
     {
       slot_state->actions[a] = slot_storage->actions[a];
     }
-
-    if (slot_storage->term_ms != slot_state->term_ms)
-    {
-      slot_storage->term_ms = slot_state->term_ms;
-      dirty = true;
-    }
   }
+}
 
-  if (dirty)
+static void tapdance_commit(bool changed)
+{
+  tapdance_sync_state_from_storage();
+  if (changed)
   {
-    eeconfig_flag_tapdance(true);                               // V251124R8: 정규화 시 dirty 플래그 기록
+    eeconfig_flag_tapdance(true);
+    era_state_sync_bump_config();  // V260821R1: GET이 새 값을 돌려준 뒤에만 CONFIG revision
   }
 }
 
@@ -595,12 +612,33 @@ bool tapdance_should_finish_immediate(uint8_t slot_index, uint8_t tap_count)
 
 static bool tapdance_set_value(uint8_t value_id, uint8_t *value_data, uint8_t length)
 {
-  uint8_t slot_index;
-  uint8_t field_index;
+  uint8_t  slot_index;
+  uint8_t  field_index;
+  uint16_t term_ms;
+  uint16_t keycode;
+  bool     changed = false;
 
   if (value_data == NULL || length < 4U)
   {
     return false;                                               // V251124R8: VIA 패킷 최소 길이 확인
+  }
+
+  if (tapdance_is_exact_term_id(value_id))
+  {
+    if (length < 5U)
+    {
+      return false;
+    }
+    slot_index = tapdance_slot_index(value_id);
+    term_ms    = ((uint16_t)value_data[0] << 8) | (uint16_t)value_data[1];
+    if (term_ms < TAPDANCE_TERM_MIN_MS || term_ms > TAPDANCE_TERM_MAX_MS)
+    {
+      return false;
+    }
+    changed = (tapdance_storage.slots[slot_index].term_ms != term_ms);
+    tapdance_storage.slots[slot_index].term_ms = term_ms;
+    tapdance_commit(changed);
+    return true;
   }
 
   slot_index = tapdance_slot_index(value_id);
@@ -613,20 +651,22 @@ static bool tapdance_set_value(uint8_t value_id, uint8_t *value_data, uint8_t le
 
   if (field_index < TAPDANCE_ACTION_COUNT)
   {
-    tapdance_storage.slots[slot_index].actions[field_index] = ((uint16_t)value_data[0] << 8) | (uint16_t)value_data[1];
+    keycode = ((uint16_t)value_data[0] << 8) | (uint16_t)value_data[1];
+    changed = (tapdance_storage.slots[slot_index].actions[field_index] != keycode);
+    tapdance_storage.slots[slot_index].actions[field_index] = keycode;
   }
   else if (field_index == TAPDANCE_FIELD_TERM)
   {
-    uint16_t term_ms = (uint16_t)value_data[0] * TAPDANCE_TERM_UNIT_MS;
-    tapdance_storage.slots[slot_index].term_ms = tapdance_normalize_term(term_ms);
+    term_ms = tapdance_normalize_term((uint16_t)value_data[0] * TAPDANCE_TERM_UNIT_MS);
+    changed = (tapdance_storage.slots[slot_index].term_ms != term_ms);
+    tapdance_storage.slots[slot_index].term_ms = term_ms;
   }
   else
   {
     return false;
   }
 
-  tapdance_sync_state_from_storage();
-  eeconfig_flag_tapdance(true);
+  tapdance_commit(changed);
   return true;
 }
 
@@ -638,6 +678,20 @@ static void tapdance_get_value(uint8_t value_id, uint8_t *value_data, uint8_t le
   if (value_data == NULL || length < 4U)
   {
     return;                                                    // V251124R8: VIA 응답 버퍼 최소 길이 확인
+  }
+
+  if (tapdance_is_exact_term_id(value_id))
+  {
+    uint16_t term_ms;
+
+    slot_index = tapdance_slot_index(value_id);
+    term_ms    = tapdance_state[slot_index].term_ms;
+    value_data[0] = (uint8_t)(term_ms >> 8);
+    if (length >= 5U)
+    {
+      value_data[1] = (uint8_t)(term_ms & 0xFF);
+    }
+    return;
   }
 
   slot_index = tapdance_slot_index(value_id);
@@ -658,8 +712,7 @@ static void tapdance_get_value(uint8_t value_id, uint8_t *value_data, uint8_t le
   }
   else if (field_index == TAPDANCE_FIELD_TERM)
   {
-    uint16_t term_ms = tapdance_state[slot_index].term_ms;
-    value_data[0] = (uint8_t)(term_ms / TAPDANCE_TERM_UNIT_MS);
+    value_data[0] = (uint8_t)tapdance_legacy_units(tapdance_state[slot_index].term_ms);  // V260821R1: floor-20ms
     value_data[1] = 0U;
   }
   else

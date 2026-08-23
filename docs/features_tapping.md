@@ -1,19 +1,19 @@
 # TAPPING_TERM 런타임 변경 가이드
 
 ## 1. 목적과 범위
-- Brick60-H7S에서 VIA를 통해 TAPPING_TERM(탭-홀드 분기 시간)과 관련 옵션(Per­missive Hold, Hold on Other Key Press, Retro Tapping)을 런타임으로 조정하는 기능을 설명합니다.
-- 대상 모듈: `src/ap/modules/qmk/port/tapping_term.{c,h}`, `src/ap/modules/qmk/keyboards/era/sirind/brick60/port/via_port.c`, `src/ap/modules/qmk/keyboards/era/sirind/brick60/json/BRICK60-H7S-VIA.JSON`, `src/ap/modules/qmk/port/eeconfig_port.c`, `src/ap/modules/qmk/quantum/action_tapping.c`, `src/ap/modules/qmk/quantum/action.c`, `src/ap/modules/qmk/quantum/process_keycode/*`의 TAPPING_TERM 소비 경로.
+- 전 보드 공통 기능으로, VIA를 통해 TAPPING_TERM(탭-홀드 분기 시간)과 관련 옵션(Per­missive Hold, Hold on Other Key Press, Retro Tapping)을 런타임으로 조정하는 기능을 설명합니다. `G_TERM_ENABLE`은 may65, intigrity80, brick60, brick65, sculpturei 전 보드의 `config.h`에 정의되어 있으며, MAY65 등 다른 보드에도 동일하게 적용됩니다.
+- 대상 모듈: `src/ap/modules/qmk/port/tapping_term.{c,h}`, 각 키보드의 `port/via_port.c`와 VIA JSON(예: brick60의 `src/ap/modules/qmk/keyboards/era/sirind/brick60/port/via_port.c`, `src/ap/modules/qmk/keyboards/era/sirind/brick60/json/BRICK60-H7S-VIA.JSON`), `src/ap/modules/qmk/port/eeconfig_port.c`, `src/ap/modules/qmk/quantum/action_tapping.c`, `src/ap/modules/qmk/quantum/action.c`, `src/ap/modules/qmk/quantum/process_keycode/*`의 TAPPING_TERM 소비 경로.
 
 ## 2. 구성 파일 & 빌드 매크로
 | 경로 | 심볼/함수 | 설명 |
 | --- | --- | --- |
-| `src/ap/modules/qmk/keyboards/era/sirind/brick60/config.h` | `G_TERM_ENABLE`, `TAPPING_TERM_PER_KEY`, `PERMISSIVE_HOLD_PER_KEY`, `HOLD_ON_OTHER_KEY_PRESS_PER_KEY`, `RETRO_TAPPING_PER_KEY` | Brick60 빌드에서 TAPPING_TERM 런타임 제어를 활성화하고 QMK의 per-key 훅을 사용하도록 강제합니다. |
+| 각 키보드 `config.h` (예: `src/ap/modules/qmk/keyboards/era/sirind/brick60/config.h`) | `G_TERM_ENABLE`, `TAPPING_TERM_PER_KEY`, `PERMISSIVE_HOLD_PER_KEY`, `HOLD_ON_OTHER_KEY_PRESS_PER_KEY`, `RETRO_TAPPING_PER_KEY` | 전 보드(may65, intigrity80, brick60, brick65, sculpturei) 빌드에서 TAPPING_TERM 런타임 제어를 활성화하고 QMK의 per-key 훅을 사용하도록 강제합니다. |
 | `src/ap/modules/qmk/qmk.c` | `tapping_term_init()` | QMK 초기화 시 EEPROM을 읽어 런타임 상태로 반영합니다. |
 | `src/ap/modules/qmk/port/tapping_term.{c,h}` | `tapping_term_handle_via_command()`, `tapping_term_sync_state_from_storage()` | VIA 명령 처리, 값 정규화, 런타임 상태/EEPROM 저장소 동기화 핵심 로직. |
 | `src/ap/modules/qmk/port/port.h` | `EECONFIG_USER_TAPPING_TERM` | USER 데이터 블록 내 TAPPING_TERM 저장 슬롯(오프셋 +52, 12B). |
 | `src/ap/modules/qmk/port/eeconfig_port.c` | `tapping_term_storage_apply_defaults()`, `tapping_term_storage_flush()` | EEPROM 초기화 경로(수동/자동 초기화 포함)에서 기본값을 기록하고 즉시 저장합니다. |
-| `src/ap/modules/qmk/keyboards/era/sirind/brick60/port/via_port.c` | `via_custom_value_command_kb()` | VIA 커스텀 채널 분기. `id_qmk_tapping`(채널 15)으로 유입된 명령을 `tapping_term_handle_via_command()`로 라우팅합니다. |
-| `src/ap/modules/qmk/keyboards/era/sirind/brick60/json/BRICK60-H7S-VIA.JSON` | `TAPPING` 섹션 | VIA UI에 TAPPING_TERM dropdown(100~500ms, 20ms 스텝)과 옵션 토글을 노출합니다. |
+| 각 키보드 `port/via_port.c` (예: `src/ap/modules/qmk/keyboards/era/sirind/brick60/port/via_port.c`) | `via_custom_value_command_kb()` | VIA 커스텀 채널 분기. `id_qmk_tapping`(채널 15)으로 유입된 명령을 `tapping_term_handle_via_command()`로 라우팅합니다. |
+| 각 키보드 VIA JSON (예: `src/ap/modules/qmk/keyboards/era/sirind/brick60/json/BRICK60-H7S-VIA.JSON`) | `TAPPING` 섹션 | V260823R1부터 exact-ms range(`id_qmk_tapping_global_term_exact`, 100~500ms, 1ms 단위)와 옵션 토글을 노출합니다. legacy dropdown 항목은 JSON에서 제거됐지만 펌웨어는 하위 호환을 위해 계속 응답합니다. |
 
 ## 3. EEPROM 슬롯 & 데이터 구조
 | 심볼/크기 | 오프셋 (`EECONFIG_USER_DATABLOCK` 기준) | 필드 | 설명 |
@@ -29,7 +29,8 @@
 
 | Value ID | VIA 단위/범위 | 설명 |
 | --- | --- | --- |
-| `id_qmk_tapping_global_term` | `value_data[0] × 10ms` (VIA dropdown 10~50 → 100~500ms) | `tapping_term_normalize()`로 100~500ms, 20ms 스텝으로 정규화 후 저장. |
+| `id_qmk_tapping_global_term` | `value_data[0] × 10ms` (VIA dropdown 10~50 → 100~500ms) | legacy SET은 `tapping_term_normalize()`로 100~500ms, 20ms 스텝 내림. legacy GET은 저장된 exact 값을 같은 격자로 투영만 하고 저장값을 바꾸지 않는다. |
+| `id_qmk_tapping_global_term_exact` | 2-byte big-endian ms (V260821R1) | 100~500 정수만 허용. 격자 없음. 99/501과 2바이트 미만 패킷은 거절하고 저장값을 유지한다. |
 | `id_qmk_tapping_permissive_hold` | 0/1 토글 | Mod-Tap에서 인터럽트 시에도 HOLD로 전환할지 여부. |
 | `id_qmk_tapping_hold_on_other_key_press` | 0/1 토글 | 다른 키가 눌리면 즉시 HOLD로 강제할지 여부. |
 | `id_qmk_tapping_retro_tapping` | 0/1 토글 | 탭-홀드 릴리즈 시점이 지났을 때 TAP으로 판정할지 여부. |
@@ -58,7 +59,9 @@ VIA 커스텀 명령 수신 (`via_custom_value_command_kb`)
 - EEPROM이 지워졌을 때(`eeconfig_init_user_datablock()` 호출)도 `tapping_term_storage_apply_defaults()` → `tapping_term_storage_flush(true)`가 실행되어 동일 흐름으로 재초기화됩니다.
 
 ## 6. 정규화·유효성 규칙
-- 범위: 100~500ms(`TAPPING_TERM_MIN/MAX_MS`), 스텝: 20ms(`TAPPING_TERM_STEP_MS`). VIA는 10ms 단위 값을 보내지만 `tapping_term_normalize()`가 스텝에 맞게 내림 정규화합니다.
+- 범위: 100~500ms(`TAPPING_TERM_MIN/MAX_MS`). legacy SET만 20ms 스텝(`TAPPING_TERM_STEP_MS`)으로 내림한다. exact SET은 범위만 검사하고 격자를 적용하지 않는다.
+- load/`tapping_term_sync_state_from_storage()`는 유효한 uint16 term을 20ms 격자로 되돌리지 않는다 (V260821R1).
+- 값이 실제로 바뀐 SET만 EEPROM dirty와 CONFIG revision을 올린다. 동일 값 SET은 no-op이다.
 - 불리언 필드는 0/1만 허용. 그 외 값, 시그니처 불일치(`0x50415447`), 버전 불일치(1)가 감지되면 기본값으로 덮어쓴 뒤 dirty 플래그를 세팅합니다.
 - 기본값 적용 시 `eeconfig_flag_tapping_term(true)`로 dirty 마크를 남겨 즉시/차후 flush 대상에 포함시킵니다.
 
@@ -77,11 +80,11 @@ VIA 커스텀 명령 수신 (`via_custom_value_command_kb`)
 - 시그니처/버전이 바뀌거나 범위를 벗어난 값이 저장되어도 `tapping_term_init()` 단계에서 기본값으로 복원하고 저장소를 dirty 표시하므로, 다음 `id_custom_save` 시점에 정상화된 값이 기록됩니다.
 
 ## 9. 사용 방법
-1. VIA `TAPPING` 섹션에서 Global Tapping Term(100~500ms, 20ms 스텝)과 각 옵션 토글을 변경합니다. 설정 즉시 런타임에 반영됩니다.
+1. VIA `TAPPING` 섹션에서 Global Tapping Term (ms)(100~500ms, 1ms 단위)과 각 옵션 토글을 변경합니다. 설정 즉시 런타임에 반영됩니다.
 2. 값을 유지하려면 VIA의 Save(또는 `id_custom_save`)를 눌러 EEPROM에 기록합니다. Save를 누르지 않으면 재부팅 시 이전 저장 값으로 롤백됩니다.
 3. EEPROM 초기화/펌웨어 업데이트 후에는 기본값(200ms)으로 돌아가므로 필요 시 다시 설정합니다.
 
 ## 10. 운영 체크 포인트
-- 정규화 로직이 20ms 스텝으로 내림 적용되므로 130ms와 같이 스텝에 맞지 않는 값은 120ms로 저장됩니다. VIA 에코(SET 후 GET)로 수신 값을 확인하십시오.
+- legacy dropdown으로 130ms를 보내면 120ms로 저장된다. exact ID로 137ms를 보내면 137ms가 저장되고, legacy GET만 12(120ms)를 돌려준다.
 - `id_custom_set_value`/`get_value` 패킷 길이가 4바이트 미만이면 `id_unhandled`로 응답하므로 클라이언트는 표준 32바이트 RAW HID 패킷을 유지해야 합니다.
 - 별도 로그가 없으므로 값 확인은 VIA UI 재조회 또는 RAW HID 응답을 통해 수행합니다. EEPROM dirty 플래그는 Save 이후에만 클리어됩니다.

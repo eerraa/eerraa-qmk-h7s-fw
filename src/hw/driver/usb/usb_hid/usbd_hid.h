@@ -59,7 +59,7 @@ extern "C" {
 #define HID_MOUSE_REPORT_DESC_SIZE                      74U
 #define HID_KEYBOARD_REPORT_DESC_SIZE                   64U
 #define HID_KEYBOARD_VIA_REPORT_DESC_SIZE               34U
-#define HID_EXK_REPORT_DESC_SIZE                        50U
+#define HID_EXK_REPORT_DESC_SIZE                        129U  // V260823R1: SYSTEM/CONSUMER(50) + MOUSE(79)
 
 #define HID_DESCRIPTOR_TYPE                             0x21U
 #define HID_REPORT_DESC                                 0x22U
@@ -155,34 +155,11 @@ enum
   USB_HID_LED_KANA        = (1 << 4)
 };
 
-typedef struct
-{
-  uint32_t freq_hz;
-  uint32_t time_max;
-  uint32_t time_min;
-  uint32_t time_excess_max;  // V250928R3 예상 간격 초과분 최대값(us)
-  uint32_t queue_depth_max;  // V250928R3 폴링 지연 당시 대기 중이던 큐 길이 최대값
-} usb_hid_rate_info_t;
-
 bool usbHidSetViaReceiveFunc(void (*func)(uint8_t *, uint8_t));
 bool usbHidEnqueueViaResponse(const uint8_t *p_data, uint8_t length);  // V251108R8: VIA 응답을 메인 루프에서 큐잉
 bool usbHidSendReport(uint8_t *p_data, uint16_t length);
 bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length);
-bool usbHidGetRateInfo(usb_hid_rate_info_t *p_info);
-bool usbHidSetTimeLog(uint16_t index, uint32_t time_us);
-void usbHidSetStatusLed(uint8_t led_bits);
-#ifdef USB_MONITOR_ENABLE
-void usbHidMonitorBackgroundService(void);                      // V251124R1: 런타임 토글을 반영한 백그라운드 진입점
-void usbHidMonitorBackgroundTick(uint32_t now_us);              // V251108R9 SOF 중단 감시 진입점
-#else
-static inline void usbHidMonitorBackgroundService(void)
-{
-}
-static inline void usbHidMonitorBackgroundTick(uint32_t now_us)
-{
-  (void)now_us;
-}
-#endif
+void usbHidSetStatusLed(uint8_t led_bits);  // V260823R2: 레거시 HID rate/monitor API는 관측 전용 진단 API로 대체
 
 /**
   * @}

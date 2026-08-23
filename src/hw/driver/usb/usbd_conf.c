@@ -48,12 +48,20 @@
 #include "usbd_def.h"
 #include "usbd_core.h"
 #include "usbd_cdc.h"
+#include "micros.h"
+#include "usb_diagnostics.h"  // V260823R2: reset/suspend 하드 이벤트 카운터
 
 
 PCD_HandleTypeDef hpcd_USB_OTG_HS;
 void Error_Handler(void);
 static bool is_connected = false;
 static bool is_suspended = false;
+
+// V260823R2: USB Device Library 속도를 진단 프로토콜 값으로 정규화한다.
+static uint8_t usbDiagnosticsSpeedFromUsbd(USBD_SpeedTypeDef speed)
+{
+  return speed == USBD_SPEED_HIGH ? USB_DIAGNOSTICS_SPEED_HIGH : USB_DIAGNOSTICS_SPEED_FULL;
+}
 
 /* External functions --------------------------------------------------------*/
 
@@ -215,6 +223,8 @@ void HAL_PCD_ResetCallback(PCD_HandleTypeDef *hpcd)
   {
     Error_Handler();
   }
+  usbDiagnosticsOnUsbReset(usbDiagnosticsIsActive() ? micros() : 0U,
+                           usbDiagnosticsSpeedFromUsbd(speed));       // V260823R2: 초기 reset도 부팅 누계에 포함
     /* Set Speed. */
   USBD_LL_SetSpeed((USBD_HandleTypeDef*)hpcd->pData, speed);
 
@@ -247,6 +257,7 @@ void HAL_PCD_SuspendCallback(PCD_HandleTypeDef *hpcd)
 
   is_connected = false;
   is_suspended = true;
+  usbDiagnosticsOnUsbSuspend(usbDiagnosticsIsActive() ? micros() : 0U);  // V260823R2
   logPrintf("[  ] USB Suspend\n");
   /* USER CODE END 2 */
 }

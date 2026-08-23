@@ -13,7 +13,7 @@
 #include "eeprom.h"
 #include "qmk/port/port.h"
 #include "qmk/port/platforms/eeprom.h"
-#include "qmk/port/usb_monitor.h"                                      // V251108R1: USB 모니터 스토리지 연동
+#include "usb_diagnostics.h"                                          // V260823R2: 관측 전용 진단 초기화
 
 #define USB_RESET_RESPONSE_GRACE_MS   (40U)                           // V251109R4: VIA 응답 송신 보장을 위한 최소 유예
 #define USB_BOOTMODE_APPLY_GRACE_MS   USB_RESET_RESPONSE_GRACE_MS     // V251109R4: BootMode 적용 시 동일 유예 사용
@@ -67,11 +67,10 @@ static void bootmode_ensure_default_persisted(void)
 static volatile struct
 {
   bool     pending;                                                        // V251109R4: VIA 응답 송신을 보장하기 위한 리셋 큐
-  bool     from_monitor;                                                   // V251124R3: USB 모니터 유발 리셋 식별
   uint32_t ready_ms;
-} usb_reset_request = {false, false, 0U};
+} usb_reset_request = {false, 0U};
 
-USBD_HandleTypeDef USBD_Device;                                            // V251123R6: USB_MONITOR_ENABLE 비활성 빌드에서도 전역 선언 유지
+USBD_HandleTypeDef USBD_Device;
 extern PCD_HandleTypeDef hpcd_USB_OTG_HS;
 
 extern USBD_DescriptorsTypeDef VCP_Desc;
@@ -80,52 +79,6 @@ extern USBD_DescriptorsTypeDef HID_Desc;
 extern USBD_DescriptorsTypeDef CMP_Desc;
 
 static USBD_DescriptorsTypeDef *p_desc = NULL;                             // V251123R6: USB 전역 상태를 항상 보관
-
-#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
-typedef enum
-{
-  USB_BOOT_MODE_REQ_STAGE_IDLE = 0,
-  USB_BOOT_MODE_REQ_STAGE_ARMED,
-  USB_BOOT_MODE_REQ_STAGE_COMMIT,
-} usb_boot_mode_request_stage_t;
-
-typedef struct
-{
-  usb_boot_mode_request_stage_t stage;                           // V250924R2 다운그레이드 요청 단계
-  bool                          log_pending;                    // V250924R2 로그 출력 요청 플래그
-  UsbBootMode_t                 next_mode;                      // V250924R2 요청된 다음 부트 모드
-  uint32_t                      delta_us;                       // V250924R2 측정된 SOF 간격(us)
-  uint32_t                      expected_us;                    // V250924R2 기대 SOF 간격(us)
-  uint32_t                      ready_ms;                       // V250924R2 2차 확인 가능 시각(ms)
-  uint32_t                      timeout_ms;                     // V250924R2 요청 만료 시각(ms)
-} usb_boot_mode_request_t;
-
-static usb_boot_mode_request_t boot_mode_request = {0};          // V250924R2 USB 안정성 이벤트 큐
-
-static void usbBootModeRequestReset(void)
-{
-  boot_mode_request.stage      = USB_BOOT_MODE_REQ_STAGE_IDLE;
-  boot_mode_request.log_pending = false;
-  boot_mode_request.next_mode  = USB_BOOT_MODE_FS_1K;
-  boot_mode_request.delta_us   = 0U;
-  boot_mode_request.expected_us = 0U;
-  boot_mode_request.ready_ms   = 0U;
-  boot_mode_request.timeout_ms = 0U;
-}
-#endif
-#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
-static void usbMonitorResetQueues(void)
-{
-  usbBootModeRequestReset();                                               // V251124R3: 모니터 비활성 시 다운그레이드 큐 초기화
-
-  if (usb_reset_request.from_monitor == true)
-  {
-    usb_reset_request.pending     = false;                                 // V251124R3: 모니터 리셋 큐 제거
-    usb_reset_request.from_monitor = false;
-    usb_reset_request.ready_ms    = 0U;
-  }
-}
-#endif
 
 #if HW_USB_CMP == 1
 static uint8_t hid_ep_tbl[] = {
@@ -285,53 +238,9 @@ bool usbScheduleGraceReset(uint32_t delay_ms)                              // V2
   }
 
   usb_reset_request.pending = true;
-  usb_reset_request.from_monitor = false;                                                   // V251124R3: 기본 리셋은 모니터 기인 아님
   usb_reset_request.ready_ms = ready_ms;
   return true;
 }
-
-#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
-usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
-                                                        uint32_t      measured_delta_us,
-                                                        uint32_t      expected_us,
-                                                        uint32_t      now_ms)  // V250924R2 비동기 USB 폴링 모드 다운그레이드 요청
-{
-  if (mode >= USB_BOOT_MODE_MAX)
-  {
-    return USB_BOOT_DOWNGRADE_REJECTED;
-  }
-
-  if (boot_mode_request.stage == USB_BOOT_MODE_REQ_STAGE_IDLE)
-  {
-    boot_mode_request.stage      = USB_BOOT_MODE_REQ_STAGE_ARMED;
-    boot_mode_request.log_pending = true;
-    boot_mode_request.next_mode  = mode;
-    boot_mode_request.delta_us   = measured_delta_us;
-    boot_mode_request.expected_us = expected_us;
-    boot_mode_request.ready_ms   = now_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS;
-    boot_mode_request.timeout_ms = boot_mode_request.ready_ms + USB_BOOT_MONITOR_CONFIRM_DELAY_MS;
-    return USB_BOOT_DOWNGRADE_ARMED;
-  }
-
-  if (boot_mode_request.stage == USB_BOOT_MODE_REQ_STAGE_ARMED)
-  {
-    boot_mode_request.next_mode   = mode;
-    boot_mode_request.delta_us    = measured_delta_us;
-    boot_mode_request.expected_us = expected_us;
-
-    if ((int32_t)(now_ms - (int32_t)boot_mode_request.ready_ms) >= 0)
-    {
-      boot_mode_request.stage       = USB_BOOT_MODE_REQ_STAGE_COMMIT;
-      boot_mode_request.log_pending = true;
-      return USB_BOOT_DOWNGRADE_CONFIRMED;
-    }
-
-    return USB_BOOT_DOWNGRADE_ARMED;
-  }
-
-  return USB_BOOT_DOWNGRADE_REJECTED;
-}
-#endif
 
 #ifdef BOOTMODE_ENABLE
 static void usbProcessBootModeApply(void)
@@ -356,62 +265,6 @@ static void usbProcessBootModeApply(void)
 }
 #endif
 
-#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
-static void usbProcessBootModeDowngrade(void)                                                                  // V250924R3 USB 안정성 이벤트 처리 루프
-{
-  if (boot_mode_request.stage == USB_BOOT_MODE_REQ_STAGE_IDLE)                         // V250924R3 비활성 시 오버헤드 방지
-  {
-    return;
-  }
-
-  uint32_t now_ms = millis();
-
-  switch (boot_mode_request.stage)
-  {
-    case USB_BOOT_MODE_REQ_STAGE_ARMED:
-      if (boot_mode_request.log_pending == true)
-      {
-        logPrintf("[!] USB Poll 불안정 감지 : 기대 %lu us, 측정 %lu us (검증 대기)\n",
-                  boot_mode_request.expected_us,
-                  boot_mode_request.delta_us);
-        logPrintf("[!] USB Poll 모드 다운그레이드 대기 -> %s\n", usbBootModeLabel(boot_mode_request.next_mode));
-        boot_mode_request.log_pending = false;
-      }
-
-      if ((int32_t)(now_ms - (int32_t)boot_mode_request.timeout_ms) >= 0)
-      {
-        usbBootModeRequestReset();
-      }
-      break;
-
-    case USB_BOOT_MODE_REQ_STAGE_COMMIT:
-      if (boot_mode_request.log_pending == true)
-      {
-        logPrintf("[!] USB Poll 불안정 감지 : 기대 %lu us, 측정 %lu us\n",
-                  boot_mode_request.expected_us,
-                  boot_mode_request.delta_us);
-        logPrintf("[!] USB Poll 모드 다운그레이드 -> %s\n", usbBootModeLabel(boot_mode_request.next_mode));
-        boot_mode_request.log_pending = false;
-      }
-
-      if (usbBootModeSaveAndReset(boot_mode_request.next_mode) != true)
-      {
-        logPrintf("[!] USB Poll 모드 저장 실패\n");                                            // V250924R2 저장 실패 로그
-      }
-      else
-      {
-        usb_reset_request.from_monitor = true;                                                // V251124R3: 토글 비활성화 시 중단 가능하도록 표시
-      }
-
-      usbBootModeRequestReset();
-      break;
-
-    default:
-      break;
-  }
-}
-#endif
-
 static void usbProcessDeferredReset(void)
 {
   if (usb_reset_request.pending == false)
@@ -425,7 +278,6 @@ static void usbProcessDeferredReset(void)
   }
 
   usb_reset_request.pending = false;
-  usb_reset_request.from_monitor = false;                                                     // V251124R3: 처리 후 원천 플래그 리셋
 
   USBD_Stop(&USBD_Device);                                               // V251109R6: 리셋 전에 USB를 강제 분리
   USBD_DeInit(&USBD_Device);
@@ -437,57 +289,23 @@ static void usbProcessDeferredReset(void)
   resetToReset();                                                        // V251109R4: VIA 응답 송신 이후에만 리셋 실행
 }
 
-static bool usbHasPendingService(bool has_apply_request, bool has_monitor_request, bool has_reset_request)
+static bool usbHasPendingService(bool has_apply_request, bool has_reset_request)
 {
-#if defined(BOOTMODE_ENABLE) && !defined(USB_MONITOR_ENABLE)
-  (void)has_monitor_request;
-#endif
-  return has_apply_request
-#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
-         || has_monitor_request
-#endif
-         || has_reset_request;
-}
-
-void usbDebugGetState(usb_debug_state_t *state)                               // V251123R7: USB 모니터/리셋 상태 스냅샷
-{
-  if (state == NULL)
-  {
-    return;
-  }
-
-#if defined(USB_MONITOR_ENABLE)
-  state->monitor_enabled = usbInstabilityIsEnabled();
-#else
-  state->monitor_enabled = false;
-#endif
-
-#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
-  state->boot_stage = (uint8_t)boot_mode_request.stage;
-#else
-  state->boot_stage = 0U;
-#endif
-
-  state->reset_pending = usb_reset_request.pending;
+  return has_apply_request || has_reset_request;
 }
 
 void usbProcess(void)
 {
-#if defined(BOOTMODE_ENABLE)
+#ifdef BOOTMODE_ENABLE
   bool has_apply_request = boot_mode_apply_request.pending;
 #else
   const bool has_apply_request = false;
 #endif
-#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
-  bool has_monitor_request = usbInstabilityIsEnabled() && boot_mode_request.stage != USB_BOOT_MODE_REQ_STAGE_IDLE;  // V251124R3: 모니터 OFF 시 다운그레이드 처리 차단
-#else
-  const bool has_monitor_request = false;
-#endif
   bool has_reset_request = usb_reset_request.pending;
 
-  if (!usbHasPendingService(has_apply_request, has_monitor_request, has_reset_request))
+  if (!usbHasPendingService(has_apply_request, has_reset_request))
   {
-    return;  // V251109R4: 처리할 큐가 없을 때는 즉시 복귀해 메인 루프 부하 최소화
+    return;  // V260823R2: 자동 복구 큐 없이 사용자 apply/reset 요청만 서비스한다.
   }
 
 #ifdef BOOTMODE_ENABLE
@@ -496,54 +314,11 @@ void usbProcess(void)
     usbProcessBootModeApply();
   }
 #endif
-#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
-  if (has_monitor_request)
-  {
-    usbProcessBootModeDowngrade();
-  }
-#endif
   if (has_reset_request)
   {
     usbProcessDeferredReset();
   }
 }
-
-#ifdef USB_MONITOR_ENABLE
-static bool usb_instability_enabled = true;                               // V251108R1: VIA USB 모니터 토글 캐시
-
-bool usbInstabilityLoad(void)
-{
-  usb_monitor_storage_init();
-  usb_instability_enabled = usb_monitor_storage_is_enabled();
-  logPrintf("[  ] USB Monitor : %s\n", usb_instability_enabled ? "ON" : "OFF");  // V251108R7: CLI에서 모니터 상태 확인
-  return true;
-}
-
-bool usbInstabilityStore(bool enable)
-{
-  if (usb_instability_enabled == enable)
-  {
-    return true;
-  }
-
-  usb_instability_enabled = enable;
-  usb_monitor_storage_set_enable(enable);
-  usb_monitor_storage_flush(true);
-#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
-  if (usb_instability_enabled == false)
-  {
-    usbMonitorResetQueues();                                              // V251124R3: 런타임 비활성화 시 대기 중인 다운그레이드/리셋 제거
-  }
-#endif
-  logPrintf("[  ] USB Monitor Toggle -> %s\n", usb_instability_enabled ? "ON" : "OFF");  // V251108R7
-  return true;
-}
-
-bool usbInstabilityIsEnabled(void)
-{
-  return usb_instability_enabled;
-}
-#endif
 
 #ifdef _USE_HW_CLI
 static void cliCmd(cli_args_t *args);
@@ -555,11 +330,7 @@ static void cliBoot(cli_args_t *args);                                       // 
 
 bool usbInit(void)
 {
-#ifdef _USE_HW_USB
-#if defined(BOOTMODE_ENABLE) && defined(USB_MONITOR_ENABLE)
-  usbBootModeRequestReset();                                          // V251108R1: 모니터 활성 시에만 다운그레이드 큐 초기화
-#endif
-#endif
+  usbDiagnosticsInit();                                               // V260823R2: RAM 전용 카운터/세션 초기화
 #ifdef _USE_HW_CLI
   cliAdd("usb", cliCmd);
   cliAdd("boot", cliBoot);                                    // V250923R1 Expose boot mode control

@@ -102,6 +102,8 @@ enum via_keyboard_value_id {
     id_switch_matrix_state = 0x03,
     id_firmware_version    = 0x04,
     id_device_indication   = 0x05,
+    id_era_state_sync      = 0x06,  // V260821R1: GET_KEYBOARD_VALUE 리비전 봉투
+    id_era_usb_diagnostics = 0x07,  // V260823R2: 읽기 전용 USB 진단 세션 봉투
 };
 
 enum via_channel_id {
@@ -120,6 +122,7 @@ enum via_channel_id {
     id_qmk_key_response       = 14,  // V251115R1: VIA 디바운스 프로필 제어 채널
     id_qmk_tapping            = 15,  // V251123R4: VIA TAPPING 제어 채널
     id_qmk_tapdance           = 16,  // V251124R8: VIA TAPDANCE 제어 채널
+    id_qmk_mousekey           = 17,  // V260823R1: VIA MOUSE 제어 채널 (참조 QMK 13번은 H7S에서 USB POLLING이 점유)
 };
 
 enum via_qmk_backlight_value {
@@ -157,7 +160,6 @@ enum via_qmk_audio_value {
 enum via_qmk_usb_polling_value {
     id_qmk_usb_bootmode_select = 1,
     id_qmk_usb_bootmode_apply  = 2,
-    id_qmk_usb_monitor_toggle  = 3,
 };
 
 // V251115R1: VIA KEY RESPONSE 메뉴 value ID 매핑
@@ -175,6 +177,7 @@ enum via_qmk_tapping_value {
     id_qmk_tapping_permissive_hold         = 2,
     id_qmk_tapping_hold_on_other_key_press = 3,
     id_qmk_tapping_retro_tapping           = 4,
+    id_qmk_tapping_global_term_exact       = 5,  // V260821R1: 2-byte BE exact ms
 };
 
 // V251124R8: VIA TAPDANCE value ID 매핑
@@ -226,6 +229,25 @@ enum via_qmk_tapdance_value {
     id_qmk_tapdance_8_dtap  = 38,
     id_qmk_tapdance_8_thold = 39,
     id_qmk_tapdance_8_term  = 40,
+
+    id_qmk_tapdance_1_term_exact = 41,  // V260821R1: TD0–TD7 exact ms, channel 16
+    id_qmk_tapdance_2_term_exact = 42,
+    id_qmk_tapdance_3_term_exact = 43,
+    id_qmk_tapdance_4_term_exact = 44,
+    id_qmk_tapdance_5_term_exact = 45,
+    id_qmk_tapdance_6_term_exact = 46,
+    id_qmk_tapdance_7_term_exact = 47,
+    id_qmk_tapdance_8_term_exact = 48,
+};
+
+// V260823R1: VIA MOUSE 제어 값 ID (참조 QMK era_mousekey_via.c와 동일한 1..6 배치)
+enum via_qmk_mousekey_value {
+    id_qmk_mousekey_cursor_min_speed    = 1,
+    id_qmk_mousekey_cursor_max_speed    = 2,
+    id_qmk_mousekey_cursor_acceleration = 3,
+    id_qmk_mousekey_cursor_interval     = 4,
+    id_qmk_mousekey_wheel_interval      = 5,
+    id_qmk_mousekey_wheel_acceleration  = 6,
 };
 
 // V251012R2: 커스텀 인디케이터 제어 값 ID

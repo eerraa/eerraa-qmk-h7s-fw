@@ -10,11 +10,12 @@ ERA-QMK-H7S-FW는 STM32H7S 마이크로컨트롤러 기반 커스텀 키보드�
 - `src/ap/` : 애플리케이션 계층과 QMK 포팅 코드가 포함됩니다.
 - `src/hw/` : 보드별 하드웨어 정의와 드라이버를 제공합니다.
 - `src/bsp/` : 보드 초기화, 클럭 설정, 스타트업 코드를 제공합니다.
-- `docs/` : 펌웨어 관련 문서 및 참고 자료가 있습니다.
+- `docs/` : 결정 기록, 실측 회고, 기능별 운영 가이드가 있습니다.
 - `tools/` : 빌드 및 UF2 변환을 지원하는 스크립트가 있습니다.
+- `graphify-out/` : 코드·문서 지식그래프입니다. `graphify query "<질문>"`으로 구조를 질의할 수 있으며, 에이전트 작업 규칙은 `AGENTS.md`를 참조하십시오.
 
 ## 빌드 준비
-1. ARM GCC Toolchain과 CMake 3.20 이상을 설치합니다.
+1. ARM GCC Toolchain과 CMake 3.13 이상을 설치합니다.
 2. Python과 `pip`을 설치한 뒤 필요한 경우 QMK 스크립트 의존성을 설치합니다.
 3. 본 저장소를 클론한 뒤 프로젝트 루트에서 아래 절차를 수행합니다.
 
@@ -29,7 +30,7 @@ cmake -S . -B build -DKEYBOARD_PATH='/keyboards/<vendor>/<keyboard_name>'
 cmake -S . -B build -G "MinGW Makefiles" -DKEYBOARD_PATH='/keyboards/<vendor>/<keyboard_name>'
 ```
 
-`KEYBOARD_PATH`에는 `/keyboards/` 디렉터리 아래에 존재하는 대상 키보드 경로를 지정합니다. 예를 들어 Brick60을 빌드하려면 `/keyboards/era/sirind/brick60`을 입력합니다.
+`KEYBOARD_PATH`에는 `/keyboards/` 디렉터리 아래에 존재하는 대상 키보드 경로를 지정합니다. 예를 들어 MAY65는 `/keyboards/era/keynetix/may65`, Brick60은 `/keyboards/era/sirind/brick60`을 입력합니다.
 
 ### 공통 빌드 단계
 설정이 완료되면 다음 명령으로 펌웨어를 컴파일합니다.

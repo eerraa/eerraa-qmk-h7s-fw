@@ -7,6 +7,7 @@
 #include "log.h"
 #include "qmk/port/port.h"
 #include "via.h"
+#include "era_state_sync.h"  // V260823R1: 디바운스 값 변경 시 CONFIG revision
 
 
 #define DEBOUNCE_PROFILE_SIGNATURE     (0x434E4244UL)     // "DBNC"
@@ -255,12 +256,41 @@ bool debounce_profile_handle_via_command(uint8_t *data, uint8_t length)
   switch (*command_id)
   {
     case id_custom_set_value:
+    {
+      // V260823R1: 한 value id의 SET이 다른 id가 돌려주는 값까지 바꾼다. Balanced 시간 하나가
+      //            pre/post를 동시에 옮기는 것이 그 예다. 그래서 스냅샷은 네 값 전체를 본다.
+      static const uint8_t watched[] =
+      {
+        id_qmk_debounce_mode,
+        id_qmk_debounce_time_single,
+        id_qmk_debounce_time_pre,
+        id_qmk_debounce_time_post,
+      };
+      uint8_t before[sizeof(watched)];
+      uint8_t after[sizeof(watched)];
+      uint8_t k;
+
+      for (k = 0; k < sizeof(watched); k++)
+      {
+        debounce_profile_get_value_internal(watched[k], &before[k]);
+      }
+
       handled = debounce_profile_set_value_internal(*value_id, value_data[0]);
       if (handled)
       {
         debounce_profile_get_value_internal(*value_id, value_data);
+
+        for (k = 0; k < sizeof(watched); k++)
+        {
+          debounce_profile_get_value_internal(watched[k], &after[k]);
+        }
+        if (memcmp(before, after, sizeof(before)) != 0)
+        {
+          era_state_sync_bump_config();                             // V260823R1: 실제로 값이 바뀐 SET에서만 revision을 올린다
+        }
       }
       break;
+    }
 
     case id_custom_get_value:
       debounce_profile_get_value_internal(*value_id, value_data);

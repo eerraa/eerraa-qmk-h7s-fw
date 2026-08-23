@@ -1,5 +1,7 @@
 # 프리징 이슈 회고 (USB_MONITOR_ENABLE 빌드)
 
+> 역사 기록: 아래 레거시 모니터와 자동 다운그레이드 코드는 V260823R2에서 제거되었습니다. 현재 구현·운영은 `docs/features_usb_diagnostics.md`를 기준으로 하며, 이 문서는 당시 실측과 판단을 보존합니다.
+
 ## 개요
 - 대상 보드: STM32H7S (HS 8000 Hz 기본) / Brick60 VIA 빌드
 - 현상: `USB_MONITOR_ENABLE`이 정의된 상태에서 부팅 후 약 620 s(10분 20초) 경과 시 키보드가 완전히 정지. LED 토글 포함 모든 동작이 멈춰 CPU/SysTick 정지로 추정됨.
@@ -11,7 +13,7 @@
 - **V251124R1**: 런타임 모니터 OFF일 때 `micros()` 호출조차 우회하도록 래퍼 추가.
   - `src/ap/ap.c`: `usbHidMonitorBackgroundService()` 호출로 변경.
   - `src/hw/driver/usb/usb_hid/usbd_hid.h`/`.c`: `usbHidMonitorBackgroundService()` 신규. `usbInstabilityIsEnabled()==false`면 즉시 리턴. 모니터 ON일 때만 `usbHidMonitorBackgroundTick()` 내부 로직 실행.
-- **V251124R2** (현재): 프리징 재현 테스트용 계측 롤백.
+- **V251124R2** (사건 당시): 프리징 재현 테스트용 계측 롤백.
   - V251123R7의 1초 주기 USB 스냅샷/LED 주기 토글 제거, LED는 부팅 후 0.5 s 경과 시 1회 OFF로 복원 (`src/ap/ap.c`).
   - V251123R8 heartbeat/SysTick 헬스체크 제거 (`src/bsp/bsp.c`, `src/bsp/bsp.h`, `src/bsp/device/stm32h7rsxx_it.c`).
   - 펌웨어 버전 `_DEF_FIRMWARE_VERSION "V251124R2"` (`src/hw/hw_def.h`).
@@ -34,7 +36,7 @@
 
 ## 파일별 핵심 포인트
 - `src/ap/ap.c`:
-  - 현재(R2): 부팅 후 `_DEF_LED1` ON → 500 ms 경과 시 1회 OFF. 메인 루프에서 `usbHidMonitorBackgroundService()` 호출.
+  - 사건 당시(R2): 부팅 후 `_DEF_LED1` ON → 500 ms 경과 시 1회 OFF. 메인 루프에서 `usbHidMonitorBackgroundService()` 호출.
   - R7 시절: 0.5 s 주기 토글 + 1 s 주기 USB 상태 로그.
 - `src/hw/driver/usb/usb_hid/usbd_hid.c`:
   - `usbHidMonitorBackgroundService()`가 모니터 런타임 OFF 시 즉시 리턴. ON일 때만 `usbHidMonitorBackgroundTick(micros())` 실행.
@@ -42,7 +44,7 @@
 - `src/bsp/device/stm32h7rsxx_it.c`:
   - R8에서 SysTick 2 s stall 로거가 있었으나 R2에서 제거됨.
 - `src/hw/hw_def.h`:
-  - `_DEF_FIRMWARE_VERSION` 확인. R8에서 V251123R8, 현재 V251124R2.
+  - `_DEF_FIRMWARE_VERSION` 확인. R8에서 V251123R8, 사건 당시 V251124R2.
 
 ## 향후 재발 시 조사 가이드
 1. **빌드/토글 확인**: `USB_MONITOR_ENABLE` 정의 여부와 `usbInstabilityIsEnabled()` 런타임 값 확인. VIA 토글이 EEPROM에 반영되는지 `usbInstabilityLoad()` 로그 확인 (`src/hw/hw.c`).
@@ -57,5 +59,9 @@
    - HW_LOG_ENABLE_DEFAULT=0, 모니터 OFF, 1 kHz로 장시간(≥15분) 반복. 재현 시점 직전 로그가 없는지 확인.
 
 ## 결론/상태
-- V251124R2까지는 프리징 재현 없음. 근본 원인은 미확인.
+- V251124R2(사건 당시)까지는 프리징 재현 없음. 근본 원인은 미확인.
 - 재발 대비를 위해 위 가이드로 단계적 계측/비교 테스트 필요.
+
+## 사건 이후 관련 변경 (후기)
+- **V251124R3**: 모니터 OFF 시 다운그레이드 처리 차단 — `usbProcess()`에서 `usbInstabilityIsEnabled()`가 false면 다운그레이드 큐를 처리하지 않도록 조건 추가 (`src/hw/driver/usb/usb.c:482`).
+- 현재 펌웨어 버전은 **V260720R1**이다. 본 문서의 실측 기록은 V251124R2 시점 기준이다.

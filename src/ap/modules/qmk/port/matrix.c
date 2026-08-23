@@ -6,9 +6,8 @@
 #include <stdint.h>
 #include <string.h>
 #include "cli.h"
-#include "usb.h"
 #include "keys.h"
-#include "matrix_instrumentation.h"  // V251009R9: 매트릭스 계측 경로를 독립 모듈로 이관
+#include "matrix_instrumentation.h"  // V260823R2: 매트릭스 개발 계측은 USB 전달 진단과 분리
 #include "debounce_profile.h"
 
 
@@ -74,7 +73,6 @@ uint8_t matrix_scan(void)
   matrixInstrumentationLogScan(pre_time, is_info_enable);
 
   changed = debounce(raw_matrix, matrix, MATRIX_ROWS, changed);
-  matrixInstrumentationPropagate(changed, pre_time);
   matrix_info();
 
   return (uint8_t)changed;
@@ -91,17 +89,7 @@ void matrix_info(void)
     if (millis()-pre_time >= 1000)
     {
       pre_time = millis();
-      usb_hid_rate_info_t hid_info;
-
-      usbHidGetRateInfo(&hid_info);
-
       logPrintf("Scan Rate : %d.%d KHz\n", get_matrix_scan_rate()/1000, get_matrix_scan_rate()%1000);
-      logPrintf("Poll Rate : %d Hz, %d us(max), %d us(min), %d us(excess), %d queued(max)\n", // V250928R3 HID 진단 지표 노출
-                hid_info.freq_hz,
-                hid_info.time_max,
-                hid_info.time_min,
-                hid_info.time_excess_max,
-                hid_info.queue_depth_max);
       if (matrixInstrumentationIsCompileEnabled())
       {
         logPrintf("Scan Time : %d us\n", matrixInstrumentationGetScanTime());
@@ -123,21 +111,11 @@ void cliCmd(cli_args_t *args)
   {
     cliPrintf("is_info_enable : %s\n", is_info_enable ? "on":"off");
 
-    usb_hid_rate_info_t hid_info;
-
-    usbHidGetRateInfo(&hid_info);
-
     #if _DEF_ENABLE_MATRIX_TIMING_PROBE
     logPrintf("Scan Rate : %d.%d KHz\n", get_matrix_scan_rate()/1000, get_matrix_scan_rate()%1000);
     #else
     logPrintf("Scan Rate : disabled\n");  // V251010R3: 빌드 타임으로 스캔 계측이 제거된 경우 안내
     #endif
-    logPrintf("Poll Rate : %d Hz, %d us(max), %d us(min), %d us(excess), %d queued(max)\n", // V250928R3 HID 진단 지표 노출
-              hid_info.freq_hz,
-              hid_info.time_max,
-              hid_info.time_min,
-              hid_info.time_excess_max,
-              hid_info.queue_depth_max);
     if (matrixInstrumentationIsCompileEnabled())
     {
       logPrintf("Scan Time : %d us\n", matrixInstrumentationGetScanTime());

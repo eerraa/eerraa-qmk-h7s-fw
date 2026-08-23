@@ -4,6 +4,7 @@
 
 #include "port.h"
 #include "quantum.h"
+#include "era_state_sync.h"  // V260821R1: exact/legacy term 변경 시 CONFIG revision
 
 
 #define TAPPING_TERM_SIGNATURE      (0x50415447UL)   // "GTAP"
@@ -50,9 +51,11 @@ EECONFIG_DEBOUNCE_HELPER(tapping_term, EECONFIG_USER_TAPPING_TERM, tapping_term_
 
 
 static uint16_t tapping_term_normalize(uint16_t term_ms);
+static uint16_t tapping_term_legacy_units(uint16_t term_ms);
 static bool     tapping_term_is_storage_valid(const tapping_term_storage_t *storage);
 static void     tapping_term_apply_defaults_locked(void);
 static void     tapping_term_sync_state_from_storage(void);
+static void     tapping_term_commit(bool changed);
 static bool     tapping_term_set_value(uint8_t id, uint8_t *value_data, uint8_t length);
 static void     tapping_term_get_value(uint8_t id, uint8_t *value_data, uint8_t length);
 
@@ -180,6 +183,11 @@ static uint16_t tapping_term_normalize(uint16_t term_ms)
   return normalized;
 }
 
+static uint16_t tapping_term_legacy_units(uint16_t term_ms)
+{
+  return tapping_term_normalize(term_ms) / 10U;  // V260821R1: exact 저장값을 20ms 격자로 내림해 legacy GET. 저장값은 바꾸지 않는다.
+}
+
 static bool tapping_term_is_storage_valid(const tapping_term_storage_t *storage)
 {
   if (storage->signature != TAPPING_TERM_SIGNATURE)
@@ -214,19 +222,12 @@ static void tapping_term_apply_defaults_locked(void)
 
 static void tapping_term_sync_state_from_storage(void)
 {
-  bool     dirty      = false;
-  uint16_t normalized = tapping_term_normalize(tapping_term_storage.tapping_term_ms);
+  bool dirty = false;
 
-  tapping_term_state.tapping_term_ms         = normalized;
+  tapping_term_state.tapping_term_ms         = tapping_term_storage.tapping_term_ms;  // V260821R1: load/sync에서 20ms 격자로 되돌리지 않는다
   tapping_term_state.permissive_hold         = tapping_term_storage.permissive_hold != 0U;
   tapping_term_state.hold_on_other_key_press = tapping_term_storage.hold_on_other_key_press != 0U;
   tapping_term_state.retro_tapping           = tapping_term_storage.retro_tapping != 0U;
-
-  if (tapping_term_storage.tapping_term_ms != normalized)
-  {
-    tapping_term_storage.tapping_term_ms = normalized;
-    dirty = true;
-  }
 
   uint8_t permissive_hold = tapping_term_state.permissive_hold ? 1U : 0U;
   uint8_t hold_on_other   = tapping_term_state.hold_on_other_key_press ? 1U : 0U;
@@ -254,8 +255,22 @@ static void tapping_term_sync_state_from_storage(void)
   }
 }
 
+static void tapping_term_commit(bool changed)
+{
+  tapping_term_sync_state_from_storage();
+  if (changed)
+  {
+    eeconfig_flag_tapping_term(true);
+    era_state_sync_bump_config();  // V260821R1: GET이 새 값을 돌려준 뒤에만 CONFIG revision
+  }
+}
+
 static bool tapping_term_set_value(uint8_t id, uint8_t *value_data, uint8_t length)
 {
+  bool     changed = false;
+  uint16_t term_ms;
+  uint8_t  flag;
+
   if (value_data == NULL || length < 4U)
   {
     return false;                                                     // V251123R5: VIA 패킷 최소 길이 보강
@@ -265,29 +280,51 @@ static bool tapping_term_set_value(uint8_t id, uint8_t *value_data, uint8_t leng
   {
     case id_qmk_tapping_global_term:
     {
-      uint16_t term_ms = (uint16_t)value_data[0] * 10U;             // V251123R5: VIA dropdown 단일 바이트만 수용
-      tapping_term_storage.tapping_term_ms = tapping_term_normalize(term_ms);  // V251123R4: 100~500ms / 20ms 스텝으로 정규화
+      term_ms = tapping_term_normalize((uint16_t)value_data[0] * 10U);  // V251123R5: VIA dropdown 단일 바이트만 수용
+      changed = (tapping_term_storage.tapping_term_ms != term_ms);
+      tapping_term_storage.tapping_term_ms = term_ms;
+      break;
+    }
+
+    case id_qmk_tapping_global_term_exact:  // V260821R1: 2-byte BE, 100–500만 허용, 격자 없음
+    {
+      if (length < 5U)
+      {
+        return false;
+      }
+      term_ms = ((uint16_t)value_data[0] << 8) | (uint16_t)value_data[1];
+      if (term_ms < TAPPING_TERM_MIN_MS || term_ms > TAPPING_TERM_MAX_MS)
+      {
+        return false;
+      }
+      changed = (tapping_term_storage.tapping_term_ms != term_ms);
+      tapping_term_storage.tapping_term_ms = term_ms;
       break;
     }
 
     case id_qmk_tapping_permissive_hold:
-      tapping_term_storage.permissive_hold = value_data[0] ? 1U : 0U;
+      flag = value_data[0] ? 1U : 0U;
+      changed = (tapping_term_storage.permissive_hold != flag);
+      tapping_term_storage.permissive_hold = flag;
       break;
 
     case id_qmk_tapping_hold_on_other_key_press:
-      tapping_term_storage.hold_on_other_key_press = value_data[0] ? 1U : 0U;
+      flag = value_data[0] ? 1U : 0U;
+      changed = (tapping_term_storage.hold_on_other_key_press != flag);
+      tapping_term_storage.hold_on_other_key_press = flag;
       break;
 
     case id_qmk_tapping_retro_tapping:
-      tapping_term_storage.retro_tapping = value_data[0] ? 1U : 0U;
+      flag = value_data[0] ? 1U : 0U;
+      changed = (tapping_term_storage.retro_tapping != flag);
+      tapping_term_storage.retro_tapping = flag;
       break;
 
     default:
       return false;
   }
 
-  tapping_term_sync_state_from_storage();
-  eeconfig_flag_tapping_term(true);
+  tapping_term_commit(changed);
   return true;
 }
 
@@ -302,8 +339,18 @@ static void tapping_term_get_value(uint8_t id, uint8_t *value_data, uint8_t leng
   {
     case id_qmk_tapping_global_term:
     {
-      uint16_t term_ms = tapping_term_storage.tapping_term_ms;
-      value_data[0] = (uint8_t)(term_ms / 10U);                    // V251123R4: 100ms 단위를 10 단위로 축약해 응답
+      value_data[0] = (uint8_t)tapping_term_legacy_units(tapping_term_state.tapping_term_ms);  // V260821R1: floor-20ms, 저장값 유지
+      break;
+    }
+
+    case id_qmk_tapping_global_term_exact:  // V260821R1
+    {
+      uint16_t term_ms = tapping_term_state.tapping_term_ms;
+      value_data[0]    = (uint8_t)(term_ms >> 8);
+      if (length >= 5U)
+      {
+        value_data[1] = (uint8_t)(term_ms & 0xFF);
+      }
       break;
     }
 

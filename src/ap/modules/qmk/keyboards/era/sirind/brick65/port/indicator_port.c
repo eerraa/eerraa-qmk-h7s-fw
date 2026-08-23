@@ -6,6 +6,8 @@
 #include "led.h"
 #include "port.h"
 #include "rgblight.h"
+#include "era_state_sync.h"  // V260823R1: 인디케이터 값 변경 시 CONFIG revision
+#include <string.h>
 #include "ws2812.h"
 
 enum
@@ -178,7 +180,16 @@ void indicator_port_via_command(uint8_t *data, uint8_t length)
 
       if (*command_id == id_custom_set_value)
       {
+        uint8_t before[4] = {data[2], 0, 0, 0};
+        uint8_t after[4]  = {data[2], 0, 0, 0};
+
+        indicator_via_get_value(before);                 // V260823R1: 변경 여부 판정을 위한 사전 스냅샷
         indicator_via_set_value(&(data[2]));
+        indicator_via_get_value(after);
+        if (memcmp(before, after, sizeof(before)) != 0)
+        {
+          era_state_sync_bump_config();                  // V260823R1: 실제로 값이 바뀐 SET에서만 revision을 올린다
+        }
       }
       else
       {

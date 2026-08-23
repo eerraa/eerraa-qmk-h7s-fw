@@ -3,7 +3,6 @@
 #include "bootloader.h"                            // V250310R6: VIA CLEAN 이후 응답 송신 보장 리셋 래퍼
 #include "eeprom_auto_factory_reset.h"             // V251112R4: AUTO_FACTORY_RESET/VIA 센티넬 공용화
 #include "qmk/quantum/eeconfig.h"                  // V251112R3: AUTO_FACTORY_RESET/VIA 공용 초기화 루틴
-#include "qmk/port/usb_monitor.h"                  // V251112R5: USB 모니터 기본값 적용
 #include "qmk/port/port.h"
 
 
@@ -196,9 +195,7 @@ bool eeprom_apply_factory_defaults(bool restore_factory_reset_sentinel)
 #ifdef BOOTMODE_ENABLE
   usbBootModeApplyDefaults();                               // V251114R4: USER 블록이 없을 때만 기본값 백업 적용
 #endif
-#ifdef USB_MONITOR_ENABLE
-  usb_monitor_storage_apply_defaults();                     // V251114R4: USB 모니터 슬롯도 동일 조건으로 보강
-#endif
+  // V260823R2: USB 진단에는 EEPROM 기본값/flush 경로가 없다.
 #endif
   if (eeprom_flush_pending() != true)
   {
