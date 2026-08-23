@@ -5,6 +5,30 @@ Claude auto-memory는 Codex CLI와 공유되지 않으므로 공용 사실은 �
 
 ---
 
+## 2026-08-23 — 자동 USB 복구 폐기와 관측 전용 전달 진단 (V260823R2)
+
+**문제 감사**:
+1. 기존 `usbHidMonitor*`는 8 kHz SOF 간격을 점수화했지만 SOF는 HID 리포트 전달 완료가 아니다. 점수가 `usbRequestBootModeDowngrade()`의 ARM→COMMIT, BootMode EEPROM 쓰기, 지연 reset까지 촉발해 관측과 복구가 결합되어 있었다.
+2. 별도 compile-time `usbd_hid_instrumentation.*`는 즉시 submit 또는 queue dequeue부터 DataIn까지를 재서, 큐 대기 시간이 빠지고 실제 생성→전달 지연을 일관되게 나타내지 못했다. SOF/raw log/CLI 계측도 사용자 진단과 중복됐다.
+3. USB IRQ 우선순위는 2, TIM2는 0이며 `micros()`는 TIM5 CNT 읽기다. 일반 EEPROM main-loop 처리가 USB SOF IRQ를 직접 막는 구조는 아니므로, SOF 지연을 곧바로 펌웨어 stall이나 host delivery failure로 해석하지 않기로 했다.
+
+**결정**:
+1. `USB_MONITOR_ENABLE`, SOF 점수/warmup/timeout, 열거·속도·suspend 점수, 자동 8k→4k→2k→1k 큐, monitor EEPROM 토글(+32), VIA channel 13 ID 3을 모두 제거했다. +32 슬롯은 이후 주소를 움직이지 않도록 `EECONFIG_USER_RESERVED_32`로만 남겼다.
+2. BootMode는 FS 1 kHz 기본과 사용자의 VIA/CLI 선택·Apply·EEPROM·응답 유예 reset만 유지한다. 진단 subsystem은 이 API를 호출하지 않는다.
+3. 항상 켜지는 것은 포화형 하드 이벤트 카운터뿐이다: keyboard/EXK report queue drop, USB reset, HID configuration, suspend, speed change. EEPROM에 쓰지 않는다.
+4. 10/30/60초 사용자 세션 동안만 keyboard report 요청 시각을 재시도 큐에 보존해 실제 keyboard IN `DataIn`까지 측정한다. 8개 정규화 histogram, min/average/max, 창 최대, 큐 최고점, `qmkUpdate()` 간격, 1 ms 초과 stall, 최근 8개 event ring을 고정 RAM에 둔다.
+5. SOF 고해상도 표본, raw stream, matrix 실행시간, 합성 안정성 점수는 제외했다. 실제 전달과 인과가 다르거나 8 kHz hot path 비용·오판 가능성이 크기 때문이다. matrix compile-time 개발 계측은 USB 진단과 분리했다.
+6. VIA 계약은 GET/SET_KEYBOARD_VALUE selector `0x07`, version 1, big-endian, 32 B 고정, request tag, session ID, frozen snapshot sequence, 18 B payload chunk다. chunk 0이 snapshot을 동결하고 후속 chunk는 같은 sequence만 받는다. 상세 byte 배치는 `docs/features_usb_diagnostics.md`가 규범이다.
+7. 일반 VIA 장치 probe는 펌웨어가 아니라 앱의 정의 manifest opt-in으로 차단한다. 연결 세대 변경·unsupported version·stale chunk는 앱이 사실 상태로 처리하며 자동 recovery를 시도하지 않는다.
+
+**비용과 검증**:
+- idle SOF 경로에서 monitor 분기와 TIM5 읽기를 제거했다. idle main loop는 active 플래그 분기만 수행한다. 세션 중에는 main loop당 CNT 1회, keyboard report당 요청/완료 CNT를 읽고 snapshot은 약 1 Hz다.
+- 고정 진단 상태는 session 272 B(histogram/threshold 60 B, event ring payload 96 B 포함) + frozen snapshot 232 B + boot counter 20 B + 상태값 6 B이다. 재시도 큐 원소에 6 B metadata를 추가해 128개 기준 768 B가 증가한다. 동일 May65 빌드의 `V260823R1` 대비 실측 순증가는 RAM 1,176 B(64,396 → 65,572 B), FLASH 44 B(122,124 → 122,168 B)이며 heap/EEPROM 증가는 없다.
+- `tools/era_via_host_tests/run.ps1`에 capability/tag/reserved/version, session, multi-chunk consistency, stale sequence, normalized histogram, hard event, deadline wrap, 포화, RAM 상한 테스트를 추가했다.
+- May65 `MinGW Makefiles` ARM 빌드 성공. 첫 NMake 자동 선택 실패는 CMake가 저장소 GNU make에 NMake `-?`를 보낸 환경 문제였고 소스 컴파일 전이었다. 실기 USB/허브 비교는 별도 필요하다.
+
+---
+
 ## 2026-08-23 — MOUSE VIA 페이지 · exact-ms JSON 노출 · state-sync 보강 (V260823R1)
 
 **배경**: custom VIA 앱(`the-via-eerraa`)과 custom QMK(`qmk_firmware_eerraa`)의 Non-Split ERA 기능을 이 H7S 코드베이스에 맞추는 작업. 검증 + 이식을 함께 수행했다.

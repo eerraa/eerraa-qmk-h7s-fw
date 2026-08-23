@@ -13,7 +13,7 @@
 | 퀀텀 코어 | `src/ap/modules/qmk/quantum/keyboard.c` + `quantum/action.c` | `matrix_task()` 변화 감지 → `action_exec()` → `host_keyboard_send()` 흐름을 담당합니다. |
 | 포팅 메인 루프 | `src/ap/modules/qmk/qmk.c` | `qmkUpdate()`가 VIA RX → `keyboard_task()` → EEPROM → Idle 순으로 호출됩니다. |
 | USB 호스트 래퍼 | `src/ap/modules/qmk/port/protocol/host.c` | QMK 보고서를 `usbHidSendReport()`에 전달하고 NKRO/LED 상태를 동기화합니다. |
-| USB HID/계측 | `src/hw/driver/usb/usb_hid/usbd_hid.c` + `usbd_hid_instrumentation.c` | HID IN 엔드포인트, VIA RAW HID 큐, 폴링 계측을 처리합니다. |
+| USB HID/진단 | `src/hw/driver/usb/usb_hid/{usbd_hid.c,usb_diagnostics.c}` | HID IN 엔드포인트, VIA RAW HID 큐, 세션형 전달 진단을 처리합니다. |
 
 ## 3. 하드웨어 스캐너 (`src/hw/driver/keys.c`)
 - `keysInit()`은 GPIO → DMA → TIM16 순으로 초기화한 뒤 타이머/채널을 스타트합니다.
@@ -26,8 +26,8 @@
 
 ## 4. 매트릭스 브리지 (`src/ap/modules/qmk/port/matrix.c`)
 - `matrix_scan()`은 `keysPeekColsBuf()`를 직접 순회하며 `raw_matrix`를 갱신한 뒤 `debounce()`를 호출합니다.
-- 스캔 시작 시각은 `matrixInstrumentationCaptureStart()`로 기록되고, 완료 후 `matrixInstrumentationLogScan()`/`Propagate()`가 HID 계측 버퍼에 스캔 지터를 보고합니다.
-- `_DEF_ENABLE_MATRIX_TIMING_PROBE`가 1일 때 `matrix info` CLI가 1초마다 스캔/폴링 속도, 큐 길이, 계측 결과를 출력합니다.
+- 스캔 시작 시각은 `matrixInstrumentationCaptureStart()`로 기록되고 완료 후 `matrixInstrumentationLogScan()`이 개발용 스캔 시간을 갱신합니다. USB 전달 진단과는 별개입니다.
+- `_DEF_ENABLE_MATRIX_TIMING_PROBE`가 1일 때 `matrix info` CLI가 스캔 속도와 계측 결과를 출력합니다.
 - `matrixInstrumentationIsCompileEnabled()`를 통해 계측 빌드 여부를 런타임에 확인할 수 있습니다.
 
 ## 5. 퀀텀 & 액션 계층
@@ -37,17 +37,17 @@
 - `qmkUpdate()`(`src/ap/modules/qmk/qmk.c`)는 `via_hid_task()` → `keyboard_task()` → `eeprom_task()` → `idle_task()` 순으로 호출되어 VIA RAW HID 패킷이 HID 리포트보다 먼저 처리되도록 보장합니다.
 
 ## 6. USB HID & VIA RAW HID
-- `usbHidSendReport()`/`usbHidSendReportEXK()`는 보고서를 즉시 전송하거나 큐에 적재하고, 계측 모듈(`usbd_hid_instrumentation.c`)에 타임스탬프를 남깁니다.
-- `usb_hid_rate_info_t` 구조체는 폴링 주파수(`freq_hz`), 폴링 간격 최대/최소(`time_max`/`time_min`), 예상 간격 초과분 최대값(`time_excess_max`), 폴링 지연 당시 큐 길이 최대값(`queue_depth_max`)을 CLI/로그에 제공하며 `matrix info`에서 재사용됩니다.
+- `usbHidSendReport()`/`usbHidSendReportEXK()`는 보고서를 즉시 전송하거나 큐에 적재합니다. 큐 삽입 실패는 항상 켜진 포화 카운터에 기록됩니다.
+- 사용자가 진단 세션을 시작한 동안 키보드 리포트는 요청 시각을 큐와 함께 보존하고 실제 `DataIn` 완료에서 지연을 확정합니다. 상세 계약은 `docs/features_usb_diagnostics.md`입니다.
 - VIA RAW HID는 `src/ap/modules/qmk/port/via_hid.c`가 인터럽트 컨텍스트에서 수신 버퍼에 적재하고, 메인 루프에서 처리 후 `usbHidEnqueueViaResponse()`로 응답합니다.
 
 ## 7. 진단 & CLI
-- `matrix info` : 스캔/폴링 속도, 계측 활성화 여부, 큐 최대 길이를 출력합니다. `matrix info on/off`로 주기 출력 제어.
+- `matrix info` : 스캔 속도와 매트릭스 계측 활성화 여부를 출력합니다. `matrix info on/off`로 주기 출력 제어.
 - `matrix row <value>` : 디버그 목적의 임시 행 덮어쓰기.
 - `_DEF_ENABLE_MATRIX_TIMING_PROBE=0`인 릴리스 빌드에서는 계측 기능이 제외되며 CLI가 이에 대한 안내를 출력합니다.
 
 ## 8. 운영 팁
 1. 행/열 수를 변경하면 `row_wr_buf`와 GPIO 초기화 핀 배열을 함께 수정해야 합니다.
 2. DMA 노드 설정은 HAL Linked-List API를 사용하므로, 타이머/채널을 바꿀 경우 `GPDMA1_REQUEST_TIM16_*` 요청과 채널 속성을 같이 검토합니다.
-3. 매트릭스 계측은 USB HID 계측(`usbd_hid_instrumentation.c`)과 동일 버퍼를 공유하므로, 두 경로 모두 `_DEF_ENABLE_*_TIMING_PROBE` 매크로를 맞춰야 일관된 데이터를 얻을 수 있습니다.
-4. VIA RAW HID 응답이 지연되면 `usbProcess()`의 리셋 큐 또는 USB monitor가 영향을 줄 수 있으므로, USB 관련 로그(`usb`, `boot`, `usb monitor`)도 함께 확인하십시오.
+3. 매트릭스 개발 계측과 사용자 USB 전달 진단은 저장소·활성 조건이 분리되어 서로의 수치를 합치지 않습니다.
+4. VIA RAW HID 응답이 지연되면 transport queue와 연결 세대를 확인하십시오. 진단은 응답을 약 1 Hz로 직렬 요청하며 자동 reset을 예약하지 않습니다.

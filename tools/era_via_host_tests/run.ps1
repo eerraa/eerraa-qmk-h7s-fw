@@ -3,6 +3,7 @@ $Here = $PSScriptRoot
 $Root = (Resolve-Path (Join-Path $Here "..\..")).Path
 $Gcc = "D:\baram-fw-tools_exe\arm_toolchain\mingw_gcc\bin\gcc.exe"
 $Out = Join-Path $Here "test_era_via_exact_ms.exe"
+$DiagnosticsOut = Join-Path $Here "test_usb_diagnostics.exe"
 $Inc = Join-Path $Here "include"
 $Qmk = Join-Path $Root "src\ap\modules\qmk"
 $Sandbox = Join-Path $Here "sandbox"
@@ -60,6 +61,30 @@ if ($LASTEXITCODE -ne 0) {
 & $Out
 if ($LASTEXITCODE -ne 0) {
     throw "host tests failed"
+}
+
+$DiagnosticsArgs = @(
+    "-std=gnu11",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-DUSB_DIAGNOSTICS_HOST_TEST",
+    "-I$(Join-Path $Here 'diagnostics_include')",
+    "-I$Root\src\hw\driver\usb\usb_hid",
+    "-I$Root\src\ap\modules\qmk\port",
+    (Join-Path $Here "test_usb_diagnostics.c"),
+    (Join-Path $Root "src\hw\driver\usb\usb_hid\usb_diagnostics.c"),
+    (Join-Path $Root "src\ap\modules\qmk\port\era_usb_diagnostics.c"),
+    "-o", $DiagnosticsOut
+)
+
+& $Gcc @DiagnosticsArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "USB diagnostic host test compile failed"
+}
+& $DiagnosticsOut
+if ($LASTEXITCODE -ne 0) {
+    throw "USB diagnostic host tests failed"
 }
 
 python (Join-Path $Here "check_single_producer.py")

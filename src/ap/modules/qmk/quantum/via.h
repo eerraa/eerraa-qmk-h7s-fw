@@ -103,6 +103,7 @@ enum via_keyboard_value_id {
     id_firmware_version    = 0x04,
     id_device_indication   = 0x05,
     id_era_state_sync      = 0x06,  // V260821R1: GET_KEYBOARD_VALUE 리비전 봉투
+    id_era_usb_diagnostics = 0x07,  // V260823R2: 읽기 전용 USB 진단 세션 봉투
 };
 
 enum via_channel_id {
@@ -159,7 +160,6 @@ enum via_qmk_audio_value {
 enum via_qmk_usb_polling_value {
     id_qmk_usb_bootmode_select = 1,
     id_qmk_usb_bootmode_apply  = 2,
-    id_qmk_usb_monitor_toggle  = 3,
 };
 
 // V251115R1: VIA KEY RESPONSE 메뉴 value ID 매핑

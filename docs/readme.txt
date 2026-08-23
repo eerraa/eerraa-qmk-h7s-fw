@@ -4,11 +4,11 @@
 
 1. 펌웨어 파일 구성
 
-   키보드이름-V260823R1.uf2
+   키보드이름-V260823R2.uf2
      - 키보드 본체에 올리는 펌웨어 파일입니다.
      - 디바운스 모드/딜레이를 VIA에서 실시간 조정할 수 있으므로 추가 변형 이미지는 제공하지 않습니다. 이 하나의 UF2만 사용하면 됩니다.
 
-   키보드이름-VIA-V260823R1.JSON
+   키보드이름-VIA-V260823R2.JSON
      - VIA(usevia.app)에서 키보드를 인식하고, 디바운스/USB 설정/기타 기능을 노출하기 위한 Draft Definition 파일입니다.
      - 키맵을 편집하기 전에 반드시 한 번 로드해야 합니다.
 
@@ -20,10 +20,12 @@
    - 기본 폴링 레이트는 1 kHz (FS)이며, 8 kHz (HS)를 쓰려면 메뉴에서 직접 선택해야 합니다.
    - Apply 버튼을 누르면 즉시 적용됩니다. 일부 허브/케이블 환경에서는 HS에서 불안정할 수 있으므로 문제가 보이면 1 kHz (FS)로 낮추십시오.
 
-2-2. USB 모니터링 기능
+2-2. USB 전달 진단
 
-   - SYSTEM 메뉴의 "Auto downgrade on USB unstable [BETA]"를 켜면 오류 감지 시 폴링 레이트를 자동으로 한 단계 낮춥니다.
-   - 베타 기능이므로 원치 않게 자주 바뀐다면 끄는 것을 권장합니다.
+   - 전용 ERA VIA 앱의 DIAGNOSTICS에서 10/30/60초 측정을 시작할 수 있습니다(기본 30초).
+   - 실제 HID 전달 지연, 분포, 펌웨어 루프 간격, USB reset/suspend 등 사실 데이터만 표시합니다.
+   - 펌웨어는 폴링 레이트를 자동으로 바꾸거나 EEPROM에 진단 결과를 저장하거나 자동 재부팅하지 않습니다.
+   - 비교가 필요하면 SYSTEM에서 모드를 직접 적용한 뒤 재연결하여 새 진단 세션을 실행하십시오.
 
 2-3. RGB 이펙트 확장
 
@@ -152,11 +154,11 @@ Firmware Guide
 
 1. Firmware package contents
 
-   KeyboardName-V260823R1.uf2
+   KeyboardName-V260823R2.uf2
      - Flash this UF2 onto the keyboard.
      - Debounce mode/delay are runtime-configurable in VIA, so no alternate images are shipped—use this single UF2.
 
-   KeyboardName-VIA-V260823R1.JSON
+   KeyboardName-VIA-V260823R2.JSON
      - VIA Draft Definition so the keyboard is recognized and USB/debounce/feature controls appear.
      - Load it once before editing the keymap.
 
@@ -168,10 +170,12 @@ Firmware Guide
    - Default is 1 kHz (FS); select 8 kHz (HS) manually if needed.
    - Apply takes effect immediately; if HS is unstable on your hub/cable, fall back to 1 kHz (FS).
 
-2-2. USB monitoring
+2-2. USB delivery diagnostics
 
-   - SYSTEM → "Auto downgrade on USB unstable [BETA]" lowers polling by one step when errors are detected.
-   - If it changes too often, turn it off.
+   - In the dedicated ERA VIA app, open DIAGNOSTICS and run a 10/30/60-second session (30 seconds by default).
+   - It reports factual HID delivery latency/distribution, firmware loop gaps, and hard USB events such as reset/suspend.
+   - Firmware never changes polling automatically, persists diagnostic results to EEPROM, or reboots for diagnostics.
+   - To compare modes, apply a mode manually in SYSTEM, reconnect, and run a separate session.
 
 2-3. RGB effects
 
@@ -271,7 +275,7 @@ Firmware Guide
    2) Open the SETTINGS tab and enable "Show Design tab."
    3) Open DESIGN, click "Load Draft Definition," and load the provided VIA JSON.
    4) Return to CONFIGURE to edit keymaps, layers, and macros.
-   5) Use SYSTEM for USB POLLING/monitoring, LIGHTING for RGB, and DEBOUNCE for debounce modes/timings.
+   5) Use SYSTEM for manual USB POLLING selection, DIAGNOSTICS for read-only measurements, LIGHTING for RGB, and DEBOUNCE for debounce modes/timings.
 
 4. Firmware flashing procedure
 

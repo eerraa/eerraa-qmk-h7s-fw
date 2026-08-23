@@ -1,5 +1,7 @@
 # 프리징 이슈 회고 (USB_MONITOR_ENABLE 빌드)
 
+> 역사 기록: 아래 레거시 모니터와 자동 다운그레이드 코드는 V260823R2에서 제거되었습니다. 현재 구현·운영은 `docs/features_usb_diagnostics.md`를 기준으로 하며, 이 문서는 당시 실측과 판단을 보존합니다.
+
 ## 개요
 - 대상 보드: STM32H7S (HS 8000 Hz 기본) / Brick60 VIA 빌드
 - 현상: `USB_MONITOR_ENABLE`이 정의된 상태에서 부팅 후 약 620 s(10분 20초) 경과 시 키보드가 완전히 정지. LED 토글 포함 모든 동작이 멈춰 CPU/SysTick 정지로 추정됨.

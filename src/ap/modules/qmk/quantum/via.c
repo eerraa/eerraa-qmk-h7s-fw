@@ -33,6 +33,7 @@
 #include "wait.h"
 #include "version.h" // for QMK_BUILDDATE used in EEPROM magic
 #include "era_state_sync.h"  // V260821R1: GET 0x06 리비전 봉투. TX는 raw_hid_send가 아니라 via_hid_task enqueue.
+#include "era_usb_diagnostics.h"  // V260823R2: 읽기 전용 USB 진단 세션 0x07 봉투.
 
 #if defined(AUDIO_ENABLE)
 #    include "audio.h"
@@ -345,6 +346,12 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
                     }
                     break;
                 }
+                case id_era_usb_diagnostics: {  // V260823R2: capability/snapshot GET은 단일 응답 버퍼만 채운다.
+                    if (!era_usb_diagnostics_via_command(data, length)) {
+                        *command_id = id_unhandled;
+                    }
+                    break;
+                }
                 default: {
                     // The value ID is not known
                     // Return the unhandled state
@@ -364,6 +371,12 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
                 case id_device_indication: {
                     uint8_t value = command_data[1];
                     via_set_device_indication(value);
+                    break;
+                }
+                case id_era_usb_diagnostics: {  // V260823R2: start/stop/clear만 허용하며 설정은 저장하지 않는다.
+                    if (!era_usb_diagnostics_via_command(data, length)) {
+                        *command_id = id_unhandled;
+                    }
                     break;
                 }
                 default: {

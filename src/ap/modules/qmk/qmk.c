@@ -2,6 +2,8 @@
 #include "qmk/port/port.h"
 #include "qmk/port/platforms/eeprom.h"            // V251112R5: EEPROM 버스트 모드 제어
 #include "qmk/port/debounce_profile.h"
+#include "usb_diagnostics.h"                      // V260823R2: 세션 중에만 메인 루프 간격 계측
+#include "micros.h"
 
 
 static void cliQmk(cli_args_t *args);
@@ -48,6 +50,10 @@ bool qmkInit(void)
 
 void qmkUpdate(void)
 {
+  if (usbDiagnosticsIsActive())
+  {
+    usbDiagnosticsTask(micros());                                // V260823R2: idle일 때 타이머 읽기/계측 task 없음
+  }
   via_hid_task();                                                // V251108R8: VIA 명령을 메인 루프에서 처리해 USB ISR 부하 감소
   keyboard_task();
   eeprom_task();

@@ -1,6 +1,5 @@
 #include "hw.h"
 #include "qmk/port/platforms/eeprom.h"  // V250923R1 Preload QMK EEPROM services
-#include "qmk/port/usb_monitor.h"    // V251112R6: USB 모니터 초기화 진입점
 
 
 
@@ -104,20 +103,12 @@ bool hwInit(void)
 #ifdef BOOTMODE_ENABLE
   bootmode_init();                                            // V251112R6: BootMode 기본값 초기화
 #endif
-#ifdef USB_MONITOR_ENABLE
-  usb_monitor_init();                                         // V251112R6: USB 모니터 기본값 초기화
-#endif
+  // V260823R2: USB 진단은 RAM 전용이므로 부팅 EEPROM 초기화/로드 단계가 없다.
   bool factory_reset_ok = hwRunFactoryResetWithRetry();        // V251124R6: AUTO_FACTORY_RESET 실패 시 LED 표시 후 재시도
 #ifdef BOOTMODE_ENABLE
   if (factory_reset_ok && usbBootModeLoad() != true)           // V250923R1 Apply stored USB boot mode preference
   {
     logPrintf("[!] usbBootModeLoad Fail\n");
-  }
-#endif
-#ifdef USB_MONITOR_ENABLE
-  if (factory_reset_ok && usbInstabilityLoad() != true)        // V251108R1: VIA 토글과 USB 모니터 상태 동기화
-  {
-    logPrintf("[!] usbInstabilityLoad Fail\n");
   }
 #endif
   if (factory_reset_ok != true)

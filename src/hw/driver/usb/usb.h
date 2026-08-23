@@ -71,37 +71,16 @@ typedef enum UsbBootMode                               // V250923R1 Persisted US
 #define USB_BOOT_MODE_DEFAULT_VALUE USB_BOOT_MODE_FS_1K           // V251112R6: 기본 BootMode, 보드에서 재정의 가능
 #endif
 
-#define USB_BOOT_MONITOR_CONFIRM_DELAY_MS (2000U)
-
-typedef enum
-{
-  USB_BOOT_DOWNGRADE_REJECTED = 0,
-  USB_BOOT_DOWNGRADE_ARMED,
-  USB_BOOT_DOWNGRADE_CONFIRMED,
-} usb_boot_downgrade_result_t;
-
-typedef struct
-{
-  bool     monitor_enabled;                                     // V251123R7: USB 모니터/리셋 상태 디버그 스냅샷
-  uint8_t  boot_stage;
-  bool     reset_pending;
-} usb_debug_state_t;
-
 #ifdef BOOTMODE_ENABLE
-void          bootmode_init(void);                   // V251112R6: BootMode 기본값 초기화 진입점
-bool          usbBootModeLoad(void);                    // V250923R1 Load stored boot mode selection
-UsbBootMode_t usbBootModeGet(void);                     // V250923R1 Query active boot mode
-bool          usbBootModeIsFullSpeed(void);             // V250923R1 Check if FS (1 kHz) mode is requested
-uint8_t       usbBootModeGetHsInterval(void);           // V250923R1 Retrieve HS polling interval encoding
-bool          usbBootModeStore(UsbBootMode_t mode);     // V251108R1 VIA BootMode 저장 공개
-void          usbBootModeApplyDefaults(void);           // V251112R5 EEPROM 초기화용 기본값 적용
+void          bootmode_init(void);                         // V251112R6: BootMode 기본값 초기화 진입점
+bool          usbBootModeLoad(void);                       // V250923R1: 저장된 폴링 모드 로드
+UsbBootMode_t usbBootModeGet(void);                        // V250923R1: 현재 폴링 모드
+bool          usbBootModeIsFullSpeed(void);
+uint8_t       usbBootModeGetHsInterval(void);
+bool          usbBootModeStore(UsbBootMode_t mode);
+void          usbBootModeApplyDefaults(void);
 bool          usbBootModeSaveAndReset(UsbBootMode_t mode);
-bool          usbBootModeScheduleApply(UsbBootMode_t mode);  // V251108R3: 인터럽트 문맥에서 리셋을 defer
-usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
-                                                        uint32_t      measured_delta_us,
-                                                        uint32_t      expected_us,
-                                                        uint32_t      now_ms); // V250924R2 USB 다운그레이드 요청 인터페이스
-void usbDebugGetState(usb_debug_state_t *state);                // V251123R7: USB 모니터/리셋 상태 조회
+bool          usbBootModeScheduleApply(UsbBootMode_t mode);  // V260823R2: 사용자 명시 적용 경로만 유지
 #else
 static inline void bootmode_init(void)
 {
@@ -148,61 +127,9 @@ static inline bool usbBootModeScheduleApply(UsbBootMode_t mode)
   (void)mode;
   return false;
 }
-
-static inline void usbDebugGetState(usb_debug_state_t *state)    // V251123R7: BootMode 비활성 빌드용 스텁
-{
-  if (state != NULL)
-  {
-    state->monitor_enabled = false;
-    state->boot_stage      = 0U;
-    state->reset_pending   = false;
-  }
-}
-
-static inline usb_boot_downgrade_result_t usbRequestBootModeDowngrade(UsbBootMode_t mode,
-                                                                      uint32_t      measured_delta_us,
-                                                                      uint32_t      expected_us,
-                                                                      uint32_t      now_ms)
-{
-  (void)mode;
-  (void)measured_delta_us;
-  (void)expected_us;
-  (void)now_ms;
-  return USB_BOOT_DOWNGRADE_REJECTED;
-}
 #endif
 
-#ifdef USB_MONITOR_ENABLE
-bool usbInstabilityLoad(void);                          // V251108R1 VIA USB 모니터 토글 로드
-bool usbInstabilityStore(bool enable);                  // V251108R1 VIA USB 모니터 토글 저장
-bool usbInstabilityIsEnabled(void);                     // V251108R1 USB 모니터 런타임 상태
-void usb_monitor_init(void);                            // V251112R6: USB 모니터 기본값 초기화 진입점
-#else
-static inline bool usbInstabilityLoad(void)
-{
-  return true;
-}
-
-static inline bool usbInstabilityStore(bool enable)
-{
-  (void)enable;
-  return false;
-}
-
-static inline bool usbInstabilityIsEnabled(void)
-{
-  return false;
-}
-
-#ifndef USB_MONITOR_INIT_STUB_DEFINED
-#define USB_MONITOR_INIT_STUB_DEFINED                                     // V251123R6: usb_monitor_init 스텁 중복 정의 방지
-static inline void usb_monitor_init(void)
-{
-}
-#endif
-#endif
-
-void usbProcess(void);                                  // V250924R2 USB 안정성 모니터 서비스 루프
+void usbProcess(void);                                  // V260823R2 사용자 BootMode/reset 요청 서비스
 bool usbScheduleGraceReset(uint32_t delay_ms);          // V251109R4 VIA 응답 송신 보장용 리셋 요청
 
 bool usbInit(void);

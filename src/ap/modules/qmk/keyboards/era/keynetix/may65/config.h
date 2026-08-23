@@ -12,7 +12,6 @@
 // hw_def.h / hw_caps_* 오버라이드 및 공용 토글
 // ---------------------------------------------------------------------------
 #define _DEF_ENABLE_MATRIX_TIMING_PROBE   0     // MATRIX 계측을 개발 빌드에서 강제 활성화하려면 정의
-#define _DEF_ENABLE_USB_HID_TIMING_PROBE  0     // HID 계측을 개발 빌드에서 강제 활성화하려면 정의
 #define _USE_HW_WS2812
 #define     HW_WS2812_MAX_CH        27    // V260428R1: MAY65는 indicator 1ch + underglow 26ch 총 27채널
 #define     HW_WS2812_CAPS          0     // V260428R1: 물리 0번 LED를 단일 인디케이터로 사용
@@ -41,11 +40,7 @@
 #define GRAVE_ESC_ENABLE
 #define KILL_SWITCH_ENABLE
 #define KKUK_ENABLE
-#define USB_MONITOR_ENABLE          1
-#define BOOTMODE_ENABLE             1
-#if defined(USB_MONITOR_ENABLE) && !defined(BOOTMODE_ENABLE)
-#  define BOOTMODE_ENABLE           1
-#endif
+#define BOOTMODE_ENABLE             1     // V260823R2: 폴링 모드는 사용자 명시 적용만 허용
 #define G_TERM_ENABLE
 #ifdef G_TERM_ENABLE
 #  define TAPPING_TERM_PER_KEY

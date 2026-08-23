@@ -13,7 +13,6 @@
 // hw_def.h / hw_caps_* 오버라이드 및 공용 토글
 // ---------------------------------------------------------------------------
 #define _DEF_ENABLE_MATRIX_TIMING_PROBE   0     // MATRIX 계측을 개발 빌드에서 강제 활성화하려면 정의
-#define _DEF_ENABLE_USB_HID_TIMING_PROBE  0     // HID 계측을 개발 빌드에서 강제 활성화하려면 정의
 // #define _USE_HW_VCOM                        // hw_caps_usb.h 참고
 #define _USE_HW_WS2812                         // hw_caps_led.h 참고 (V251114R2: WS2812 캡 분리)
 #define HW_WS2812_MAX_CH            30
@@ -43,11 +42,7 @@
 #define GRAVE_ESC_ENABLE
 #define KILL_SWITCH_ENABLE
 #define KKUK_ENABLE
-#define USB_MONITOR_ENABLE          1           // V251108R1: Brick60 VIA 채널 USB 모니터 활성화
-#define BOOTMODE_ENABLE             1
-#if defined(USB_MONITOR_ENABLE) && !defined(BOOTMODE_ENABLE)
-#  define BOOTMODE_ENABLE           1
-#endif
+#define BOOTMODE_ENABLE             1     // V260823R2: 폴링 모드는 사용자 명시 적용만 허용
 #define G_TERM_ENABLE                           // V251123R4: VIA TAPPING term/옵션 제어 활성화
 #ifdef G_TERM_ENABLE
 #  define TAPPING_TERM_PER_KEY
