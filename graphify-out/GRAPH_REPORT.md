@@ -1,16 +1,16 @@
-# Graph Report - eerraa-qmk-h7s-fw-via2  (2026-08-23)
+# Graph Report - eerraa-qmk-h7s-fw-via2  (2026-08-24)
 
 ## Corpus Check
-- 364 files · ~204,232 words
+- 364 files · ~204,758 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2174 nodes · 4867 edges · 126 communities (122 shown, 4 thin omitted)
+- 2174 nodes · 4867 edges · 126 communities (123 shown, 3 thin omitted)
 - Extraction: 76% EXTRACTED · 24% INFERRED · 0% AMBIGUOUS · INFERRED: 1149 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b6743a80`
+- Built from commit: `696fbda7`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -45,6 +45,7 @@
 - VIA 코어
 - 시퀀서 코어
 - 보드별 WS2812 드라이버
+- 키코드 변환·리포트
 - I2C 드라이버
 - CLI 코어
 - Key Override·원샷 모드
@@ -140,7 +141,7 @@
 ## Hyperedges (group relationships)
 - **VIA 커스텀 채널 기능군 (ch13 USB / ch15 Tapping / ch16 TapDance over RAW HID)** — docs_features_bootmode_via_channel13, docs_features_tapping_runtime_tapping_term, docs_features_tapdance_tap_dance_feature, docs_features_keyinput_via_raw_hid_path [INFERRED 0.85]
 
-## Communities (126 total, 4 thin omitted)
+## Communities (126 total, 3 thin omitted)
 
 ### Community 0 - "디바운스 알고리즘/프로파일"
 Cohesion: 0.19
@@ -168,15 +169,15 @@ Nodes (41): eeconfig_update_rgblight_current(), rgblight_blink_layer(), rgblight
 
 ### Community 7 - "액션·호스트 리포트 전송"
 Cohesion: 0.07
-Nodes (42): oneshot_fullfillment_t, timer_read(), report_keyboard_t, report_nkro_t, host_keyboard_send(), host_nkro_send(), has_anykey(), add_oneshot_locked_mods() (+34 more)
+Nodes (43): oneshot_fullfillment_t, timer_read(), report_keyboard_t, report_nkro_t, host_keyboard_send(), host_nkro_send(), has_anykey(), add_oneshot_locked_mods() (+35 more)
 
 ### Community 8 - "시퀀서 테스트"
 Cohesion: 0.05
 Nodes (42): TEST_F(), TestGetActiveTracks, TestGetActiveTracksOutOfBound, TestGetBeatDuration, TestGetStepDuration120, TestGetStepDuration60, TestIncreaseTempoMax, TestIsStepOffForGivenTrack (+34 more)
 
 ### Community 9 - "keyboard 태스크·매트릭스 브리지"
-Cohesion: 0.09
-Nodes (20): generate_tick_event(), housekeeping_task(), housekeeping_task_kb(), housekeeping_task_user(), is_keyboard_master(), keyboard_post_init_kb(), keyboard_post_init_user(), keyboard_pre_init_kb() (+12 more)
+Cohesion: 0.10
+Nodes (16): generate_tick_event(), housekeeping_task(), housekeeping_task_kb(), housekeeping_task_user(), is_keyboard_master(), keyboard_post_init_kb(), keyboard_post_init_user(), keyboard_task() (+8 more)
 
 ### Community 10 - "USB CDC 클래스"
 Cohesion: 0.16
@@ -184,11 +185,11 @@ Nodes (20): debounce_algo_entry_t, debounce_runtime_error_t, debounce_runtime_ty
 
 ### Community 11 - "액션 레이어"
 Cohesion: 0.20
-Nodes (27): layer_state_t, default_layer_and(), default_layer_debug(), default_layer_or(), default_layer_set(), default_layer_state_set(), default_layer_state_set_kb(), default_layer_state_set_user() (+19 more)
+Nodes (27): layer_state_t, default_layer_and(), default_layer_or(), default_layer_set(), default_layer_state_set(), default_layer_state_set_kb(), default_layer_state_set_user(), default_layer_xor() (+19 more)
 
 ### Community 12 - "액션 실행 코어"
-Cohesion: 0.14
-Nodes (20): action_t, keyrecord_t, debug_action(), get_hold_on_other_key_press(), get_retro_tapping(), is_tap_action(), is_tap_record(), post_process_record_quantum() (+12 more)
+Cohesion: 0.13
+Nodes (20): action_t, keyrecord_t, debug_action(), get_hold_on_other_key_press(), get_retro_tapping(), is_tap_action(), is_tap_record(), default_layer_debug() (+12 more)
 
 ### Community 13 - "USB HID 클래스·인터벌"
 Cohesion: 0.13
@@ -199,8 +200,8 @@ Cohesion: 0.06
 Nodes (43): digitizer_t, host_driver_t, joystick_t, report_digitizer_t, report_joystick_t, report_programmable_button_t, timer_elapsed(), report_mouse_t (+35 more)
 
 ### Community 15 - "send_string·키 전송 유틸"
-Cohesion: 0.09
-Nodes (41): key_override_t, keyrecord_t, kill_switch_process(), kkuk_idle(), led_t, host_consumer_send(), host_keyboard_led_state(), host_system_send() (+33 more)
+Cohesion: 0.12
+Nodes (36): keyrecord_t, kill_switch_process(), kkuk_idle(), wait_ms(), led_t, host_consumer_send(), host_keyboard_led_state(), host_system_send() (+28 more)
 
 ### Community 16 - "usbd_conf (HAL PCD 연동)"
 Cohesion: 0.12
@@ -262,6 +263,10 @@ Nodes (20): sequencer_resolution_t, get_beat_duration(), get_step_duration(), is
 Cohesion: 0.13
 Nodes (16): rgb_led_t, ws2812_setleds(), rgb_led_t, ws2812_setleds(), rgb_led_t, ws2812_setleds(), rgb_led_t, ws2812_setleds() (+8 more)
 
+### Community 31 - "키코드 변환·리포트"
+Cohesion: 0.25
+Nodes (3): action_for_key(), keypos_t, keymap_key_to_keycode()
+
 ### Community 32 - "I2C 드라이버"
 Cohesion: 0.12
 Nodes (21): I2C_HandleTypeDef, millis(), eepromWaitReady(), cli_args_t, cliI2C(), delayUs(), HAL_I2C_ErrorCallback(), HAL_I2C_MspDeInit() (+13 more)
@@ -271,8 +276,8 @@ Cohesion: 0.14
 Nodes (22): cli_t, cli_args_t, __WEAK, cliLineAdd(), cliLineChange(), cliLineClean(), cliLoopIdle(), cliMemoryDump() (+14 more)
 
 ### Community 34 - "Key Override·원샷 모드"
-Cohesion: 0.26
-Nodes (15): wait_ms(), tap_code(), tap_code_delay(), neutralize_flashing_modifiers(), send_byte(), send_char(), send_char_with_delay(), send_dword() (+7 more)
+Cohesion: 0.17
+Nodes (18): key_override_t, clear_suppressed_override_mods(), clear_weak_override_mods(), get_mods(), get_oneshot_locked_mods(), get_oneshot_mods(), get_weak_mods(), keyrecord_t (+10 more)
 
 ### Community 35 - "CDC 상위 계층"
 Cohesion: 0.15
@@ -309,6 +314,10 @@ Nodes (16): eeprom_get_write_overflow_count(), cli_args_t, cliEeprom(), eepromFo
 ### Community 43 - "다이나믹 키맵"
 Cohesion: 0.21
 Nodes (22): era_state_sync_bump_config(), eeprom_update_byte(), dynamic_keymap_encoder_to_eeprom_address(), dynamic_keymap_get_encoder(), dynamic_keymap_get_keycode(), dynamic_keymap_get_layer_count(), dynamic_keymap_key_to_eeprom_address(), dynamic_keymap_macro_get_buffer_size() (+14 more)
+
+### Community 44 - "HID 계측·micros"
+Cohesion: 0.12
+Nodes (6): sendchar_func_t, keyboard_pre_init_kb(), keyboard_pre_init_user(), keyboard_setup(), matrix_setup(), print_set_sendchar()
 
 ### Community 45 - "rgblight 이펙트"
 Cohesion: 0.11
@@ -348,7 +357,7 @@ Nodes (15): rgblight_indicator_target_callback_t, led_t, indicator_apply_default
 
 ### Community 54 - "액션 태핑 코어"
 Cohesion: 0.14
-Nodes (26): action_exec(), keyevent_t, debug_event(), debug_record(), action_tapping_process(), keyevent_t, keyrecord_t, debug_tapping_key() (+18 more)
+Nodes (27): action_exec(), keyevent_t, debug_event(), debug_record(), process_record_tap_hint(), action_tapping_process(), keyevent_t, keyrecord_t (+19 more)
 
 ### Community 55 - "Tapping Term 포트"
 Cohesion: 0.20
@@ -463,8 +472,8 @@ Cohesion: 0.18
 Nodes (11): rgblight_indicator_state_t, eeconfig_flush_rgblight_current(), preprocess_rgblight(), rgblight_consume_host_led_queue(), rgblight_flush_render_queue(), rgblight_indicator_apply_overlay(), rgblight_render_frame(), rgblight_task() (+3 more)
 
 ### Community 87 - "버전 VIA 포트"
-Cohesion: 0.21
-Nodes (9): KEYCODE2CONSUMER(), KEYCODE2SYSTEM(), keycode_config(), mod_config(), action_for_key(), action_for_keycode(), action_t, keypos_t (+1 more)
+Cohesion: 0.28
+Nodes (6): KEYCODE2CONSUMER(), KEYCODE2SYSTEM(), keycode_config(), mod_config(), action_for_keycode(), action_t
 
 ### Community 88 - "시퀀서 트랙 활성화"
 Cohesion: 0.60
@@ -505,7 +514,7 @@ Nodes (4): is_sequencer_track_active(), sequencer_set_track_activation(), sequen
 ## Knowledge Gaps
 - **42 isolated node(s):** `config_copy`, `state_copy`, `1. 목적과 범위`, `2. 구성 파일`, `3. 이 유닛은 런타임 상태를 소유하지 않는다` (+37 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **4 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **3 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -514,7 +523,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.138) - this node is a cross-community bridge._
 - **Why does `logPrintf()` connect `HID 리포트 전송 경로` to `디바운스 알고리즘/프로파일`, `퀀텀 코어·부트로더 리셋`, `QSPI 플래시 (W25Q16JV)`, `USB 디스크립터 3종`, `send_string·키 전송 유틸`, `usbd_conf (HAL PCD 연동)`, `매트릭스 스캔·계측`, `USB 코어·BootMode 관리`, `Tap Dance 퀀텀 처리`, `ap 메인 루프`, `I2C 드라이버`, `CLI 코어`, `CDC 상위 계층`, `EEPROM 비동기 큐`, `USB 컨트롤 요청 (ctlreq)`, `CLI 부가 명령·펌웨어 태그`, `ZD24C128 EEPROM 드라이버`, `플래시 EEPROM 에뮬레이션`, `퀀텀 헤더 모음`, `UART·CLI 입출력`, `드라이버 초기화·로그`, `타이머 포트·키보드 초기화`, `via_hid RAW HID 브리지`, `matrix_get_row`?**
   _High betweenness centrality (0.130) - this node is a cross-community bridge._
-- **Why does `timer_read()` connect `액션·호스트 리포트 전송` to `I2C 드라이버`, `퀀텀 코어·부트로더 리셋`, `rgblight 코어`, `keyboard 태스크·매트릭스 브리지`, `시퀀서 페이즈 태스크`, `액션 레이어`, `HID 리포트 타입 정의`, `send_string·키 전송 유틸`, `시퀀서 코어`, `I2C/SPI CLI 보조`, `Tap Dance 포트`, `debounce.h`?**
+- **Why does `timer_read()` connect `액션·호스트 리포트 전송` to `I2C 드라이버`, `Key Override·원샷 모드`, `퀀텀 코어·부트로더 리셋`, `rgblight 코어`, `keyboard 태스크·매트릭스 브리지`, `시퀀서 페이즈 태스크`, `HID 리포트 타입 정의`, `시퀀서 코어`, `I2C/SPI CLI 보조`, `Tap Dance 포트`, `debounce.h`?**
   _High betweenness centrality (0.095) - this node is a cross-community bridge._
 - **Are the 19 inferred relationships involving `TEST_F()` (e.g. with `get_beat_duration()` and `get_step_duration()`) actually correct?**
   _`TEST_F()` has 19 INFERRED edges - model-reasoned connections that need verification._

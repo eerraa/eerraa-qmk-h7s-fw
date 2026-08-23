@@ -5,6 +5,56 @@ Claude auto-memory는 Codex CLI와 공유되지 않으므로 공용 사실은 �
 
 ---
 
+## 2026-08-24 — 실기 검증 전 독립 감사 결과 (V260823R2, 펌웨어 코드 변경 없음)
+
+`696fbda`(펌웨어) / `94fd725`(the-via-eerraa) 구현을 실기 검증 투입 가능 여부 기준으로
+독립 재검토했다. **펌웨어 코드에서는 BLOCKER를 찾지 못했고 펌웨어 소스는 수정하지 않았다.**
+BLOCKER 1건은 앱 표시 계층에서 발견해 `the-via-eerraa`에서만 고쳤다.
+
+**실측으로 확정한 사실** (다음 세션이 다시 재보정하지 않도록 기록):
+1. `micros()`는 정확히 1 µs다. HSE 24 MHz → PLL1(M2/N50/P1) → SYSCLK 600 MHz, HCLK
+   `DIV2`=300 MHz, APB1 `DIV2`=150 MHz이므로 APB1 타이머 클럭은 300 MHz다.
+   `microsInit()`의 prescaler 299가 정확히 1 MHz를 만든다. `bspInit()`의
+   `SystemClock_Config()`가 `hwInit()→microsInit()`보다 먼저 실행되므로
+   `SystemCoreClock`은 이미 600 MHz다. wrap 주기는 4,295초로 최대 세션 60초의 71배다.
+2. `usbDiagnosticsCapture()`의 임계구역 복사량은 정확히 **292 B**다
+   (`sizeof(session_internal)`=272 + `hard_counters`=20, mingw gcc로 실측).
+   `usb_diagnostics_snapshot_t`는 236 B이며 기존 문서의 232 B 표기는 오차다.
+3. `PRIMASK` 임계구역은 USB/TIM2 IRQ를 포함해 전역 차단이지만, 292 B 복사는 600 MHz
+   M7에서 1 µs 미만이고 빈도가 약 1 Hz다. 8 kHz의 125 µs 예산 대비 구조적 위험이 없다.
+4. 진단 OFF 오버헤드를 디스어셈블리로 확인했다. `USBD_HID_SOF`에는 진단 코드가 전혀
+   없고(레거시 monitor의 SOF당 `micros()`가 사라진 순이득), `USBD_HID_DataIn`·
+   `qmkUpdate`는 `usbDiagnosticsIsActive()` 호출 1회만 추가된다.
+   `usbHidSendReport`는 리포트당 28 B 스택 zero-init과 `qbufferAvailable()` 1회가
+   늘었고, 8 kHz 기준 합계 0.05 % 미만이다.
+5. May65 RAM 65,572 B / FLASH 122,168 B로 보고값과 일치했고, 진단 opt-in H7S 5종
+   (may65, intigrity80, brick60, brick65, sculpturei) 모두 ARM 빌드가 통과했다.
+
+**BLOCKER (앱 측, 수정 완료)**: 펌웨어는 세션 시작 시점의 **선택 BootMode**로
+`expected_interval_us`를 계산하는데, 이는 실제 enumerate된 link speed가 아니다.
+HS 8K를 선택한 채 FS만 지원하는 hub/port에 연결하면 실제 간격은 1000 µs인데 기준은
+125 µs가 되어 모든 표본이 `> 4.00×` 버킷에 들어간다. 정상 FS 연결을 장치 결함으로
+오판하게 만드는 표시이며, 실기 체크리스트가 허브·다른 PC를 명시하므로 실제로 발생한다.
+펌웨어 wire contract는 바꾸지 않았다 — snapshot이 mode와 negotiated speed를 이미 함께
+보내므로 앱이 정합성을 판정해 경고·보고서 문구·비교표 row 표시로 처리한다. 선택 mode를
+숨기거나 자동 보정하지 않는 편이 "8K로 동작하지 않았다"는 사실을 더 정확히 전달한다.
+
+**실기에서만 판정 가능한 항목 (POST-HARDWARE)**:
+- `USBD_HID_DataIn`은 epnum과 무관하게 `p_hhid->state`를 IDLE로 되돌리고,
+  `USBD_HID_SOF`의 VIA 응답 송신은 그 state를 BUSY로 잡지 않는다. **이는 이 커밋
+  이전부터 존재한 드라이버 동작이다.** 키보드 IN이 in-flight인 순간 VIA IN이 완료되면
+  드물게 latency 표본이 새 요청 시각과 짝지어져 과소 측정될 수 있다. 타이핑 중
+  세션 기준 대략 25초에 1회 수준으로 추정했으나 실기 확인이 필요하다.
+- VIA 응답은 마지막 enqueue로부터 20 ms가 지나야 SOF에서 배출된다(기존 동작).
+  직렬 왕복이므로 12 chunk snapshot 1회는 최소 약 240 ms가 걸린다. 1 Hz 폴링에는
+  여유가 있지만 실기에서 실제 주기를 확인한다.
+- 스냅샷 읽기가 중간에 실패하면 그 주기의 chunk 0에서 이미 창 최대값이 초기화된다.
+  이후 trend 점은 histogram 차분 창(2주기)과 창 최대값(1주기)의 범위가 어긋난다.
+  드물고 방향이 보수적이라 수정하지 않았다.
+- report drop 카운터는 keyboard 큐와 EXK 큐의 적재 실패를 합산한다.
+
+---
+
 ## 2026-08-23 — 자동 USB 복구 폐기와 관측 전용 전달 진단 (V260823R2)
 
 **문제 감사**:

@@ -22,6 +22,8 @@
 
 리포트 최소/평균/최대, 약 1초 창의 최대값, 큐 깊이 최고점, 8개 누적 histogram을 제공합니다. 앱은 연속 snapshot의 누적 histogram 차이로 창별 분위수를 근사합니다.
 
+정규화 기준은 **세션 시작 시점에 선택된 BootMode**의 간격이며 실제로 enumerate된 link speed가 아닙니다. FS 1K는 항상 Full Speed로, HS 2/4/8K는 항상 High Speed로 열거되므로 둘이 어긋나면(예: HS 8K 상태로 FS 전용 허브에 연결) 배수·분위수·trend는 선택 모드를 설명하지 못합니다. snapshot chunk 0이 mode와 negotiated speed를 함께 보내므로 앱이 이 불일치를 판정해 경고합니다. 마이크로초 원값과 카운터는 이 경우에도 유효합니다.
+
 ## 3. 런타임 구조와 비용
 
 ```
@@ -41,7 +43,7 @@ VIA 약 1 Hz 요청
 
 idle 경로는 SOF마다 타임스탬프를 읽지 않습니다. `qmkUpdate()`에는 active 플래그 분기만 있고, 세션 중에만 루프당 TIM5 counter를 한 번 읽습니다. 리포트가 발생한 경우 요청과 DataIn에서 각각 한 번 읽습니다. snapshot 복사는 약 1 Hz로 제한됩니다.
 
-고정 RAM 상한은 진단 세션 내부 상태 272 B, wire frozen snapshot 232 B, 부팅 카운터 20 B와 상태값 6 B입니다. 세션 272 B 중 histogram 누계/threshold는 60 B(32 B + 28 B), 최근 8개 event timeline payload는 96 B(12 B × 8)입니다. frozen snapshot에도 host 전달용 histogram 32 B와 timeline 96 B가 포함됩니다. 키보드 재시도 큐에는 요청 시각/세션 ID 6 B가 각 원소에 추가되어 128개 기준 768 B가 늘어납니다. heap 할당과 EEPROM 사용은 없습니다.
+고정 RAM 상한은 진단 세션 내부 상태 272 B, wire frozen snapshot 236 B, 부팅 카운터 20 B와 상태값 6 B입니다. `usbDiagnosticsCapture()`의 임계구역 복사량은 세션 272 B + 부팅 카운터 20 B = 292 B입니다. 세션 272 B 중 histogram 누계/threshold는 60 B(32 B + 28 B), 최근 8개 event timeline payload는 96 B(12 B × 8)입니다. frozen snapshot에도 host 전달용 histogram 32 B와 timeline 96 B가 포함됩니다. 키보드 재시도 큐에는 요청 시각/세션 ID 6 B가 각 원소에 추가되어 128개 기준 768 B가 늘어납니다. heap 할당과 EEPROM 사용은 없습니다.
 
 동일 May65/ARM GCC/MinGW 설정으로 기준 `V260823R1`과 비교한 링크 결과는 RAM 64,396 B → 65,572 B로 순증가 1,176 B, FLASH 122,124 B → 122,168 B로 순증가 44 B입니다. 신규 진단 core와 VIA encoder 오브젝트의 code/constant 합은 3,272 B지만 제거한 SOF monitor/instrumentation 코드가 대부분 상쇄합니다.
 
@@ -112,5 +114,6 @@ capability bit는 report timing `0x01`, histogram `0x02`, firmware timing `0x04`
 2. 타이핑/마우스 키 등 재현하려는 입력을 수행합니다.
 3. 하드 이벤트가 있으면 케이블·허브·호스트 포트를 점검하고, 사용자가 직접 더 낮은 BootMode를 적용한 뒤 별도 세션으로 비교합니다.
 4. 펌웨어/진단 프로토콜 버전이 다른 기록은 한 비교 그룹으로 합치지 않습니다.
+5. 앱이 "선택 모드와 협상 속도 불일치"를 표시하면 정규화 수치를 비교에 쓰지 말고, 선택 모드가 요구하는 속도로 열거되는 포트/허브로 옮겨 재측정합니다.
 
 자동 복구 부재 검사는 `USB_MONITOR`, `usbInstability`, `usbRequestBootModeDowngrade` 심볼이 소스에 없는지 확인합니다. 계약/포화/wrap 테스트는 `pwsh -NoProfile -File tools/era_via_host_tests/run.ps1`, 보드 빌드는 May65 CMake 명령으로 검증합니다.
