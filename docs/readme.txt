@@ -18,7 +18,7 @@
 
    - VIA CONFIGURE 탭 → SYSTEM 메뉴에서 원하는 폴링 레이트[1 kHz (FS), 2 kHz (HS), 4 kHz (HS), 8 kHz (HS)]를 선택합니다.
    - 기본 폴링 레이트는 1 kHz (FS)이며, 8 kHz (HS)를 쓰려면 메뉴에서 직접 선택해야 합니다.
-   - Apply 버튼을 누르면 즉시 적용됩니다. 일부 허브/케이블 환경에서는 HS에서 불안정할 수 있으므로 문제가 보이면 1 kHz (FS)로 낮추십시오.
+   - Apply를 누르면 키보드가 재시작되며 새 속도로 돌아옵니다. 일부 허브/케이블 환경에서는 HS가 불안정할 수 있으므로 문제가 보이면 1 kHz (FS)로 낮추십시오.
 
 2-2. USB 전달 진단
 
@@ -96,7 +96,7 @@
      · On Tap / On Hold / On Double Tap / Tap+Hold를 슬롯별로 지정. 비워 두면 해당 동작은 실행되지 않으며, 비어 있으면 Tap을 대신 사용하는 폴백이 적용됩니다.
      · Term (ms)는 슬롯별 탭/홀드 판정 시간(100~500 ms, 1 ms 단위)으로 글로벌 TAPPING_TERM과 독립적입니다. 기본값 200 ms.
    - 적용/저장: 변경 시 즉시 RAM에 반영되며, Save를 누르면 EEPROM에 저장되어 재부팅 후에도 유지됩니다.
-   - 키맵 배치: VIA KEYMAP 탭 하단 CUSTOM 섹션의 “Tap Dance” 그룹에서 TD0~TD7을 골라 배치합니다. UI TD0~TD7은 내부 슬롯 0~7과 1:1로 연결됩니다.
+   - 키맵 배치: VIA KEYMAP 탭의 TAPDANCE 그룹에서 TD0~TD7을 골라 배치합니다. UI TD0~TD7은 내부 슬롯 0~7과 1:1로 연결됩니다.
    - 동작 예시 (Vial과 동일한 로직):
      · Hold가 비어 있으면 Tap을 대신 눌러 유지합니다.
      · Tap+Hold가 비어 있으면 Tap을 한 번 보내고 Hold(없으면 Tap)를 길게 누릅니다.
@@ -110,12 +110,13 @@
 2-9. 마우스 키 (MOUSE)
 
    - VIA CONFIGURE → FEATURE → MOUSE에서 조정합니다. 키맵에는 KEYMAP 탭에서 Mouse ↑/↓/←/→, Mouse Btn1~8, Mouse Wh ↑/↓/←/→ 키코드를 배치합니다.
-   - Cursor Start Speed: 키를 누른 직후 한 번에 움직이는 픽셀 수(1~8 px). 조준 정밀도를 결정합니다.
-   - Cursor Top Speed: 가속이 끝난 뒤의 한 번 이동량(8~64 px). 화면이 넓을수록 큰 값이 편합니다.
-   - Cursor Acceleration: Start에서 Top까지 걸리는 시간(0.5~2.0초). Off를 고르면 가속 없이 Start Speed로 고정됩니다.
-   - Cursor Steps Per Second: 초당 이동 이벤트 수(50~200 /s). 값이 클수록 움직임이 부드러워지며, 가속 시간은 그대로 유지됩니다.
-   - Wheel Rate: 초당 휠 이벤트 수(6~50 /s).
-   - Wheel Acceleration: Off / Mild / Strong 3단계.
+   - Cursor Acceleration: 시작 속도에서 최고 속도까지 걸리는 시간(0.5~2.0초). Off면 시작 속도로 고정됩니다.
+   - Cursor Start Speed: 키를 누른 직후 한 스텝의 이동 거리(1~8 px).
+   - Cursor Top Speed: 가속이 끝난 뒤 한 스텝의 이동 거리(8~64 px).
+   - Cursor Speed: 가속이 Off일 때의 한 스텝 이동 거리.
+   - Cursor Steps Per Second: 초당 이동 스텝 수(50~200 /s). 클수록 부드러워지고 가속 시간은 그대로입니다.
+   - Wheel Rate: 초당 스크롤 스텝 수(6~50 /s).
+   - Wheel Acceleration: 누르고 있는 동안 스크롤이 빨라지는 정도(Off / Mild / Strong).
    - 기본값은 Start 4 px, Top 16 px, 가속 1.0초, 100 /s입니다. 값을 바꾼 뒤 SAVE를 누르면 EEPROM에 보존됩니다.
 
 2-10. 동시 입력(롤오버)
@@ -173,7 +174,7 @@ Firmware Guide
 
    - VIA CONFIGURE → SYSTEM: choose 1 kHz (FS), 2/4/8 kHz (HS).
    - Default is 1 kHz (FS); select 8 kHz (HS) manually if needed.
-   - Apply takes effect immediately; if HS is unstable on your hub/cable, fall back to 1 kHz (FS).
+   - Applying restarts the keyboard, which comes back at the new rate. If HS is unstable on your hub or cable, fall back to 1 kHz (FS).
 
 2-2. USB delivery diagnostics
 
@@ -251,7 +252,7 @@ Firmware Guide
      · On Tap / On Hold / On Double Tap / Tap+Hold per slot. Empty fields skip that action and use Tap as a fallback where applicable.
      · Term (ms) is a per-slot tap/hold window (100–500 ms, 1 ms resolution), independent of the global TAPPING_TERM. Default 200 ms.
    - Apply/save: changes take effect immediately in RAM; click Save to store to EEPROM so they persist after reboot.
-   - Keymap placement: in VIA KEYMAP, open the CUSTOM section and choose TD0–TD7 under “Tap Dance,” then place them. UI TD0–TD7 map 1:1 to internal slots 0–7.
+   - Keymap placement: in VIA KEYMAP, open the TAPDANCE group and place TD0–TD7. UI TD0–TD7 map 1:1 to internal slots 0–7.
    - Behavior (matches Vial Tap Dance):
      · If Hold is empty, Tap is held instead.
      · If Tap+Hold is empty, Tap is sent once, then Hold (or Tap) is held.
@@ -265,12 +266,13 @@ Firmware Guide
 2-9. Mouse keys (MOUSE)
 
    - VIA CONFIGURE → FEATURE → MOUSE. Place Mouse arrows, Mouse Btn1-8 and Mouse Wh keycodes from the KEYMAP tab.
-   - Cursor Start Speed: pixels moved per event right after the key goes down (1-8 px). This is what aiming precision costs.
-   - Cursor Top Speed: pixels per event once acceleration is finished (8-64 px). Wider screens want a larger value.
-   - Cursor Acceleration: time to climb from Start to Top (0.5-2.0 s). Off holds the cursor at Start Speed with no ramp.
-   - Cursor Steps Per Second: movement events per second (50-200 /s). Higher is smoother and leaves the ramp duration unchanged.
-   - Wheel Rate: wheel events per second (6-50 /s).
-   - Wheel Acceleration: Off / Mild / Strong.
+   - Cursor Acceleration: time from start speed to top speed (0.5-2.0 s). Off holds the start speed.
+   - Cursor Start Speed: distance per step the instant you press the key (1-8 px).
+   - Cursor Top Speed: distance per step once acceleration has finished (8-64 px).
+   - Cursor Speed: distance per step while acceleration is Off.
+   - Cursor Steps Per Second: move steps per second (50-200 /s). Higher is smoother and does not change the acceleration time.
+   - Wheel Rate: scroll steps per second (6-50 /s).
+   - Wheel Acceleration: how much scrolling speeds up while you hold (Off / Mild / Strong).
    - Defaults are Start 4 px, Top 16 px, a 1.0 s ramp and 100 /s. Click SAVE to store to EEPROM.
 
 2-10. Rollover
