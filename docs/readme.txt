@@ -40,12 +40,12 @@
    - KEY BIND 1은 좌/우, KEY BIND 2는 상/하 한 쌍을 Enable 후 KEY 1/KEY 2에 원하는 키를 지정합니다.
    - 두 키가 동시에 눌리면 마지막 입력만 남기고 반대 키를 해제하며, 마지막 키를 떼면 반대 키가 계속 눌린 경우 자동으로 다시 눌러 줍니다.
 
-2-5. KKUK (꾹보드)
+2-5. KKUK
 
    - V260824R2부터 메뉴 이름을 Anti-Ghosting에서 KKUK으로 바꿨습니다. 매트릭스 고스팅 방지와는
      아무 관계가 없어 이전 이름이 오해를 불렀습니다.
    - 기본 키 두 개 이상을 가만히 누르고 있으면 그 묶음 전체를 주기적으로 뗐다가 다시 눌러 줍니다.
-     asd를 누르고 있으면 asddddd가 아니라 asdasdasd가 입력됩니다. 흔히 말하는 꾹보드입니다.
+     asd를 누르고 있으면 asddddd가 아니라 asdasdasd가 입력됩니다.
    - VIA CONFIGURE → FEATURE → KKUK을 Enable 하면 켜집니다.
    - First Delay Time: 두 개 이상 기본 키를 누른 상태가 얼마나 지속되면 모드로 진입할지(50~300 ms).
    - Repeat Time: 모드 활성화 후 묶음 전체를 해제/재입력하는 주기(50~200 ms).
@@ -93,7 +93,7 @@
    - 기본 개념: 슬롯 1~8(TD0~TD7)에 “어떤 키를 몇 번/얼마나 눌렀을 때 무엇을 보낼지”를 기록한 뒤, 키맵에 TD0~TD7만 배치합니다.
    - 지정 가능한 키코드는 https://docs.qmk.fm/keycodes 참고.
    - 설정 위치: VIA CONFIGURE → TAPDANCE 메뉴.
-     · On Tap / On Hold / On Double Tap / Tap+Hold를 슬롯별로 지정. 비워 두면 해당 동작은 실행되지 않으며, 비어 있으면 Tap을 대신 사용하는 폴백이 적용됩니다.
+     · On Tap(짧게 눌림 판정), On Hold(길게 눌림 판정), On Double Tap(Term 안에 두 번 탭), Tap+Hold(한 번 탭한 뒤 길게 누름)에 각각 입력할 키코드를 지정합니다. 비워 두면 해당 동작은 실행되지 않으며, 비어 있으면 Tap을 대신 사용하는 폴백이 적용됩니다.
      · Term (ms)는 슬롯별 탭/홀드 판정 시간(100~500 ms, 1 ms 단위)으로 글로벌 TAPPING_TERM과 독립적입니다. 기본값 200 ms.
    - 적용/저장: 변경 시 즉시 RAM에 반영되며, Save를 누르면 EEPROM에 저장되어 재부팅 후에도 유지됩니다.
    - 키맵 배치: VIA KEYMAP 탭의 TAPDANCE 그룹에서 TD0~TD7을 골라 배치합니다. UI TD0~TD7은 내부 슬롯 0~7과 1:1로 연결됩니다.
@@ -201,7 +201,7 @@ Firmware Guide
    - Renamed from Anti-Ghosting in V260824R2. The old name was misleading: this has nothing
      to do with matrix ghosting.
    - Hold two or more basic keys still and the whole group is released and pressed again on a
-     timer. Holding a, s and d types asdasdasd, not asddddd. Korean players call this a KKUK board.
+     timer. Holding a, s and d types asdasdasd, not asddddd.
    - VIA CONFIGURE → FEATURE → KKUK → Enable.
    - First Delay Time: how long multiple basic keys must be held before entering the mode (50–300 ms).
    - Repeat Time: interval to release/repress the whole bundle (50–200 ms).
@@ -249,7 +249,7 @@ Firmware Guide
    - Concept: assign “what to send” to slots 1–8 (TD0–TD7), then place TD0–TD7 on the keymap.
    - KC keycodes are listed at https://docs.qmk.fm/keycodes.
    - Where to set: VIA CONFIGURE → TAPDANCE.
-     · On Tap / On Hold / On Double Tap / Tap+Hold per slot. Empty fields skip that action and use Tap as a fallback where applicable.
+     · Keycodes for On Tap (short press), On Hold (long press), On Double Tap (two taps inside Term) and Tap+Hold (a tap, then holding). Empty fields skip that action and use Tap as a fallback where applicable.
      · Term (ms) is a per-slot tap/hold window (100–500 ms, 1 ms resolution), independent of the global TAPPING_TERM. Default 200 ms.
    - Apply/save: changes take effect immediately in RAM; click Save to store to EEPROM so they persist after reboot.
    - Keymap placement: in VIA KEYMAP, open the TAPDANCE group and place TD0–TD7. UI TD0–TD7 map 1:1 to internal slots 0–7.
