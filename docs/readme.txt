@@ -40,11 +40,16 @@
    - KEY BIND 1은 좌/우, KEY BIND 2는 상/하 한 쌍을 Enable 후 KEY 1/KEY 2에 원하는 키를 지정합니다.
    - 두 키가 동시에 눌리면 마지막 입력만 남기고 반대 키를 해제하며, 마지막 키를 떼면 반대 키가 계속 눌린 경우 자동으로 다시 눌러 줍니다.
 
-2-5. Anti-Ghosting
+2-5. KKUK (꾹보드)
 
-   - VIA CONFIGURE → FEATURE → Anti-Ghosting을 Enable 하면 동시 입력 반복 보정이 켜집니다.
+   - V260824R1부터 메뉴 이름을 Anti-Ghosting에서 KKUK으로 바꿨습니다. 매트릭스 고스팅 방지와는
+     아무 관계가 없어 이전 이름이 오해를 불렀습니다.
+   - 기본 키 두 개 이상을 가만히 누르고 있으면 그 묶음 전체를 주기적으로 뗐다가 다시 눌러 줍니다.
+     asd를 누르고 있으면 asddddd가 아니라 asdasdasd가 입력됩니다. 흔히 말하는 꾹보드입니다.
+   - VIA CONFIGURE → FEATURE → KKUK을 Enable 하면 켜집니다.
    - First Delay Time: 두 개 이상 기본 키를 누른 상태가 얼마나 지속되면 모드로 진입할지(50~300 ms).
    - Repeat Time: 모드 활성화 후 묶음 전체를 해제/재입력하는 주기(50~200 ms).
+   - SOCD에 지정한 키는 대상에서 제외됩니다.
 
 2-6. 디바운스 설정 (DEBOUNCE)
 
@@ -190,11 +195,16 @@ Firmware Guide
    - Enable KEY BIND 1 (L/R) and KEY BIND 2 (U/D), assign KEY 1/KEY 2 (e.g., A/D or arrows).
    - When both in a pair are pressed, the latest press wins; releasing the last key re-applies the opposite key if it was held.
 
-2-5. Anti-Ghosting
+2-5. KKUK
 
-   - VIA CONFIGURE → FEATURE → Anti-Ghosting → Enable.
+   - Renamed from Anti-Ghosting in V260824R1. The old name was misleading: this has nothing
+     to do with matrix ghosting.
+   - Hold two or more basic keys still and the whole group is released and pressed again on a
+     timer. Holding a, s and d types asdasdasd, not asddddd. Korean players call this a KKUK board.
+   - VIA CONFIGURE → FEATURE → KKUK → Enable.
    - First Delay Time: how long multiple basic keys must be held before entering the mode (50–300 ms).
    - Repeat Time: interval to release/repress the whole bundle (50–200 ms).
+   - Keys assigned to SOCD are excluded.
 
 2-6. Debounce settings (DEBOUNCE)
 

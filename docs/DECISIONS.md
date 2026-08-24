@@ -5,6 +5,44 @@ Claude auto-memory는 Codex CLI와 공유되지 않으므로 공용 사실은 �
 
 ---
 
+## 2026-08-24 — VIA 메뉴 Anti-Ghosting을 KKUK으로 개명 (V260824R1, 펌웨어 코드 변경 없음)
+
+**사실 확인**: `port/kkuk.c`는 매트릭스를 전혀 참조하지 않는다(`matrix`/`scan`/`row`/`col`
+문자열 0건). 호출하는 것은 `keyboard_report`, `clear_keys()`, `send_keyboard_report()`,
+`millis()`, `IS_BASIC_KEYCODE`, `kill_switch_is_use`뿐이다. 즉 매트릭스와 키맵이 이미 해석을
+끝낸 **HID 리포트 계층**에서만 동작한다. 또한 H7S 5개 보드 어디에도 `MATRIX_HAS_GHOST`가
+정의되어 있지 않으므로 `quantum/keyboard.c`의 `has_ghost_in_row()` 경로 자체가 컴파일되지
+않는다. 스위치마다 다이오드가 있어 매트릭스 고스팅이 물리적으로 발생하지 않는다.
+
+**결정**: 메뉴 이름 `Anti-Ghosting` → `KKUK`. 이 기능은 고스팅 방지가 아니라, 두 개 이상
+누르고 있는 기본 키 묶음을 주기적으로 해제/재입력해 `asd` → `asdasdasd`로 만드는 것이다.
+한국 사용자가 아는 통칭이 "꾹보드"이고, 펌웨어 자신의 식별자도 이미 `kkuk.c`,
+`KKUK_ENABLE`, `id_qmk_kkuk_*`다. 코드·JSON·문서가 한 단어로 수렴한다. `Mode` 드롭다운의
+유일한 옵션 이름이 `Report Pulse`인 것도 이 기능이 리포트 계층 동작임을 그대로 말한다.
+
+**변경 범위**: 공식 VIA JSON 5개의 submenu label과 `docs/readme.txt` 2-5절(한국어·영어)
+뿐이다. **채널·value id·EEPROM 배치·펌웨어 코드는 그대로**이므로 재빌드나 버전 상승이
+필요하지 않고, 이미 플래시된 키보드도 새 JSON만 불러오면 새 이름으로 보인다.
+
+readme 2-5절에는 "V260824R1부터 Anti-Ghosting에서 KKUK으로 바꿨습니다"를 남겼다. 이전 이름으로
+매뉴얼을 검색하는 기존 사용자가 길을 잃지 않도록 하는 breadcrumb이며, 한 릴리스 주기 뒤에
+지워도 된다.
+
+**앱 쪽**: `the-via-eerraa`의 ERA 커스텀 정의 30개(H7S 5 + RP2040 25)도 같은 라벨로 바꿨다.
+앱은 submenu label을 `t()`에 통과시키므로 한국어 로케일만 `KKUK (꾹보드)`로 풀어 쓴다.
+기존에 `SOCD`를 중국어에서 `SOCD (同时按键冲突)`로 풀어 쓰던 것과 같은 방식이다.
+
+**남은 것**: RP2040(`qmk_firmware_eerraa`)의 VIA JSON 25개와
+`keyboards/era/common/docs/user/readme.txt` 6곳은 그대로다. 그 저장소는 이번 작업에서 읽기
+전용이었다. 그때까지 RP2040 보드는 커스텀 앱에서 `KKUK`, 공식 usevia.app에서
+`Anti-Ghosting`으로 보인다.
+
+**graphify**: `graphify-out/`에 이전 이름이 담긴 노드가 남아 있다. 이번 세션은 앱 저장소를
+cwd로 두고 작업했고 `graphify update`를 실행하지 않았다. 갱신이 필요하면 반드시 이 저장소를
+cwd로 두고 실행해야 한다.
+
+---
+
 ## 2026-08-24 — 2차 실기: 절대 지연은 재현되지 않는다 (V260824R1)
 
 BRICK60에서 D-1 수정본으로 7세션을 재측정했다. 원본은
