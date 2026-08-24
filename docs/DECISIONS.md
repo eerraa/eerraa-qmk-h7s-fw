@@ -5,6 +5,47 @@ Claude auto-memory는 Codex CLI와 공유되지 않으므로 공용 사실은 �
 
 ---
 
+## 2026-08-24 — 공식 VIA JSON 5개에 빠져 있던 MOUSE 페이지 추가 (펌웨어 코드 변경 없음)
+
+**문제**: `V260823R1`에서 MOUSE 채널을 구현하고(`id_qmk_mousekey = 17`,
+value id 1~6, `port/mousekey_config.c`) 5개 보드의 `port/via_port.c`가 모두 채널 17을
+라우팅하는데, **공식 VIA JSON 5개에는 MOUSE submenu가 없었다.** 즉 펌웨어가 가진 기능에
+도달할 방법이 없었다.
+
+이것이 의도된 누락이 아니라는 증거는 저장소 안에 이미 있었다.
+
+- `docs/features_mousekey.md`의 노출 표가 `| 각 보드 VIA JSON | FEATURE → MOUSE |
+  6개 컨트롤 노출. |`이라고 적고 있다. 사실이 아니었다.
+- `docs/readme.txt` 2-9절은 사용자에게 "VIA CONFIGURE → FEATURE → MOUSE에서
+  조정합니다"라고 안내한다. 그 화면이 없었다.
+
+**결정**: 5개 공식 JSON의 FEATURE 메뉴 `TAPPING` 뒤에 MOUSE submenu를 넣는다. 이제 두
+문서가 참인 상태가 된다.
+
+**내용**: `the-via-eerraa`의 H7S 커스텀 정의에 들어간 블록과 **바이트 단위로 동일한 의미**다
+(삽입 스크립트가 파싱 결과를 앱 정의와 deep-equal 비교해 검증한다). 채널 17, value id 1~6,
+`Cursor Acceleration == 0`이면 `Cursor Speed` 한 줄, 아니면 `Cursor Start/Top Speed` 두 줄을
+보여주는 `showIf` 구조까지 같다. 옵션 값과 기본값은 `readme.txt` 2-9절과 일치한다.
+
+기존 JSON은 `"content": ["id_qmk_debounce_mode", 14, 1]`처럼 안쪽 배열을 한 줄로 두는 손질된
+포맷이다. `json.dumps(indent=2)`로 다시 쓰면 파일 전체가 2,500줄 넘게 재포맷되므로, 그
+스타일 그대로 렌더링해 텍스트로 삽입했다. 결과는 5개 파일 각 94줄 **순수 추가**이며 삭제된
+줄이 0이다.
+
+**NKRO는 넣지 않는다.** `readme.txt` 2-10절과 2026-08-23 결정 2번대로 이 키보드는 전환 없이
+항상 20키 동시 입력이고 켜고 끄는 옵션 자체가 없다. 토글을 만들면 없는 선택지를 있는 것처럼
+보이게 하는 거짓말이 된다.
+
+**펌웨어 코드·채널·value id·EEPROM 배치는 그대로다.** JSON만 바뀌므로 재빌드나 버전 상승이
+필요 없고, 이미 플래시된 키보드도 새 JSON을 불러오면 MOUSE가 보인다.
+
+**실기 확인 필요**: 이 JSON으로 공식 usevia.app에서 MOUSE 6개 컨트롤이 값을 읽고 쓰는지,
+`Cursor Acceleration`을 Off로 바꿀 때 행이 실제로 교체되는지는 기기에서 확인해야 한다.
+`mk_time_to_max`가 1바이트라 200 /s(5 ms)에서 가속 상한이 1.275초로 잘리는 알려진 한계
+(2026-08-23 결정)는 그대로이며, 되읽기가 실제 값을 정직하게 보고하는 것으로 계약을 맞춰 두었다.
+
+---
+
 ## 2026-08-24 — UF2 업로드 후 자동 시작 실패의 원인과 이원 대응 (V260824R2)
 
 **증상**: UF2 업로드 자체는 항상 성공하나, 부트로더 → 펌웨어 자동 전환이 간헐적으로
