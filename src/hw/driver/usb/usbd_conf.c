@@ -458,7 +458,7 @@ USBD_StatusTypeDef USBD_LL_Start(USBD_HandleTypeDef *pdev)
   //            근본 해결은 부트로더 V260824R1(점프 대신 시스템 리셋)이다. 부트로더는
   //            UF2 로 갱신할 수 없어(내부 플래시, ST-LINK 필요) 기출하 보드에는
   //            적용할 수 없으므로 본 지연을 배포한다.
-  //            상세: docs/features_usb_boot_handoff.md
+  //            상세: docs/contract_usb.md
   delay(USBD_BOOT_DETACH_HOLD_MS);
 
   hal_status = HAL_PCD_Start(pdev->pData);

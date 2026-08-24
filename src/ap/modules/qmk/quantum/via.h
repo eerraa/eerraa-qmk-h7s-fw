@@ -118,7 +118,7 @@ enum via_channel_id {
     id_qmk_kill_switch_lr     = 10,
     id_qmk_kill_switch_ud     = 11,
     id_qmk_kkuk               = 12,
-    id_qmk_usb_polling        = 13,  // V251108R1: BootMode/USB 모니터 전용 채널
+    id_qmk_usb_polling        = 13,  // V251108R1: BootMode 전용 채널. value id 3(구 USB 모니터 토글)은 V260823R2에서 폐기 — 재사용 금지, docs/contract_usb.md
     id_qmk_key_response       = 14,  // V251115R1: VIA 디바운스 프로필 제어 채널
     id_qmk_tapping            = 15,  // V251123R4: VIA TAPPING 제어 채널
     id_qmk_tapdance           = 16,  // V251124R8: VIA TAPDANCE 제어 채널

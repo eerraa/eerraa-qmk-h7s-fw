@@ -1,104 +1,109 @@
-# 에이전트 작업 가이드 (Codex · Claude Code 공용)
+# H7S 펌웨어 — 에이전트 진입점
 
-본 문서는 전체 저장소에 적용되며, 아래 순서대로 지침을 확인하십시오.
+STM32H7S3(내장 HS PHY) 키보드 펌웨어. 보드 5종이 한 소스를 공유하고 `-DKEYBOARD_PATH`로만
+갈린다. USB는 HS 8/4/2 kHz와 FS 1 kHz를 지원하며 **기본은 FS 1 kHz**다. QMK 포팅층 위에
+VIA/Vial을 얹었고, 커스텀 VIA 앱(`the-via-eerraa`)이 반대편 짝이다.
 
-## 1. 필수 응답 규칙
-- 모든 답변, 커밋 메시지, PR 본문은 **반드시 한국어**로 작성합니다.
-- 저장소 탐색은 §3의 지식그래프 질의로 후보를 좁힌 뒤 필요한 파일만 엽니다.
+이 파일이 정본 지시 파일이고 `CLAUDE.md`는 여기로 보내는 포인터다. **답변·커밋 메시지·PR
+본문은 한국어로 쓴다.**
 
-## 2. 프로젝트 개요
-- 대상 보드: STM32H7S3 (내장 HS PHY) — 기본 USB 폴링 주기 8000Hz.
-- 지원 속도: HS 8k/4k/2kHz, FS 1kHz. 정책은 FS 우선입니다.
-- 주요 기능: USB instability monitor, 단계적 폴링 다운그레이드 큐, QMK 포팅층, VIA/Vial 지원.
-- 지원 키보드(5종, `src/ap/modules/qmk/keyboards/` 하위): `era/keynetix/may65`(최근 작업 보드), `era/intigrity80`, `era/sirind/{brick60,brick65,sculpturei}`
-- 현재 `_DEF_FIRMWARE_VERSION`: **V260823R1** (기준은 항상 `src/hw/hw_def.h`)
+## 1. 시작 전에
 
-## 3. 지식그래프 (graphify) — 코드 탐색 1순위
-이 리포에는 지식그래프가 `graphify-out/`에 커밋되어 있습니다. 스코프는 `.graphifyignore`가 정의하며, "실제 컴파일되는 코드 + 프로젝트 문서"만 포함합니다.
-- 세션 시작 시 `python tools/graphify/bootstrap.py`를 실행합니다 (Claude Code는 `.claude/settings.json`의 SessionStart hook이 자동 실행). git hook 설치, 그래프 동기화, 상태 출력을 수행합니다.
-- 코드 구조 질문은 먼저 `graphify query "<질문>"`으로 답합니다. 두 심볼의 관계는 `graphify path "A" "B"`, 단일 개념 설명은 `graphify explain "X"`.
-- 코드 수정 후에는 `graphify update .`로 그래프를 갱신합니다 (AST-only, LLM/API 비용 없음). 커밋 시에는 post-commit hook이 자동 갱신합니다.
-- hook 갱신으로 `graphify-out/` 파일이 dirty해지는 것은 정상이며, 다음 커밋에 함께 포함합니다.
-- 전체 아키텍처 조망은 `graphify-out/GRAPH_REPORT.md`를 참조합니다.
-- `src/ap/modules/qmk/CMakeLists.txt`의 컴파일 파일 목록을 바꾸면 `.graphifyignore`도 함께 갱신합니다.
+기록된 상태를 믿지 말고 직접 확인한다. **현재 펌웨어 버전은 문서가 아니라 코드가 든다.**
 
-## 4. 작업 전 체크리스트
-1. `_DEF_FIRMWARE_VERSION`과 보드 매크로를 `src/hw/hw_def.h`에서 확인합니다.
-2. 엔트리 경로는 `src/main.c → src/ap/ap.c` 흐름을 중심으로 파악합니다.
-3. QMK 구조는 `src/ap/modules/qmk/{port,keyboards,quantum}` 순으로 확인합니다.
-4. 다음 경로는 **고위험 파일군**으로 분류하여 변경 시 집중 리뷰합니다.
-   - `src/ap/modules/qmk/port/sys_port.*`
-   - `src/hw/driver/`
+```powershell
+git status --short
+git log --oneline -3
+Select-String -Path src/hw/hw_def.h -Pattern "_DEF_FIRMWARE_VERSION"
+```
 
-## 5. 변경 이력 규칙
-- 코드 변경마다 **사용자로부터 전달받은 코드 버전**(`VYYMMDDRn`)으로 `// VYYMMDDRn ...` 형식의 변경 이력 주석을 추가합니다.
-- 변경된 코드 버전에 맞추어 `_DEF_FIRMWARE_VERSION`를 업데이트 합니다.
-  PATH: src/hw/hw_def.h
-- 사용자가 코드 버전을 명시하지 않은 상태에서 작업을 시작해야 한다면, 임의의 코드 버전을 하나 지정해 변경 이력에 표기합니다.
-  그리고 즉시 사용자에게 공식 버전 확인을 요청합니다.
+전부 읽지 마라. 하려는 일에 따라 읽는다.
 
-## 6. 코드 스타일 요약
-- 들여쓰기는 공백 두 칸을 사용합니다.
-- 함수 및 제어문 중괄호는 새 줄에 배치합니다.
-- 조건문은 `if (cond) {`와 같이 괄호 앞뒤에 공백을 둡니다.
-- 연산자는 `a + b` 형태로 좌우에 공백을 두되, 기존 코드가 공백 없이 연속 호출(`millis()-pre_time`)을 사용한다면 주변 컨벤션을 유지합니다.
-- `#define` 상수는 대문자로 작성하고 값, 주석 사이 정렬을 맞춥니다.
-- 단일 행 주석은 `//`를 사용하며, 변경 이력 주석은 한국어로 남깁니다.
-- 함수 선언과 정의 사이에는 한 줄을 비워 가독성을 확보합니다.
+| 하려는 일 | 읽을 것 |
+| --- | --- |
+| 무엇이 어디 있고 무엇이 정본인가 | `docs/MAP.md` — **여기부터** |
+| VIA·앱과 주고받는 것 (채널, exact-ms, `0x06`/`0x07`, MOUSE) | `docs/contract_via.md` |
+| USB 호스트에 보고하는 것 (리포트, 부트 편차, 폴링, 부트로더 인계) | `docs/contract_usb.md` |
+| EEPROM에 남는 것 (슬롯, 버전 쿠키, 팩토리 리셋) | `docs/contract_eeprom.md` |
+| 무엇을 어떻게 돌려 보는가 | `docs/manual_verify.md` |
+| 아직 안 끝난 것, 되살리면 안 되는 것 | `docs/state_open.md` |
+| 사용자에게 나가는 문구 | `docs/readme.txt` |
+| 코드가 어디 살고 무엇을 부르는가 | graphify (§3) |
 
-## 7. 빌드 및 테스트
-- 개발 환경: Windows 11 + PowerShell/Git Bash 기준 (WSL/Linux에서도 동일 명령 동작). ARM GCC Toolchain, CMake 3.13 이상, Python3 필요.
-```bash
-cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/keynetix/may65'
+## 2. 먼저 알아야 손해를 안 보는 것
+
+- **USB instability monitor와 자동 폴링 다운그레이드는 없다.** 폐기한 것이지 빠진 것이 아니고,
+  되살리면 안 되는 이유가 둘 있다 — `docs/contract_usb.md` §4. 검사기가 그 심볼들이 `src/`에
+  다시 나타나면 실패한다.
+- **문서가 코드와 어긋나면 코드가 이긴다.** 다만 그 계약이 앱 저장소와 짝을 이루는 것이면
+  이쪽이 틀렸을 수도 있다 — 고치기 전에 양쪽을 대조한다(`docs/MAP.md` §7).
+- **cwd는 이 저장소에 둔다.** 앱 저장소를 cwd로 열고 이쪽 규칙을 따르다가 앱에
+  `graphify-out/` 75,000줄을 잘못 커밋한 사고가 있다.
+- **소스는 UTF-8(BOM 없음) + CRLF이고 주석이 한국어다.** 이 머신의 Python은 기본이 cp949라
+  `PYTHONUTF8=1` 없이 스크립트로 소스를 다루면 한국어가 깨진다. 파일은 `rb`로 읽고 원래
+  개행에 맞춰 쓴다. 백슬래시가 들어가는 편집은 heredoc으로 하지 말고 `.py` 파일을 만들어
+  실행한다 — heredoc이 이스케이프를 한 단계 먹는다.
+- **편집기에 열려 있던 파일이 저장되며 작업을 덮어쓴 사고가 있었다.** 커밋 전에
+  `git status`와 `git diff --stat`을 본다.
+- `graphify-out/`이 dirty해지는 것은 정상이다(§3).
+
+## 3. 코드 구조는 그래프가 답한다
+
+`graphify-out/`에 지식그래프가 커밋되어 있고 세션 시작 시
+`python tools/graphify/bootstrap.py`가 동기화한다(Claude Code는 `.claude/settings.json`의
+SessionStart hook이 자동 실행). 코드 구조·호출 관계·영향 범위는 raw 탐색 전에 그래프에 묻는다.
+
+```
+graphify query "usbHidSendReport"        심볼 주변 BFS
+graphify path "qmkUpdate" "usbHidSendReport"
+graphify explain "usbHidSendReport"
+graphify update .                        코드·문서 수정 후 (AST 전용, LLM 비용 없음)
+```
+
+**질의는 자연어 문장이 아니라 심볼 이름으로 한다.** 그래프가 답하는 것과 답하지 못하는 것의
+경계는 `docs/MAP.md` §6에 있다. 그래프는 파생이지 권위가 아니다. **구조 설명만을 위한 문서는
+만들지 않는다.**
+
+## 4. 작업 규칙
+
+- **코드 변경마다** 사용자에게 받은 코드 버전으로 `// VYYMMDDRn ...` 형식의 한국어 변경 이력
+  주석을 남기고, `src/hw/hw_def.h`의 `_DEF_FIRMWARE_VERSION`을 같은 값으로 올린다. 버전을
+  받지 못했으면 하나를 임시 지정해 표기하고 **즉시 공식 버전 확인을 요청한다.**
+  이 규칙은 **소스 변경에만** 적용된다 — 문서 전용 커밋은 버전을 올리지 않는다.
+  버전 상승이 EEPROM 전체 초기화를 뜻한다는 점은 `docs/contract_eeprom.md` §2.
+- 고위험 파일군은 변경 시 집중 리뷰한다: `src/ap/modules/qmk/port/sys_port.c`,
+  `src/ap/modules/qmk/port/sys_port.h`, `src/hw/driver/`.
+- 스타일: 공백 두 칸 들여쓰기, 중괄호는 새 줄, `if (cond) {`처럼 괄호 앞뒤 공백, 연산자 좌우
+  공백(단 `millis()-pre_time`처럼 주변이 붙여 쓰면 그 관습을 따른다), `#define` 상수는
+  대문자·값·주석 정렬, 주석은 `//`.
+- QMK 업스트림을 병합할 때는 `src/ap/modules/qmk/quantum/`을 먼저 비교하고, 그다음
+  `src/ap/modules/qmk/port/`에서 플랫폼 수정을 재적용한다.
+- 커밋은 관심사별로 나눈다 — 문서, 소스, 그리고 뒤따르는 graphify 재생성.
+  **지우는 커밋과 새로 쓰는 커밋을 분리한다. 문서를 지우는 커밋은 그 문서가 들고 있던 근거를
+  커밋 메시지에 담는다** — 삭제만이 유일하게 복구 불가능한 수다.
+- **명시적 요청 없이 push하지 않는다.**
+- PR 제목·본문은 한국어로 쓰고 변경 요약, 검증 결과, 현재 펌웨어 버전 문자열을 담는다.
+
+## 5. 검증
+
+```powershell
+python tools/era_doc_refs.py                                 # 문서-코드 정합 8종
+pwsh -NoProfile -File tools/era_via_host_tests/run.ps1        # VIA 값 계층·진단·단일 생산자
+cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/keynetix/may65' -G "MinGW Makefiles"
 cmake --build build -j10
 ```
-- Windows에서 MinGW 사용 시 `-G "MinGW Makefiles"`를 추가합니다.
-- 별도의 **빌드 테스트 실행 명령**이 없다면 빌드 테스트는 생략합니다.
-- UF2 변환은 CMake 타깃 내부에서 자동으로 처리됩니다 (`tools/uf2/uf2conv.py`, family `0xFFFF0002`).
-- JSON/VIA 파일 검증은 `jq` 또는 Python 표준 JSON 파서를 사용합니다. 도구별 경로 전제(WSL 심볼릭 링크 등)는 두지 않습니다.
-- VIA 값 계층(tapping/tapdance exact-ms, MOUSE 단위 환산, state-sync 봉투)을 건드리면 호스트 단위 테스트를 실행합니다: `pwsh -NoProfile -File tools/era_via_host_tests/run.ps1`. mingw gcc로 해당 유닛만 호스트에서 빌드해 돌리므로 보드가 필요 없습니다.
 
-## 8. 디렉터리 힌트
-- `src/` : 펌웨어 소스 및 라이브러리 전반
-- `src/ap/` : 애플리케이션 계층과 QMK 포팅
-- `src/hw/` : 하드웨어 추상화 및 펌웨어 버전 정의
-- `src/bsp/` : 보드 초기화, 클럭, 스타트업 코드
-- `src/lib/` : 벤더 라이브러리 (ST HAL/CMSIS/USB Device Library, lib8tion)
-- `tools/` : 빌드·UF2 보조 스크립트, graphify 부트스트랩(`tools/graphify/`)
-- `docs/` : 결정 기록·실측 회고·기능 운영 가이드 (§11 참조)
+무엇이 무엇을 무는지, 어떤 변경이 무엇을 owe하는지, 툴체인 전제는 `docs/manual_verify.md`.
+**소스를 건드리지 않은 변경은 빌드를 owe하지 않으며, 그렇게 말하는 것이 검증 진술이다.**
+문서만 고쳤어도 첫 줄은 돌린다.
 
-## 9. PR 작성 지침
-- PR 제목과 본문은 한국어로 작성합니다.
-- 변경 요약과 테스트 결과를 명시하고, 현재 펌웨어 버전 문자열(예: `V260821R1`)을 포함합니다.
-- 후속 PR이라면 기존 요약을 유지한 채 의미 있는 변경만 추가로 기술합니다.
+## 6. 하지 말 것
 
-## 10. 추가 주의사항
-- USB 모니터는 구성 직후 50ms 홀드오프 후 HS 2048 프레임(약 256ms)/FS 128 프레임을 채우거나 2.05초 타임아웃 중 먼저 도달하면 활성화됩니다. 다운그레이드 ARM→COMMIT 지연은 2초입니다.
-- VIA에서 USB 모니터를 런타임 비활성화하면 대기 중인 다운그레이드·리셋 큐도 함께 초기화됩니다 (V251124R3, `usbMonitorResetQueues`).
-- 타이머/USB 경로를 변경할 때는 8000Hz 스케줄링이 유지되는지 검증합니다.
-- 장기 실행 타이머를 건드릴 경우 USB instability monitor의 워밍업/타임아웃 조건을 함께 확인하면 리그레션을 줄일 수 있습니다.
-- QMK 업스트림 병합 시 `quantum/`을 먼저 비교하고, 이후 `port/`에서 플랫폼 수정을 재적용합니다.
-- 디버그 로그는 `src/hw/hw.c` 초기화 루틴과 연동되어 있으므로, 버전 문자열 출력 경로를 수정할 때는 전역 영향 범위를 검토하세요.
-
-## 11. 문서 체계와 참조 가이드
-문서 역할 분담 원칙:
-- **코드 구조·호출 관계**는 지식그래프(§3)로 질의합니다. 구조 설명만을 위한 문서는 새로 만들지 않습니다.
-- **docs/** 에는 코드에서 복원 불가능한 것만 둡니다: 결정 기록(`DECISIONS.md`), 실측·회고(`freeze_retro.md`), 기능별 운영·트러블슈팅 가이드(`features_*.md`, `eeprom.md`, `rgblight.md`), 릴리스 동봉 사용자 안내(`readme.txt`).
-- 세션 인수인계, 결정, 실측 결과는 에이전트 개인 메모리가 아니라 `docs/DECISIONS.md`에 기록합니다 (Codex·Claude 간 공유 필요).
-- 릴리스 시 `docs/readme.txt`의 버전 표기를 함께 갱신합니다.
-
-작업별 참조 목록 (그래프 질의로 부족할 때):
-- **펌웨어 버전/로그 문자열**: `src/hw/hw_def.h`의 `_DEF_FIRMWARE_VERSION`, `src/hw/hw.c`의 `hwInit()` 버전 출력
-- **엔트리 포인트/메인 루프**: `src/main.c`의 `main()`, `src/ap/ap.c`의 `apInit()/apMain()`, 초기 설정은 `src/ap/ap_def.h`
-- **QMK 포팅 공통 계층**: `src/ap/modules/qmk/port/`의 `sys_port.*`, `matrix*.c`, `ver_port.c`, `via_hid.*`, 플랫폼별 HAL 연동은 `port/platforms/`
-- **키보드별 키맵/설정**: `src/ap/modules/qmk/keyboards/era/<vendor>/<board>/` (config.h, info.json, keymap.c, json/의 VIA JSON, port/)
-- **USB instability monitor & 폴링 다운그레이드 큐**: `src/hw/driver/usb/usb_hid/usbd_hid.c`, `src/hw/driver/usb/usb.[ch]` — 문서: `docs/features_instability_monitor.md`
-- **USB 클래스/엔드포인트**: `src/hw/driver/usb/`(`usbd_conf.c`, `usb_hid/`, `usb_cdc/`, `usb_cmp/`, `usb_hid/usbd_hid_instrumentation.c`), CDC 상위 계층은 `src/hw/driver/cdc.c`
-- **EEPROM/BootMode/자동 초기화**: `src/hw/driver/eeprom/`, `src/hw/driver/eeprom_auto_factory_reset.c`, `src/ap/modules/qmk/port/port.h`의 `EECONFIG_USER_BOOTMODE` — 문서: `docs/eeprom.md`, `docs/features_bootmode.md`, `docs/features_auto_factory_reset.md`
-- **키 입력/디바운스**: `src/hw/driver/keys.c`, `src/ap/modules/qmk/port/matrix*.c` — 문서: `docs/features_keyinput.md`
-- **Tap Dance / Tapping**: `src/ap/modules/qmk/port/tapdance.c`, `quantum/process_keycode/process_tap_dance.c` — 문서: `docs/features_tapdance.md`, `docs/features_tapping.md`
-- **마우스 키**: `src/ap/modules/qmk/port/mousekey_config.c`, `quantum/mousekey.c` — 문서: `docs/features_mousekey.md`
-- **USB HID 리포트 구성/동시 입력**: `src/hw/driver/usb/usb_hid/usbd_hid.c`의 `HID_KEYBOARD_ReportDesc`·`HID_EXK_ReportDesc`, `src/hw/hw_caps_keys.h`의 `HW_KEYS_PRESS_MAX` — 문서: `docs/features_usb_hid_reports.md`
-- **LED/RGB**: `src/hw/driver/led.c`, `src/hw/driver/ws2812.c`, QMK 헬퍼는 `src/ap/modules/qmk/quantum/rgblight/` — 문서: `docs/rgblight.md`
-- **로깅/CLI**: `src/hw/driver/log.c`, `src/hw/driver/uart.c`, USB CLI 진입점은 `src/hw/driver/usb/usb.c`의 `cliBoot`
-- **빌드/툴체인**: `tools/` 디렉터리 일체 (CMake 헬퍼, UF2 변환, ST-LINK 로더)
+- instability monitor / 자동 폴링 다운그레이드 복원 — `docs/contract_usb.md` §4.
+- EEPROM USER 슬롯 오프셋 이동 — `docs/contract_eeprom.md` §1.
+- `graphify-out/`을 손으로 편집하기. 갱신은 `graphify update .`로만 하고 별도 커밋으로 뺀다.
+- 같은 사실을 두 문서에 두기. 각 문서의 `Canonical for`가 그 문서의 범위를 선언한다.
+- 검사기나 호스트 테스트가 물고 있는 계약을 문서에서 지우기. 문서에 없으면 그 검사가 왜
+  있는지 아무도 모르게 된다.
+- 문서에 날짜·세션 서사·진행 상태를 남기기. `git log`와 실행이 답한다.
+  예외는 `docs/state_open.md` 하나다.
