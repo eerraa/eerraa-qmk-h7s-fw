@@ -42,7 +42,7 @@
 
 2-5. KKUK (꾹보드)
 
-   - V260824R1부터 메뉴 이름을 Anti-Ghosting에서 KKUK으로 바꿨습니다. 매트릭스 고스팅 방지와는
+   - V260824R2부터 메뉴 이름을 Anti-Ghosting에서 KKUK으로 바꿨습니다. 매트릭스 고스팅 방지와는
      아무 관계가 없어 이전 이름이 오해를 불렀습니다.
    - 기본 키 두 개 이상을 가만히 누르고 있으면 그 묶음 전체를 주기적으로 뗐다가 다시 눌러 줍니다.
      asd를 누르고 있으면 asddddd가 아니라 asdasdasd가 입력됩니다. 흔히 말하는 꾹보드입니다.
@@ -197,7 +197,7 @@ Firmware Guide
 
 2-5. KKUK
 
-   - Renamed from Anti-Ghosting in V260824R1. The old name was misleading: this has nothing
+   - Renamed from Anti-Ghosting in V260824R2. The old name was misleading: this has nothing
      to do with matrix ghosting.
    - Hold two or more basic keys still and the whole group is released and pressed again on a
      timer. Holding a, s and d types asdasdasd, not asddddd. Korean players call this a KKUK board.
