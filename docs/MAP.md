@@ -37,8 +37,8 @@ Canonical for: 이 저장소의 정본 규칙 — 어떤 사실이 어디 살고
 | [readme.txt](readme.txt) | (사용자 문서) | 릴리스에 동봉하는 사용자 안내. 에이전트 문서 규격의 예외 — §8 |
 
 `AGENTS.md`와 `CLAUDE.md`는 진입 사슬이라 헤더 규약의 예외다. 그 둘과 이 색인 사이에
-문서 목록을 두 벌 두지 않는다 — `AGENTS.md`는 **하려는 일**로 라우팅하고, 여기는 **무엇의
-원본인가**로 라우팅한다.
+문서 목록을 두 벌 두지 않는다 — `AGENTS.md`는 Change / Locate / Verify로 라우팅하고,
+여기는 **무엇의 원본인가**로 라우팅한다.
 
 ## 3. 보드
 
@@ -147,29 +147,31 @@ vendorId는 5종 모두 `0x4552`다. 다섯 보드는 같은 소스를 공유하
 
 ## 8. 문서 규칙
 
-- `docs/` 아래 문서는 `Genre`와 `Canonical for` 두 줄을 선언한다. Genre는 `contract` `map`
-  `manual` `state` `entry` 다섯 중 하나다. 파일 이름의 접두사도 같은 장르를 말한다 — 문서가
-  여섯 개뿐이라 디렉터리로 나누면 저장소 간 참조만 깨진다.
-- **`Canonical for`는 편집하는 순간에 읽히는 자리다.** 새 사실을 쓰기 전에 그 사실의 원본을
-  선언한 문서가 이미 있는지 본다. 앱 저장소의 ADR 하나가 998줄로 부푼 원인이 이 선언의
-  부재였다.
+헤더·장르 다섯·거절 세 줄·은퇴·최소 검사의 정본은 저장소 `eerraa-agent-docs` 태그 **v1**의
+`eerraa-agent-docs/AGENT_DOCS_CONVENTION.md`다. 이 절은 그 규약이 저장소마다 고르라고 남겨
+둔 것만 적는다.
+
+- 에이전트 문서는 여섯 편뿐이라 **flat**이다 (`docs/` 바로 아래). 장르 디렉터리와 별도 색인을
+  두지 않는다. `AGENTS.md`가 Change / Locate / Verify로 라우팅하고, 이 문서 §2가 원본을
+  색인한다.
 - 문서에 저장소 경로를 쓸 때는 **저장소 상대 경로 전체**를 백틱으로 적는다
-  (`src/ap/modules/qmk/port/via_hid.c`). 짝 저장소 파일은 저장소 이름을 앞에 붙인다
-  (`the-via-eerraa/docs/MAP.md`). `path` 검사가 해소한다.
-- **제약에는 원인을 붙인다.** 원인이 없으면 다음 사람이 규칙을 우회할 명분을 갖는다. 커밋은
-  변경 단위이고 제약은 계약 단위라 `git log`가 이것을 대신하지 못한다.
-- **뒤집힌 결정은 지운다.** "아래에서 뒤집혔다"는 주석을 손으로 달지 않는다. 다만 뒤집힌
-  이유가 지금 규칙의 근거이면 그 이유만 현재 규칙 안에 남는다.
-- 날짜·세션 서사·진행 상태·HEAD 해시·1회성 측정 원본은 쓰지 않는다. `git log`와 실행이
-  답한다. 예외는 `state_open.md` 하나이며, 그 문서는 항목이 닫히면 함께 사라진다.
-- 측정치는 **그 측정이 지금 규칙의 근거일 때만** 규칙 옆에 남는다. 그 자리를 벗어난 측정
-  원본은 남기지 않는다.
+  (`src/ap/modules/qmk/port/via_hid.c`). 짝 저장소·규약 저장소 파일은 저장소 이름을 앞에
+  붙인다 (`the-via-eerraa/docs/MAP.md`, `eerraa-agent-docs/AGENT_DOCS_CONVENTION.md`).
+  `path` 검사가 해소한다. 경로가 `파일:줄`이면 그 줄이 파일 안인지도 본다.
+- 보드·채널·EEPROM·wire 표는 `<!-- era-doc-refs: … -->` 마커 안에 두고
+  `python tools/era_doc_refs.py --tables`가 소스에서 다시 계산한다. 손으로 고치지 마라 —
+  `table` 검사가 소스와 대조한다.
+- 이 저장소에는 값이 바뀌는 ADR이 없으므로 `Status:`와 `Read when:`을 쓰지 않는다.
+  `header` 검사가 부재를 본다.
 
 검사기는 `python tools/era_doc_refs.py` 하나이며 아홉 가지를 본다: `path` `comment` `header`
 `index` `symbol` `retired` `table` `menu` `version`. `comment`는 반대 방향을 본다 — 소스
 주석이 부르는 `docs/` 경로가 실재하는지다. 문서 쪽만 검사하면 문서를 지웠는데 주석이 계속
 그것을 가리키는 드리프트가 남는다. 그 검사기가 비어 있지 않은지는
-`python tools/era_doc_refs_selftest.py`가 결함을 심어 확인한다. **아직 기계가 보지 못하는
-것**은 세 가지다 —
+`python tools/era_doc_refs_selftest.py`가 결함을 심어 확인한다. 커밋마다 돌리려면 클론당
+`git config core.hooksPath hooks` — `hooks/pre-commit`이 검사기를 부른다. CI 워크플로는
+없다.
+
+**아직 기계가 보지 못하는 것**은 세 가지다 —
 문장이 선언한 장르에 맞는지, `Canonical for`가 참인지(비어 있지 않은지만 본다), 그리고
 짝 저장소와의 정합. 세 번째는 §7의 사고 두 건이 바로 그 구멍에서 나왔다.

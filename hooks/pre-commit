@@ -1,0 +1,16 @@
+#!/bin/sh
+# 문서-코드 정합. 클론마다 한 번:
+#   git config core.hooksPath hooks
+# --no-verify로 건너뛰지 마라. 결함을 고쳐라.
+# PYTHONUTF8=1 — 이 저장소 소스는 UTF-8이고, 호스트 Python 기본 코드 페이지가
+# 다를 수 있다.
+
+ROOT=$(git rev-parse --show-toplevel)
+if command -v python3 >/dev/null 2>&1; then
+  PY=python3
+else
+  PY=python
+fi
+
+export PYTHONUTF8=1
+exec "$PY" "$ROOT/tools/era_doc_refs.py"

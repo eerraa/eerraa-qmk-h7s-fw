@@ -5,7 +5,9 @@ STM32H7S3(내장 HS PHY) 키보드 펌웨어. 보드 5종이 한 소스를 공�
 VIA/Vial을 얹었고, 커스텀 VIA 앱(`the-via-eerraa`)이 반대편 짝이다.
 
 이 파일이 정본 지시 파일이고 `CLAUDE.md`는 여기로 보내는 포인터다. **답변·커밋 메시지·PR
-본문은 한국어로 쓴다.**
+본문은 한국어로 쓴다.** 문서 헤더·장르 다섯·거절 세 줄·최소 검사의 정본은 저장소
+`eerraa-agent-docs` 태그 **v1**의 `eerraa-agent-docs/AGENT_DOCS_CONVENTION.md`다.
+이 저장소는 그 규약을 따르고, 에이전트 문서가 여섯 편이라 색인을 따로 두지 않는다.
 
 ## 1. 시작 전에
 
@@ -17,18 +19,19 @@ git log --oneline -3
 Select-String -Path src/hw/hw_def.h -Pattern "_DEF_FIRMWARE_VERSION"
 ```
 
-전부 읽지 마라. 하려는 일에 따라 읽는다.
+전부 읽지 마라. 하려는 일에 따라 읽는다. 세 열은 이유가 다르다 — **Change**는 편집 전
+필독, **Locate**는 조회, **Verify**는 빌드·캡처·판정할 때만.
 
-| 하려는 일 | 읽을 것 |
-| --- | --- |
-| 무엇이 어디 있고 무엇이 정본인가 | `docs/MAP.md` — **여기부터** |
-| VIA·앱과 주고받는 것 (채널, exact-ms, `0x06`/`0x07`, MOUSE) | `docs/contract_via.md` |
-| USB 호스트에 보고하는 것 (리포트, 부트 편차, 폴링, 부트로더 인계) | `docs/contract_usb.md` |
-| EEPROM에 남는 것 (슬롯, 버전 쿠키, 팩토리 리셋) | `docs/contract_eeprom.md` |
-| 무엇을 어떻게 돌려 보는가 | `docs/manual_verify.md` |
-| 아직 안 끝난 것, 되살리면 안 되는 것 | `docs/state_open.md` |
-| 사용자에게 나가는 문구 | `docs/readme.txt` |
-| 코드가 어디 살고 무엇을 부르는가 | 소스 검색 (`git grep -n`, `rg`) |
+| Change | Locate | Verify |
+| --- | --- | --- |
+| 정본·색인 — `docs/MAP.md` (**여기부터**) | 보드·채널·EEPROM 생성 표, 짝 저장소 | `python tools/era_doc_refs.py` |
+| VIA·앱 계약 — `docs/contract_via.md` | 채널, exact-ms, `0x06`/`0x07`, MOUSE | `python tools/era_doc_refs.py`; `pwsh -NoProfile -File tools/era_via_host_tests/run.ps1` |
+| USB 호스트 계약 — `docs/contract_usb.md` | 리포트, 부트 편차, 폴링, 부트로더 인계 | `python tools/era_doc_refs.py`; 소스면 `cmake --build build -j10` |
+| EEPROM 계약 — `docs/contract_eeprom.md` | 슬롯, 버전 쿠키, 팩토리 리셋. 배치 표는 `docs/MAP.md` §5 | `python tools/era_doc_refs.py` |
+| 검증 절차 — `docs/manual_verify.md` | 명령, 툴체인 전제, 증상별 확인 순서 | 그 문서가 적은 명령을 그대로 |
+| 열린 항목 — `docs/state_open.md` | 아직 안 끝난 것, 되살리면 안 되는 것 | 해당 항목이 가리키는 실기 |
+| 사용자 문구 — `docs/readme.txt` | 릴리스에 동봉하는 안내 | `python tools/era_doc_refs.py` |
+| — | 코드가 어디 살고 무엇을 부르는가 — 소스 검색 (`git grep -n`, `rg`) | — |
 
 ## 2. 먼저 알아야 손해를 안 보는 것
 
@@ -78,11 +81,15 @@ Select-String -Path src/hw/hw_def.h -Pattern "_DEF_FIRMWARE_VERSION"
 ## 4. 검증
 
 ```powershell
-python tools/era_doc_refs.py                                 # 문서-코드 정합 8종
+python tools/era_doc_refs.py                                 # 문서-코드 정합 9종
 pwsh -NoProfile -File tools/era_via_host_tests/run.ps1        # VIA 값 계층·진단·단일 생산자
 cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/keynetix/may65' -G "MinGW Makefiles"
 cmake --build build -j10
 ```
+
+클론마다 한 번 `git config core.hooksPath hooks` 하면 `hooks/pre-commit`이 커밋 전에
+`python tools/era_doc_refs.py`를 돌린다. 검사기 자신을 고쳤으면
+`python tools/era_doc_refs_selftest.py`도 돌린다.
 
 무엇이 무엇을 무는지, 어떤 변경이 무엇을 owe하는지, 툴체인 전제는 `docs/manual_verify.md`.
 **소스를 건드리지 않은 변경은 빌드를 owe하지 않으며, 그렇게 말하는 것이 검증 진술이다.**
