@@ -180,14 +180,27 @@ Root `CMakeLists.txt:39-49` GLOB-recurses `src/hw/*.c` with empty
 
 ## 9. Headers never included
 
-No `#include` of these kit headers anywhere in the tree:
-
-`src/common/hw/include/buzzer.h`, `cmd.h`, `es8156.h`, `fatfs.h`,
-`fault.h`, `files.h`, `mixer.h`, `nvs.h`, `pdm.h`, `pwm.h`,
-`resize.h`, `swtimer.h`, `touch.h`, `w5300.h`.
-
-Class: DELETE. They are BARAM-kit leftovers. `hw.h` does include
+These kit headers had no `#include` in the tree. Removed 2026-08-30,
+commit `56deaba`. BARAM-kit leftovers. `src/hw/hw.h` still includes
 `button.h`, `spi.h`, `qspi.h`, `cdc.h` (gated shells).
+
+| Header | Class | Proof |
+| --- | --- | --- |
+| buzzer.h | removed | Absent after 2026-08-30, commit `56deaba`. Re-measure: 0 `#include` in the tree. No matching .c |
+| cmd.h | removed | Absent after 2026-08-30, commit `56deaba`. Re-measure: 0 `#include` in the tree. No matching .c |
+| es8156.h | removed | Absent after 2026-08-30, commit `56deaba`. Re-measure: 0 `#include` in the tree. No matching .c |
+| fatfs.h | removed | Absent after 2026-08-30, commit `56deaba`. Re-measure: 0 `#include` in the tree. No matching .c |
+| fault.h | removed | Absent after 2026-08-30, commit `56deaba`. Re-measure: 0 `#include` in the tree. No matching .c |
+| files.h | removed | Absent after 2026-08-30, commit `56deaba`. Re-measure: 0 `#include` in the tree. No matching .c |
+| mixer.h | removed | Absent after 2026-08-30, commit `56deaba`. Re-measure: 0 `#include` in the tree. No matching .c |
+| nvs.h | removed | Absent after 2026-08-30, commit `56deaba`. Re-measure: 0 `#include` in the tree. No matching .c |
+| pdm.h | removed | Absent after 2026-08-30, commit `56deaba`. Re-measure: 0 `#include` in the tree. No matching .c |
+| pwm.h | removed | Absent after 2026-08-30, commit `56deaba`. Re-measure: 0 `#include` in the tree. No matching .c |
+| resize.h | removed | Absent after 2026-08-30, commit `56deaba`. Re-measure: 0 `#include` in the tree. No matching .c |
+| swtimer.h | removed | Absent after 2026-08-30, commit `56deaba`. Re-measure: 0 `#include` in the tree. No matching .c |
+| touch.h | removed | Absent after 2026-08-30, commit `56deaba`. Re-measure: 0 `#include` in the tree. No matching .c |
+| w5300.h | removed | Absent after 2026-08-30, commit `56deaba`. Re-measure: 0 `#include` of w5300.h. The file itself included w5300_regs.h. No matching .c |
+| w5300_regs.h | DELETE | `src/common/hw/include/w5300_regs.h`. Re-measure before cluster 5: 1 `#include`, from w5300.h. After that includer is gone, 0 includes. Not in the cluster 5 list |
 
 ## 10. Tools, tests, IDE — nothing CI-runs
 
@@ -235,7 +248,9 @@ version bump unless that session edits `src/`.
    `ea80621`, PR #281. Definitions and prototypes only. No `src/`
    callers, macros, or function pointers. `_DEF_ENABLE_MATRIX_TIMING_PROBE`
    stays.
-5. Never-included kit headers in §9.
+5. Never-included kit headers in §9 — removed 2026-08-30, commit
+   `56deaba`. Fourteen headers, 0 `#include` each. `w5300_regs.h`
+   stays (not in the cluster 5 list).
 6. `KEY_OVERRIDE_ENABLE` and drop `process_key_override.c` from CMake
    if the table stays NULL.
 7. Remove `src/ap/modules/qmk/quantum/sequencer/*.c` from the QMK CMake GLOB.
