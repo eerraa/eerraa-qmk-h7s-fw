@@ -1,69 +1,104 @@
-# USB 호스트 계약
+# USB host contract
 
 Genre: contract
-Canonical for: 호스트에 무엇을 어떤 모양으로 보고하는가 — 인터페이스·엔드포인트 구성, 20키
-리포트와 부트 규격 편차, NKRO를 넣지 않는 이유, 폴링 모드 소유권, **폐기한 자동 복구와
-되살리면 안 되는 이유**, 부트로더 인계 디태치, 메인 루프 주기 작업의 타이머 규칙
+Canonical for: what the host is shown and in what shape — interface and
+endpoint layout, the 20-key report and boot-protocol size deviation, why NKRO
+is not shipped, polling-mode ownership, the retired automatic USB recovery
+path and why it must not be restored, bootloader-handoff detach, and the
+main-loop periodic-work timer rule
 
-## 1. 인터페이스 구성
+## 1. Interface and endpoint layout
 
-| 인터페이스 | 엔드포인트 | 크기 | subclass / protocol | 내용 |
+Shipped boards start `USB_HID_MODE` (`HW_USB_CMP` is 0 unless `_USE_HW_VCOM`
+is defined). The HID configuration descriptor in
+`src/hw/driver/usb/usb_hid/usbd_hid.c` declares three interfaces:
+
+| Interface | Endpoint | wMaxPacketSize | subclass / protocol | Reports |
 | --- | --- | --- | --- | --- |
-| 0 | `HID_EPIN_ADDR` `0x81` IN | 64 B | 1 (BOOT) / 1 (Keyboard) | 키보드. **20키 배열, IN 22 B** |
-| 1 | `HID_VIA_EP_IN` `0x84` IN / `HID_VIA_EP_OUT` `0x04` OUT | 32 B | 0 / 0 | VIA raw HID |
-| 2 | `HID_EXK_EP_IN` `0x85` IN | 8 B | 1 / 0 | SYSTEM(ID 3, 3 B) / CONSUMER(ID 4, 3 B) / MOUSE(ID 2, 6 B) |
+| 0 | `HID_EPIN_ADDR` `0x81` IN | `HID_EPIN_SIZE` 64 B | 1 (BOOT) / 1 (Keyboard) | Keyboard IN, 22 B. No OUT endpoint; LED output is the 1 B HID SET_REPORT on EP0 |
+| 1 | `HID_VIA_EP_IN` `0x84` IN / `HID_VIA_EP_OUT` `0x04` OUT | `HID_VIA_EP_SIZE` 32 B | 0 / 0 | VIA raw HID, 32 B each way |
+| 2 | `HID_EXK_EP_IN` `0x85` IN | `HID_EXK_EP_SIZE` 8 B | 1 (BOOT) / 0 (none) | SYSTEM (`REPORT_ID_SYSTEM` 3, 3 B) / CONSUMER (`REPORT_ID_CONSUMER` 4, 3 B) / MOUSE (`REPORT_ID_MOUSE` 2, 6 B) |
 
-`bInterval`은 세 인터페이스 모두 `usbBootModeGetHsInterval()`을 따르므로 선택한 폴링 레이트가
-그대로 적용된다. 마우스 리포트는 6 B라 **기존 8 B 엔드포인트에 그대로 들어간다** — 엔드포인트
-크기도 FIFO 배분도 바뀌지 않았다. 디스크립터가 선언한 크기와 QMK 구조체 크기는
-`src/hw/driver/usb/usb_hid/usbd_hid.c`의 `_Static_assert` 셋이 컴파일 시점에 고정한다.
-Composite(CDC+HID) 모드의 `src/hw/driver/usb/usb_cmp/usbd_cmp.c`는 같은 상수
-(`HID_EXK_EP_SIZE`, `HID_EXK_REPORT_DESC_SIZE`)에서 디스크립터를 조립하므로 두 모드가 자동으로
-일치한다.
+The mouse report is 6 B (`report_mouse_t` with `MOUSE_SHARED_EP`) and fits
+the existing 8 B EXK endpoint. `_Static_assert` in
+`src/hw/driver/usb/usb_hid/usbd_hid.c` locks the report-descriptor sizes
+to the QMK structs.
 
-## 2. 동시 입력은 20키다 — 6KRO가 아니다
+Advertised `bInterval` on that HID-only descriptor:
 
-`HW_KEYS_PRESS_MAX`가 20이라(5개 보드 모두 override 없음) 인터페이스 0의 IN 리포트는
-mods(1) + reserved(1) + keys[20] = **22 B**다. 빌드 이미지에서 추출한 디스크립터의
-`95 14 75 08`(REPORT_COUNT = 0x14 = 20)이 이를 확증한다. 리포트 디스크립터를 파싱하는 호스트는
-20키를 그대로 인식하고, 21번째 키는 `add_key_byte()`가 빈 슬롯을 찾지 못해 **조용히 무시**한다
-(ErrorRollOver를 보내지 않는다).
+- HS (`USBD_HID_GetHSCfgDesc`): keyboard IN, VIA IN, VIA OUT, and EXK IN
+  all take `usbBootModeGetHsInterval()`.
+- FS (`USBD_HID_GetFSCfgDesc`): only keyboard IN is patched to
+  `HID_FS_BINTERVAL` (1). VIA IN/OUT keep the static descriptor value 4;
+  EXK keeps the static `HID_HS_BINTERVAL` (1).
 
-## 3. 부트 규격 편차는 알려진 상태이고 유지한다
+`FS 1K` enumerates as Full Speed (`PCD_SPEED_HIGH_IN_FULL`). The HS 2/4/8K
+modes enumerate as High Speed (`PCD_SPEED_HIGH`).
 
-| | 이 펌웨어 (인터페이스 0) | HID Boot Keyboard 규격 |
+When `_USE_HW_VCOM` is on, `src/hw/driver/usb/usb_cmp/usbd_cmp.c` builds the
+same three HID interfaces from the same size and report-descriptor-length
+constants. HS keyboard `wMaxPacketSize` then ORs `(2U << 11)` (three
+transactions per microframe); the HID-only descriptor does not.
+
+## 2. Simultaneous keys are 20, not 6KRO
+
+`HW_KEYS_PRESS_MAX` is 20 (`src/hw/hw_caps_keys.h`). No board overrides it.
+Interface 0 has no `KEYBOARD_SHARED_EP`, so `report_keyboard_t` is mods(1) +
+reserved(1) + `keys[20]` = `HID_KEYBOARD_REPORT_SIZE` / `KEYBOARD_REPORT_SIZE`
+**22 B**. The report descriptor's `REPORT_COUNT` is `HW_KEYS_PRESS_MAX`.
+
+A host that parses the report descriptor sees 20 key slots. A 21st key is
+dropped: `add_key_byte()` in `src/ap/modules/qmk/port/protocol/report.c`
+leaves the report unchanged when no empty slot remains. It does not send an
+ErrorRollOver code.
+
+## 3. Boot-protocol size deviation is known and kept
+
+| | This firmware (interface 0) | HID Boot Keyboard |
 | --- | --- | --- |
-| IN 리포트 | 22 B — mods(1) + reserved(1) + keys[20] | 8 B — mods(1) + reserved(1) + keys[6] |
-| OUT 리포트 | 1 B (LED 5비트 + 패딩 3) | 동일 |
-| 인터페이스 선언 | subclass 1(BOOT), protocol 1(Keyboard) | 동일 |
+| IN report | 22 B — mods(1) + reserved(1) + keys[20] | 8 B — mods(1) + reserved(1) + keys[6] |
+| Output report | 1 B (5 LED bits + 3 bits padding) | Same |
+| Interface | subclass 1 (BOOT), protocol 1 (Keyboard) | Same |
 
-BIOS에서 동작해 온 이유는 **22 B의 앞 8 B가 부트 포맷과 바이트 단위로 같기** 때문이다. 8 B만
-읽는 호스트는 부트 키보드가 보낸 것과 같은 데이터를 받아 앞 6키가 정확히 동작한다.
+The first 8 B of the 22 B IN report are the boot layout byte-for-byte. A
+host that reads only 8 B sees the same modifiers, reserved byte, and first
+six keys a boot keyboard would have sent.
 
-편차는 둘이다. ① `USBD_HID_REQ_SET_PROTOCOL`(boot)을 받아도 리포트를 8 B로 줄이지 않는다 —
-전송 길이는 항상 `HID_KEYBOARD_REPORT_SIZE`다. ② 인터페이스 0의 GET_REPORT에 핸들러가 없어
-STALL된다. **남는 위험은 내용이 아니라 전송 크기다** — 호스트가 8 B TD로 IN을 걸면 22 B 응답이
-babble이 되어 엔드포인트가 halt될 수 있다. 다만 EFI HID 드라이버를 포함한 대부분의 호스트
-스택은 `wMaxPacketSize`(64)로 버퍼를 잡으므로 통과한다.
+Two deviations from boot protocol:
 
-> **REFUSED:** boot protocol에서 리포트를 8 B로 절단하도록 고치기.
-> **WHY:** 재시도 큐와 SOF 드레인이 얽힌 8 kHz 송신 경로를 프로토콜 상태에 따라 가변 길이로
-> 바꿔야 하는데, 출시 이미지가 이 동작으로 현장에서 쓰이고 실패 보고가 없다.
-> **REOPENS:** 특정 BIOS/KVM에서 실패가 보고되면 ①부터 검토한다.
+1. `USBD_HID_REQ_SET_PROTOCOL` stores `hhid->Protocol` and does not shrink
+   the IN report. `usbHidSendReport()` always transmits
+   `HID_KEYBOARD_REPORT_SIZE`. That field is not wired to QMK
+   `keyboard_protocol`.
+2. Interface 0 has no `USBD_HID_REQ_GET_REPORT` handler; the class SETUP
+   default STALLs it (`USBD_CtlError`).
 
-따라서 **"BIOS 호환"은 규격상 보장이 아니라 앞 8 B 일치에 기댄 실무적 호환이다.** 이 구분을
-문서와 릴리스 노트에서 흐리지 않는다.
+The remaining risk is transfer size, not content. `wMaxPacketSize` is 64
+(`HID_EPIN_SIZE`). A host that arms an 8 B IN transfer against a 22 B
+packet can babble-halt the endpoint.
 
-> **REFUSED:** NKRO(240키, 별도 리포트 ID) 도입.
-> **WHY:** 기본 상태가 이미 전환 없이 20키라 기능적 실익이 없는 반면, NKRO 리포트 32 B를
-> 실으려면 EXK 엔드포인트를 8 B → 32 B로 키워야 해서 켜지 않는 사용자까지 재열거와 재시도 큐
-> RAM 1,152 B → 4,224 B를 부담한다. 6KRO↔NKRO 토글은 "부트 호환이냐 동시입력이냐"의 교환을
-> 사용자에게 떠넘기는 장치인데 지금 구성에는 그 교환 자체가 없다.
-> **REOPENS:** 20키로 부족하다는 실사용 근거. 재도입하면 EXK에 리포트 ID를 추가하고
-> `keyboard_protocol`을 SET_PROTOCOL `wIndex==0`에 연결하는 방식이 그대로 유효하다.
+BIOS/UEFI compatibility is therefore the 8 B prefix match, not a spec
+guarantee. Do not blur that in this file or in release notes.
 
-NKRO 토글은 이 펌웨어에서 **제공된 적이 없다.** `NKRO_ENABLE`이 정의된 적이 없어
-`keymap_config.nkro` 비트는 아무 효과가 없었다. 즉 위 결정은 현상 유지이지 회귀가 아니다.
+> **REFUSED:** shrinking the keyboard IN report to 8 B on boot protocol.
+> **WHY:** the 8 kHz send path (retry queue and SOF drain) would have to
+> become protocol-state variable length, and shipping images already run
+> this 22 B report with no field failure report.
+> **REOPENS:** a specific BIOS/KVM that fails; start with deviation 1.
+
+> **REFUSED:** shipping NKRO (bitmap report, separate report ID).
+> **WHY:** the default report already holds 20 keys with no toggle, while a
+> 32 B NKRO report (`NKRO_REPORT_BITS` 30 plus ID and mods) would force EXK
+> from 8 B to 32 B and grow the EXK retry queue for every user, including
+> those who never enable it. A 6KRO↔NKRO toggle is a boot-compat versus
+> rollover trade-off this layout does not have.
+> **REOPENS:** field evidence that 20 keys is not enough. Reintroduction
+> still means an extra report ID on EXK and tying `keyboard_protocol` to
+> SET_PROTOCOL with `wIndex` 0.
+
+NKRO was never offered. `NKRO_ENABLE` is not a compile definition
+(`src/ap/modules/qmk/CMakeLists.txt`), so `keymap_config.nkro` has no
+effect. Keeping 20-key reports is the status quo, not a regression.
 
 ## 4. 자동 USB 복구는 폐기됐다 — 되살리지 마라
 
@@ -99,25 +134,43 @@ reset, HID configuration, suspend, speed change. RAM에만 있고 EEPROM에 쓰�
 매트릭스 개발 계측(`matrix_instrumentation.c`)은 사용자 USB 전달 진단과 **저장소도 활성 조건도
 분리되어 있다.** 두 쪽의 수치를 합치지 않는다 — 재는 구간이 다르다.
 
-## 5. 폴링 모드는 사용자 소유다
+## 5. Polling mode is user-owned
 
-| enum | 실제 모드 | HS `bInterval` | VIA dropdown |
+| enum | Link | HS `bInterval` (`usbBootModeGetHsInterval`) | VIA dropdown |
 | --- | --- | --- | --- |
-| `USB_BOOT_MODE_FS_1K` | FS 1 kHz | (FS endpoint interval 1) | 3 |
+| `USB_BOOT_MODE_FS_1K` | FS 1 kHz | 1 (FS uses `HID_FS_BINTERVAL`) | 3 |
 | `USB_BOOT_MODE_HS_2K` | HS 2 kHz | 3 | 2 |
 | `USB_BOOT_MODE_HS_4K` | HS 4 kHz | 2 | 1 |
 | `USB_BOOT_MODE_HS_8K` | HS 8 kHz | 1 | 0 |
 
-기본은 **FS 1 kHz**다. 채널 13 value 1 SET은 pending 값만 바꾸고, value 2 SET=1이
-`usbBootModeScheduleApply()`를 걸어 메인 루프의 `usbProcessBootModeApply()`가 EEPROM에 기록한 뒤
-VIA 응답을 위한 최소 40 ms와 USB 디태치 100 ms를 두고 MCU를 리셋한다. 같은 모드를 골라도
-재열거 의도는 유지한다. CLI `boot info` / `boot set {1k|2k|4k|8k}`도 같은 경로를 쓴다.
+Default is **FS 1 kHz**. `USB_BOOT_MODE_DEFAULT_VALUE` is
+`USB_BOOT_MODE_FS_1K`; no board overrides it. All five boards set
+`BOOTMODE_ENABLE`.
 
-**이 큐와 리셋을 호출하는 것은 사용자 경로뿐이다.** 진단 서브시스템은 이 API를 부르지 않는다.
-`usbProcess()`에 사용자 apply/reset 외의 자동 단계가 있으면 §4 위반이다.
+Channel 13 (`id_qmk_usb_polling`) in `src/ap/modules/qmk/port/bootmode.c`:
+`id_qmk_usb_bootmode_select` (value 1) SET updates `pending_boot_mode`
+only. `id_qmk_usb_bootmode_apply` (value 2) SET of a non-zero byte calls
+`usbBootModeScheduleApply()`. `id_custom_save` is a no-op; persist is
+Apply (`docs/contract_eeprom.md` §1).
 
-모드를 바꾸면 연결이 끊기므로 진행 중인 진단 세션은 앱이 중단 처리하고, 재연결 후 새 세션으로
-비교한다.
+The main loop (`src/ap/ap.c`) runs `usbProcess()`, which drains that queue
+through `usbProcessBootModeApply()` → `usbBootModeSaveAndReset()`: write
+`EECONFIG_USER_BOOTMODE`, wait at least `USB_BOOTMODE_APPLY_GRACE_MS` (40)
+for the VIA response, then `usbProcessDeferredReset()` detaches
+(`USB_RESET_DETACH_DELAY_MS` 100) and resets the MCU. Apply of the already
+active mode still queues that reset.
+
+CLI `boot info` / `boot set {1k|2k|4k|8k}` calls `usbBootModeSaveAndReset()`
+directly — same persist-and-reset, no pending queue.
+
+Only those user paths call the apply/reset APIs.
+`src/ap/modules/qmk/port/era_usb_diagnostics.c` does not. Any automatic
+step in `usbProcess()` besides user apply/reset violates §4.
+
+Apply/reset tears down USB and reboots, so an in-flight diagnostic session
+cannot continue on the same enumeration. How the host treats that boundary
+is `the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md` and
+`docs/contract_via.md` §6.
 
 ## 6. 부트로더 → 펌웨어 인계는 100 ms 디태치가 필요하다
 
