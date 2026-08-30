@@ -172,7 +172,7 @@ Root `CMakeLists.txt:39-49` GLOB-recurses `src/hw/*.c` with empty
 | `src/hw/driver/usb/usb_cdc/` and `src/hw/driver/usb/usb_cmp/` TUs | DELETE (compile inclusion) | Always GLOB'd. Product `usbBegin(USB_HID_MODE)` (`src/hw/hw.c:137`). `_USE_HW_VCOM` commented (`src/hw/hw_caps_core.h:23`). `USE_USBD_COMPOSITE` off. Files are the VCOM toggle path, not a second product |
 | `_USE_HW_CDC` always defined | KEEP / review | `src/hw/hw_caps_usb.h:14-16` vs `HW_USB_CDC` 0. `cdcInit()` still runs |
 | `button.c` / `spi.c` / `qspi.c` / `loader.c` | KEEP (gated empty TU) | `_USE_HW_BUTTON`, `_USE_HW_SPI`, `_USE_HW_LOADER` unset; `_USE_HW_QSPI` commented |
-| `HAL_I3C_MODULE_ENABLED` | DELETE (the enable) | `src/bsp/device/stm32h7rsxx_hal_conf.h:56`. No `src/hw` / `src/ap` I3C call. HAL `.c` is GLOB'd |
+| `HAL_I3C_MODULE_ENABLED` | removed | Enable commented after 2026-08-30, commit `4950b9e`, PR #285. Was `#define HAL_I3C_MODULE_ENABLED` in `src/bsp/device/stm32h7rsxx_hal_conf.h:56`; now CubeMX `/* #define HAL_I3C_MODULE_ENABLED   */`. Re-measure: no `src/hw` / `src/ap` / `src/common` I3C HAL call (`HAL_I3C_*`, `hi3c`, `I3C_HandleTypeDef`). `src/bsp` had the enable and the `#ifdef` include. No `HAL_I3C_MspInit` override. startup I3C1 IRQ slots have no C handlers. `HAL_I2C_MODULE_ENABLED` stays (`src/hw/driver/i2c.c`). Vendor `stm32h7rsxx_hal_i3c.c` stays on disk and in the HAL Src GLOB; the body is `#ifdef HAL_I3C_MODULE_ENABLED`. The `#ifdef` include guard stays |
 | `src/ap/modules/qmk/quantum/sequencer/*.c` | removed | Absent after 2026-08-30, commit `458b5b1`, PR #284. Was the QMK CMake GLOB `${QMK_ROOT_PATH}/quantum/sequencer/*.c`. `SEQUENCER_ENABLE` is not a compile definition. Re-measure: no board `config.h` (five boards) sets `SEQUENCER_ENABLE`. Call sites in `quantum.c` / `quantum.h` / `keyboard.c` are `#ifdef SEQUENCER_ENABLE`. `process_sequencer.c` was not in the CMake file list. sequencer.c has no feature guard around its globals. `.c`/`.h` stay on disk with other unlinked QMK modules. Include dir `quantum/sequencer` stays (`quantum_keycodes.h` includes `sequencer.h`) |
 | `KEY_OVERRIDE_ENABLE` | removed | Absent after 2026-08-30, commit `7e1e6f4`, PR #283. Was `add_compile_definitions(KEY_OVERRIDE_ENABLE)` and `process_key_override.c` in the QMK CMake file list. Weak `key_overrides = NULL`. Re-measure: no board keymap (`src/ap/modules/qmk/keyboards/era/**/keymap.c`, five boards) defines `key_overrides`, `key_override_t`, `ko_make_*`, `KO_TOGG`/`KO_ON`/`KO_OFF`. Call sites in `quantum.c` / `keyboard.c` / `action_util.c` / `quantum.h` are `#ifdef KEY_OVERRIDE_ENABLE`. `.c`/`.h` stay on disk with other unlinked QMK modules |
 | Unlinked QMK modules (backlight, audio, rgb_matrix, led_matrix, unicode, split_common, bootmagic, wear_leveling, most of `src/ap/modules/qmk/quantum/process_keycode/*.c`) | KEEP | On disk, not in the CMake file list. `AGENTS.md` §3 merge procedure compares `src/ap/modules/qmk/quantum/` then re-applies `src/ap/modules/qmk/port/` |
@@ -258,7 +258,9 @@ version bump unless that session edits `src/`.
 7. Remove `src/ap/modules/qmk/quantum/sequencer/*.c` from the QMK CMake GLOB
    — removed 2026-08-30, commit `458b5b1`, PR #284. GLOB gone.
    `sequencer.c`/`.h` stay on disk (unlinked QMK modules KEEP).
-8. Undefine `HAL_I3C_MODULE_ENABLED`.
+8. Undefine `HAL_I3C_MODULE_ENABLED`
+   — removed 2026-08-30, commit `4950b9e`, PR #285. Enable commented
+   CubeMX-style. Vendor I3C HAL `.c`/`.h` stay on disk (GLOB empty TU).
 9. Stop GLOB-compiling `src/hw/driver/usb/usb_cdc/` and
    `src/hw/driver/usb/usb_cmp/` when `HW_USB_CMP` is 0
    (highest USB risk in this list; VCOM toggle must still work).
