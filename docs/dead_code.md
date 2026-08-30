@@ -200,9 +200,9 @@ There is no `.github/workflows` tree.
 | `tools/uf2/uf2conv.py` | CMake POST_BUILD | KEEP |
 | `tools/W25Q16JV_BARAM-QMK-H7S.stldr` | `.vscode/launch.json` `--extload` | KEEP (flash helper) |
 | `.vscode/launch.json` OpenOCD `target/stm32u5x.cfg` | MCU family is H7S, not U5 | STALE-COMMENT |
-| baram-45k and baram-60mx-6.25u VS Code workspaces under prj/vscode | Absent after 2026-08-30, commit `c3462d9`, PR pending. Named keyboards/baram paths that are not in this tree. CMake GLOB and include dirs are `src/` only. `src/ap/modules/qmk/keyboards/` has era boards only | removed |
-| `.vscode/tasks.json` uf2-make-uf2 task | Absent after 2026-08-30, commit `c3462d9`, PR pending. Input was build/baram-45k-h7s.bin. CMake `PRJ_NAME` is baram-qmk-h7s; POST_BUILD still runs `tools/uf2/uf2conv.py` on that bin | removed |
-| empty .codex file | Absent after 2026-08-30, commit `c3462d9`, PR pending. Zero bytes, 0 readers | removed |
+| baram-45k and baram-60mx-6.25u VS Code workspaces under prj/vscode | Absent after 2026-08-30, commit `c3462d9`, PR #277. Named keyboards/baram paths that are not in this tree. CMake GLOB and include dirs are `src/` only. `src/ap/modules/qmk/keyboards/` has era boards only | removed |
+| `.vscode/tasks.json` uf2-make-uf2 task | Absent after 2026-08-30, commit `c3462d9`, PR #277. Input was build/baram-45k-h7s.bin. CMake `PRJ_NAME` is baram-qmk-h7s; POST_BUILD still runs `tools/uf2/uf2conv.py` on that bin | removed |
+| empty .codex file | Absent after 2026-08-30, commit `c3462d9`, PR #277. Zero bytes, 0 readers | removed |
 
 ## 11. Open items that are not unused code
 
@@ -220,7 +220,7 @@ One claim-cluster per later session. Do not combine with a source
 version bump unless that session edits `src/`.
 
 1. IDE / workspace stale paths — removed 2026-08-30, commit `c3462d9`,
-   PR pending. No firmware image change. Remaining `.vscode/tasks.json`
+   PR #277. No firmware image change. Remaining `.vscode/tasks.json`
    cmake tasks and `.vscode/launch.json` stay.
 2. `#if 0` HID mouse descriptor blocks (`usbd_hid.c`, `usbd_cmp.c`) plus
    unused `HID_MOUSE_REPORT_DESC_SIZE` if nothing else remains.
