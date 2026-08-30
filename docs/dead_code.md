@@ -241,3 +241,11 @@ the retired-symbol list, `raw_hid_send` stub, EEPROM burst code,
 channel 13/17 layout, `0x06`/`0x07` handlers, thinning unlinked QMK
 modules under `src/ap/modules/qmk/quantum/`, Graphify restore, D-2/D-3/D-4,
 bootloader handoff, closing `docs/state_open.md` items.
+
+## 13. Product firmware identifiers renamed (this PR)
+
+Not a deletion. No `src/` edit. Firmware version stays `V260824R2`.
+
+`CMakeLists.txt` `PRJ_NAME` baram-qmk-h7s → eerraa-qmk-h7s. That stem is the elf, map, and POST_BUILD `${PROJECT_NAME}.bin`. `.vscode/launch.json` three `executable` paths follow `./build/eerraa-qmk-h7s.elf`. `tools/W25Q16JV_BARAM-QMK-H7S.stldr` → `tools/W25Q16JV_EERRAA-QMK-H7S.stldr` by git mv (same SHA-256). Two `--extload` paths follow.
+
+§10 still names the old stldr as measured at `101c021`. Do not restore the old `PRJ_NAME` value. The loader ELF still contains the C string `W25Q16JV_BARAM-QMK-H7S`; the blob was not patched.
