@@ -11,14 +11,15 @@ in `src/hw/hw_def.h` is `V260824R2`. Peer trees were read only:
 `the-via-eerraa` `a37dfaa768792d8a480621a120b80affb0fd13cd`,
 `qmk_firmware_eerraa` `dc2ebf485b748bf8c74fe5eee782b8be70606784`.
 
-This file does not delete firmware. Later sessions delete one
-claim-cluster at a time.
+This file does not delete firmware. Remaining DELETE rows are later
+sessions, one claim-cluster at a time.
 
 ## Classes
 
 | Class | Meaning |
 | --- | --- |
 | DELETE | Unused in this tree; a later session may remove it |
+| removed | Gone after a deletion session. Date and PR in the row. Not pending DELETE |
 | RETIRED-ID | Name or slot must stay reserved / must not return in `src/` |
 | STALE-COMMENT | Text or path is leftover; behavior is live or already gone |
 | PAIRED-STOP | Cross-repo mismatch. Record both sides. Do not pick a winner here |
@@ -198,11 +199,10 @@ There is no `.github/workflows` tree.
 | `tools/era_via_host_tests/run.ps1` | Manual. Hard-coded mingw `gcc` path | KEEP |
 | `tools/uf2/uf2conv.py` | CMake POST_BUILD | KEEP |
 | `tools/W25Q16JV_BARAM-QMK-H7S.stldr` | `.vscode/launch.json` `--extload` | KEEP (flash helper) |
-| `prj/vscode/baram-45k.code-workspace` | Points at `keyboards/baram/45k`, which is not in this tree | DELETE |
-| `prj/vscode/baram-60mx-6.25u.code-workspace` | Points at `keyboards/baram/60MX-6.25U`, which is not in this tree | DELETE |
-| `.vscode/tasks.json` `uf2-make-uf2` | Reads `build/baram-45k-h7s.bin` | DELETE (that task) or STALE-COMMENT |
 | `.vscode/launch.json` OpenOCD `target/stm32u5x.cfg` | MCU family is H7S, not U5 | STALE-COMMENT |
-| `.codex` | Tracked, zero bytes | DELETE |
+| baram-45k and baram-60mx-6.25u VS Code workspaces under prj/vscode | Absent after 2026-08-30, commit `c3462d9`, PR pending. Named keyboards/baram paths that are not in this tree. CMake GLOB and include dirs are `src/` only. `src/ap/modules/qmk/keyboards/` has era boards only | removed |
+| `.vscode/tasks.json` uf2-make-uf2 task | Absent after 2026-08-30, commit `c3462d9`, PR pending. Input was build/baram-45k-h7s.bin. CMake `PRJ_NAME` is baram-qmk-h7s; POST_BUILD still runs `tools/uf2/uf2conv.py` on that bin | removed |
+| empty .codex file | Absent after 2026-08-30, commit `c3462d9`, PR pending. Zero bytes, 0 readers | removed |
 
 ## 11. Open items that are not unused code
 
@@ -219,8 +219,9 @@ Do not close these in this campaign.
 One claim-cluster per later session. Do not combine with a source
 version bump unless that session edits `src/`.
 
-1. IDE / workspace stale paths (`prj/vscode/*`, `.vscode/tasks.json` uf2
-   input, empty `.codex`). No firmware image change.
+1. IDE / workspace stale paths — removed 2026-08-30, commit `c3462d9`,
+   PR pending. No firmware image change. Remaining `.vscode/tasks.json`
+   cmake tasks and `.vscode/launch.json` stay.
 2. `#if 0` HID mouse descriptor blocks (`usbd_hid.c`, `usbd_cmp.c`) plus
    unused `HID_MOUSE_REPORT_DESC_SIZE` if nothing else remains.
 3. Orphan `_DEF_ENABLE_USB_HID_TIMING_PROBE`.
