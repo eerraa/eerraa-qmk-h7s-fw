@@ -7,7 +7,7 @@ VIA/Vial을 얹었고, 커스텀 VIA 앱(`the-via-eerraa`)이 반대편 짝이�
 이 파일이 정본 지시 파일이고 `CLAUDE.md`는 여기로 보내는 포인터다. **답변·커밋 메시지·PR
 본문은 한국어로 쓴다.** 문서 헤더·장르 다섯·거절 세 줄·최소 검사의 정본은 저장소
 `eerraa-agent-docs` 태그 **v1**의 `eerraa-agent-docs/AGENT_DOCS_CONVENTION.md`다.
-이 저장소는 그 규약을 따르고, 에이전트 문서가 여섯 편이라 색인을 따로 두지 않는다.
+이 저장소는 그 규약을 따르고, 에이전트 문서가 일곱 편이라 색인을 따로 두지 않는다.
 
 ## 1. 시작 전에
 
@@ -30,6 +30,7 @@ Select-String -Path src/hw/hw_def.h -Pattern "_DEF_FIRMWARE_VERSION"
 | EEPROM 계약 — `docs/contract_eeprom.md` | 슬롯, 버전 쿠키, 팩토리 리셋. 배치 표는 `docs/MAP.md` §5 | `python tools/era_doc_refs.py` |
 | 검증 절차 — `docs/manual_verify.md` | 명령, 툴체인 전제, 증상별 확인 순서 | 그 문서가 적은 명령을 그대로 |
 | 열린 항목 — `docs/state_open.md` | 아직 안 끝난 것, 되살리면 안 되는 것 | 해당 항목이 가리키는 실기 |
+| 죽은 코드 장부 — `docs/dead_code.md` | 폐기·미사용·짝-정지 위치. 지우기는 이후 세션 | `python tools/era_doc_refs.py` |
 | 사용자 문구 — `docs/readme.txt` | 릴리스에 동봉하는 안내 | `python tools/era_doc_refs.py` |
 | — | 코드가 어디 살고 무엇을 부르는가 — 소스 검색 (`git grep -n`, `rg`) | — |
 

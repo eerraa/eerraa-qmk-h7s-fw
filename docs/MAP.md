@@ -38,6 +38,7 @@ only this side breaks the app.
 | [contract_eeprom.md](contract_eeprom.md) | contract | Persistent-state contract. USER slot ownership, version cookie and factory reset, 8 kHz write budget |
 | [manual_verify.md](manual_verify.md) | manual | Checks that run without a board and their commands, what only hardware can decide, symptom order |
 | [state_open.md](state_open.md) | state | Undecided items and start conditions. The only document that goes away with time |
+| [dead_code.md](dead_code.md) | map | Unused, retired, and paired-stop locations in this tree. Deletion is later sessions |
 | [readme.txt](readme.txt) | (user document) | User copy shipped with a release. Exception to the agent-doc spec — §8 |
 
 `AGENTS.md` and `CLAUDE.md` are the entry chain, so they omit the header
@@ -128,6 +129,7 @@ values and contracts.
 | Values — offsets, channel numbers, constants | this file §3–§5 (recomputed from source). Value ids: `docs/contract_via.md` (`wire-values`) |
 | Why it is this shape | `docs/contract_via.md`, `docs/contract_usb.md`, `docs/contract_eeprom.md` |
 | **Absent** — retired subsystems and why | `docs/contract_usb.md` §4 |
+| Unused / retired / paired-stop locations | `docs/dead_code.md` |
 | The other side of a cross-repo contract | §7 and the app ADRs |
 | What to run and how | `docs/manual_verify.md` |
 
@@ -162,7 +164,7 @@ minimum check set are specified by tag **v1** of
 what that spec leaves each repository to choose. It does not copy the
 spec.
 
-- Six agent documents, **flat** under `docs/`. No genre directories and
+- Seven agent documents, **flat** under `docs/`. No genre directories and
   no second index. `AGENTS.md` routes Change / Locate / Verify; §2
   indexes originals.
 - Repository paths in backticks are the **full repository-relative
