@@ -316,3 +316,11 @@ void host_programmable_button_send(uint32_t data) {
 #endif
 
 __attribute__((weak)) void send_programmable_button(report_programmable_button_t *report) {}
+
+uint16_t host_last_system_usage(void) {
+    return last_system_usage;
+}
+
+uint16_t host_last_consumer_usage(void) {
+    return last_consumer_usage;
+}
