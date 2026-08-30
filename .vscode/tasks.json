@@ -28,13 +28,6 @@
       "type": "shell",
       "command": "cmake --build build --target clean",
       "problemMatcher": [],
-    },
-
-    {
-      "label": "uf2-make-uf2",
-      "type": "shell",
-      "command": "python3 tools/uf2/uf2conv.py build/baram-45k-h7s.bin --family 0xFFFF0002 --convert --output build/baram-qmk-h7s.uf2",
-      "problemMatcher": [],
-    }        
+    }
   ]
 }
