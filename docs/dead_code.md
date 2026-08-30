@@ -173,7 +173,7 @@ Root `CMakeLists.txt:39-49` GLOB-recurses `src/hw/*.c` with empty
 | `_USE_HW_CDC` always defined | KEEP / review | `src/hw/hw_caps_usb.h:14-16` vs `HW_USB_CDC` 0. `cdcInit()` still runs |
 | `button.c` / `spi.c` / `qspi.c` / `loader.c` | KEEP (gated empty TU) | `_USE_HW_BUTTON`, `_USE_HW_SPI`, `_USE_HW_LOADER` unset; `_USE_HW_QSPI` commented |
 | `HAL_I3C_MODULE_ENABLED` | DELETE (the enable) | `src/bsp/device/stm32h7rsxx_hal_conf.h:56`. No `src/hw` / `src/ap` I3C call. HAL `.c` is GLOB'd |
-| `src/ap/modules/qmk/quantum/sequencer/*.c` | DELETE (CMake GLOB) | `src/ap/modules/qmk/CMakeLists.txt:78`. `SEQUENCER_ENABLE` is not a compile definition. sequencer.c has no feature guard around its globals |
+| `src/ap/modules/qmk/quantum/sequencer/*.c` | removed | Absent after 2026-08-30, commit `458b5b1`, PR #284. Was the QMK CMake GLOB `${QMK_ROOT_PATH}/quantum/sequencer/*.c`. `SEQUENCER_ENABLE` is not a compile definition. Re-measure: no board `config.h` (five boards) sets `SEQUENCER_ENABLE`. Call sites in `quantum.c` / `quantum.h` / `keyboard.c` are `#ifdef SEQUENCER_ENABLE`. `process_sequencer.c` was not in the CMake file list. sequencer.c has no feature guard around its globals. `.c`/`.h` stay on disk with other unlinked QMK modules. Include dir `quantum/sequencer` stays (`quantum_keycodes.h` includes `sequencer.h`) |
 | `KEY_OVERRIDE_ENABLE` | removed | Absent after 2026-08-30, commit `7e1e6f4`, PR #283. Was `add_compile_definitions(KEY_OVERRIDE_ENABLE)` and `process_key_override.c` in the QMK CMake file list. Weak `key_overrides = NULL`. Re-measure: no board keymap (`src/ap/modules/qmk/keyboards/era/**/keymap.c`, five boards) defines `key_overrides`, `key_override_t`, `ko_make_*`, `KO_TOGG`/`KO_ON`/`KO_OFF`. Call sites in `quantum.c` / `keyboard.c` / `action_util.c` / `quantum.h` are `#ifdef KEY_OVERRIDE_ENABLE`. `.c`/`.h` stay on disk with other unlinked QMK modules |
 | Unlinked QMK modules (backlight, audio, rgb_matrix, led_matrix, unicode, split_common, bootmagic, wear_leveling, most of `src/ap/modules/qmk/quantum/process_keycode/*.c`) | KEEP | On disk, not in the CMake file list. `AGENTS.md` §3 merge procedure compares `src/ap/modules/qmk/quantum/` then re-applies `src/ap/modules/qmk/port/` |
 | `GRAVE_ESC_ENABLE` / `send_string` via dynamic macros / `quantum/logging` | KEEP | All five boards define `GRAVE_ESC_ENABLE`. Macros call `send_string_with_delay`. `keyboard.c` binds `sendchar` |
@@ -255,7 +255,9 @@ version bump unless that session edits `src/`.
    if the table stays NULL — removed 2026-08-30, commit `7e1e6f4`,
    PR #283. Define and CMake file-list entry gone.
    `process_key_override.c`/`.h` stay on disk (unlinked QMK modules KEEP).
-7. Remove `src/ap/modules/qmk/quantum/sequencer/*.c` from the QMK CMake GLOB.
+7. Remove `src/ap/modules/qmk/quantum/sequencer/*.c` from the QMK CMake GLOB
+   — removed 2026-08-30, commit `458b5b1`, PR #284. GLOB gone.
+   `sequencer.c`/`.h` stay on disk (unlinked QMK modules KEEP).
 8. Undefine `HAL_I3C_MODULE_ENABLED`.
 9. Stop GLOB-compiling `src/hw/driver/usb/usb_cdc/` and
    `src/hw/driver/usb/usb_cmp/` when `HW_USB_CMP` is 0
