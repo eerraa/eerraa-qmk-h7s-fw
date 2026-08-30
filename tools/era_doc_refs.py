@@ -266,14 +266,14 @@ def _span(values: list[tuple[str, int]]) -> str:
 def table_wire_values() -> list[str]:
     channels = channel_map()
     rows = [
-        ("글로벌 TAPPING term (exact)", channels["id_qmk_tapping"],
+        ("Global TAPPING term (exact)", channels["id_qmk_tapping"],
          _span(_enum_values("via_qmk_tapping_value", r"_term_exact$"))),
         ("TD0–TD7 term (exact)", channels["id_qmk_tapdance"],
          _span(_enum_values("via_qmk_tapdance_value", r"_term_exact$"))),
-        ("MOUSE 6개 컨트롤", channels["id_qmk_mousekey"],
+        ("MOUSE six controls", channels["id_qmk_mousekey"],
          _span(_enum_values("via_qmk_mousekey_value", r"^id_qmk_mousekey_"))),
     ]
-    lines = ["| 컨트롤 | 채널 | value id |", "| --- | --- | --- |"]
+    lines = ["| Control | Channel | value id |", "| --- | --- | --- |"]
     for label, channel, span in rows:
         lines.append(f"| {label} | {channel} | {span} |")
     return lines
