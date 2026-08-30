@@ -54,11 +54,11 @@ This file owns the value-id rows. `table` regenerates them from
 `src/ap/modules/qmk/quantum/via.h`.
 
 <!-- era-doc-refs: wire-values -->
-| 컨트롤 | 채널 | value id |
+| Control | Channel | value id |
 | --- | --- | --- |
-| 글로벌 TAPPING term (exact) | 15 | 5 |
+| Global TAPPING term (exact) | 15 | 5 |
 | TD0–TD7 term (exact) | 16 | 41–48 |
-| MOUSE 6개 컨트롤 | 17 | 1–6 |
+| MOUSE six controls | 17 | 1–6 |
 <!-- era-doc-refs: end -->
 
 Peer `the-via-eerraa/docs/adr/0001-state-sync-protocol.md` and
@@ -158,77 +158,211 @@ write as a remote CONFIG change and storms GET.
 > echo would loop GET against the same store.
 > **REOPENS:** none while State Sync poll uses equality tokens.
 
-## 5. selector `0x06` — state sync 봉투
+## 5. selector `0x06` — State Sync envelope
 
-`GET_KEYBOARD_VALUE(0x02)` + `id_era_state_sync`. **32 B 고정**, version 1, 도메인 셋
-(`ERA_STATE_SYNC_DOMAIN_KEYMAP`·`_MACRO`·`_CONFIG`). 예약 구간이 0이 아니거나 길이가 모자라면
-`ERA_STATE_SYNC_STATUS_INVALID`다.
+`id_get_keyboard_value` (`0x02`) + `id_era_state_sync` (`0x06`).
+Version `ERA_STATE_SYNC_ENVELOPE_VERSION` (`0x01`). Integers are
+big-endian. The layout is the 32 B VIA payload. SET is not routed on
+this selector; `via.c` marks `id_unhandled`. TX is §1.
 
-길이 검사가 6 B였던 적이 있는데 그것으로는 부족하다 — 앱 파서와 참조 구현이 둘 다 **32 B 봉투
-전 구간**을 본다. 응답 버퍼만 채우고 TX는 §1 경로를 탄다.
+Byte layout matches `the-via-eerraa/docs/adr/0001-state-sync-protocol.md`.
 
-## 6. selector `0x07` — 진단 봉투는 관측 전용이다
+### Request
 
-`GET_KEYBOARD_VALUE(0x02)`/`SET_KEYBOARD_VALUE(0x03)` + `id_era_usb_diagnostics`, v1,
-big-endian, 32 B 고정.
+| Byte | Meaning |
+| ---: | ------- |
+| `0` | `id_get_keyboard_value` (`0x02`) |
+| `1` | `0x06` |
+| `2` | `0x01` |
+| `3` | `0` |
+| `4..5` | host request tag, BE16 |
+| `6..31` | `0` |
 
-| 요청 byte | 의미 | | 응답 byte | 의미 |
-| --- | --- | --- | --- | --- |
-| 0–2 | command, selector, version | | 0–5 | command, selector, v1, operation, echo tag |
-| 3 | operation | | 6 | status |
-| 4–5 | host request tag (BE16) | | 7 | state |
-| 6 | duration 초 또는 chunk index | | 8–9 | session ID (BE16) |
-| 7–8 | snapshot sequence (chunk 0은 0) | | 10–11 | frozen snapshot sequence |
-| 9–31 | 반드시 0 | | 12–13 | chunk index / count |
-| | | | 14–31 | 18 B payload |
+### Response
 
-operation은 capabilities `0x00`·snapshot `0x01`(GET), start `0x10`·stop `0x11`·clear `0x12`
-(SET). status는 OK 0 / unsupported version 1 / invalid 2 / busy 3 / no session 4 / stale
-snapshot 5. chunk 0이 snapshot을 동결하고 후속 chunk는 **같은 sequence만** 받는다. 기본
-chunk는 0–7이고 timeline event 두 개마다 하나가 붙어 최대 12개다.
+| Byte | Meaning |
+| ---: | ------- |
+| `0` | `0x02` |
+| `1` | `0x06` |
+| `2` | `0x01` (firmware writes envelope version, not the request version byte) |
+| `3` | status: `ERA_STATE_SYNC_STATUS_OK` `0x00`, `UNSUPPORTED_VERSION` `0x01`, `INVALID` `0x02` |
+| `4..5` | echoed tag, BE16 |
+| `6` | domain mask; OK writes `ERA_STATE_SYNC_DOMAIN_MASK_INITIAL` (`0x07`) |
+| `7` | `0` |
+| `8..11` | keymap revision, BE32 |
+| `12..15` | macro revision, BE32 |
+| `16..19` | config revision, BE32 |
+| `20..31` | `0` |
 
-**tag와 sequence는 역할이 다르다.** tag는 전송 큐에서 요청–응답을 맞추고, sequence는 여러
-패킷이 같은 동결 snapshot인지 보장한다.
+Domain bits: `ERA_STATE_SYNC_DOMAIN_KEYMAP` `0x01`,
+`ERA_STATE_SYNC_DOMAIN_MACRO` `0x02`, `ERA_STATE_SYNC_DOMAIN_CONFIG`
+`0x04`. Version is checked before reserved bytes. A nonzero reserved
+byte (`3` or `6..31`) is `ERA_STATE_SYNC_STATUS_INVALID` (status 2);
+the tag is still echoed and revisions are not filled.
 
-**펌웨어는 판정하지 않는다.** 안정성 점수, stable/unstable 라벨, 자동 폴링 변경, EEPROM 기록,
-자동 재부팅이 전부 없다. 이건 누락이 아니라 계약이며 근거는 `docs/contract_usb.md` §4에 있다.
+`length < 32` is not INVALID. `era_state_sync_via_command` returns
+false and `via.c` sets `id_unhandled` (`0xFF`); the buffer is not
+rewritten as a v1 envelope. Peer observation, VIA unedited: the app
+parseStateSyncEnvelope returns null when length is not 32 (neither
+`0xFF` nor INVALID).
 
-### 6-1. 진단 수치를 비교해도 되는 축
+`tools/era_via_host_tests/test_era_via_exact_ms.c` bites the OK
+envelope, reserved INVALID, unsupported version, tag echo, and the
+31-byte false return.
 
-**절대 µs는 회차 간 비교에 쓸 수 없다.** 같은 펌웨어·같은 모드인데 재열거만으로 평균이
-FS에서 231 → 558 µs로, HS 4K에서 232 → 184 µs로 움직인 실측이 있다. 리포트가 디바운스 1 ms
-틱 경계에서 방출되고 그 틱과 호스트 USB 프레임의 위상차가 **부팅마다 무작위로 다시 정해지기**
-때문이다. `min`이 곧 그 위상이다.
+> **REFUSED:** answering `ERA_STATE_SYNC_STATUS_INVALID` on
+> `length < 32`.
+> **WHY:** a short buffer is not an envelope;
+> `era_state_sync_via_command` returns false and `via.c` marks
+> `id_unhandled` (`0xFF`).
+> **REOPENS:** none while VIA IN is a 32 B report.
 
-비교에 쓸 수 있는 것은 위상 독립 지표뿐이다 — **span(max − min)**, queue depth peak, report
-drops, `>2× interval` 건수, main-loop gap.
+## 6. selector `0x07` — diagnostics envelope
 
-정규화 기준은 **세션 시작 시점에 선택된 BootMode**의 간격이지 실제로 열거된 link speed가
-아니다. HS 8K를 고른 채 FS 전용 허브에 꽂으면 모든 표본이 최상위 버킷에 들어간다. snapshot이
-mode와 negotiated speed를 함께 보내므로 **앱이** 그 불일치를 판정한다 — 펌웨어는 선택 모드를
-숨기거나 자동 보정하지 않는다. "8K로 동작하지 않았다"가 더 정확한 사실이기 때문이다.
+`id_get_keyboard_value` (`0x02`) / `id_set_keyboard_value` (`0x03`) +
+`id_era_usb_diagnostics` (`0x07`). Protocol
+`ERA_USB_DIAGNOSTICS_PROTOCOL_VERSION` (`0x01`), big-endian, 32 B.
+Firmware answers the request; it is not an unsolicited producer.
+Observation-only product boundary is `docs/contract_usb.md` §4
+(do not copy it here). Byte layout matches
+`the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md`.
 
-펌웨어 버전이 다른 기록은 같은 비교군에 넣지 않는다. `V260824R1`의 IN 엔드포인트 busy 분리
-(`in_ep_busy`)가 재시도 큐 진입을 줄여 **지연과 큐 깊이의 기준선 자체를 내렸다.**
+### Request
 
-### 6-2. 계측 비용의 상한
+| Byte | Field |
+| ---: | ----- |
+| `0` | command: GET `0x02` or SET `0x03` |
+| `1` | `0x07` |
+| `2` | `0x01` |
+| `3` | operation |
+| `4..5` | host tag, BE16 |
+| `6` | duration seconds or snapshot chunk index |
+| `7..8` | snapshot sequence; chunk 0 must send 0 |
+| `9..31` | reserved, must be 0 |
 
-이 서브시스템이 8 kHz 경로에 들어가도 되는 근거는 고정된 RAM과 짧은 임계구역이다. 늘리는
-변경은 이 근거를 다시 세워야 한다.
+Operations: capabilities `ERA_USB_DIAGNOSTICS_OP_CAPABILITIES` `0x00`
+and snapshot `ERA_USB_DIAGNOSTICS_OP_SNAPSHOT` `0x01` are GET. Start
+`ERA_USB_DIAGNOSTICS_OP_START` `0x10`, stop
+`ERA_USB_DIAGNOSTICS_OP_STOP` `0x11`, and clear
+`ERA_USB_DIAGNOSTICS_OP_CLEAR` `0x12` are SET. Start duration is
+10 / 30 / 60 only.
 
-- 세션 내부 상태 272 B + wire frozen snapshot 236 B + 부팅 카운터 20 B + 상태값 6 B. heap과
-  EEPROM 사용은 없다.
-- `usbDiagnosticsCapture()`의 임계구역 복사량은 **292 B**(세션 272 + 카운터 20)이며 mingw
-  gcc로 실측했다. 전역 인터럽트 차단이지만 600 MHz M7에서 1 µs 미만이고 빈도가 약 1 Hz라
-  125 µs 예산 대비 구조적 위험이 없다.
-- 키보드 재시도 큐 원소마다 요청 시각·세션 ID 6 B가 붙어 128개 기준 768 B가 는다.
-- idle 경로는 SOF마다 타임스탬프를 읽지 않는다. 세션 중에만 루프당 TIM5 카운터를 한 번 읽고,
-  리포트마다 요청·완료에서 각각 한 번 읽는다.
+Wrong command/operation pairing, a nonzero reserved byte (`9..31`),
+chunk 0 with a nonzero sequence, or a duration other than 10 / 30 / 60
+is `ERA_USB_DIAGNOSTICS_STATUS_INVALID` (status 2). Unsupported
+version is checked first and wins over INVALID.
 
-`micros()`는 **정확히 1 µs 눈금**이다. HSE 24 MHz → PLL1 → SYSCLK 600 MHz, APB1 타이머 클럭
-300 MHz에 prescaler 299가 정확히 1 MHz를 만들고, wrap 주기 4,295초는 최대 세션 60초의 71배다.
-브라우저가 1 Hz로 31회 폴링하는 동안 펌웨어 elapsed가 30,000 ms에 도달해 실측으로도 교차
-검증됐다.
+`length < 32` is the same unhandled path as §5: the handler
+returns false and `via.c` sets `id_unhandled` (`0xFF`).
+
+### Response
+
+| Byte | Field |
+| ---: | ----- |
+| `0..5` | command, selector, v1, operation, echoed tag |
+| `6` | status |
+| `7` | state: idle 0, running 1, complete 2, stopped 3 |
+| `8..9` | session ID, BE16; none is 0 |
+| `10..11` | frozen snapshot sequence, BE16 |
+| `12` | chunk index |
+| `13` | chunk count |
+| `14..31` | 18 B operation payload |
+
+Codes: OK 0, unsupported version 1, invalid 2, busy 3, no session 4,
+stale snapshot 5. Tag matches the request in the transport queue.
+Sequence is the frozen snapshot those chunks belong to — not a second
+tag. Chunk 0 freezes a new nonzero sequence; later chunks must send
+that same sequence or the reply is stale.
+
+START OK payload is duration, BootMode, expected interval µs (BE32).
+STOP with no running session is no session. CLEAR while running is
+busy. Concurrent START is busy.
+
+### Capabilities payload
+
+| Payload byte | Field |
+| -----------: | ----- |
+| `0` | flags: report timing `0x01`, histogram `0x02`, firmware timing `0x04`, timeline `0x08`, boot counters `0x10` |
+| `1` | duration mask 10 / 30 / 60, bits `0x07` |
+| `2..3` | histogram bins `USB_DIAGNOSTICS_HISTOGRAM_BUCKETS` 8, timeline capacity `USB_DIAGNOSTICS_TIMELINE_CAPACITY` 8 |
+| `4..5` | recommended snapshot interval 1000 ms, BE16 |
+| `6..7` | endian 1 (big), time unit 1 (µs) |
+| `8` | firmware version length, max 9 |
+| `9..17` | ASCII `_DEF_FIRMWARE_VERSION` and zero padding |
+
+### Snapshot chunks
+
+| Chunk | 18 B payload |
+| ----: | ------------ |
+| `0` | mode U8, speed U8, duration U8, event count U8, elapsed ms U32, expected interval µs U32, report samples U32, bin/timeline count U8×2 |
+| `1` | latency min / average / max / window max U32×4, queue peak U16 |
+| `2..3` | histogram U32×4 each |
+| `4` | loop samples / max / window max / stall count U32×4, stall threshold U16 |
+| `5` | boot drops / resets / configurations / suspends U32×4 |
+| `6` | boot speed changes, session drops / resets / configurations U32×4 |
+| `7` | session suspends / speed changes / timeline overwrites U32×3, zero padding |
+| `8..11` | two events each: type U8 + relative ms U32 + value U32 |
+
+Base chunk count is `ERA_USB_DIAGNOSTICS_BASE_CHUNKS` (8). One extra
+chunk per two timeline events, max 12. Sequence 0 is skipped on wrap,
+same as State Sync tokens.
+
+`tools/era_via_host_tests/test_usb_diagnostics.c` bites capability
+bytes, reserved INVALID, unsupported version, duration, busy / stop /
+clear, frozen multi-chunk, stale sequence, wrap, and saturation.
+
+> **REFUSED:** answering `ERA_USB_DIAGNOSTICS_STATUS_INVALID` on
+> `length < 32`.
+> **WHY:** a short buffer is not an envelope;
+> `era_usb_diagnostics_via_command` returns false and `via.c` marks
+> `id_unhandled` (`0xFF`).
+> **REOPENS:** none while VIA IN is a 32 B report.
+
+### 6-1. Axes that survive a phase redraw
+
+Absolute microseconds are not comparable across runs. The same
+firmware and mode moved FS average 231 → 558 µs and HS 4K 232 → 184
+µs on re-enumeration alone. Reports leave on the debounce 1 ms tick
+boundary, and that tick's phase against the host USB frame is redrawn
+at random every boot. `min` is that phase.
+
+Comparable axes are phase-independent: span (max − min), queue-depth
+peak, report drops, `>2× interval` counts, main-loop gap.
+
+The histogram's expected interval is the BootMode selected at START,
+not the negotiated link speed. HS 8K on an FS-only hub puts every
+sample in the top bucket. The snapshot already carries mode and
+negotiated speed; the app judges the mismatch. Firmware does not hide
+the selected mode or auto-correct it.
+
+Do not mix firmware versions in one comparison set. `V260824R1`
+split IN-endpoint busy (`in_ep_busy`) and lowered the latency and
+queue-depth baseline.
+
+### 6-2. Instrumentation cost bound
+
+This subsystem sits on the 8 kHz path because RAM is fixed and the
+critical section is short. A change that grows either must re-state
+that bound.
+
+- Session `usb_diagnostics_session_internal_t` 272 B, wire frozen
+  snapshot `usb_diagnostics_snapshot_t` 236 B, boot counters 20 B,
+  plus 6 B of sequence / valid / speed / next-id. No heap. No EEPROM.
+- `usbDiagnosticsCapture()` copies 292 B (session 272 + counters 20)
+  under a global IRQ mask. About 1 Hz.
+- Keyboard retry-queue entries carry 6 B of request time and session
+  id (`report_info_t`); 128 slots add 768 B. `_Static_assert` locks
+  that padding.
+- Idle does not read TIM5 for this subsystem. `qmkUpdate()` calls
+  `usbDiagnosticsTask(micros())` only while
+  `usbDiagnosticsIsActive()`. A live session reads the counter once
+  per loop and once each at report request and DataIn complete.
+
+`micros()` is a 1 µs tick. TIM5 prescaler is
+`(SystemCoreClock / 2) / 1000000 - 1` (299 at 600 MHz). Wrap is
+`UINT32_MAX` + 1 µs, 4295 s, 71× the longest 60 s session. A 1 Hz
+host poll reaching firmware elapsed 30 000 ms at poll 31 is the field
+cross-check.
 
 ## 7. MOUSE unit conversion — three places code alone does not reconstruct
 
