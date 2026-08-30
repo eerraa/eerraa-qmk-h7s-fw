@@ -1,14 +1,8 @@
 #include "timer.h"
 
-
-
+// V260831R1: 동작 없는 timer_clear 스텁을 제거해 미구현 호출을 링크 오류로 드러낸다.
 
 void timer_init(void)
-{
-
-}
-
-void timer_clear(void)
 {
 
 }
