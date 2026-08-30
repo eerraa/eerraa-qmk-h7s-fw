@@ -140,7 +140,7 @@ deleted persistence_burst_design document must not be restored
 | HID_MOUSE_ReportDesc | removed | Absent after 2026-08-30, commit `eb3b334`, PR #278. Was a literal `#if 0` array in `src/hw/driver/usb/usb_hid/usbd_hid.c`. GET_DESCRIPTOR wIndex 2 serves `HID_EXK_ReportDesc`. Live mouse is EXK report ID 2. Size macro HID_MOUSE_REPORT_DESC_SIZE had no remaining src/ use; removed from `src/hw/driver/usb/usb_hid/usbd_hid.h` |
 | USBD_CMPSIT_HIDMouseDesc | removed | Absent after 2026-08-30, commit `eb3b334`, PR #278. Was a literal `#if 0` function in `src/hw/driver/usb/usb_cmp/usbd_cmp.c` plus a commented prototype. Live composite HID builder is `USBD_CMPSIT_HIDKeyboardDesc` (keyboard / VIA / EXK). `USE_USBD_COMPOSITE` is defined only when `HW_USB_CMP == 1` (`src/hw/driver/usb/usbd_conf.h:56-58`). Product: `HW_USB_CMP` 0 (`src/hw/hw_caps_usb.h:38-39`) |
 | `lib8tion.c` `#if 0` Arduino test | KEEP | Vendor FastLED test. Not this product's HID path |
-| _DEF_ENABLE_USB_HID_TIMING_PROBE | removed | Absent after 2026-08-30, commit `b94e9ea`. Was a default-0 `#ifndef`/`#define` in `src/hw/hw_def.h`. Re-measure before delete: no other `src/` reference besides that define. No CMake `-D`. Name matches retired `usbd_hid_instrumentation`. `_DEF_ENABLE_MATRIX_TIMING_PROBE` stays |
+| _DEF_ENABLE_USB_HID_TIMING_PROBE | removed | Absent after 2026-08-30, commit `b94e9ea`, PR #280. Was a default-0 `#ifndef`/`#define` in `src/hw/hw_def.h`. Re-measure before delete: no other `src/` reference besides that define. No CMake `-D`. Name matches retired `usbd_hid_instrumentation`. `_DEF_ENABLE_MATRIX_TIMING_PROBE` stays |
 | `_DEF_ENABLE_MATRIX_TIMING_PROBE` | KEEP | Default 0 on all five `config.h` files. Callers exist in `src/ap/modules/qmk/port/matrix.c` and `src/ap/modules/qmk/port/matrix_instrumentation.c` |
 | `loader jump` body commented out | DELETE | `src/hw/driver/loader.c:224-242`, already inside `_USE_HW_LOADER` which is unset |
 
@@ -227,9 +227,9 @@ version bump unless that session edits `src/`.
    `eb3b334`, PR #278. Live mouse remains EXK report ID 2. Compiled
    image unchanged.
 3. Orphan USB HID timing-probe define — removed 2026-08-30, commit
-   `b94e9ea`. Default-0 `#ifndef`/`#define` in `src/hw/hw_def.h`; no other
-   `src/` reference besides that define. `_DEF_ENABLE_MATRIX_TIMING_PROBE`
-   stays.
+   `b94e9ea`, PR #280. Default-0 `#ifndef`/`#define` in `src/hw/hw_def.h`;
+   no other `src/` reference besides that define.
+   `_DEF_ENABLE_MATRIX_TIMING_PROBE` stays.
 4. Zero-caller helpers in §7 (one session; split if review wants a
    smaller diff).
 5. Never-included kit headers in §9.
