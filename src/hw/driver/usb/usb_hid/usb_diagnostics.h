@@ -85,7 +85,6 @@ void usbDiagnosticsInit(void);
 bool usbDiagnosticsIsActive(void);
 usb_diagnostics_state_t usbDiagnosticsGetState(void);
 uint16_t usbDiagnosticsGetSessionId(void);
-uint8_t usbDiagnosticsGetCurrentSpeed(void);
 
 bool usbDiagnosticsStart(uint8_t  duration_seconds,
                          uint8_t  polling_mode,

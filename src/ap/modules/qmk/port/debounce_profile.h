@@ -31,6 +31,5 @@ bool                        debounce_profile_set_single_delay(uint8_t delay_ms);
 bool                        debounce_profile_set_press_delay(uint8_t delay_ms);
 bool                        debounce_profile_set_release_delay(uint8_t delay_ms);
 void                        debounce_profile_save(bool force);
-void                        debounce_profile_restore_defaults(void);
 void                        debounce_profile_storage_apply_defaults(void);
 bool                        debounce_profile_handle_via_command(uint8_t *data, uint8_t length);

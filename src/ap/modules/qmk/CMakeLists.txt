@@ -75,7 +75,6 @@ file(GLOB QMK_SRC_FILES CONFIGURE_DEPENDS
   ${QMK_ROOT_PATH}/quantum/color.c
 
 
-  ${QMK_ROOT_PATH}/quantum/sequencer/*.c
   ${QMK_ROOT_PATH}/quantum/logging/*.c
   ${QMK_ROOT_PATH}/quantum/debounce_runtime.c
   ${QMK_ROOT_PATH}/quantum/debounce/asym_eager_defer_pk.c
@@ -84,7 +83,6 @@ file(GLOB QMK_SRC_FILES CONFIGURE_DEPENDS
   
 
   ${QMK_ROOT_PATH}/quantum/send_string/*.c
-  ${QMK_ROOT_PATH}/quantum/process_keycode/process_key_override.c
   ${QMK_ROOT_PATH}/quantum/process_keycode/process_grave_esc.c
   ${QMK_ROOT_PATH}/quantum/mousekey.c                        # V260823R1: 마우스 키 엔진
 
@@ -121,7 +119,6 @@ add_compile_definitions(DYNAMIC_KEYMAP_MACRO_DELAY=10)
 add_compile_definitions(VIA_ENABLE)
 add_compile_definitions(RAW_ENABLE)
 add_compile_definitions(DYNAMIC_KEYMAP_ENABLE)
-add_compile_definitions(KEY_OVERRIDE_ENABLE)
 # add_compile_definitions(HOLD_ON_OTHER_KEY_PRESS) // QMK와 디폴트와 매치하지 않음
 add_compile_definitions(EXTRAKEY_ENABLE)
 
