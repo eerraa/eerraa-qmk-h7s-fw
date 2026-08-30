@@ -89,7 +89,8 @@ cmake --build build -j10
 
 클론마다 한 번 `git config core.hooksPath hooks` 하면 `hooks/pre-commit`이 커밋 전에
 `python tools/era_doc_refs.py`를 돌린다. 검사기 자신을 고쳤으면
-`python tools/era_doc_refs_selftest.py`도 돌린다.
+`python tools/era_doc_refs_selftest.py`도 돌린다. 훅 실행기를 고쳤으면
+`python hooks/test_pre_commit.py`를 돌린다.
 
 무엇이 무엇을 무는지, 어떤 변경이 무엇을 owe하는지, 툴체인 전제는 `docs/manual_verify.md`.
 **소스를 건드리지 않은 변경은 빌드를 owe하지 않으며, 그렇게 말하는 것이 검증 진술이다.**
