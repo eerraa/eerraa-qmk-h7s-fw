@@ -137,8 +137,8 @@ deleted persistence_burst_design document must not be restored
 
 | Item | Class | Proof |
 | --- | --- | --- |
-| `HID_MOUSE_ReportDesc` | DELETE | `src/hw/driver/usb/usb_hid/usbd_hid.c:370-412` `#if 0`. Live mouse is EXK report ID 2, not this descriptor. `HID_MOUSE_REPORT_DESC_SIZE` remains `src/hw/driver/usb/usb_hid/usbd_hid.h:59` |
-| `USBD_CMPSIT_HIDMouseDesc` | DELETE | `src/hw/driver/usb/usb_cmp/usbd_cmp.c:941-980` `#if 0`, and the TU is also behind `USE_USBD_COMPOSITE` which is defined only when `HW_USB_CMP == 1` (`src/hw/driver/usb/usbd_conf.h:56-58`). Product: `HW_USB_CMP` 0 (`src/hw/hw_caps_usb.h:38-39`) |
+| HID_MOUSE_ReportDesc | removed | Absent after 2026-08-30, commit `eb3b334`. Was a literal `#if 0` array in `src/hw/driver/usb/usb_hid/usbd_hid.c`. GET_DESCRIPTOR wIndex 2 serves `HID_EXK_ReportDesc`. Live mouse is EXK report ID 2. Size macro HID_MOUSE_REPORT_DESC_SIZE had no remaining src/ use; removed from `src/hw/driver/usb/usb_hid/usbd_hid.h` |
+| USBD_CMPSIT_HIDMouseDesc | removed | Absent after 2026-08-30, commit `eb3b334`. Was a literal `#if 0` function in `src/hw/driver/usb/usb_cmp/usbd_cmp.c` plus a commented prototype. Live composite HID builder is `USBD_CMPSIT_HIDKeyboardDesc` (keyboard / VIA / EXK). `USE_USBD_COMPOSITE` is defined only when `HW_USB_CMP == 1` (`src/hw/driver/usb/usbd_conf.h:56-58`). Product: `HW_USB_CMP` 0 (`src/hw/hw_caps_usb.h:38-39`) |
 | `lib8tion.c` `#if 0` Arduino test | KEEP | Vendor FastLED test. Not this product's HID path |
 | `_DEF_ENABLE_USB_HID_TIMING_PROBE` | DELETE | Defined `src/hw/hw_def.h:68-69`. No other `src/` reference. Name matches the retired instrumentation unit |
 | `_DEF_ENABLE_MATRIX_TIMING_PROBE` | KEEP | Default 0 on all five `config.h` files. Callers exist in `src/ap/modules/qmk/port/matrix.c` and `src/ap/modules/qmk/port/matrix_instrumentation.c` |
@@ -222,8 +222,10 @@ version bump unless that session edits `src/`.
 1. IDE / workspace stale paths — removed 2026-08-30, commit `c3462d9`,
    PR #277. No firmware image change. Remaining `.vscode/tasks.json`
    cmake tasks and `.vscode/launch.json` stay.
-2. `#if 0` HID mouse descriptor blocks (`usbd_hid.c`, `usbd_cmp.c`) plus
-   unused `HID_MOUSE_REPORT_DESC_SIZE` if nothing else remains.
+2. `#if 0` HID mouse descriptor blocks (usbd_hid.c, usbd_cmp.c) plus
+   unused HID_MOUSE_REPORT_DESC_SIZE — removed 2026-08-30, commit
+   `eb3b334`. Live mouse remains EXK report ID 2. Compiled image
+   unchanged.
 3. Orphan `_DEF_ENABLE_USB_HID_TIMING_PROBE`.
 4. Zero-caller helpers in §7 (one session; split if review wants a
    smaller diff).
