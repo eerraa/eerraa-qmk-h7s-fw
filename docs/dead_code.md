@@ -169,7 +169,7 @@ Root `CMakeLists.txt:39-49` GLOB-recurses `src/hw/*.c` with empty
 
 | Item | Class | Proof |
 | --- | --- | --- |
-| `src/hw/driver/usb/usb_cdc/` and `src/hw/driver/usb/usb_cmp/` TUs | DELETE (compile inclusion) | Always GLOB'd. Product `usbBegin(USB_HID_MODE)` (`src/hw/hw.c:137`). `_USE_HW_VCOM` commented (`src/hw/hw_caps_core.h:23`). `USE_USBD_COMPOSITE` off. Files are the VCOM toggle path, not a second product |
+| `src/hw/driver/usb/usb_cdc/` and `src/hw/driver/usb/usb_cmp/` TUs | DELETE (compile inclusion) | Still pending. Session 9 STOP 2026-08-30, PR #285. CMake unchanged (`CMakeLists.txt` `EXCLUDE_PATHS` empty; both dirs still in the `src/hw/*.c` GLOB and in include dirs). Side A (why the row exists): product `usbBegin(USB_HID_MODE)` (`src/hw/hw.c:137-140`). `_USE_HW_VCOM` is commented only (`src/hw/hw_caps_core.h:23`, `src/ap/modules/qmk/keyboards/era/sirind/brick60/config.h:16`, `src/ap/modules/qmk/keyboards/era/intigrity80/config.h:16`); absent on may65 / brick65 / sculpturei. No live `#define _USE_HW_VCOM` in the tree. All five shipped boards therefore take `HW_USB_CMP` 0 (`src/hw/hw_caps_usb.h:38-39`). `USE_USBD_COMPOSITE` is defined only when `HW_USB_CMP == 1` (`src/hw/driver/usb/usbd_conf.h:56-58`). `usbd_cmp.c` body is `#ifdef USE_USBD_COMPOSITE` (`src/hw/driver/usb/usb_cmp/usbd_cmp.c:39`). `usb.c` takes `&CMP_Desc` only under `#if HW_USB_CMP == 1` (`src/hw/driver/usb/usb.c:417-432`). `docs/contract_usb.md` §1: shipped boards start `USB_HID_MODE`; `usb_cmp` builds the same HID interfaces when `_USE_HW_VCOM` is on. Side B (why the ==0 GLOB is not compile-dead): `_USE_HW_CDC` is always defined (`src/hw/hw_caps_usb.h:14-16`). `cdcInit()` always runs (`src/hw/hw.c:135`). `cdcIfInit` lives in `src/hw/driver/usb/usb_cdc/usbd_cdc_if.c:79` (qbuffer + `USBD_CDC_fops`). Dropping the usb_cdc GLOB on the ==0 path unlinks a TU the HID image calls. The `HW_USB_CMP==1` path uses the same GLOB (`src/hw/hw_caps_usb.h:18-24` sets `HW_USB_CMP` 1). An un-gated exclude would drop VCOM composite USB. Do not pick a USB winner |
 | `_USE_HW_CDC` always defined | KEEP / review | `src/hw/hw_caps_usb.h:14-16` vs `HW_USB_CDC` 0. `cdcInit()` still runs |
 | `button.c` / `spi.c` / `qspi.c` / `loader.c` | KEEP (gated empty TU) | `_USE_HW_BUTTON`, `_USE_HW_SPI`, `_USE_HW_LOADER` unset; `_USE_HW_QSPI` commented |
 | `HAL_I3C_MODULE_ENABLED` | removed | Enable commented after 2026-08-30, commit `4950b9e`, PR #285. Was `#define HAL_I3C_MODULE_ENABLED` in `src/bsp/device/stm32h7rsxx_hal_conf.h:56`; now CubeMX `/* #define HAL_I3C_MODULE_ENABLED   */`. Re-measure: no `src/hw` / `src/ap` / `src/common` I3C HAL call (`HAL_I3C_*`, `hi3c`, `I3C_HandleTypeDef`). `src/bsp` had the enable and the `#ifdef` include. No `HAL_I3C_MspInit` override. startup I3C1 IRQ slots have no C handlers. `HAL_I2C_MODULE_ENABLED` stays (`src/hw/driver/i2c.c`). Vendor `stm32h7rsxx_hal_i3c.c` stays on disk and in the HAL Src GLOB; the body is `#ifdef HAL_I3C_MODULE_ENABLED`. The `#ifdef` include guard stays |
@@ -263,7 +263,9 @@ version bump unless that session edits `src/`.
    CubeMX-style. Vendor I3C HAL `.c`/`.h` stay on disk (GLOB empty TU).
 9. Stop GLOB-compiling `src/hw/driver/usb/usb_cdc/` and
    `src/hw/driver/usb/usb_cmp/` when `HW_USB_CMP` is 0
-   (highest USB risk in this list; VCOM toggle must still work).
+   (highest USB risk in this list; VCOM toggle must still work)
+   — still pending after 2026-08-30 re-measure, PR #285. STOP:
+   CMake left unchanged. Do not pick a USB winner. See §8 row.
 
 Not a deletion session unless Hyojin says so: `EECONFIG_USER_RESERVED_32`,
 the retired-symbol list, `raw_hid_send` stub, EEPROM burst code,
