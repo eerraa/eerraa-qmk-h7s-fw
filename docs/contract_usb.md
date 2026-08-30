@@ -100,39 +100,86 @@ NKRO was never offered. `NKRO_ENABLE` is not a compile definition
 (`src/ap/modules/qmk/CMakeLists.txt`), so `keymap_config.nkro` has no
 effect. Keeping 20-key reports is the status quo, not a regression.
 
-## 4. 자동 USB 복구는 폐기됐다 — 되살리지 마라
+## 4. Automatic USB recovery is retired — do not restore it
 
-없어진 것: SOF 간격 점수화와 warmup/timeout, 열거·속도·suspend 점수, 자동 8k → 4k → 2k → 1k
-다운그레이드 큐, monitor EEPROM 토글, 그 토글의 VIA 채널 13 value id 3, 그리고 컴파일 타임
-계측 유닛. `src/`에 **0건**이다.
+Gone from `src/` (0 hits). `tools/era_doc_refs.py` `retired`
+fails if any of these return: `usbMonitor`, `usbInstability`,
+`usbHidMonitor`, `usbRequestBootModeDowngrade`,
+`usbd_hid_instrumentation`, `USB_MONITOR_ENABLE`, `auto_downgrade`.
+What they implemented is also gone: SOF-interval scoring and
+warmup/timeout, enumeration/speed/suspend scoring, the automatic
+8k → 4k → 2k → 1k downgrade queue, the monitor EEPROM toggle, that
+toggle's VIA channel 13 value id 3, and the compile-time
+instrumentation unit. Channel 13 value id 3 is not in
+`src/ap/modules/qmk/quantum/via.h`; do not reuse it. Official JSON
+exposes value ids 1 and 2 only.
 
-없어진 것이 아니라 **폐기한 것**이고 이유는 둘이다.
+This is retired, not missing. Two reasons stand together.
 
-1. **제품 계약.** 펌웨어는 안정성 점수나 stable/unstable 판정을 만들지 않고, 폴링 모드를
-   자동으로 되돌리지 않는다. 모드 선택은 언제나 사용자 소유다(§5). 반대편은 앱 저장소의
-   `the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md`가 들고 있다. 관측은
-   `docs/contract_via.md` §6의 읽기 전용 세션이 대신한다.
-2. **그 코드가 원인 미상 정지를 냈다.** `USB_MONITOR_ENABLE`이 정의된 빌드에서 부팅 약 620초
-   뒤 LED 토글까지 포함해 전부 멈추는 현상이 재현됐다. **런타임 토글이 OFF일 때도 재현됐고,
-   빌드에서 매크로를 빼면 재현되지 않았다.** 계측을 넣으면 사라지는 Heisenbug였고 원인은 끝내
-   확인되지 않았다. 즉 되살리는 쪽이 그 미해결 위험을 다시 들여오는 것이다.
+1. **Product contract.** Firmware does not emit a stability score or a
+   stable/unstable verdict, and it does not revert polling mode on its
+   own. Mode choice is always user-owned (§5). The other side is
+   `the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md`. Observation
+   is the read-only `0x07` session; the byte envelope lives in
+   `docs/contract_via.md` §6, not here.
+2. **That code hung the keyboard for an unexplained reason.** A build
+   with `USB_MONITOR_ENABLE` defined froze after about 620 s from
+   boot, including the LED toggle. It reproduced with the runtime
+   toggle OFF. It did not reproduce when the macro was removed from
+   the build. Adding instrumentation made it vanish. The cause was
+   never identified. Restoring the path reimports that unresolved
+   risk.
 
-> **REFUSED:** instability monitor 또는 자동 폴링 다운그레이드 복원.
-> **WHY:** 위 두 이유가 함께 선다 — 앱과의 제품 계약을 깨고, 원인이 확인되지 않은 정지 경로를
-> 되들인다.
-> **REOPENS:** 없다. 관측이 더 필요하면 selector `0x07` 세션을 넓힌다.
+> **REFUSED:** restoring the instability monitor or automatic polling
+> downgrade.
+> **WHY:** both reasons stand together — it would break the product
+> contract with the app, and it would reimport a hang path whose
+> cause was never identified.
+> **REOPENS:** none. If more observation is needed, widen the
+> selector `0x07` session.
 
-**무는 것**: `python tools/era_doc_refs.py`의 `retired` 검사가 폐기 심볼이 `src/`에 다시
-나타나면 실패한다. 그 목록이 곧 문서가 이 이름들을 "없는 것"으로 부를 수 있는 예외다.
+The EEPROM monitor slot was not deleted. It remains
+`EECONFIG_USER_RESERVED_32` so later slot addresses do not move
+(`docs/contract_eeprom.md` §1). Nothing reads or writes it.
 
-EEPROM의 monitor 슬롯은 지우지 않고 `EECONFIG_USER_RESERVED_32`로 남겼다 — 뒤 슬롯 주소를
-움직이지 않기 위해서다(`docs/contract_eeprom.md` §1).
+### 0x07 product boundary
 
-지금 **항상 켜져 있는 것은 포화형 하드 카운터뿐**이다: keyboard/EXK report queue drop, USB
-reset, HID configuration, suspend, speed change. RAM에만 있고 EEPROM에 쓰지 않는다.
+Selector `0x07` (`ERA_USB_DIAGNOSTICS_KEYBOARD_VALUE`) is observation
+only. It must not couple to polling-mode apply/reset or to State Sync
+recovery. That is the same product boundary as ADR 0002 (auto
+downgrade, auto mode benchmark, EEPROM diagnostic history, synthetic
+stability score, coupling `0x07` to polling mode or State Sync
+recovery). Firmware:
 
-매트릭스 개발 계측(`matrix_instrumentation.c`)은 사용자 USB 전달 진단과 **저장소도 활성 조건도
-분리되어 있다.** 두 쪽의 수치를 합치지 않는다 — 재는 구간이 다르다.
+- `src/ap/modules/qmk/port/era_usb_diagnostics.c` does not call
+  `usbBootModeScheduleApply`, `usbBootModeSaveAndReset`, or
+  `usbScheduleGraceReset`. START reads `usbBootModeGet()` only to
+  compute the histogram's expected interval.
+- That file does not include `src/ap/modules/qmk/port/era_state_sync.h`.
+  Channel 13 select still bumps CONFIG revision; `0x07` does not.
+- Session state and always-on counters live in RAM
+  (`src/hw/driver/usb/usb_hid/usb_diagnostics.c`). CLEAR zeros the
+  session; it does not write EEPROM and does not clear boot counters.
+- No synthetic score is computed.
+
+> **REFUSED:** coupling selector `0x07` to polling-mode apply/reset or
+> State Sync recovery, writing diagnostic history to EEPROM, or
+> emitting a synthetic stability score.
+> **WHY:** mode choice is always the user's, and observation that
+> changes the control plane, EEPROM, or recovery contaminates what it
+> measures.
+> **REOPENS:** none. If more observation is needed, widen the
+> read-only `0x07` session.
+
+Always-on counters (saturating `uint32`, event-driven): keyboard/EXK
+report-queue drop, USB reset, HID configuration, suspend, speed
+change. RAM only.
+
+Matrix development instrumentation
+(`src/ap/modules/qmk/port/matrix_instrumentation.c`) is a separate
+store and a separate compile flag (`_DEF_ENABLE_MATRIX_TIMING_PROBE`,
+0 on every shipped board). Do not add the two sets of numbers
+together — they measure different intervals.
 
 ## 5. Polling mode is user-owned
 
@@ -172,45 +219,67 @@ cannot continue on the same enumeration. How the host treats that boundary
 is `the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md` and
 `docs/contract_via.md` §6.
 
-## 6. 부트로더 → 펌웨어 인계는 100 ms 디태치가 필요하다
+## 6. Bootloader-to-firmware handoff needs a 100 ms detach hold
 
-UF2 업로드 자체는 항상 성공하는데 부트로더 → 펌웨어 자동 전환이 간헐적으로 실패했다. 원인은
-부트로더가 시스템 리셋이 아니라 **직접 점프**를 쓰면서 USB를 클럭 게이팅으로만 껐다는 것이다.
-클럭 게이팅은 주변장치 레지스터를 리셋하지 않으므로 `DCTL.SDIS`가 0으로 남아 D+ 풀업과 HS
-터미네이션이 유지된다. 호스트에게 장치는 분리된 것이 아니라 *붙어 있는데 응답만 없는* 상태이고,
-그 위로 올라온 펌웨어는 영원히 열거되지 않는다.
+UF2 upload itself succeeds. Jump-entry from the bootloader can leave
+the host with a device that is electrically still attached: the
+bootloader clock-gates USB and does not set `DCTL.SDIS`, so D+ pull-up
+and HS termination stay. Firmware that then enumerates never gets a
+new address.
 
-**펌웨어가 보완할 수 있는 이유**: USB 분리/부착은 소프트웨어 인수인계가 아니라 D+/D- 선의
-전기적 상태이고 `DCTL.SDIS` 비트 하나가 결정한다. USB 주변장치는 부트로더와 펌웨어가 공유하는
-같은 하드웨어이며 점프 이후 소유자는 펌웨어다. 게다가 펌웨어는 이미 PCD init 끝에서 SDIS=1을
-세우고 있었고 그 구간이 수백 µs로 너무 짧았을 뿐이다. 그래서 보완책은 새 동작 추가가 아니라
-**기존 구간의 유지 시간 연장**이다 — `src/hw/driver/usb/usbd_conf.c`의 `USBD_LL_Start()`가
-`USBD_BOOT_DETACH_HOLD_MS`(100 ms)만큼 SDIS를 유지한 뒤 PCD를 시작한다.
+Firmware already disconnects. `HAL_PCD_Init()` ends with
+`USB_DevDisconnect()` (`DCTL.SDIS` = 1). `HAL_PCD_Start()` immediately
+calls `USB_DevConnect()` (`SDIS` = 0). That window is hundreds of
+microseconds — shorter than host/hub debounce (~100 ms).
 
-같은 기법의 선례가 이미 있다. VIA 리셋 경로가 `USB_RESET_DETACH_DELAY_MS`(100 ms)를 두고
-리셋한다. 두 상수를 공유하지 않는 것은 전자가 "리셋 전 디태치 유예", 후자가 "부팅 시 디태치
-유지"로 목적이 달라 각각 조정 가능해야 하기 때문이다.
+`USBD_LL_Start()` in `src/hw/driver/usb/usbd_conf.c` holds
+`USBD_BOOT_DETACH_HOLD_MS` (100) after that init disconnect, then
+starts PCD. It is a longer hold of an existing electrical detach, not
+a new USB behavior. `usbBegin()` runs once per boot (`src/hw/hw.c`),
+so the blocking delay is on the boot path only.
 
-**판별 코드를 넣지 않았다.** `DCFG.DAD != 0`으로 점프 진입을 판별할 수 있으나 PCD init이 클럭
-인가와 코어 리셋(DAD를 0으로)을 한 호출에서 처리해 중복 초기화가 필요하다. 100 ms를 아끼려고
-하드웨어 의존 코드를 넣지 않는다. `usbBegin()`은 부팅 시 1회만 호출되므로 블로킹 지연이 안전하다.
+The VIA reset path uses a different constant:
+`USB_RESET_DETACH_DELAY_MS` (100) in `src/hw/driver/usb/usb.c`, after
+`USBD_Stop`/`USBD_DeInit` and before `resetToReset()`. Pre-reset
+detach grace and boot-time detach hold stay independently tunable.
 
-**한계**: 부트로더가 UF2 완료 처리 중 외장 플래시를 소거·복사하는 1.5~5초 동안 USB 스택이
-멈추는 것은 펌웨어가 개입할 수 없다. 근본 해결은 부트로더 쪽(점프 대신 디태치 후 시스템 리셋)
-이고 그것은 ST-LINK로만 갱신되므로 **이후 출고분에만** 적용된다. 이 펌웨어 보완책은 **기출하
-보드용**이며 재열거 실패만 해결한다.
+Firmware does not detect jump-entry. Every boot takes the 100 ms hold.
+PCD init clocks the core and clears `DCFG.DAD` in the same call, so a
+detector would need a second init.
 
-## 7. 주기 작업의 만료 판정을 캐시하지 마라
+This workaround is for boards already shipped. The bootloader-side
+root fix (detach, then system reset instead of a jump) is ST-LINK
+only and applies to later shipments. Firmware cannot intervene while
+the bootloader's UF2 copy has stalled USB. Field confirmation of
+auto-start stays in `docs/state_open.md`; this section does not close
+it.
 
-USB 폴링 루프와 같은 메인 루프에서 RGB 애니메이션·EEPROM 큐·키 스캔이 함께 돈다. 그 주기
-작업들은 **16비트 타이머**(`sync_timer_read()`)로 만료를 판정하므로 비교 창이 약 32초다.
+## 7. Do not skip rgblight lookup behind a 16-bit expiry cache
 
-> **REFUSED:** rgblight에 이펙트 함수·주기 캐시와 "만료 선행 분기"를 다시 넣기.
-> **WHY:** 그 구조에서 `next_timer_due`가 16비트 비교 창 밖으로 밀리거나 Velocikey·비활성
-> 상태에서 캐시가 stale이 되면 애니메이션과 렌더가 **조용히 멈춘다.** 실제로 10분 안팎에
-> 재현됐고, 캐시와 선행 분기를 완전히 걷어낸 뒤에야 사라졌다.
-> **REOPENS:** 만료 판정을 32비트 시각으로 옮기고 wrap을 unsigned 차로 다루는 설계라면 다시
-> 검토할 수 있다. 캐시 자체가 금지된 것이 아니라 **16비트 창 위의 캐시**가 금지된 것이다.
+USB polling, RGB animation, EEPROM drain, and key scan share the main
+loop (`src/ap/ap.c`: `usbProcess()` then `qmkUpdate()`).
+`rgblight_timer_task()` in
+`src/ap/modules/qmk/quantum/rgblight/rgblight.c` expires with 16-bit
+`sync_timer_read()` / `timer_expired()`. That compare window is
+`UINT16_MAX / 2` milliseconds, about 32 s.
 
-같은 규칙이 진단 세션에도 적용된다 — deadline은 unsigned 차와 signed deadline 비교로 다루고,
-누계는 `UINT32_MAX`에서 포화시킨다. TIM5 wrap 주기는 4,295초다(`docs/contract_via.md` §6-2).
+Every call recomputes `effect_func` and `interval_time` before the
+expiry check. `next_timer_due` is still the 16-bit next deadline.
+Pulse-on-press paths already expire with a 32-bit signed compare on
+`sync_timer_read32()`.
+
+> **REFUSED:** putting back an rgblight early branch that caches
+> `effect_func` and interval and skips that lookup until a 16-bit
+> `next_timer_due` expires.
+> **WHY:** when `next_timer_due` is pushed outside the 16-bit compare
+> window, or Velocikey / inactive state leaves the cache stale,
+> animation and render stop silently. That freeze reproduced around
+> ten minutes; it stopped only after the lookup-skipping cache was
+> removed.
+> **REOPENS:** an expiry design that uses a 32-bit clock and unsigned
+> wrap (the pulse paths already do). Cache itself is not forbidden; a
+> cache sitting on the 16-bit window is.
+
+Diagnostic sessions follow the 32-bit rule: `usbDiagnosticsTask()`
+completes when `(int32_t)(now_us - deadline_us) >= 0`. Counters
+saturate at `UINT32_MAX`. TIM5 wrap is `docs/contract_via.md` §6-2.
