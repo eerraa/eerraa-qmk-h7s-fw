@@ -1,7 +1,7 @@
 # ERA-QMK-H7S-FW
 
 ## 프로젝트 개요
-ERA-QMK-H7S-FW는 STM32H7S 마이크로컨트롤러 기반 커스텀 키보드를 위해 설계된 고성능 펌웨어입니다. HS USB 8kHz 폴링을 기본으로 하며, USB instability monitor와 단계적 폴링 다운그레이드 큐를 통해 고속 입력 안정성을 확보합니다. QMK 포팅층이 포함되어 있어 기존 QMK 기반 설정과 호환되며, `src/main.c → src/ap/ap.c` 경로를 따라 애플리케이션 로직이 동작합니다.
+ERA-QMK-H7S-FW는 STM32H7S 마이크로컨트롤러 기반 커스텀 키보드를 위해 설계된 고성능 펌웨어입니다. QMK 포팅층이 포함되어 있어 기존 QMK 기반 설정과 호환되며, `src/main.c → src/ap/ap.c` 경로를 따라 애플리케이션 로직이 동작합니다.
 
 이 프로젝트는 https://github.com/chcbaram/baram-qmk-h7s에서 포트되었습니다.
 
@@ -12,7 +12,6 @@ ERA-QMK-H7S-FW는 STM32H7S 마이크로컨트롤러 기반 커스텀 키보드�
 - `src/bsp/` : 보드 초기화, 클럭 설정, 스타트업 코드를 제공합니다.
 - `docs/` : 결정 기록, 실측 회고, 기능별 운영 가이드가 있습니다.
 - `tools/` : 빌드 및 UF2 변환을 지원하는 스크립트가 있습니다.
-- `graphify-out/` : 코드·문서 지식그래프입니다. `graphify query "<질문>"`으로 구조를 질의할 수 있으며, 에이전트 작업 규칙은 `AGENTS.md`를 참조하십시오.
 
 ## 빌드 준비
 1. ARM GCC Toolchain과 CMake 3.13 이상을 설치합니다.

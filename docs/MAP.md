@@ -2,8 +2,7 @@
 
 Genre: map
 Canonical for: 이 저장소의 정본 규칙 — 어떤 사실이 어디 살고, 두 곳이 어긋났을 때 어느 쪽이 이기며,
-그것을 무는 것이 무엇인가. 문서 색인, 보드·채널·EEPROM 사실 표, graphify 경계, 짝 저장소 대응,
-문서 규칙
+그것을 무는 것이 무엇인가. 문서 색인, 보드·채널·EEPROM 사실 표, 짝 저장소 대응, 문서 규칙
 
 이 문서는 **무엇이 어디 있고 어긋나면 어느 쪽이 정본인가**만 답한다. 결정의 근거는
 `docs/contract_via.md`·`docs/contract_usb.md`·`docs/contract_eeprom.md`, 아직 끝나지 않은 것은
@@ -20,7 +19,7 @@ Canonical for: 이 저장소의 정본 규칙 — 어떤 사실이 어디 살고
 | VIA wire 봉투(`0x06`·`0x07`)와 값 계층 | 소스, 그리고 반대편은 앱 ADR(§7) | `tools/era_via_host_tests/run.ps1` |
 | raw-HID TX 생산자 | `src/ap/modules/qmk/port/via_hid.c` | `tools/era_via_host_tests/check_single_producer.py` |
 | 사용자에게 나가는 문구 | `docs/readme.txt` | `version` 검사(릴리스 파일명) |
-| 코드가 어디서 무엇을 부르는가 | 소스. 조회는 graphify(§6) | 없음 — 그래프는 파생이지 권위가 아니다 |
+| 코드가 어디서 무엇을 부르는가 | 소스. 조회는 소스 검색 | 없음 — 파생 인덱스는 정본이 아니다 |
 
 문서와 코드가 어긋나면 **코드가 이긴다.** 문서를 고치고, 왜 어긋났는지 커밋 메시지에 남긴다.
 반대로 코드가 계약을 어긴 경우에는 계약이 이긴다 — 그 계약은 §7의 앱 저장소와 짝을 이루므로
@@ -111,35 +110,24 @@ vendorId는 5종 모두 `0x4552`다. 다섯 보드는 같은 소스를 공유하
 | +152 | 16B | `EECONFIG_USER_MOUSEKEY` |
 <!-- era-doc-refs: end -->
 
-## 6. graphify — 코드 구조는 그래프가 답한다
+## 6. 코드 구조는 소스가 답한다
 
-`graphify-out/`에 지식그래프가 커밋되어 있고 스코프는 `.graphifyignore`가 정의한다
-("실제 컴파일되는 코드 + 프로젝트 문서"). 세션 시작 시
-`python tools/graphify/bootstrap.py`가 동기화한다.
+구조 질문은 소스 검색(`git grep -n`, `rg`)이 답한다. 파생 인덱스는 정본이 아니다.
+값과 계약의 위치만 이 문서가 가리킨다.
 
 | 질문 | 어디서 답하는가 |
 | --- | --- |
-| 이 함수는 어디 살고 무엇을 부르는가 | `graphify query "usbHidSendReport"` |
-| A에서 B까지 어떻게 닿는가 | `graphify path "qmkUpdate" "usbHidSendReport"` |
-| 이 심볼 주변에 무엇이 붙어 있는가 | `graphify explain "usbHidSendReport"` |
+| 이 함수는 어디 살고 무엇을 부르는가 | 소스 검색 (`git grep -n`, `rg`) |
 | 값 — 오프셋·채널 번호·상수 | 이 문서 §3~§5 (소스에서 다시 계산됨) |
 | 왜 이렇게 되어 있는가 | `contract_*.md` |
 | **없는 것** — 폐기된 서브시스템과 그 이유 | `contract_usb.md` §4 |
 | 저장소 밖의 반대편 계약 | §7, 그리고 앱 저장소의 ADR |
 | 무엇을 어떻게 돌려 보는가 | `manual_verify.md` |
 
-**질의는 자연어 문장이 아니라 심볼 이름으로 한다.** `graphify query "via_hid_task"`는 74개
-노드를 돌려주지만 `"via_hid_task는 무엇을 호출하는가"`는 `No matching nodes found`다.
-
-그래프는 **파생이지 권위가 아니다.** 코드를 고쳤으면 `graphify update .`로 갱신하고
-(AST 전용, LLM 비용 없음) 별도 커밋으로 분리한다. 커밋 시 post-commit hook이 자동 갱신하므로
-`graphify-out/`이 dirty해지는 것은 정상이다. `src/ap/modules/qmk/CMakeLists.txt`의 컴파일
-목록을 바꾸면 `.graphifyignore`도 함께 갱신한다.
-
 ## 7. 짝 저장소
 
 전부 이 PC에만 있는 경로다. **cwd는 이 저장소에 둔다** — 앱 저장소를 cwd로 열고 이쪽 규칙을
-따르다가 앱에 `graphify-out/` 75,000줄을 잘못 커밋한 사고가 있다. 반대편을 고쳐야 하면
+따르다가 앱에 파생물 75,000줄을 잘못 커밋한 사고가 있다. 반대편을 고쳐야 하면
 그 저장소에서 그쪽 `AGENTS.md`를 읽고 시작한다.
 
 | 저장소 | 이 펌웨어의 무엇과 짝인가 |
