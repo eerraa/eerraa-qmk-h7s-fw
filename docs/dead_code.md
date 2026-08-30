@@ -174,7 +174,7 @@ Root `CMakeLists.txt:39-49` GLOB-recurses `src/hw/*.c` with empty
 | `button.c` / `spi.c` / `qspi.c` / `loader.c` | KEEP (gated empty TU) | `_USE_HW_BUTTON`, `_USE_HW_SPI`, `_USE_HW_LOADER` unset; `_USE_HW_QSPI` commented |
 | `HAL_I3C_MODULE_ENABLED` | DELETE (the enable) | `src/bsp/device/stm32h7rsxx_hal_conf.h:56`. No `src/hw` / `src/ap` I3C call. HAL `.c` is GLOB'd |
 | `src/ap/modules/qmk/quantum/sequencer/*.c` | DELETE (CMake GLOB) | `src/ap/modules/qmk/CMakeLists.txt:78`. `SEQUENCER_ENABLE` is not a compile definition. sequencer.c has no feature guard around its globals |
-| `KEY_OVERRIDE_ENABLE` | DELETE (the define) | Set `src/ap/modules/qmk/CMakeLists.txt:124`. `process_key_override.c` is in the file list. Weak `key_overrides = NULL` (`src/ap/modules/qmk/quantum/process_keycode/process_key_override.c:87`). No board keymap defines a table |
+| `KEY_OVERRIDE_ENABLE` | removed | Absent after 2026-08-30, commit `7e1e6f4`, PR #283. Was `add_compile_definitions(KEY_OVERRIDE_ENABLE)` and `process_key_override.c` in the QMK CMake file list. Weak `key_overrides = NULL`. Re-measure: no board keymap (`src/ap/modules/qmk/keyboards/era/**/keymap.c`, five boards) defines `key_overrides`, `key_override_t`, `ko_make_*`, `KO_TOGG`/`KO_ON`/`KO_OFF`. Call sites in `quantum.c` / `keyboard.c` / `action_util.c` / `quantum.h` are `#ifdef KEY_OVERRIDE_ENABLE`. `.c`/`.h` stay on disk with other unlinked QMK modules |
 | Unlinked QMK modules (backlight, audio, rgb_matrix, led_matrix, unicode, split_common, bootmagic, wear_leveling, most of `src/ap/modules/qmk/quantum/process_keycode/*.c`) | KEEP | On disk, not in the CMake file list. `AGENTS.md` §3 merge procedure compares `src/ap/modules/qmk/quantum/` then re-applies `src/ap/modules/qmk/port/` |
 | `GRAVE_ESC_ENABLE` / `send_string` via dynamic macros / `quantum/logging` | KEEP | All five boards define `GRAVE_ESC_ENABLE`. Macros call `send_string_with_delay`. `keyboard.c` binds `sendchar` |
 
@@ -252,7 +252,9 @@ version bump unless that session edits `src/`.
    `56deaba`, PR #282. Fourteen headers, 0 `#include` each. `w5300_regs.h`
    stays (not in the cluster 5 list).
 6. `KEY_OVERRIDE_ENABLE` and drop `process_key_override.c` from CMake
-   if the table stays NULL.
+   if the table stays NULL — removed 2026-08-30, commit `7e1e6f4`,
+   PR #283. Define and CMake file-list entry gone.
+   `process_key_override.c`/`.h` stay on disk (unlinked QMK modules KEEP).
 7. Remove `src/ap/modules/qmk/quantum/sequencer/*.c` from the QMK CMake GLOB.
 8. Undefine `HAL_I3C_MODULE_ENABLED`.
 9. Stop GLOB-compiling `src/hw/driver/usb/usb_cdc/` and
