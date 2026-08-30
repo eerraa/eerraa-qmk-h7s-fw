@@ -1,29 +1,57 @@
-# VIA wire 계약
+# VIA wire contract
 
 Genre: contract
-Canonical for: 앱·VIA 호스트와 주고받는 것 전부 — raw-HID TX 단일 생산자, 채널 주소 배정,
-exact-ms 값 계층, revision 상승 시점, selector `0x06`/`0x07` 봉투, MOUSE 단위 환산,
-그리고 각각을 무는 검사
+Canonical for: what the app and VIA host exchange — the single raw-HID TX
+producer, channel and value-id assignment, exact-ms value encoding,
+when KEYMAP/MACRO/CONFIG revisions bump, selector `0x06`/`0x07` byte
+envelopes, MOUSE unit conversion, and the checks that bite each of those
 
-반대편 계약은 앱 저장소가 들고 있다(`docs/MAP.md` §7). **어긋나면 이쪽이 틀렸을 수도 있다.**
-고치기 전에 양쪽을 대조한다.
+The other side lives in the app repo (`docs/MAP.md` §7). A mismatch can
+mean this side is wrong. Compare both before editing.
 
-## 1. raw-HID TX 생산자는 하나뿐이다
+## 1. One raw-HID TX producer
 
-VIA 응답은 `src/ap/modules/qmk/port/via_hid.c`의 `via_hid_task()`가
-`usbHidEnqueueViaResponse()`로 적재하는 경로 하나로만 나간다. `raw_hid_send()`는 **빈 스텁으로
-남는다.** `src/ap/modules/qmk/quantum/via.c`의 GET switch는 응답 버퍼만 채우고 TX를 소유하지
-않는다.
+VIA replies leave through `via_hid_task()` in
+`src/ap/modules/qmk/port/via_hid.c`, which calls
+`usbHidEnqueueViaResponse()`. `raw_hid_send()` in that file is an empty
+stub. `src/ap/modules/qmk/quantum/via.c` still calls `raw_hid_send()` at
+the end of `raw_hid_receive()`; that call is a no-op. The GET switch,
+including `id_era_state_sync`, fills the 32 B buffer and does not own
+TX. `via_hid_task()` enqueues that same buffer after
+`raw_hid_receive()` returns.
 
-**왜**: 두 곳이 TX를 소유하면 32 B 봉투가 서로 섞이고, SOF 배출 순서가 요청–응답 짝을 깬다.
-호스트는 직렬 왕복을 가정하므로 이 깨짐이 앱에서 "응답 없음"이 아니라 **다른 요청의 응답**으로
-보인다.
+Two producers would mix 32 B envelopes on the VIA IN endpoint, and SOF
+drain order would break request–response pairing. The host assumes a
+serial round-trip; a mix shows up as another request's reply, not as
+"no reply".
 
-**무는 것**: `tools/era_via_host_tests/check_single_producer.py`가 소스를 직접 읽어 세 가지를
-본다 — `raw_hid_send()` 본문이 비어 있는가, `via_hid_task()`가 enqueue를 부르는가, `via.c`가
-`id_era_state_sync`를 TX 없이 채우는가.
+`tools/era_via_host_tests/check_single_producer.py` reads the sources:
+`raw_hid_send()` body stays empty, `via_hid_task()` enqueues, and
+`via.c` fills `id_era_state_sync` without TX.
 
-## 2. 채널 주소는 참조 QMK와 다르다
+> **REFUSED:** filling in `raw_hid_send()` or adding a second VIA TX
+> path.
+> **WHY:** `via.c` already calls `raw_hid_send()` on every command; a
+> live stub would transmit twice, once from that call and once from
+> `via_hid_task()` enqueue, and mix envelopes on one IN endpoint.
+> **REOPENS:** none while VIA IN remains a single 32 B endpoint.
+
+## 2. Channel numbers are not the RP2040 layout
+
+The generated channel table is `docs/MAP.md` §4 (`via-channels`). Do
+not copy it here. Firmware routing means that board's
+`<board>/port/via_port.c` accepts the channel. JSON exposure means the
+official `*-VIA.JSON` lets the user reach that screen. Routing without
+exposure leaves a firmware feature with no UI — `menu` fails that case.
+
+Channel 2 (`id_qmk_rgblight_channel`) is handled in VIA core
+(`src/ap/modules/qmk/quantum/via.c`), so board routing is `-` and JSON
+exposure is still `O`. Channels 1, 3, 4, and 5 are VIA-reserved and
+unused here; do not assign a new feature to those numbers. Channel 13
+value id 3 is retired (`docs/contract_usb.md` §4); do not reuse it.
+
+This file owns the value-id rows. `table` regenerates them from
+`src/ap/modules/qmk/quantum/via.h`.
 
 <!-- era-doc-refs: wire-values -->
 | 컨트롤 | 채널 | value id |
@@ -33,55 +61,102 @@ VIA 응답은 `src/ap/modules/qmk/port/via_hid.c`의 `via_hid_task()`가
 | MOUSE 6개 컨트롤 | 17 | 1–6 |
 <!-- era-doc-refs: end -->
 
-**계열마다 주소가 다르고, 그래도 된다.** VIA는 정의를 `(vendorId, productId)`로 캐시하므로
-H7S 정의가 별도인 이상 RP2040(`qmk_firmware_eerraa`)과 번호가 같을 필요가 없다. 각 계열이
-자기 배치를 먼저 굳혔고, 이미 배포된 번호를 옮기는 것이 사용자 EEPROM을 깨는 쪽이다.
+Peer `the-via-eerraa/docs/adr/0001-state-sync-protocol.md` and
+`the-via-eerraa/docs/MAP.md` §3 use the same H7S ids. VIA caches a
+definition by `(vendorId, productId)`, so H7S numbers need not match
+RP2040 (`qmk_firmware_eerraa`). Each family froze its layout first;
+moving a shipped number breaks the app overlay and the official JSON.
 
-| 컨트롤 | RP2040 참조 | H7S | 왜 다른가 |
-| --- | --- | --- | --- |
-| 글로벌 TAPPING term | 채널 15 / value 5 | 같음 | — |
-| TD0–TD7 term | 채널 0(custom) / value 72–79 | **채널 16 / value 41–48** | H7S는 Tap Dance에 전용 채널 16을 먼저 할당했고 슬롯 액션이 1–40을 쓴다. exact term은 그 뒤에 붙었다 |
-| MOUSE | 채널 13 | **채널 17** | H7S에서 13은 USB POLLING이 점유한다. value id 1–6 배치는 참조와 같다 |
+| Control | RP2040 | H7S |
+| --- | --- | --- |
+| Global TAPPING term (exact) | channel 15 / value 5 | Same |
+| TD0–TD7 term (exact) | channel 0 / values 72–79 | channel 16 / values 41–48. Channel 16 is the Tap Dance channel; slot actions occupy values 1–40, exact terms append after that |
+| MOUSE (six controls) | channel 13 | channel 17. Channel 13 is `id_qmk_usb_polling`. Value ids 1–6 match the reference |
 
-SOCD는 이름도 다르다 — 참조는 `socd` 접두사를, 여기는 `id_qmk_kill_switch_lr`·`_ud`를 쓴다.
+SOCD command names here are `id_qmk_kill_switch_lr` and
+`id_qmk_kill_switch_ud`. The reference uses a `socd` prefix.
 
-전체 채널 배치는 `docs/MAP.md` §4. 앱은 이 표의 반대편을 `the-via-eerraa/docs/MAP.md` §3에
-들고 있으므로 **한쪽을 고치면 반드시 양쪽을 본다.**
+A new channel takes an unused number from `docs/MAP.md` §4 and is added
+to all five official JSON files and the app custom definition together.
+This repo's half is `menu`. Cross-repo match is not checked
+(`docs/MAP.md` §7).
 
-새 채널을 할당할 때는 `docs/MAP.md` §4에서 비어 있는 번호를 고르고, **5개 보드의 공식 JSON과
-앱 커스텀 정의에 동시에** 넣는다. 한쪽만 바뀌면 펌웨어에 있는 기능에 손이 닿지 않는다 —
-MOUSE가 실제로 그렇게 배포된 적이 있다. `menu` 검사가 이 저장소 쪽 절반을 막는다.
+> **REFUSED:** moving a shipped H7S channel or value id.
+> **WHY:** official JSON and the app overlay already address those
+> numbers; a move desyncs one side and leaves the firmware feature
+> unreachable or writes the wrong slot.
+> **REOPENS:** an additive id, shipped on both sides at once. Compacting
+> a hole is not that.
 
-## 3. exact-ms 값 계층
+## 3. exact-ms encoding
 
-- exact SET은 **2 B big-endian uint16, 100–500**만 받는다. 범위 밖과 2 B 미만 패킷은 거절하고
-  저장값을 유지한다.
-- legacy dropdown(값 × 10 ms, 20 ms 격자)은 공식 `usevia.app` 호환용으로 펌웨어에 남는다.
-  **legacy SET만** 20 ms 격자로 내림한다.
-- **legacy GET은 저장된 exact 값을 격자로 투영만 하고 저장값을 바꾸지 않는다.** load와
-  `tapping_term_sync_state_from_storage()`도 유효한 uint16을 격자로 되돌리지 않는다.
+Exact SET is a 2-byte big-endian `uint16` on `id_custom_set_value`
+(`0x07`) / `id_custom_get_value` (`0x08`). Inclusive range is 100–500
+(`TAPPING_TERM_MIN_MS` / `TAPPING_TERM_MAX_MS` in
+`src/ap/modules/qmk/port/tapping_term.c`; `TAPDANCE_TERM_MIN_MS` /
+`TAPDANCE_TERM_MAX_MS` in `src/ap/modules/qmk/port/tapdance.c`). Out of
+range, or fewer than two value bytes (`length < 5` on the 32 B report),
+is refused and the store is unchanged.
 
-**왜 이 비대칭이 계약인가**: 같은 펌웨어를 공식 앱과 커스텀 앱이 동시에 상대한다. GET이
-저장값을 건드리면 공식 앱에서 한 번 조회한 것만으로 사용자가 커스텀 앱에서 넣은 137 ms가
-120 ms로 잘린다. 읽기는 쓰기가 아니다.
+Official `*-VIA.JSON` still expose the 1-byte × 10 ms legacy dropdown
+(global channel 15 value 1; TD slot `*_term` values 5, 10, … 40) and do
+not expose `_term_exact`. Firmware implements both. The custom-app JSON
+is the other side (`the-via-eerraa` ADR 0001).
 
-Tap Dance 슬롯 term은 글로벌 `TAPPING_TERM`과 **완전히 독립**이다. 손상된 슬롯(시그니처·버전·
-범위)은 init에서 200 ms 기본값으로 복원하고 dirty 표시를 남긴다.
+Legacy SET floors onto the 100–500 / 20 ms grid. Legacy GET projects
+the stored exact millisecond value onto that grid and does not rewrite
+storage. Load and `tapping_term_sync_state_from_storage()` also leave a
+valid uint16 unsnapped. GET is not a write: an official-app query must
+not clip a custom-app 137 ms down to 120 ms.
 
-Tap Dance 상태머신은 **Vial 호환**을 계약으로 든다 — 액션이 지정되지 않은 단계는 tap으로
-대체되고, 슬롯에 tap/hold만 있으면 1탭에서 term을 기다리지 않고 즉시 완료한다. VIA는
-`customKeycodes` **배열 순서대로** `QK_KB_0`~`QK_KB_7`을 보내고 펌웨어가 `TD(0)`~`TD(7)`으로
-치환하므로, **순서를 바꾸면 이미 저장된 사용자 키맵의 슬롯 배정이 달라진다.**
+Tap Dance slot terms are independent of global `TAPPING_TERM`. Slot
+validity is `docs/contract_eeprom.md` §1.
 
-## 4. 값이 실제로 바뀐 SET만 revision을 올린다
+`tools/era_via_host_tests/test_era_via_exact_ms.c` bites the range,
+the short packet, and the GET/SET asymmetry.
 
-CONFIG revision을 올리는 채널은 디바운스(14), KKUK(12), SOCD(10·11), 인디케이터(0),
-BootMode(13)이고, `id_eeprom_reset`은 세 도메인 전부를 올린다. KEYMAP·MACRO revision은 VIA
-keymap/macro write 명령 뒤에 올린다.
+## 4. Revisions bump when the published value changes
 
-참조 QMK는 EEPROM 쓰기 캐치올 훅 한 곳에서 올리지만 이 포팅층에는 그 훅이 없어 채널별로
-올린다. **동일 값 SET은 no-op이다** — 아니면 앱이 자기 쓰기에 스스로 반응해 되읽기 폭풍이
-난다.
+Tokens are RAM `uint32`, start at 1, and skip 0 on wrap
+(`era_state_sync_next()` in `src/ap/modules/qmk/port/era_state_sync.c`).
+This porting layer has no QMK EEPROM-write catch-all, so each handler
+bumps its domain.
+
+KEYMAP, on the write command, no compare:
+`id_dynamic_keymap_set_keycode`, `id_dynamic_keymap_reset`,
+`id_dynamic_keymap_set_buffer`, `id_dynamic_keymap_set_encoder`.
+
+MACRO, same: `id_dynamic_keymap_macro_set_buffer`,
+`id_dynamic_keymap_macro_reset`.
+
+CONFIG, compare-then-bump (a same-value SET is a no-op):
+
+| Channel | Handler |
+| --- | --- |
+| 14 debounce | `src/ap/modules/qmk/port/debounce_profile.c` |
+| 12 KKUK | `src/ap/modules/qmk/port/kkuk.c` |
+| 10 / 11 SOCD | `src/ap/modules/qmk/port/kill_switch.c` |
+| 0 indicator | `<board>/port/indicator_port.c` |
+| 13 BootMode select (value 1) | `src/ap/modules/qmk/port/bootmode.c`. Apply (value 2) does not bump |
+| 15 tapping | `src/ap/modules/qmk/port/tapping_term.c` |
+| 16 tapdance | `src/ap/modules/qmk/port/tapdance.c` |
+| 17 mousekey | `src/ap/modules/qmk/port/mousekey_config.c` |
+
+Always bump, no compare: `via_set_layout_options()`.
+`id_eeprom_reset` bumps all three domains.
+
+Does not bump: channel 2 rgblight (VIA core), channel 8 version,
+channel 9 system, `id_custom_save` (EEPROM flush only; BootMode save is
+a no-op), selector `0x07`.
+
+A no-op custom SET must not bump. Otherwise the app treats its own
+write as a remote CONFIG change and storms GET.
+
+> **REFUSED:** bumping CONFIG on a custom SET that did not change the
+> published value.
+> **WHY:** the app refreshes CONFIG from revision inequality; a self
+> echo would loop GET against the same store.
+> **REOPENS:** none while State Sync poll uses equality tokens.
 
 ## 5. selector `0x06` — state sync 봉투
 
@@ -155,34 +230,70 @@ mode와 negotiated speed를 함께 보내므로 **앱이** 그 불일치를 판�
 브라우저가 1 Hz로 31회 폴링하는 동안 펌웨어 elapsed가 30,000 ms에 도달해 실측으로도 교차
 검증됐다.
 
-## 7. MOUSE 단위 환산에서 실제로 어려운 세 곳
+## 7. MOUSE unit conversion — three places code alone does not reconstruct
 
-VIA가 그리는 것과 QMK 엔진이 드는 것이 같지 않다. 이 셋은 코드만 봐서는 복원되지 않는다.
+VIA draws pixels and milliseconds. The QMK engine stores
+`(mk_move_delta, mk_max_speed)` and `mk_time_to_max` as event counts.
+Channel 17 value ids 1–6 are in the generated table above. Conversion
+is `src/ap/modules/qmk/port/mousekey_config.c`. `MOUSEKEY_MOVE_MAX` is
+127. `id_custom_set_value` echoes the clamped value so the page draws
+what the firmware kept.
 
-**7-1. 최고 속도는 저장되지 않는다.** 엔진이 드는 것은 (스텝, 배수) 쌍이고 한 최고 속도를
-만드는 조합이 여러 개다. raw 쌍을 그대로 노출하면 서로 다투는 컨트롤이 된다. 그래서 페이지는
-첫 스텝과 최고 스텝을 px로 제시하고 배수를 파생시킨다. Start Speed를 바꿀 때 최고 속도를
-붙잡아 둔다. 비율은 **내림이 아니라 반올림**이다 — 내림하면 스텝 8·상한 127에서 비율 15가
-되어 120으로 되읽히고, 반올림하면 16이 되어 엔진 클램프가 정확히 127로 되돌려준다.
+`tools/era_via_host_tests/test_era_via_exact_ms.c` (`test_mousekey`)
+bites 7-1, 7-2, and 7-3.
 
-**7-2. 가속은 화면에서 시간, 엔진에서 이벤트 수다.** `mk_time_to_max`는 이동 이벤트를 센다.
-그대로 통과시키면 갱신 주기를 올릴 때 건드리지 않은 램프가 절반으로 줄어든다. 그래서
-지속시간으로 들고 `time_to_max × interval`로 파생시킨다. 표시 단위 50 ms는 해상도가 아니라
-**왕복 정확성**이다 — 이벤트 수로 내렸다가 시간으로 올릴 때 반올림 오차가 나지 않는 단위가
-50 ms다(33 ms는 어긋나고 20·10 ms도 일부 조합에서 어긋난다).
+### 7-1. Top speed is not stored
 
-`mk_time_to_max`가 1바이트라 도달 범위는 갱신 주기가 빨라질수록 좁아진다. 200 /s(5 ms)에서
-상한은 **1.275 s**이므로 JSON이 함께 제시하는 1.5 s·2.0 s는 조용히 잘린다. 참조 QMK도 같은
-옵션 목록에 같은 동작이고, 주기별로 옵션 목록을 바꾸는 것은 VIA 정의 형식으로 표현할 수 없다.
-그래서 **되읽기가 정직한 것**으로 계약을 맞췄다 — 새로고침하면 실제로 든 짧은 램프가 보인다.
-호스트 테스트가 두 성질을 검증한다: 담기는 조합은 정확히 왕복하고, 담기지 않는 조합은
-요청보다 짧은 값을 돌려준다.
+The engine holds a (step, ratio) pair. Several pairs make the same top
+speed. Exposing the raw pair would fight the page. The page shows first
+step and top step in px; the firmware derives the ratio. Changing Start
+Speed holds the current top speed and recomputes `max_speed`. The
+ratio is rounded, not floored: step 8 and cap 127 floor to ratio 15
+(reads back 120) and round to 16 (engine clamp returns 127).
 
-**7-3. 가속 Off는 "최고 속도 고정"이 아니라 "첫 스텝 고정"이다.** `mk_time_to_max`가 0이면
-엔진 판정이 첫 반복부터 참이라 `mk_max_speed`가 모든 이벤트의 스텝 크기가 된다. 여기에 최고
-속도를 넣으면 쓸 수 없다 — 50 이벤트/초에서 32 px는 초당 1600 px이고 호스트 포인터 가속까지
-곱해진다. 그래서 off일 때 런타임 배수에 1을 넣어 모든 분기를 `mk_move_delta` 하나로 접고,
-저장된 배수는 건드리지 않는다. 램프를 다시 고르면 사용자가 고른 비율이 그대로 돌아온다.
+> **REFUSED:** flooring the speed ratio, or exposing the raw
+> `(move_delta, max_speed)` pair as two independent knobs.
+> **WHY:** floor misses the 127 cap on round-trip; two knobs that
+> multiply would drag top speed when the user moves start speed.
+> **REOPENS:** none while `move_unit()` still clamps at
+> `MOUSEKEY_MOVE_MAX`.
 
-`id_custom_set_value`는 **클램프된 실제 값**을 곧바로 에코한다. set이 값을 자를 수 있고 VIA는
-돌아온 값을 그리므로, 에코를 빼면 화면과 펌웨어가 갈라진다.
+### 7-2. Acceleration is time on the page, event count in the engine
+
+`mk_time_to_max` counts move events. Passing the page value through
+would halve an untouched ramp when the user raises the update rate.
+The page holds duration; firmware stores
+`time_to_max ≈ duration / interval` (rounded) and, on interval SET,
+re-derives events from the held duration. Display unit
+`MOUSEKEY_CFG_RAMP_UNIT_MS` is 50. That unit is round-trip accuracy,
+not resolution: every duration × interval pair the official JSON
+offers either round-trips exactly or, if it does not fit in one
+byte of events, reads back shorter than requested — never the
+request.
+
+`mk_time_to_max` is `uint8`, so reach shrinks as the interval shortens.
+At 200 /s (5 ms) the cap is 255 × 5 ms = **1.275 s**. Official JSON
+offers 1.5 s (30) and 2.0 s (40) on the same page as 5 ms, so those
+pairs clip. GET of 1.5 s at 5 ms returns 26 (1.3 s). Honest readback
+is the contract; per-rate option lists are not expressible in VIA
+JSON.
+
+### 7-3. Acceleration Off locks the first step, not top speed
+
+`mk_time_to_max == 0` makes the engine's `repeat >= time_to_max` test
+true from the first repeat, so `mk_max_speed` would be every event's
+step. Writing the stored top speed there is unusable: 32 px at 50
+events/s is 1600 px/s before host pointer acceleration. Off therefore
+sets runtime `mk_max_speed` to 1, folding every branch onto
+`mk_move_delta`, and leaves the stored ratio untouched. Turning the
+ramp back on restores the user's ratio. GET of top speed still reports
+the stored top (`mousekey_config_effective_max_speed()`), which is why
+the JSON can hide that control behind `showIf` accel ≠ 0.
+
+> **REFUSED:** treating accel Off as "lock to top speed", or writing 0
+> into the stored ratio.
+> **WHY:** Off-as-top-speed is a jump the pointer host then
+> accelerates further; clearing the stored ratio would forget the
+> user's ramp.
+> **REOPENS:** none while `mk_time_to_max == 0` means "already at
+> max" on the first event.
