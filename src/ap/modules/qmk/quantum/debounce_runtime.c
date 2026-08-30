@@ -52,6 +52,14 @@ typedef struct
   uint8_t                 max_post_ms;
 } debounce_algo_entry_t;
 
+// V260831R2: 외부 STATUS는 제거하되 재초기화와 입력 우회를 결정하는 오류 상태는 내부에 유지
+typedef enum
+{
+  DEBOUNCE_RUNTIME_ERROR_NONE = 0,
+  DEBOUNCE_RUNTIME_ERROR_UNSUPPORTED,
+  DEBOUNCE_RUNTIME_ERROR_ALLOC,
+} debounce_runtime_error_t;
+
 
 static const debounce_algo_entry_t k_algorithms[] =
 {
@@ -100,6 +108,7 @@ static const debounce_runtime_config_t k_default_config = DEBOUNCE_RUNTIME_CFG(Q
 static const debounce_algo_entry_t *debounce_runtime_find_algo(debounce_runtime_type_t type);
 static uint8_t                       debounce_runtime_clamp_delay(uint8_t value, uint8_t max_value);
 static bool                          debounce_runtime_apply_if_possible(void);
+static bool                          debounce_runtime_is_ready(void);
 static void                          debounce_runtime_free_active(void);
 static bool                          debounce_runtime_passthrough(matrix_row_t raw[],
                                                                   matrix_row_t cooked[],
@@ -154,12 +163,7 @@ const debounce_runtime_config_t *debounce_runtime_get_default_config(void)
   return &k_default_config;                                        // V251115R3: 보드 기본 디바운스 설정 반환
 }
 
-debounce_runtime_error_t debounce_runtime_get_last_error(void)
-{
-  return g_runtime.last_error;
-}
-
-bool debounce_runtime_is_ready(void)
+static bool debounce_runtime_is_ready(void)
 {
   return (g_runtime.config_ready == true) &&
          (g_runtime.pending_reinit == false) &&

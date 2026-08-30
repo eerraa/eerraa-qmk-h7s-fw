@@ -4,11 +4,11 @@
 
 1. 펌웨어 파일 구성
 
-   키보드이름-V260831R1.uf2
+   키보드이름-V260831R2.uf2
      - 키보드 본체에 올리는 펌웨어 파일입니다.
      - 디바운스 모드/딜레이를 VIA에서 실시간 조정할 수 있으므로 추가 변형 이미지는 제공하지 않습니다. 이 하나의 UF2만 사용하면 됩니다.
 
-   키보드이름-VIA-V260831R1.JSON
+   키보드이름-VIA-V260831R2.JSON
      - VIA(usevia.app)에서 키보드를 인식하고, 디바운스/USB 설정/기타 기능을 노출하기 위한 Draft Definition 파일입니다.
      - 키맵을 편집하기 전에 반드시 한 번 로드해야 합니다.
 
@@ -158,11 +158,11 @@ Firmware Guide
 
 1. Firmware package contents
 
-   KeyboardName-V260831R1.uf2
+   KeyboardName-V260831R2.uf2
      - Flash this UF2 onto the keyboard.
      - Debounce mode/delay are runtime-configurable in VIA, so no alternate images are shipped—use this single UF2.
 
-   KeyboardName-VIA-V260831R1.JSON
+   KeyboardName-VIA-V260831R2.JSON
      - VIA Draft Definition so the keyboard is recognized and USB/debounce/feature controls appear.
      - Load it once before editing the keymap.
 
