@@ -5,7 +5,8 @@
 
   path     백틱 안 저장소 경로가 실재하는가 (`:line`, `{a,b}`, `*` 지원)
   comment  소스 주석이 부르는 docs/ 경로가 실재하는가
-  header   docs/*.md가 Genre / Canonical for 두 줄을 선언하는가
+  header   docs/*.md가 Genre / Canonical for 두 줄을 선언하는가.
+           Status: / Read when: 은 이 저장소에 값이 바뀌는 ADR이 없어 금지
   index    docs/ 아래 모든 문서가 docs/MAP.md 색인에서 도달 가능한가
   symbol   백틱 안 식별자가 src/ 또는 tools/에 실재하는가
   retired  폐기된 서브시스템의 심볼이 src/에 되살아나지 않았는가
@@ -32,13 +33,16 @@ ENTRY_DOCS = [ROOT / "AGENTS.md", ROOT / "CLAUDE.md"]
 USER_DOC = DOC_DIR / "readme.txt"
 
 GENRES = ("contract", "map", "manual", "state", "entry")
+# 값이 바뀌는 ADR이 생기면 Status: 만 그 파일에서 허용한다. 지금은 없다.
+FORBIDDEN_HEADERS = ("Status:", "Read when:")
 
-# 같은 PC의 짝 저장소. 경로 검사는 접두사만 보고 통과시킨다.
+# 같은 PC의 짝 저장소·규약 저장소. 경로 검사는 접두사만 보고 통과시킨다.
 FOREIGN_REPOS = (
     "the-via-eerraa/",
     "qmk_firmware_eerraa/",
     "eerraa-qmk-h7s-boot/",
     "eerraa-54lm20-fw/",
+    "eerraa-agent-docs/",
 )
 
 # 폐기된 서브시스템. src/에 0건이어야 하고, 이 목록이 곧 symbol 검사의 예외다 —
@@ -339,6 +343,18 @@ def _check_one_path(where: str, match: re.Match) -> None:
                 report("path", where, f"`{candidate}:{line_no}` — 파일은 {total}줄이다")
 
 
+def _forbidden_header_lines(path: Path) -> None:
+    where_base = path.relative_to(ROOT).as_posix()
+    for number, line in enumerate(read(path).splitlines(), 1):
+        for header in FORBIDDEN_HEADERS:
+            if line.startswith(header):
+                report(
+                    "header",
+                    f"{where_base}:{number}",
+                    f"`{header}` 필드는 이 저장소에서 쓰지 않는다",
+                )
+
+
 def check_headers() -> None:
     for doc in sorted(DOC_DIR.glob("*.md")):
         head = read(doc).splitlines()[:8]
@@ -353,6 +369,10 @@ def check_headers() -> None:
             report("header", where, "`Canonical for:` 줄이 없다")
         elif not canonical.split(":", 1)[1].strip():
             report("header", where, "`Canonical for:`가 비어 있다")
+        _forbidden_header_lines(doc)
+    for doc in ENTRY_DOCS:
+        if doc.exists():
+            _forbidden_header_lines(doc)
 
 
 def check_index() -> None:

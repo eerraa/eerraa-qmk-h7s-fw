@@ -18,6 +18,9 @@ Canonical for: 보드 없이 돌릴 수 있는 검증과 그 명령, 각 검사�
 하나씩 심어 검사기가 그것을 그 이름으로 잡는지 보고 원본을 되돌린다 — **통과하는 검사기가
 무언가를 보고 있다는 뜻은 아니기 때문이다.**
 
+클론마다 한 번 `git config core.hooksPath hooks` 하면 `hooks/pre-commit`이 커밋 전에
+`python tools/era_doc_refs.py`를 돌린다. CI 워크플로는 없다.
+
 ## 2. 툴체인 전제 (Windows)
 
 문서 검사기는 Python 3만 있으면 어디서든 돈다. 호스트 테스트는 mingw gcc **절대경로**가

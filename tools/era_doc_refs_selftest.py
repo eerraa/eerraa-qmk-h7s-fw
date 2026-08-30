@@ -54,6 +54,12 @@ PROBES = (
      lambda b: b.replace(b"docs/contract_usb.md", b"docs/gone.md", 1), False),
     ("header", "[header]", "docs/contract_via.md",
      lambda b: b.replace(b"Genre: contract", b"Genre: kontrakt", 1), False),
+    ("header(Status)", "[header]", "docs/contract_via.md",
+     lambda b: b.replace(b"Genre: contract", b"Status: Accepted\nGenre: contract", 1),
+     False),
+    ("header(Read when)", "[header]", "docs/contract_via.md",
+     lambda b: b.replace(b"Genre: contract", b"Read when: always\nGenre: contract", 1),
+     False),
     ("index", "[index]", "docs/zz_selftest_orphan.md",
      lambda b: "# orphan\n\nGenre: map\nCanonical for: 자기검사\n".encode(), True),
     ("symbol", "[symbol]", MAP_DOC,
@@ -71,6 +77,25 @@ PROBES = (
 )
 
 
+def probe_foreign_skip(name: str, prefix: str) -> bool:
+    """FOREIGN_REPOS 접두사는 로컬 경로가 아니므로 없어도 [path]가 나면 안 된다."""
+    path = ROOT / MAP_DOC
+    original = path.read_bytes()
+    planted = f"\n`{prefix}no-such-file.md`\n".encode()
+    try:
+        path.write_bytes(original + planted)
+        code, out = run_checker()
+    finally:
+        path.write_bytes(original)
+    leaked = "[path]" in out and prefix in out
+    ok = code == 0 and not leaked
+    detail = "skipped" if ok else next(
+        (line for line in out.splitlines() if prefix in line), out.strip()
+    )
+    print(f"{'PASS' if ok else 'FAIL'} {name:14s} {detail[:100]}")
+    return ok
+
+
 def main() -> int:
     code, out = run_checker()
     if code != 0:
@@ -79,15 +104,18 @@ def main() -> int:
 
     missed = [name for name, tag, target, transform, create in PROBES
               if not probe(name, tag, target, transform, create)]
+    if not probe_foreign_skip("foreign", "eerraa-agent-docs/"):
+        missed.append("foreign")
 
     code, out = run_checker()
     if code != 0:
         print("복구 실패 — 트리가 원래 상태로 돌아오지 않았다.\n" + out)
         return 1
+    n = len(PROBES) + 1  # + FOREIGN_REPOS skip
     if missed:
         print(f"\nFAIL 심었는데 잡지 못한 결함: {missed}")
         return 1
-    print(f"\nPASS 결함 {len(PROBES)}종을 전부 잡았고 트리는 원상 복구됐다")
+    print(f"\nPASS 결함 {n}종을 전부 잡았고 트리는 원상 복구됐다")
     return 0
 
 

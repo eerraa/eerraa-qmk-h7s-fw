@@ -2,8 +2,7 @@
 
 Genre: map
 Canonical for: 이 저장소의 정본 규칙 — 어떤 사실이 어디 살고, 두 곳이 어긋났을 때 어느 쪽이 이기며,
-그것을 무는 것이 무엇인가. 문서 색인, 보드·채널·EEPROM 사실 표, graphify 경계, 짝 저장소 대응,
-문서 규칙
+그것을 무는 것이 무엇인가. 문서 색인, 보드·채널·EEPROM 사실 표, 짝 저장소 대응, 문서 규칙
 
 이 문서는 **무엇이 어디 있고 어긋나면 어느 쪽이 정본인가**만 답한다. 결정의 근거는
 `docs/contract_via.md`·`docs/contract_usb.md`·`docs/contract_eeprom.md`, 아직 끝나지 않은 것은
@@ -20,7 +19,7 @@ Canonical for: 이 저장소의 정본 규칙 — 어떤 사실이 어디 살고
 | VIA wire 봉투(`0x06`·`0x07`)와 값 계층 | 소스, 그리고 반대편은 앱 ADR(§7) | `tools/era_via_host_tests/run.ps1` |
 | raw-HID TX 생산자 | `src/ap/modules/qmk/port/via_hid.c` | `tools/era_via_host_tests/check_single_producer.py` |
 | 사용자에게 나가는 문구 | `docs/readme.txt` | `version` 검사(릴리스 파일명) |
-| 코드가 어디서 무엇을 부르는가 | 소스. 조회는 graphify(§6) | 없음 — 그래프는 파생이지 권위가 아니다 |
+| 코드가 어디서 무엇을 부르는가 | 소스. 조회는 소스 검색 | 없음 — 파생 인덱스는 정본이 아니다 |
 
 문서와 코드가 어긋나면 **코드가 이긴다.** 문서를 고치고, 왜 어긋났는지 커밋 메시지에 남긴다.
 반대로 코드가 계약을 어긴 경우에는 계약이 이긴다 — 그 계약은 §7의 앱 저장소와 짝을 이루므로
@@ -38,8 +37,8 @@ Canonical for: 이 저장소의 정본 규칙 — 어떤 사실이 어디 살고
 | [readme.txt](readme.txt) | (사용자 문서) | 릴리스에 동봉하는 사용자 안내. 에이전트 문서 규격의 예외 — §8 |
 
 `AGENTS.md`와 `CLAUDE.md`는 진입 사슬이라 헤더 규약의 예외다. 그 둘과 이 색인 사이에
-문서 목록을 두 벌 두지 않는다 — `AGENTS.md`는 **하려는 일**로 라우팅하고, 여기는 **무엇의
-원본인가**로 라우팅한다.
+문서 목록을 두 벌 두지 않는다 — `AGENTS.md`는 Change / Locate / Verify로 라우팅하고,
+여기는 **무엇의 원본인가**로 라우팅한다.
 
 ## 3. 보드
 
@@ -111,35 +110,24 @@ vendorId는 5종 모두 `0x4552`다. 다섯 보드는 같은 소스를 공유하
 | +152 | 16B | `EECONFIG_USER_MOUSEKEY` |
 <!-- era-doc-refs: end -->
 
-## 6. graphify — 코드 구조는 그래프가 답한다
+## 6. 코드 구조는 소스가 답한다
 
-`graphify-out/`에 지식그래프가 커밋되어 있고 스코프는 `.graphifyignore`가 정의한다
-("실제 컴파일되는 코드 + 프로젝트 문서"). 세션 시작 시
-`python tools/graphify/bootstrap.py`가 동기화한다.
+구조 질문은 소스 검색(`git grep -n`, `rg`)이 답한다. 파생 인덱스는 정본이 아니다.
+값과 계약의 위치만 이 문서가 가리킨다.
 
 | 질문 | 어디서 답하는가 |
 | --- | --- |
-| 이 함수는 어디 살고 무엇을 부르는가 | `graphify query "usbHidSendReport"` |
-| A에서 B까지 어떻게 닿는가 | `graphify path "qmkUpdate" "usbHidSendReport"` |
-| 이 심볼 주변에 무엇이 붙어 있는가 | `graphify explain "usbHidSendReport"` |
+| 이 함수는 어디 살고 무엇을 부르는가 | 소스 검색 (`git grep -n`, `rg`) |
 | 값 — 오프셋·채널 번호·상수 | 이 문서 §3~§5 (소스에서 다시 계산됨) |
 | 왜 이렇게 되어 있는가 | `contract_*.md` |
 | **없는 것** — 폐기된 서브시스템과 그 이유 | `contract_usb.md` §4 |
 | 저장소 밖의 반대편 계약 | §7, 그리고 앱 저장소의 ADR |
 | 무엇을 어떻게 돌려 보는가 | `manual_verify.md` |
 
-**질의는 자연어 문장이 아니라 심볼 이름으로 한다.** `graphify query "via_hid_task"`는 74개
-노드를 돌려주지만 `"via_hid_task는 무엇을 호출하는가"`는 `No matching nodes found`다.
-
-그래프는 **파생이지 권위가 아니다.** 코드를 고쳤으면 `graphify update .`로 갱신하고
-(AST 전용, LLM 비용 없음) 별도 커밋으로 분리한다. 커밋 시 post-commit hook이 자동 갱신하므로
-`graphify-out/`이 dirty해지는 것은 정상이다. `src/ap/modules/qmk/CMakeLists.txt`의 컴파일
-목록을 바꾸면 `.graphifyignore`도 함께 갱신한다.
-
 ## 7. 짝 저장소
 
 전부 이 PC에만 있는 경로다. **cwd는 이 저장소에 둔다** — 앱 저장소를 cwd로 열고 이쪽 규칙을
-따르다가 앱에 `graphify-out/` 75,000줄을 잘못 커밋한 사고가 있다. 반대편을 고쳐야 하면
+따르다가 앱에 파생물 75,000줄을 잘못 커밋한 사고가 있다. 반대편을 고쳐야 하면
 그 저장소에서 그쪽 `AGENTS.md`를 읽고 시작한다.
 
 | 저장소 | 이 펌웨어의 무엇과 짝인가 |
@@ -159,29 +147,31 @@ vendorId는 5종 모두 `0x4552`다. 다섯 보드는 같은 소스를 공유하
 
 ## 8. 문서 규칙
 
-- `docs/` 아래 문서는 `Genre`와 `Canonical for` 두 줄을 선언한다. Genre는 `contract` `map`
-  `manual` `state` `entry` 다섯 중 하나다. 파일 이름의 접두사도 같은 장르를 말한다 — 문서가
-  여섯 개뿐이라 디렉터리로 나누면 저장소 간 참조만 깨진다.
-- **`Canonical for`는 편집하는 순간에 읽히는 자리다.** 새 사실을 쓰기 전에 그 사실의 원본을
-  선언한 문서가 이미 있는지 본다. 앱 저장소의 ADR 하나가 998줄로 부푼 원인이 이 선언의
-  부재였다.
+헤더·장르 다섯·거절 세 줄·은퇴·최소 검사의 정본은 저장소 `eerraa-agent-docs` 태그 **v1**의
+`eerraa-agent-docs/AGENT_DOCS_CONVENTION.md`다. 이 절은 그 규약이 저장소마다 고르라고 남겨
+둔 것만 적는다.
+
+- 에이전트 문서는 여섯 편뿐이라 **flat**이다 (`docs/` 바로 아래). 장르 디렉터리와 별도 색인을
+  두지 않는다. `AGENTS.md`가 Change / Locate / Verify로 라우팅하고, 이 문서 §2가 원본을
+  색인한다.
 - 문서에 저장소 경로를 쓸 때는 **저장소 상대 경로 전체**를 백틱으로 적는다
-  (`src/ap/modules/qmk/port/via_hid.c`). 짝 저장소 파일은 저장소 이름을 앞에 붙인다
-  (`the-via-eerraa/docs/MAP.md`). `path` 검사가 해소한다.
-- **제약에는 원인을 붙인다.** 원인이 없으면 다음 사람이 규칙을 우회할 명분을 갖는다. 커밋은
-  변경 단위이고 제약은 계약 단위라 `git log`가 이것을 대신하지 못한다.
-- **뒤집힌 결정은 지운다.** "아래에서 뒤집혔다"는 주석을 손으로 달지 않는다. 다만 뒤집힌
-  이유가 지금 규칙의 근거이면 그 이유만 현재 규칙 안에 남는다.
-- 날짜·세션 서사·진행 상태·HEAD 해시·1회성 측정 원본은 쓰지 않는다. `git log`와 실행이
-  답한다. 예외는 `state_open.md` 하나이며, 그 문서는 항목이 닫히면 함께 사라진다.
-- 측정치는 **그 측정이 지금 규칙의 근거일 때만** 규칙 옆에 남는다. 그 자리를 벗어난 측정
-  원본은 남기지 않는다.
+  (`src/ap/modules/qmk/port/via_hid.c`). 짝 저장소·규약 저장소 파일은 저장소 이름을 앞에
+  붙인다 (`the-via-eerraa/docs/MAP.md`, `eerraa-agent-docs/AGENT_DOCS_CONVENTION.md`).
+  `path` 검사가 해소한다. 경로가 `파일:줄`이면 그 줄이 파일 안인지도 본다.
+- 보드·채널·EEPROM·wire 표는 `<!-- era-doc-refs: … -->` 마커 안에 두고
+  `python tools/era_doc_refs.py --tables`가 소스에서 다시 계산한다. 손으로 고치지 마라 —
+  `table` 검사가 소스와 대조한다.
+- 이 저장소에는 값이 바뀌는 ADR이 없으므로 `Status:`와 `Read when:`을 쓰지 않는다.
+  `header` 검사가 부재를 본다.
 
 검사기는 `python tools/era_doc_refs.py` 하나이며 아홉 가지를 본다: `path` `comment` `header`
 `index` `symbol` `retired` `table` `menu` `version`. `comment`는 반대 방향을 본다 — 소스
 주석이 부르는 `docs/` 경로가 실재하는지다. 문서 쪽만 검사하면 문서를 지웠는데 주석이 계속
 그것을 가리키는 드리프트가 남는다. 그 검사기가 비어 있지 않은지는
-`python tools/era_doc_refs_selftest.py`가 결함을 심어 확인한다. **아직 기계가 보지 못하는
-것**은 세 가지다 —
+`python tools/era_doc_refs_selftest.py`가 결함을 심어 확인한다. 커밋마다 돌리려면 클론당
+`git config core.hooksPath hooks` — `hooks/pre-commit`이 검사기를 부른다. CI 워크플로는
+없다.
+
+**아직 기계가 보지 못하는 것**은 세 가지다 —
 문장이 선언한 장르에 맞는지, `Canonical for`가 참인지(비어 있지 않은지만 본다), 그리고
 짝 저장소와의 정합. 세 번째는 §7의 사고 두 건이 바로 그 구멍에서 나왔다.
