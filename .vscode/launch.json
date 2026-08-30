@@ -34,7 +34,7 @@
       "servertype": "stlink",
       "serverArgs": [
         "-m","1",
-        "--extload", "${workspaceFolder}/tools/W25Q16JV_EERRAA-QMK-H7S.stldr"         
+        "--extload", "${workspaceFolder}/tools/W25Q16JV_EERRAA-QMK-H7S.stldr"
       ],      
       "osx": {
         "serverpath": "/opt/ST/STM32CubeCLT_1.16.0/STLink-gdb-server/bin/ST-LINK_gdbserver",
@@ -63,7 +63,7 @@
       },        
       "serverArgs": [
         "-m","1",
-        "--extload", "${workspaceFolder}/tools/W25Q16JV_EERRAA-QMK-H7S.stldr"         
+        "--extload", "${workspaceFolder}/tools/W25Q16JV_EERRAA-QMK-H7S.stldr"
       ],       
       "runToEntryPoint": "main",  
       "overrideRestartCommands": [
