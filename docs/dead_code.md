@@ -242,7 +242,7 @@ channel 13/17 layout, `0x06`/`0x07` handlers, thinning unlinked QMK
 modules under `src/ap/modules/qmk/quantum/`, Graphify restore, D-2/D-3/D-4,
 bootloader handoff, closing `docs/state_open.md` items.
 
-## 13. Product firmware identifiers renamed (this PR)
+## 13. Product firmware identifiers renamed (PR #279)
 
 Not a deletion. No `src/` edit. Firmware version stays `V260824R2`.
 
