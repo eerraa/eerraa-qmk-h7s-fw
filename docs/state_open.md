@@ -1,82 +1,103 @@
-# 아직 닫히지 않은 것
+# Open items
 
 Genre: state
-Canonical for: 무엇이 아직 판정되지 않았고 무엇이 착수 조건인가, 실기에서만 확인되는 미검증
-항목, 그리고 되살리지 않기로 한 것
+Canonical for: what is still undecided and what the start condition is,
+hardware-only unverified items, and what must not be restored
 
-**이 저장소에서 시간이 지나면 사라지는 유일한 문서다.** 항목이 닫히면 그 자리에서 지우고,
-그때까지 살아남은 규칙은 규칙을 소유한 계약 문서로 옮긴다. 전부 닫히면 이 파일을 지운다 —
-닫힌 항목을 "완료"로 표시해 남기지 않는다. 그런 줄은 여전히 색인에 잡히고 여전히 현재처럼
-읽힌다.
+**This is the only document in this repository that goes away with
+time.** Close an item by deleting it in place. Rules that still apply
+move to the contract that owns them. When every item is closed, delete
+this file — do not leave closed items marked done. Those lines still
+hit the index and still read as current. The file is not archived.
 
-식별자(D-2 등)는 앱 저장소와 실기 회신이 같은 번호로 부르고 있어 유지한다.
+Identifiers (D-2 and the rest) stay. The app repository and hardware
+replies use the same numbers.
 
-## 1. 판정 대기 — 데이터가 결정한다
+## 1. Waiting on a decision — data decides
 
-### D-2. VIA 응답 스로틀의 기준점
+### D-2. VIA response-throttle reference point
 
-`usbHidEnqueueViaResponse()`가 **enqueue마다** 지연 타이머를 갱신하고 SOF는 마지막 적재로부터
-20 ms가 지나야 배출한다. 즉 기준이 "마지막 송신"이 아니라 "마지막 적재"라서, 요청이 20 ms 안에
-계속 들어오면 배출이 계속 밀린다. 지금 문제가 없는 것은 호스트가 직렬이기 때문이다.
+`usbHidEnqueueViaResponse()` refreshes the delay timer on **every
+enqueue**. SOF drains only after 20 ms from the last enqueue. The
+reference is last enqueue, not last transmit, so a request stream
+inside 20 ms keeps postponing drain. That is not a problem today
+because the host is serial.
 
-실질 효과는 VIA 왕복 1회당 최소 20 ms이고, 12-chunk snapshot 한 번이 약 240 ms를 차지해 1 Hz
-진단 세션에서 VIA 트래픽이 벽시계의 약 25 %를 점유한다.
+The practical effect is a 20 ms floor per VIA round-trip. One
+12-chunk snapshot takes about 240 ms, so a 1 Hz diagnostic session
+puts VIA traffic at about 25 % of wall-clock.
 
-**착수 조건**: 이 20 ms가 과거 호스트 측 레이스 회피용이었는지 먼저 확인한다. 근거가 없으면
-기준점을 **송신 시각**으로 옮기거나(진짜 rate limit) 값을 낮춘다. 근거가 있으면 그 이유를
-`docs/contract_via.md`에 남기고 이 항목을 닫는다.
+**Start condition**: first confirm whether that 20 ms was to dodge a
+past host-side race. If there is no evidence, move the reference to
+**transmit time** (a real rate limit) or lower the value. If there is
+evidence, record the reason in `docs/contract_via.md` and close this
+item.
 
-### D-3. 손실 경로 계수 범위
+### D-3. Loss-path count scope
 
-리포트 손실 경로는 셋인데 하나만 계수된다 — 재시도 큐 포화(계수됨), 서스펜드 중 폐기(조용히),
-TIM2 드레인 중 미구성 상태 폐기(조용히). 현재 UI 명칭이 "Report queue drops"로 첫 번째에
-정확히 한정되어 있으므로 **거짓은 아니다.**
+There are three report-loss paths and only one is counted — retry-queue
+saturation (counted), discard while suspended (silent), discard while
+unconfigured during TIM2 drain (silent). The current UI name is
+"Report queue drops", which is scoped exactly to the first, so **it is
+not false.**
 
-**착수 조건**: 실기에서 나머지 둘이 실제로 관측되면 계수 범위를 넓히고 명칭을 함께 바꾼다.
-관측되지 않으면 현행을 유지하고 이 항목을 닫는다. 서스펜드/미구성은 이미 하드 이벤트로
-노출되므로 사용자가 상관할 수 있다.
+**Start condition**: if hardware shows the other two, widen the count
+and rename with it. If they are not observed, keep the current scope
+and close this item. Suspend and unconfigured already surface as hard
+events, so a user can care.
 
-### D-4. keyboard / EXK 드롭 분리
+### D-4. keyboard / EXK drop split
 
-`report_drops`는 두 큐를 합산한다. 구조적으로는 별개 큐·별개 결과라 분리가 옳지만, 분리하려면
-snapshot payload에 필드가 필요하고 앱이 그 예약 구간을 0으로 검증하므로 **양쪽 동시 변경**이다.
+`report_drops` sums both queues. Structurally they are separate queues
+with separate outcomes, so a split is right, but splitting needs a
+field in the snapshot payload and the app checks that reserved region
+as 0, so it is a **simultaneous change on both sides.**
 
-**착수 조건**: 실기에서 EXK 드롭이 실제로 발생할 때만. 마우스키 집중 사용 세션에서도 drop 0이
-나온 회차가 있으므로, 근거 없이 metric을 늘리지 않는다.
+**Start condition**: only when hardware actually produces EXK drops.
+A mouse-key-heavy session has already returned drop 0, so do not add a
+metric without evidence.
 
-## 2. 실기 미검증
+## 2. Hardware-unverified
 
-| 항목 | 무엇을 봐야 하는가 |
+| Item | What to look at |
 | --- | --- |
-| `V260824R2` 부트로더 인계 보완 | 구 부트로더 보드에서 UF2 업로드 후 자동 시작이 10회 연속 성공하는지. 콜드부트 열거 지연이 체감되지 않는지. VIA 리셋·모드 변경 후 재열거. 허브 경유와 다른 PC. |
-| 부트로더 쪽 근본 수정 | ST-LINK로 기록되는 이후 출고분에서만 확인 가능하다. `docs/contract_usb.md` §6. |
-| 공식 `usevia.app`의 MOUSE 페이지 | 6개 컨트롤이 값을 읽고 쓰는지, `Cursor Acceleration`을 Off로 바꿀 때 행이 실제로 교체되는지. |
-| 진단 세션 유실 경로 | 완료 세션은 CLEAR나 다음 START 전까지 RAM에 남는데, 세션 중 절전으로 중단된 런이 덤프에 기록되지 않은 사례가 있다. 절전 시나리오만 단독 재현한 뒤 **새 세션으로** 카운터를 읽어 판정한다(`docs/manual_verify.md` §5). |
-| 모드↔협상 속도 불일치 경고 | 음성 경로(정상 미표시)는 네 모드 전부에서 확인됐고 **양성 경로가 미검증**이다. FS 전용 포트/허브가 필요하다. |
-| 내부 플래시 EEPROM 에뮬레이션 | 코드 수준 리팩터링은 되어 있고 실기 검증이 없다. 현재 보드는 외부 I2C만 쓴다. 멀티바이트 쓰기의 Unlock/Lock 최소화는 clean-up 상태머신과 오류 롤백을 함께 재설계해야 해서 미착수다. |
+| `V260824R2` bootloader-handoff complement | On a board still on the old bootloader, UF2 upload then auto-start succeeds 10 times in a row. Cold-boot enumeration delay is not perceptible. Re-enumeration after VIA reset and mode change. Via a hub and on a different PC. |
+| Bootloader-side root fix | Confirmable only on later shipments written with ST-LINK. `docs/contract_usb.md` §6. |
+| Official `usevia.app` MOUSE page | Whether the six controls read and write values, and whether setting `Cursor Acceleration` to Off actually swaps the row. |
+| Diagnostic session-loss path | A completed session stays in RAM until CLEAR or the next START. There have been runs interrupted by suspend during the session that did not appear in the dump. Reproduce the suspend scenario alone, then read counters on a **new session** (`docs/manual_verify.md` §5). |
+| Mode↔negotiated-speed mismatch warning | The negative path (correctly not shown) is confirmed on all four modes. **The positive path is unverified.** Needs an FS-only port/hub. |
+| Internal-flash EEPROM emulation | Code-level refactoring is done; hardware verification is not. Current boards use external I2C only. Minimizing Unlock/Lock around multi-byte writes needs a redesign of the clean-up state machine and error rollback together, so it is not started. |
 
-## 3. 되살리지 않기로 한 것
+## 3. Must not restore
 
-**`docs/` 아래 있던 persistence_burst_design.md(537줄)는 폐기됐고 사본이 없다.** VIA 연속
-설정과 EEPROM burst-safe 설계를 다룬 문서였으며, 그 커밋을 로컬·원격 양쪽에서 지웠다.
+**The 537-line persistence_burst_design.md that used to sit under
+`docs/` is retired and has no copy.** It covered VIA consecutive
+settings and EEPROM burst-safe design. That commit was deleted on both
+local and remote.
 
-**왜**: 이 이슈는 처음부터 새로 설계한다. 옛 문서를 남겨 두면 폐기하기로 한 설계가 최신
-문서처럼 오인된다. **이 문서를 찾는 세션은 복원하지 말고 백지에서 시작한다** — reflog나
-cherry-pick으로 되살리는 "구조" 행동을 하지 않는다.
+**Why:** this issue is designed from scratch. Leaving the old document
+makes a retired design look current. **A session looking for this
+document does not restore it — start from a blank page.** Do not treat
+reflog or cherry-pick restore as a "structure" action.
 
-instability monitor와 자동 폴링 다운그레이드를 되살리지 않는 이유는 성격이 달라
-`docs/contract_usb.md` §4가 계약으로 든다.
+Why the instability monitor and automatic polling downgrade must not
+be restored is a different kind of fact; `docs/contract_usb.md` §4
+holds it as contract.
 
-## 4. 짝 저장소에 넘길 것
+## 4. Hand off to the peer repository
 
-`the-via-eerraa`의 다음 두 줄이 이 저장소의 사라진 워크트리를 가리킨다. 그 저장소를 여는
-세션이 고친다 — **cwd를 옮기지 않고 여기서 고치지 않는다**(`docs/MAP.md` §7).
+These two lines in `the-via-eerraa` still point at this repository's
+gone worktrees. A session that opens that repository fixes them —
+**do not move cwd and do not fix them here** (`docs/MAP.md` §7).
 
-- `the-via-eerraa/docs/MAP.md` §8이 `eerraa-qmk-h7s-fw-via`·`-via2`를 "H7S 작업 워크트리"로
-  든다. 둘은 은퇴했고 워크트리는 하나뿐이다.
-- `the-via-eerraa/docs/adr/0003-era-menu-help-ui.md`가 `eerraa-qmk-h7s-fw-via2/src/...` 경로를
-  근거로 인용한다. 같은 파일이 `eerraa-qmk-h7s-fw/src/...`에 있다.
+- `the-via-eerraa/docs/MAP.md` §8 lists `eerraa-qmk-h7s-fw-via` and
+  `-via2` as "H7S working worktrees". Both are retired; there is one
+  worktree.
+- `the-via-eerraa/docs/adr/0003-era-menu-help-ui.md` cites an
+  `eerraa-qmk-h7s-fw-via2/src/...` path as evidence. The same file is
+  at `eerraa-qmk-h7s-fw/src/...`.
 
-RP2040 쪽(`qmk_firmware_eerraa`)의 VIA JSON 25개와 사용자 안내는 아직 `Anti-Ghosting` 이름을
-쓴다. 그때까지 RP2040 보드는 커스텀 앱에서 `KKUK`, 공식 `usevia.app`에서 `Anti-Ghosting`으로
-보인다. H7S 5종은 양쪽 다 `KKUK`이다.
+RP2040 (`qmk_firmware_eerraa`) still uses the name `Anti-Ghosting` in
+its 25 VIA JSON files and user copy. Until that changes, RP2040 boards
+show `KKUK` in the custom app and `Anti-Ghosting` on official
+`usevia.app`. The five H7S boards are `KKUK` on both.
