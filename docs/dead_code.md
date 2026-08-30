@@ -146,18 +146,19 @@ deleted persistence_burst_design document must not be restored
 
 ## 7. Symbols with 0 callers (port / `hw/driver`)
 
-Definitions exist; no other `src/` call.
+These helpers had no other `src/` call. Removed 2026-08-30, commit
+`ea80621`.
 
 | Symbol | Class | Proof |
 | --- | --- | --- |
-| `debounce_profile_restore_defaults` | DELETE | `src/ap/modules/qmk/port/debounce_profile.c:229`. Factory uses `debounce_profile_storage_apply_defaults` (`eeconfig_port.c:18`) |
-| `eeprom_write_block` | DELETE | `src/ap/modules/qmk/port/platforms/eeprom.c:338` |
-| `usbDiagnosticsGetCurrentSpeed` | DELETE | `src/hw/driver/usb/usb_hid/usb_diagnostics.c:166` |
-| `host_last_system_usage` / `host_last_consumer_usage` | DELETE | `src/ap/modules/qmk/port/protocol/host.c:320-326` |
-| `get_first_key` | DELETE | `src/ap/modules/qmk/port/protocol/report.c:59` |
-| `timer_clear` | DELETE | `src/ap/modules/qmk/port/platforms/timer.c:11` empty body |
-| `suspend_wakeup_condition` | DELETE | `src/ap/modules/qmk/port/platforms/suspend.c` |
-| `cdcIsInit` | DELETE | Defined `src/hw/driver/cdc.c:34`. `cdcInit` is called (`src/hw/hw.c:135`) |
+| debounce_profile_restore_defaults | removed | Absent after 2026-08-30, commit `ea80621`. Prototype and definition. Factory still uses `debounce_profile_storage_apply_defaults` (`eeconfig_port.c:18`). Re-measure: no `src/` or `tools/` call, no `#define` alias, no function pointer |
+| eeprom_write_block | removed | Absent after 2026-08-30, commit `ea80621`. Prototype and definition. Live writes are `eeprom_write_byte` / `eeprom_write_word` / `eeprom_write_dword` and `eeprom_update_block`. Re-measure: no `src/` or `tools/` call |
+| usbDiagnosticsGetCurrentSpeed | removed | Absent after 2026-08-30, commit `ea80621`. Prototype and definition. `usbDiagnosticsCapture` still copies `s_current_speed` into the snapshot. Live getters `usbDiagnosticsGetState` and `usbDiagnosticsGetSessionId` stay. Re-measure: no `src/` or `tools/` call |
+| host_last_system_usage / host_last_consumer_usage | removed | Absent after 2026-08-30, commit `ea80621`. Prototypes and getters. `host_system_send` / `host_consumer_send` still keep the last-usage statics for dedup. Re-measure: no `src/` or `tools/` call |
+| get_first_key | removed | Absent after 2026-08-30, commit `ea80621`. Prototype and definition. Live `has_anykey` and `is_key_pressed` stay. Re-measure: no `src/` or `tools/` call |
+| timer_clear | removed | Absent after 2026-08-30, commit `ea80621`. Prototype and empty body. `timer_init` stays (`src/ap/modules/qmk/quantum/keyboard.c:495`). `sync_timer_clear` is a different empty macro in `src/ap/modules/qmk/quantum/sync_timer.h`. Re-measure: no `src/` or `tools/` call of timer_clear |
+| suspend_wakeup_condition | removed | Absent after 2026-08-30, commit `ea80621`. Prototype and definition. `qmk.c` idle path still calls `suspend_power_down` and `suspend_wakeup_init`. Re-measure: no `src/` or `tools/` call |
+| cdcIsInit | removed | Absent after 2026-08-30, commit `ea80621`. Prototype and definition. `cdcInit` is still called (`src/hw/hw.c:135`). The TU-local is_init flag was only read by this getter and was removed with it |
 
 `raw_hid_send` is called from `via.c` and is a no-op. KEEP (§3).
 
@@ -230,8 +231,10 @@ version bump unless that session edits `src/`.
    `b94e9ea`, PR #280. Default-0 `#ifndef`/`#define` in `src/hw/hw_def.h`;
    no other `src/` reference besides that define.
    `_DEF_ENABLE_MATRIX_TIMING_PROBE` stays.
-4. Zero-caller helpers in §7 (one session; split if review wants a
-   smaller diff).
+4. Zero-caller helpers in §7 — removed 2026-08-30, commit
+   `ea80621`. Definitions and prototypes only. No `src/` callers,
+   macros, or function pointers. `_DEF_ENABLE_MATRIX_TIMING_PROBE`
+   stays.
 5. Never-included kit headers in §9.
 6. `KEY_OVERRIDE_ENABLE` and drop `process_key_override.c` from CMake
    if the table stays NULL.
