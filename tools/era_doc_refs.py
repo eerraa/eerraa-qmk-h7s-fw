@@ -207,7 +207,7 @@ def eeprom_slots() -> list[tuple[str, int, str]]:
 # --------------------------------------------------------------------------
 
 def table_boards() -> list[str]:
-    lines = ["| 보드 | 소스 | 공식 VIA JSON (json/ 아래) | PID |", "| --- | --- | --- | --- |"]
+    lines = ["| Board | Source | Official VIA JSON (under json/) | PID |", "| --- | --- | --- | --- |"]
     for row in boards():
         lines.append(
             f"| {row['name']} | `{row['dir']}/` |"
@@ -225,7 +225,7 @@ def table_channels() -> list[str]:
     exposed: set[int] = set()
     for row in board_rows:
         exposed |= exposed_channels(ROOT / row["json"])
-    lines = ["| 채널 | 이름 | 펌웨어 라우팅 | 보드 JSON 노출 |", "| --- | --- | --- | --- |"]
+    lines = ["| Channel | Name | Firmware routing | Board JSON exposure |", "| --- | --- | --- | --- |"]
     for name, number in sorted(known.items(), key=lambda item: item[1]):
         lines.append(
             f"| {number} | `{name}` |"
@@ -236,7 +236,7 @@ def table_channels() -> list[str]:
 
 
 def table_eeprom() -> list[str]:
-    lines = ["| 오프셋 | 크기 | 심볼 |", "| --- | --- | --- |"]
+    lines = ["| Offset | Size | Symbol |", "| --- | --- | --- |"]
     for name, offset, size in eeprom_slots():
         lines.append(f"| +{offset} | {size} | `{name}` |")
     return lines
