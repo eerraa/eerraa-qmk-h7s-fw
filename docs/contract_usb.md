@@ -40,6 +40,20 @@ same three HID interfaces from the same size and report-descriptor-length
 constants. HS keyboard `wMaxPacketSize` then ORs `(2U << 11)` (three
 transactions per microframe); the HID-only descriptor does not.
 
+The root `CMakeLists.txt` deliberately keeps both `usb_cdc` and `usb_cmp` in
+the recursive `src/hw/*.c` source set. `_USE_HW_CDC` is always defined in
+`src/hw/hw_caps_usb.h`, and `cdcInit()` in `src/hw/driver/cdc.c` calls
+`cdcIfInit()` from `src/hw/driver/usb/usb_cdc/usbd_cdc_if.c` even on shipped
+`HW_USB_CMP == 0` images. The `HW_USB_CMP == 1` VCOM path uses the same source
+set for the composite builder.
+
+> **REFUSED:** removing `usb_cdc` or `usb_cmp` from the root source glob based
+> only on shipped boards having `HW_USB_CMP == 0`.
+> **WHY:** HID-only images still link `cdcIfInit()`, while the VCOM composite
+> path needs `usb_cmp`; an unconditional exclusion breaks one of those modes.
+> **REOPENS:** separate CMake source selections that link both modes, with all
+> five shipped HID images and a VCOM composite image built from that design.
+
 ## 2. Simultaneous keys are 20, not 6KRO
 
 `HW_KEYS_PRESS_MAX` is 20 (`src/hw/hw_caps_keys.h`). No board overrides it.

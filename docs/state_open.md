@@ -96,8 +96,3 @@ gone worktrees. A session that opens that repository fixes them —
 - `the-via-eerraa/docs/adr/0003-era-menu-help-ui.md` cites an
   `eerraa-qmk-h7s-fw-via2/src/...` path as evidence. The same file is
   at `eerraa-qmk-h7s-fw/src/...`.
-
-RP2040 (`qmk_firmware_eerraa`) still uses the name `Anti-Ghosting` in
-its 25 VIA JSON files and user copy. Until that changes, RP2040 boards
-show `KKUK` in the custom app and `Anti-Ghosting` on official
-`usevia.app`. The five H7S boards are `KKUK` on both.

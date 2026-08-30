@@ -226,16 +226,6 @@ void debounce_profile_save(bool force)
   eeconfig_flush_debounce_profile(force);
 }
 
-void debounce_profile_restore_defaults(void)
-{
-  debounce_profile_apply_defaults_locked();
-  debounce_profile_sync_from_storage();
-  debounce_profile_state.applied         = false;
-  debounce_profile_state.requires_reboot = false;
-  debounce_profile_apply_current();
-  eeconfig_flush_debounce_profile(true);
-}
-
 void debounce_profile_storage_apply_defaults(void)
 {
   debounce_profile_apply_defaults_locked();                      // V251115R1: EEPROM 공장 초기화 경로에서 기본값만 기록
