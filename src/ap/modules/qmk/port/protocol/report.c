@@ -52,33 +52,6 @@ uint8_t has_anykey(void) {
     return cnt;
 }
 
-/** \brief get_first_key
- *
- * FIXME: Needs doc
- */
-uint8_t get_first_key(void) {
-#ifdef NKRO_ENABLE
-    if (keyboard_protocol && keymap_config.nkro) {
-        uint8_t i = 0;
-        for (; i < NKRO_REPORT_BITS && !nkro_report->bits[i]; i++)
-            ;
-        return i << 3 | biton(nkro_report->bits[i]);
-    }
-#endif
-#ifdef RING_BUFFERED_6KRO_REPORT_ENABLE
-    uint8_t i = cb_head;
-    do {
-        if (keyboard_report->keys[i] != 0) {
-            break;
-        }
-        i = RO_INC(i);
-    } while (i != cb_tail);
-    return keyboard_report->keys[i];
-#else
-    return keyboard_report->keys[0];
-#endif
-}
-
 /** \brief Checks if a key is pressed in the report
  *
  * Returns true if the keyboard_report reports that the key is pressed, otherwise false

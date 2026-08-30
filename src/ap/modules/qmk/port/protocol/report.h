@@ -314,7 +314,6 @@ static inline uint16_t KEYCODE2CONSUMER(uint8_t key) {
 }
 
 uint8_t has_anykey(void);
-uint8_t get_first_key(void);
 bool    is_key_pressed(uint8_t key);
 
 void add_key_byte(report_keyboard_t* keyboard_report, uint8_t code);

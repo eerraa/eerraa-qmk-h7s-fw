@@ -335,16 +335,6 @@ void eeprom_write_dword(uint32_t *addr, uint32_t value)
 	eeprom_write_byte(p, value >> 24); 
 }
 
-void eeprom_write_block(const void *buf, void *addr, size_t len)
-{
-  uint8_t       *p   = (uint8_t *)addr;
-  const uint8_t *src = (const uint8_t *)buf;
-  while (len--)
-  {
-    eeprom_write_byte(p++, *src++);
-  }
-}
-
 void eeprom_update_byte(uint8_t *addr, uint8_t value)
 {
   uint8_t orig = eeprom_read_byte(addr);

@@ -36,20 +36,6 @@ __attribute__((weak)) void suspend_wakeup_init_kb(void) {
     suspend_wakeup_init_user();
 }
 
-/** \brief suspend wakeup condition
- *
- * FIXME: needs doc
- */
-bool suspend_wakeup_condition(void) {
-    matrix_power_up();
-    matrix_scan();
-    matrix_power_down();
-    for (uint8_t r = 0; r < MATRIX_ROWS; r++) {
-        if (matrix_get_row(r)) return true;
-    }
-    return false;
-}
-
 void suspend_power_down(void)
 {
   suspend_power_down_quantum();

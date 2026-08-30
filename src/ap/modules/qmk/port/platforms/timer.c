@@ -8,11 +8,6 @@ void timer_init(void)
 
 }
 
-void timer_clear(void)
-{
-
-}
-
 uint16_t timer_read(void)
 {
   return millis();

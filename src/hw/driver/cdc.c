@@ -17,8 +17,6 @@
 
 
 
-static bool is_init = false;
-
 bool cdcInit(void)
 {
   bool ret = true;
@@ -26,14 +24,7 @@ bool cdcInit(void)
 
   ret = cdcIfInit();
 
-  is_init = ret;
-
   return ret;
-}
-
-bool cdcIsInit(void)
-{
-  return is_init;
 }
 
 bool cdcIsConnect(void)

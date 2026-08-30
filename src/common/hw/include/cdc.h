@@ -14,7 +14,6 @@ extern "C" {
 
 
 bool     cdcInit(void);
-bool     cdcIsInit(void);
 bool     cdcIsConnect(void);
 uint32_t cdcAvailable(void);
 uint8_t  cdcRead(void);
