@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Portable host tests for VIA value layer, USB diagnostics, RGB SLEEP, CLEAN, and TX producer.
+"""Portable host tests for VIA value layer, USB diagnostics, RGB SLEEP, CLEAN, VERSION, and TX producer.
 
 Windows 문서 명령은 tools/era_via_host_tests/run.ps1 이다. 이 스크립트는 같은 검사를
 PATH의 gcc로 돌린다 (mingw 경로가 없는 Linux 포함).
@@ -8,6 +8,7 @@ PATH의 gcc로 돌린다 (mingw 경로가 없는 Linux 포함).
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -144,6 +145,29 @@ def main() -> int:
             "-Wno-unused-parameter",
             "-Wno-unused-function",
             "-include", str(INC / "force_host.h"),
+            f"-I{INC}",
+            f"-I{QMK / 'port'}",
+            f"-I{QMK / 'quantum'}",
+            f"-I{QMK / 'quantum' / 'keymap_extras'}",
+        ],
+    )
+
+    hw_def = (ROOT / "src" / "hw" / "hw_def.h").read_text(encoding="utf-8")
+    ver_match = re.search(r'_DEF_FIRMWARE_VERSION\s+"(V\d{6}R\d)"', hw_def)
+    if ver_match is None:
+        raise SystemExit("hw_def.h에서 _DEF_FIRMWARE_VERSION을 찾지 못했다")
+    compile_and_run(
+        HERE / "test_version.exe",
+        [
+            HERE / "test_version.c",
+            QMK / "port" / "ver_port.c",
+        ],
+        [
+            "-Wno-unused-parameter",
+            "-Wno-unused-function",
+            "-include", str(INC / "force_host.h"),
+            "-include", "stdlib.h",
+            f'-D_DEF_FIRMWARE_VERSION="{ver_match.group(1)}"',
             f"-I{INC}",
             f"-I{QMK / 'port'}",
             f"-I{QMK / 'quantum'}",
