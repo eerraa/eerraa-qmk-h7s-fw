@@ -10,7 +10,7 @@ what only hardware can decide and how to read it, and symptom order
 | Command | Bites |
 | --- | --- |
 | `PYTHONUTF8=1 python tools/era_doc_refs.py` | document–code match, nine checks (`docs/MAP.md` §8) |
-| `pwsh -NoProfile -File tools/era_via_host_tests/run.ps1` | VIA value layer, `0x07` diagnostics, RGB SLEEP, EEPROM CLEAN, single raw-HID TX producer |
+| `pwsh -NoProfile -File tools/era_via_host_tests/run.ps1` | VIA value layer, `0x07` diagnostics, RGB SLEEP, EEPROM CLEAN, VERSION GET, single raw-HID TX producer |
 | `python tools/era_via_host_tests/run.py` | same host tests when `gcc` is on PATH |
 | cmake (§4) | compile, link, `_Static_assert`, size |
 | `PYTHONUTF8=1 python tools/era_doc_refs_selftest.py` | the checker is not empty |

@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -20,6 +21,24 @@ ROOT = Path(__file__).resolve().parents[1]
 CHECKER = ROOT / "tools/era_doc_refs.py"
 MAP_DOC = "docs/MAP.md"
 JSON_DOC = "src/ap/modules/qmk/keyboards/era/keynetix/may65/json/MAY65-H7S-VIA.JSON"
+
+
+def current_firmware_version() -> bytes:
+    text = (ROOT / "src/hw/hw_def.h").read_bytes()
+    match = re.search(rb'_DEF_FIRMWARE_VERSION\s+"(V\d{6}R\d)"', text)
+    if match is None:
+        raise SystemExit("hw_def.h에서 _DEF_FIRMWARE_VERSION을 찾지 못했다")
+    return match.group(1)
+
+
+def plant_readme_release_filename(body: bytes) -> bytes:
+    current = current_firmware_version()
+    needle = b"-" + current + b".uf2"
+    planted = b"-V260101R1.uf2" if current != b"V260101R1" else b"-V260101R2.uf2"
+    if needle not in body:
+        raise SystemExit("docs/readme.txt에 현재 버전 UF2 파일명이 없다")
+    return body.replace(needle, planted, 1)
+
 
 
 def run_checker() -> tuple[int, str]:
@@ -73,7 +92,7 @@ PROBES = (
     ("version(doc)", "[version]", MAP_DOC,
      lambda b: b + b"\nV299999R9\n", False),
     ("version(readme)", "[version]", "docs/readme.txt",
-     lambda b: b.replace(b"-V260824R2.uf2", b"-V260101R1.uf2", 1), False),
+     plant_readme_release_filename, False),
 )
 
 
