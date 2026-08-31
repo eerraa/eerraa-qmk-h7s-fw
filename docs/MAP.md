@@ -95,6 +95,10 @@ that file (`wire-values`).
 | 18 | `id_qmk_rgb_sleep` | O | O |
 <!-- era-doc-refs: end -->
 
+Channel 8 VERSION uses value 5 for the NUL-terminated ASCII `YYMMDDRn`
+label. Legacy zero-based dropdown GET values 1–4 remain implemented but are
+not exposed by the current five official JSON files (`docs/contract_via.md` §2).
+
 ## 5. EEPROM USER slots
 
 Offsets from `EECONFIG_USER_DATABLOCK`. `EECONFIG_USER_DATA_SIZE` is

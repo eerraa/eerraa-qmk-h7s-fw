@@ -50,9 +50,23 @@ static uint8_t via_get(uint8_t value_id)
 }
 
 
+static void via_get_ascii(uint8_t value[10])
+{
+  uint8_t buf[32];
+
+  memset(buf, 0xA5, sizeof(buf));
+  buf[0] = id_custom_get_value;
+  buf[1] = 8;
+  buf[2] = 5;
+  via_qmk_version(buf, 32);
+  memcpy(value, &buf[3], 10);
+}
+
+
 int main(void)
 {
   uint8_t buf[32];
+  uint8_t version[10];
 
   expect_true("cookie is V260901R1", strcmp(_DEF_FIRMWARE_VERSION, "V260901R1") == 0);
 
@@ -61,6 +75,10 @@ int main(void)
   expect_eq_u8("GET Month 09 -> 8", via_get(2), 8);
   expect_eq_u8("GET Day 01 -> 0", via_get(3), 0);
   expect_eq_u8("GET Rev R1 -> 0", via_get(4), 0);
+
+  via_get_ascii(version);
+  expect_true("GET ASCII -> 260901R1 plus NUL", memcmp(version, "260901R1", 9) == 0);
+  expect_eq_u8("GET ASCII preserves report tail", version[9], 0xA5);
 
   memset(buf, 0, sizeof(buf));
   buf[0] = id_custom_set_value;

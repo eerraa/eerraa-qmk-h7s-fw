@@ -86,8 +86,8 @@ VIA 사용
 
 ■ SOCD
    반대 방향키가 함께 눌리면 마지막에 누른 키만 남기는 Last Input Wins
-   기능입니다. VIA CONFIGURE -> FEATURE -> SOCD에서 KEY BIND 1은 좌/우,
-   KEY BIND 2는 상/하 한 쌍을 지정하십시오. 마지막 키를 떼면 반대 키가
+   기능입니다. VIA CONFIGURE -> FEATURE -> SOCD에서 좌/우와 상/하 두 키 쌍을
+   지정하십시오. 마지막 키를 떼면 반대 키가
    계속 눌린 경우 그 키를 다시 눌러 줍니다.
 
 ■ KKUK   ※ 이전 이름: Anti-Ghosting
@@ -136,7 +136,7 @@ VIA 사용
 ■ RGB 절전
    키 입력이 없는 시간이 지나면 RGB를 끕니다.
    기본값은 10분이며, 키를 누르면 RGB가 다시 켜집니다.
-   VIA CONFIGURE -> FEATURE -> SLEEP에서 1/3/5/10/30/60분 중 고릅니다.
+   VIA CONFIGURE -> SYSTEM -> SLEEP에서 1/3/5/10/30/60분 중 고릅니다.
    PC가 절전되거나 연결이 사라지면 RGB도 절전 상태로 들어갑니다.
 
 ■ USB POLLING
@@ -146,8 +146,7 @@ VIA 사용
 
 ■ VERSION
    VIA CONFIGURE -> SYSTEM -> VERSION에서 현재 펌웨어 날짜와 리비전을
-   확인합니다. 이 펌웨어는 26년 09월 01일 R1입니다. 메뉴에서 값을 바꿔도
-   펌웨어는 바뀌지 않습니다.
+   읽기 전용 한 줄로 확인합니다. 이 펌웨어는 26년 09월 01일 R1입니다.
 
 ■ USB 전달 진단
    전용 ERA VIA 앱의 DIAGNOSTICS에서 10/30/60초 측정을 시작할 수
@@ -158,7 +157,7 @@ VIA 사용
 ■ EEPROM CLEAN
    키맵과 모든 설정을 초기화합니다.
 
-   VIA CONFIGURE -> SYSTEM -> CLEAN에서 10초 안에 확인 토글 세 개를 모두
+   VIA CONFIGURE -> SYSTEM -> EEPROM에서 10초 안에 확인 토글 세 개를 모두
    켜면 실행됩니다. 저장된 모든 데이터가 초기화되고 키보드가 재시작됩니다.
    10초를 넘기면 켜 둔 토글이 저절로 풀립니다.
 
@@ -250,8 +249,8 @@ Key Features
 
 ■ SOCD
    Last Input Wins: when opposite direction keys are held together, only the
-   latest press stays. Assign left/right on KEY BIND 1 and up/down on KEY
-   BIND 2 in VIA CONFIGURE -> FEATURE -> SOCD. Releasing the last key puts
+   latest press stays. Assign the left/right and up/down key pairs in VIA
+   CONFIGURE -> FEATURE -> SOCD. Releasing the last key puts
    the opposite key back down if it is still held.
 
 ■ KKUK   (formerly named Anti-Ghosting)
@@ -299,7 +298,7 @@ Key Features
 ■ RGB sleep
    RGB turns off after a period with no key input.
    The default is 10 minutes, and pressing a key turns RGB back on.
-   Choose 1/3/5/10/30/60 minutes in VIA CONFIGURE -> FEATURE -> SLEEP.
+   Choose 1/3/5/10/30/60 minutes in VIA CONFIGURE -> SYSTEM -> SLEEP.
    If the PC sleeps or the connection goes away, RGB also enters sleep.
 
 ■ USB POLLING
@@ -308,9 +307,8 @@ Key Features
    default is 1 kHz (FS). If the link is unstable, drop back to 1 kHz (FS).
 
 ■ VERSION
-   VIA CONFIGURE -> SYSTEM -> VERSION shows the firmware date and revision.
-   This firmware is 26-09-01 R1. Changing the menu does not change the
-   firmware.
+   VIA CONFIGURE -> SYSTEM -> VERSION shows the firmware date and revision
+   as one read-only value. This firmware is 26-09-01 R1.
 
 ■ USB delivery diagnostics
    In the dedicated ERA VIA app, open DIAGNOSTICS and run a 10/30/60-second
@@ -321,7 +319,7 @@ Key Features
 ■ EEPROM CLEAN
    Erases the keymap and every setting.
 
-   Switch all three confirm toggles in VIA CONFIGURE -> SYSTEM -> CLEAN
+   Switch all three confirm toggles in VIA CONFIGURE -> SYSTEM -> EEPROM
    within ten seconds to run it. Everything stored is erased and the
    keyboard restarts. Miss the ten seconds and the toggles you switched
    clear themselves.
