@@ -1,19 +1,24 @@
 #include "ver_port.h"
 
+#include <string.h>
 
 
 
 
+
+// V260901R1: 단일 읽기 전용 ASCII VERSION 값을 추가하고 기존 드롭다운 GET 주소는 호환용으로 유지한다.
 enum via_qmk_ver_item {
-    id_qmk_ver_yy  = 1,
-    id_qmk_ver_mm  = 2,
-    id_qmk_ver_dd  = 3,
-    id_qmk_ver_rv  = 4,
+    id_qmk_ver_yy    = 1,
+    id_qmk_ver_mm    = 2,
+    id_qmk_ver_dd    = 3,
+    id_qmk_ver_rv    = 4,
+    id_qmk_ver_ascii = 5,
 };
 
 static void via_qmk_ver_get_value(uint8_t *data);
 
-static const char *ver_str = _DEF_FIRMWARE_VERSION;
+static const char ver_str[] = _DEF_FIRMWARE_VERSION;
+_Static_assert(sizeof(ver_str) == 10U, "VERSION must be VYYMMDDRn plus NUL.");
 
 
 
@@ -82,6 +87,12 @@ void via_qmk_ver_get_value(uint8_t *data)
         ver_buf[0] = '0';
         ver_buf[1] = ver_str[8];
         value_data[0] = ((uint8_t)strtoul((const char * )ver_buf, (char **)NULL, (int)10)) - 1;
+        break;
+      }
+    case id_qmk_ver_ascii:
+      {
+        // Drop the H7S cookie's leading V and include the NUL terminator.
+        memcpy(value_data, &ver_str[1], sizeof(ver_str) - 1U);
         break;
       }
   }

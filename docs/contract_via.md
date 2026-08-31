@@ -2,7 +2,8 @@
 
 Genre: contract
 Canonical for: what the app and VIA host exchange — the single raw-HID TX
-producer, channel and value-id assignment, exact-ms value encoding,
+producer, channel and value-id assignment, the VERSION ASCII value,
+exact-ms value encoding,
 when KEYMAP/MACRO/CONFIG revisions bump, selector `0x06`/`0x07` byte
 envelopes, MOUSE unit conversion, and the checks that bite each of those
 
@@ -52,6 +53,13 @@ value id 3 is retired (`docs/contract_usb.md` §4); do not reuse it.
 Channel 9 value 1 (Jump to Boot) GET is always 0; SET jumps only when the
 value byte is nonzero. Values 2–4 are EEPROM CLEAN
 (`docs/contract_eeprom.md` §2).
+Channel 8 values 1–4 retain the shipped zero-based Year / Month / Day /
+Revision GET values for old definitions. Value 5 is the current official
+surface: GET returns `YYMMDDRn` plus NUL as nine bytes, copied from
+`_DEF_FIRMWARE_VERSION` without its leading `V`; SET and SAVE do nothing
+(`src/ap/modules/qmk/port/ver_port.c`). All five official JSON files expose
+one read-only `label` at value 5 and no dropdown. The additive id preserves
+old cached definitions without changing a shipped value's meaning.
 Channel 18 (`id_qmk_rgb_sleep`) value 1 is the official minute preset
 (1/3/5/10/30/60). The EEPROM store is uint16 seconds (default 600).
 Official GET floors the stored seconds onto that menu and does not
