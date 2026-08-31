@@ -10,7 +10,7 @@ what only hardware can decide and how to read it, and symptom order
 | Command | Bites |
 | --- | --- |
 | `PYTHONUTF8=1 python tools/era_doc_refs.py` | document–code match, nine checks (`docs/MAP.md` §8) |
-| `pwsh -NoProfile -File tools/era_via_host_tests/run.ps1` | VIA value layer, `0x07` diagnostics, RGB SLEEP, single raw-HID TX producer |
+| `pwsh -NoProfile -File tools/era_via_host_tests/run.ps1` | VIA value layer, `0x07` diagnostics, RGB SLEEP, EEPROM CLEAN, single raw-HID TX producer |
 | `python tools/era_via_host_tests/run.py` | same host tests when `gcc` is on PATH |
 | cmake (§4) | compile, link, `_Static_assert`, size |
 | `PYTHONUTF8=1 python tools/era_doc_refs_selftest.py` | the checker is not empty |
@@ -57,7 +57,7 @@ tool".
 
 ## 3. Host tests
 
-`tools/era_via_host_tests/run.ps1` builds two host binaries with that
+`tools/era_via_host_tests/run.ps1` builds the host binaries with that
 mingw gcc, runs them, then
 `tools/era_via_host_tests/check_single_producer.py`. It does not use
 the ARM toolchain. Which sources it compiles is the script.
@@ -67,6 +67,7 @@ the ARM toolchain. Which sources it compiles is the script.
 | `tools/era_via_host_tests/test_era_via_exact_ms.c` | `docs/contract_via.md` §3 exact-ms, §5 `0x06`, §7 MOUSE |
 | `tools/era_via_host_tests/test_usb_diagnostics.c` | `docs/contract_via.md` §6 |
 | `tools/era_via_host_tests/test_rgb_sleep.c` | RGB SLEEP GET/SET/SAVE, default 600 s / 10 min, CLEAN, idle/suspend/host-gone, official GET projection |
+| `tools/era_via_host_tests/test_sys_eeprom_clean.c` | SYSTEM CLEAN three-toggle GET/SET, 10 s window, Jump to Boot SET 0 |
 | `tools/era_via_host_tests/check_single_producer.py` | `docs/contract_via.md` §1 |
 
 `tools/era_via_host_tests/check_single_producer.py` reads

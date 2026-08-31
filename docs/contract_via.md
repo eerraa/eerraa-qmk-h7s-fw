@@ -49,6 +49,9 @@ Channel 2 (`id_qmk_rgblight_channel`) is handled in VIA core
 exposure is still `O`. Channels 1, 3, 4, and 5 are VIA-reserved and
 unused here; do not assign a new feature to those numbers. Channel 13
 value id 3 is retired (`docs/contract_usb.md` §4); do not reuse it.
+Channel 9 value 1 (Jump to Boot) GET is always 0; SET jumps only when the
+value byte is nonzero. Values 2–4 are EEPROM CLEAN
+(`docs/contract_eeprom.md` §2).
 Channel 18 (`id_qmk_rgb_sleep`) value 1 is the official minute preset
 (1/3/5/10/30/60). The EEPROM store is uint16 seconds (default 600).
 Official GET floors the stored seconds onto that menu and does not

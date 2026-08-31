@@ -80,9 +80,15 @@ return false and `src/main.c` sit in an LED-toggle loop. Half-initialized
 EEPROM must not boot quietly.
 
 The in-product EEPROM reset is the system-channel confirm sequence in
-`src/ap/modules/qmk/port/sys_port.c`. It calls `eeprom_req_clean()`, which
-uses `eepromScheduleDeferredFactoryReset()` to clear the sentinel and reboot,
-so the next boot runs the same `eepromAutoFactoryResetCheck()` path.
+`src/ap/modules/qmk/port/sys_port.c`. Official JSON exposes three toggles
+(channel 9, values 2 / 3 / 4). GET returns each bit. SET 1 sets that bit,
+SET 0 clears it. The window is `SYS_EEP_RESET_CONFIRM_WINDOW_MS` (10000)
+from the first SET 1 and is not extended by later confirms; `via_qmk_system_task()`
+and the next GET/SET expire leftover bits so a later third toggle cannot
+finish a stale sequence. All three bits inside the window call
+`eeprom_req_clean()`, which uses `eepromScheduleDeferredFactoryReset()` to
+clear the sentinel and reboot, so the next boot runs the same
+`eepromAutoFactoryResetCheck()` path.
 
 ## 3. The write path stays inside the 8 kHz budget
 

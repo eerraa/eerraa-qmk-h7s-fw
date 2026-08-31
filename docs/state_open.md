@@ -65,6 +65,7 @@ metric without evidence.
 | Bootloader-side root fix | Confirmable only on later shipments written with ST-LINK. `docs/contract_usb.md` §6. |
 | Official `usevia.app` MOUSE page | Whether the six controls read and write values, and whether setting `Cursor Acceleration` to Off actually swaps the row. |
 | RGB SLEEP | Real 10-minute idle → RGB off; key wake; OS USB suspend; powered hub + PC off (~300 ms SOF stale); charger-only never enumerated stays lit; usevia.app FEATURE → SLEEP GET/SET/SAVE and reboot; EEPROM CLEAN → 10 min. |
+| EEPROM CLEAN 10 s window | usevia.app SYSTEM → CLEAN: three toggles GET their bits, SET 0 clears, leftover confirms fall off after 10 s, all three inside the window wipe. |
 | Diagnostic session-loss path | A completed session stays in RAM until CLEAR or the next START. There have been runs interrupted by suspend during the session that did not appear in the dump. Reproduce the suspend scenario alone, then read counters on a **new session** (`docs/manual_verify.md` §5). |
 | Mode↔negotiated-speed mismatch warning | The negative path (correctly not shown) is confirmed on all four modes. **The positive path is unverified.** Needs an FS-only port/hub. |
 | Internal-flash EEPROM emulation | Code-level refactoring is done; hardware verification is not. Current boards use external I2C only. Minimizing Unlock/Lock around multi-byte writes needs a redesign of the clean-up state machine and error rollback together, so it is not started. |
