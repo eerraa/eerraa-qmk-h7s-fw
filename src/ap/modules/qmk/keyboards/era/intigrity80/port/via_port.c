@@ -6,6 +6,7 @@
 #include "tapping_term.h"
 #include "tapdance.h"
 #include "mousekey_config.h"
+#include "rgb_sleep.h"
 
 static void via_handle_usb_polling_channel(uint8_t *data, uint8_t length);  // V260823R2: 사용자 BootMode 분기만 유지
 
@@ -72,6 +73,15 @@ void via_custom_value_command_kb(uint8_t *data, uint8_t length)
     if (mousekey_config_handle_via_command(data, length))
     {
       return;  // V260823R1: VIA MOUSE 채널 처리
+    }
+  }
+#endif
+#ifdef RGBLIGHT_ENABLE
+  if (*channel_id == id_qmk_rgb_sleep)
+  {
+    if (rgb_sleep_handle_via_command(data, length))
+    {
+      return;  // V260901R1: VIA RGB SLEEP 채널 처리
     }
   }
 #endif

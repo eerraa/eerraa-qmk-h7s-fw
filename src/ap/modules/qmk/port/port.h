@@ -10,6 +10,7 @@
 #include "tapping_term.h"
 #include "tapdance.h"
 #include "mousekey_config.h"                                                                          // V260823R1: VIA MOUSE 튜닝 페이지
+#include "rgb_sleep.h"                                                                                // V260901R1: VIA RGB SLEEP
 
 
 
@@ -27,3 +28,4 @@
 #define EECONFIG_USER_TAPPING_TERM        ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 52))  // 12B  // V251123R4: VIA TAPPING 설정 슬롯
 #define EECONFIG_USER_TAPDANCE            ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 64))  // 88B  // V251124R8: VIA TAPDANCE 슬롯
 #define EECONFIG_USER_MOUSEKEY            ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 152)) // 16B  // V260823R1: VIA MOUSE 튜닝 슬롯
+#define EECONFIG_USER_RGB_SLEEP           ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 168)) // 4B   // V260901R1: VIA RGB SLEEP 초 단위 타임아웃 슬롯

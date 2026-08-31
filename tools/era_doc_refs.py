@@ -272,6 +272,8 @@ def table_wire_values() -> list[str]:
          _span(_enum_values("via_qmk_tapdance_value", r"_term_exact$"))),
         ("MOUSE six controls", channels["id_qmk_mousekey"],
          _span(_enum_values("via_qmk_mousekey_value", r"^id_qmk_mousekey_"))),
+        ("RGB SLEEP timeout", channels["id_qmk_rgb_sleep"],
+         _span(_enum_values("via_qmk_rgb_sleep_value", r"^id_qmk_rgb_sleep_"))),
     ]
     lines = ["| Control | Channel | value id |", "| --- | --- | --- |"]
     for label, channel, span in rows:

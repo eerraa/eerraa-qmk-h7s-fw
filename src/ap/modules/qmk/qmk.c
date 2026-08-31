@@ -28,6 +28,9 @@ bool qmkInit(void)
 #ifdef MOUSEKEY_ENABLE
   mousekey_config_init();                          // V260823R1: VIA MOUSE 설정 초기 로드 (keyboard_init 전에 mk_* 반영)
 #endif
+#ifdef RGBLIGHT_ENABLE
+  rgb_sleep_init();                                // V260901R1: VIA RGB SLEEP 타임아웃 로드
+#endif
 
   keyboard_setup();
   keyboard_init();
@@ -107,6 +110,9 @@ void idle_task(void)
 
 #ifdef KKUK_ENABLE
   kkuk_idle();
+#endif
+#ifdef RGBLIGHT_ENABLE
+  rgb_sleep_task();                                // V260901R1: 유휴·Suspend·호스트 소실을 한 RGB owner가 적용
 #endif
 }
 

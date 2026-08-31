@@ -58,6 +58,8 @@ PCD_HandleTypeDef hpcd_USB_OTG_HS;
 void Error_Handler(void);
 static bool is_connected = false;
 static bool is_suspended = false;
+static volatile uint32_t sof_count = 0;  // V260901R1: SOF 생존 카운터. 점수는 계산하지 않는다.
+static bool host_seen = false;           // V260901R1: 한 번이라도 주소를 받은 뒤에만 호스트 소실로 본다
 
 // V260823R2: USB Device Library 속도를 진단 프로토콜 값으로 정규화한다.
 static uint8_t usbDiagnosticsSpeedFromUsbd(USBD_SpeedTypeDef speed)
@@ -90,6 +92,16 @@ bool USBD_is_connected(void)
 bool USBD_is_suspended(void)
 {
   return is_suspended;
+}
+
+bool USBD_host_seen(void)
+{
+  return host_seen;  // V260901R1
+}
+
+uint32_t USBD_sof_count(void)
+{
+  return sof_count;  // V260901R1
 }
 
 /*******************************************************************************
@@ -193,6 +205,7 @@ static void PCD_SOFCallback(PCD_HandleTypeDef *hpcd)
 void HAL_PCD_SOFCallback(PCD_HandleTypeDef *hpcd)
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
 {
+  sof_count++;  // V260901R1: ISR에서는 카운터만 올린다. RGB 판정은 메인 루프.
   USBD_LL_SOF((USBD_HandleTypeDef*)hpcd->pData);
 }
 
@@ -613,6 +626,7 @@ USBD_StatusTypeDef USBD_LL_SetUSBAddress(USBD_HandleTypeDef *pdev, uint8_t dev_a
   usb_status =  USBD_Get_USB_Status(hal_status);
 
   is_connected = true;
+  host_seen = true;  // V260901R1: 주소 할당 = 호스트가 한 번 나타났다. 이후에도 지우지 않는다.
 
   return usb_status;
 }

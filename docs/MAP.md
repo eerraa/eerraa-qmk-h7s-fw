@@ -91,6 +91,7 @@ that file (`wire-values`).
 | 15 | `id_qmk_tapping` | O | O |
 | 16 | `id_qmk_tapdance` | O | O |
 | 17 | `id_qmk_mousekey` | O | O |
+| 18 | `id_qmk_rgb_sleep` | O | O |
 <!-- era-doc-refs: end -->
 
 ## 5. EEPROM USER slots
@@ -114,6 +115,7 @@ they have shipped (`docs/contract_eeprom.md` §1).
 | +52 | 12B | `EECONFIG_USER_TAPPING_TERM` |
 | +64 | 88B | `EECONFIG_USER_TAPDANCE` |
 | +152 | 16B | `EECONFIG_USER_MOUSEKEY` |
+| +168 | 4B | `EECONFIG_USER_RGB_SLEEP` |
 <!-- era-doc-refs: end -->
 
 ## 6. Structure questions are answered by source

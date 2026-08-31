@@ -109,3 +109,7 @@ The driver in use is external I2C EEPROM (`src/hw/driver/eeprom/zd24c128.c`,
 hardware-verified (`docs/state_open.md`).
 
 USB diagnostics do not write EEPROM (`docs/contract_usb.md` §4).
+RGB SLEEP writes only the timeout slot on VIA SAVE / CLEAN / invalid-slot
+init (`src/ap/modules/qmk/port/rgb_sleep.c`). The 4 B slot is signature,
+version, and uint16 seconds. A stored 0 is treated as 600 (10 min).
+Sleep/wake itself is RAM and `*_noeeprom`; it does not add flash wear.

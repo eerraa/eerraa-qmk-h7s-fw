@@ -138,6 +138,8 @@ void usbDeInit(void);
 bool usbIsOpen(void);
 bool usbIsConnect(void);
 bool usbIsSuspended(void);
+bool usbHostSeen(void);       // V260901R1: 부팅 이후 호스트가 한 번이라도 주소를 줬는가
+uint32_t usbSofCount(void);   // V260901R1: SOF 누적. 자동 다운그레이드에 쓰지 않는다
 
 UsbMode_t usbGetMode(void);
 UsbType_t usbGetType(void);

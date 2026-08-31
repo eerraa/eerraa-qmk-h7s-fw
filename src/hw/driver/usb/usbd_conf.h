@@ -112,6 +112,8 @@ void USBD_static_free(void *p);
 
 bool USBD_is_connected(void);
 bool USBD_is_suspended(void);
+bool USBD_host_seen(void);      // V260901R1: 부팅 이후 호스트가 주소를 준 적이 있는가
+uint32_t USBD_sof_count(void);  // V260901R1: SOF 콜백 누적. 간격 점수가 아니다
 
 #endif /* __USBD_CONF_H */
 
