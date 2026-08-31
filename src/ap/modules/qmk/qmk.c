@@ -2,6 +2,7 @@
 #include "qmk/port/port.h"
 #include "qmk/port/platforms/eeprom.h"            // V251112R5: EEPROM 버스트 모드 제어
 #include "qmk/port/debounce_profile.h"
+#include "qmk/port/sys_port.h"                    // V260901R1: EEPROM CLEAN 10초 확인 창
 #include "usb_diagnostics.h"                      // V260823R2: 세션 중에만 메인 루프 간격 계측
 #include "micros.h"
 
@@ -108,6 +109,7 @@ void idle_task(void)
     is_suspended = is_suspended_cur;
   }
 
+  via_qmk_system_task();                           // V260901R1: CLEAN 확인 비트가 10초를 넘기면 스스로 풀린다
 #ifdef KKUK_ENABLE
   kkuk_idle();
 #endif

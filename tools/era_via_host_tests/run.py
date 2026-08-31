@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Portable host tests for VIA value layer, USB diagnostics, RGB SLEEP, and TX producer.
+"""Portable host tests for VIA value layer, USB diagnostics, RGB SLEEP, CLEAN, and TX producer.
 
 Windows 문서 명령은 tools/era_via_host_tests/run.ps1 이다. 이 스크립트는 같은 검사를
 PATH의 gcc로 돌린다 (mingw 경로가 없는 Linux 포함).
@@ -129,6 +129,23 @@ def main() -> int:
             "-DEECONFIG_USER_DATA_SIZE=512",
             f"-I{SANDBOX}",
             f"-I{INC}",
+            f"-I{QMK / 'quantum'}",
+            f"-I{QMK / 'quantum' / 'keymap_extras'}",
+        ],
+    )
+
+    compile_and_run(
+        HERE / "test_sys_eeprom_clean.exe",
+        [
+            HERE / "test_sys_eeprom_clean.c",
+            QMK / "port" / "sys_port.c",
+        ],
+        [
+            "-Wno-unused-parameter",
+            "-Wno-unused-function",
+            "-include", str(INC / "force_host.h"),
+            f"-I{INC}",
+            f"-I{QMK / 'port'}",
             f"-I{QMK / 'quantum'}",
             f"-I{QMK / 'quantum' / 'keymap_extras'}",
         ],
