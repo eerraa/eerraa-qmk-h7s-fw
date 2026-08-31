@@ -2,6 +2,7 @@
 #include "qmk/port/port.h"
 #include "qmk/port/platforms/eeprom.h"            // V251112R5: EEPROM 버스트 모드 제어
 #include "qmk/port/debounce_profile.h"
+#include "qmk/port/sys_port.h"                    // V260901R1: EEPROM CLEAN 10초 확인 창
 #include "usb_diagnostics.h"                      // V260823R2: 세션 중에만 메인 루프 간격 계측
 #include "micros.h"
 
@@ -27,6 +28,9 @@ bool qmkInit(void)
 #endif
 #ifdef MOUSEKEY_ENABLE
   mousekey_config_init();                          // V260823R1: VIA MOUSE 설정 초기 로드 (keyboard_init 전에 mk_* 반영)
+#endif
+#ifdef RGBLIGHT_ENABLE
+  rgb_sleep_init();                                // V260901R1: VIA RGB SLEEP 타임아웃 로드
 #endif
 
   keyboard_setup();
@@ -105,8 +109,12 @@ void idle_task(void)
     is_suspended = is_suspended_cur;
   }
 
+  via_qmk_system_task();                           // V260901R1: CLEAN 확인 비트가 10초를 넘기면 스스로 풀린다
 #ifdef KKUK_ENABLE
   kkuk_idle();
+#endif
+#ifdef RGBLIGHT_ENABLE
+  rgb_sleep_task();                                // V260901R1: 유휴·Suspend·호스트 소실을 한 RGB owner가 적용
 #endif
 }
 

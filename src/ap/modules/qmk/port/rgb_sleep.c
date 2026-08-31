@@ -1,0 +1,256 @@
+#include "rgb_sleep.h"
+
+#ifdef RGBLIGHT_ENABLE
+
+#include <string.h>
+#include "quantum.h"
+#include "port.h"
+#include "era_state_sync.h"
+#include "usb.h"
+#include "rgblight.h"
+
+
+#define RGB_SLEEP_SIGNATURE  (0x53U)  // 'S'
+#define RGB_SLEEP_VERSION    (1U)
+
+
+typedef struct
+{
+  uint8_t  signature;
+  uint8_t  version;
+  uint16_t timeout_seconds;
+} rgb_sleep_storage_t;
+
+_Static_assert(sizeof(rgb_sleep_storage_t) == 4, "EECONFIG out of spec.");  // V260901R1: 슬롯 크기 고정
+
+
+static void via_qmk_rgb_sleep_get_value(uint8_t *data);
+static void via_qmk_rgb_sleep_set_value(uint8_t *data);
+static void rgb_sleep_apply_rgb(bool want_dark);
+static uint16_t rgb_sleep_normalized_seconds(uint16_t seconds);
+
+
+static rgb_sleep_storage_t rgb_sleep_store;
+static bool                rgb_sleep_dark;
+static bool                rgb_sleep_sof_seen;
+static uint32_t            rgb_sleep_last_sof_count;
+static uint32_t            rgb_sleep_last_sof_ms;
+
+EECONFIG_DEBOUNCE_HELPER_CHECKED(rgb_sleep_cfg, EECONFIG_USER_RGB_SLEEP, rgb_sleep_store);
+
+
+static uint16_t rgb_sleep_normalized_seconds(uint16_t seconds)
+{
+  return (seconds == 0U) ? RGB_SLEEP_TIMEOUT_DEFAULT_SEC : seconds;
+}
+
+uint16_t rgb_sleep_timeout_seconds(void)
+{
+  return rgb_sleep_normalized_seconds(rgb_sleep_store.timeout_seconds);
+}
+
+uint8_t rgb_sleep_timeout_min(void)
+{
+  return rgb_sleep_policy_preset_minutes(rgb_sleep_timeout_seconds());
+}
+
+bool rgb_sleep_is_dark(void)
+{
+  return rgb_sleep_dark;
+}
+
+bool eeconfig_check_valid_rgb_sleep_cfg(void)
+{
+  rgb_sleep_storage_t probe;
+
+  eeprom_read_block(&probe, EECONFIG_USER_RGB_SLEEP, sizeof(probe));
+  return probe.signature == RGB_SLEEP_SIGNATURE &&
+         probe.version == RGB_SLEEP_VERSION &&
+         probe.timeout_seconds != 0U;
+}
+
+void eeconfig_post_flush_rgb_sleep_cfg(void)
+{
+}
+
+void rgb_sleep_storage_apply_defaults(void)
+{
+  rgb_sleep_store.signature        = RGB_SLEEP_SIGNATURE;
+  rgb_sleep_store.version          = RGB_SLEEP_VERSION;
+  rgb_sleep_store.timeout_seconds  = RGB_SLEEP_TIMEOUT_DEFAULT_SEC;
+  eeconfig_flag_rgb_sleep_cfg(true);
+}
+
+void rgb_sleep_storage_flush(bool force)
+{
+  eeconfig_flush_rgb_sleep_cfg(force);
+}
+
+void rgb_sleep_init(void)
+{
+  eeconfig_init_rgb_sleep_cfg();
+  if (rgb_sleep_store.signature != RGB_SLEEP_SIGNATURE ||
+      rgb_sleep_store.version != RGB_SLEEP_VERSION ||
+      rgb_sleep_store.timeout_seconds == 0U)
+  {
+    rgb_sleep_storage_apply_defaults();
+    eeconfig_flush_rgb_sleep_cfg(true);  // V260901R1: 유효하지 않은 슬롯은 init에서 기본 600초를 바로 기록한다
+  }
+  rgb_sleep_store.timeout_seconds = rgb_sleep_normalized_seconds(rgb_sleep_store.timeout_seconds);
+  rgb_sleep_dark             = false;
+  rgb_sleep_sof_seen         = false;
+  rgb_sleep_last_sof_count   = usbSofCount();
+  rgb_sleep_last_sof_ms      = timer_read32();
+}
+
+static void rgb_sleep_apply_rgb(bool want_dark)
+{
+#if defined(RGBLIGHT_SLEEP)
+  if (want_dark)
+  {
+    // 물리 게이트는 논리 에지뿐 아니라 어긋난 켜짐에도 맞춘다. quantum wake / VIA RGB on
+    // 이 절전 중에 라이트를 켤 수 있다. 이미 어둡고 꺼져 있으면 핫패스에서 다시 호출하지 않는다.
+    if (!rgb_sleep_dark || rgblight_is_enabled())
+    {
+      rgblight_suspend();
+      if (rgblight_is_enabled())
+      {
+        rgblight_disable_noeeprom();  // V260901R1: suspend 뒤에도 켜져 있으면 owner가 재적용한다
+      }
+    }
+    rgb_sleep_dark = true;
+  }
+  else if (rgb_sleep_dark)
+  {
+    rgblight_wakeup();
+    rgb_sleep_dark = false;
+  }
+#else
+  (void)want_dark;
+#endif
+}
+
+void rgb_sleep_task(void)
+{
+  uint32_t sof_count;
+  bool     host_gone;
+  bool     want_dark;
+
+  sof_count = usbSofCount();
+  if (sof_count != rgb_sleep_last_sof_count)
+  {
+    rgb_sleep_last_sof_count = sof_count;
+    rgb_sleep_last_sof_ms    = timer_read32();
+    rgb_sleep_sof_seen       = true;
+  }
+
+  host_gone = false;
+  if (usbHostSeen() && rgb_sleep_sof_seen)
+  {
+    if (timer_elapsed32(rgb_sleep_last_sof_ms) >= RGB_SLEEP_SOF_STALE_MS)
+    {
+      host_gone = true;  // V260901R1: Suspend 콜백이 없어도 SOF가 끊기면 호스트가 사라진 것으로 본다
+    }
+  }
+
+  want_dark = rgb_sleep_policy_local_requested(usbIsSuspended(),
+                                               host_gone,
+                                               rgb_sleep_timeout_seconds(),
+                                               last_matrix_activity_elapsed());
+  rgb_sleep_apply_rgb(want_dark);
+}
+
+bool rgb_sleep_handle_via_command(uint8_t *data, uint8_t length)
+{
+  uint8_t *command_id;
+  uint8_t *value_id_and_data;
+  uint16_t before;
+  uint16_t after;
+
+  if (data == NULL || length < 2U)
+  {
+    return false;
+  }
+
+  command_id        = &(data[0]);
+  value_id_and_data = &(data[2]);
+
+  switch (*command_id)
+  {
+    case id_custom_set_value:
+      {
+        if (length < 4U)
+        {
+          *command_id = id_unhandled;
+          return true;
+        }
+        before = rgb_sleep_store.timeout_seconds;
+        via_qmk_rgb_sleep_set_value(value_id_and_data);
+        via_qmk_rgb_sleep_get_value(value_id_and_data);  // V260901R1: 거절된 SET은 보관값을 투영해 되돌려준다
+        after = rgb_sleep_store.timeout_seconds;
+        if (before != after)
+        {
+          era_state_sync_bump_config();
+        }
+        break;
+      }
+    case id_custom_get_value:
+      {
+        via_qmk_rgb_sleep_get_value(value_id_and_data);
+        break;
+      }
+    case id_custom_save:
+      {
+        rgb_sleep_storage_flush(true);
+        break;
+      }
+    default:
+      {
+        *command_id = id_unhandled;
+        break;
+      }
+  }
+  return true;
+}
+
+static void via_qmk_rgb_sleep_get_value(uint8_t *data)
+{
+  uint8_t *value_id   = &(data[0]);
+  uint8_t *value_data = &(data[1]);
+
+  switch (*value_id)
+  {
+    case id_qmk_rgb_sleep_timeout:
+      {
+        value_data[0] = rgb_sleep_policy_preset_minutes(rgb_sleep_timeout_seconds());
+        break;
+      }
+  }
+}
+
+static void via_qmk_rgb_sleep_set_value(uint8_t *data)
+{
+  uint8_t *value_id   = &(data[0]);
+  uint8_t *value_data = &(data[1]);
+  uint16_t requested;
+
+  switch (*value_id)
+  {
+    case id_qmk_rgb_sleep_timeout:
+      {
+        if (!rgb_sleep_timeout_is_preset(value_data[0]))
+        {
+          break;  // V260901R1: 프리셋 밖 값은 거절하고 저장소를 바꾸지 않는다
+        }
+        requested = (uint16_t)value_data[0] * 60U;
+        if (rgb_sleep_store.timeout_seconds != requested)
+        {
+          rgb_sleep_store.timeout_seconds = requested;
+          eeconfig_flag_rgb_sleep_cfg(true);
+        }
+        break;
+      }
+  }
+}
+
+#endif

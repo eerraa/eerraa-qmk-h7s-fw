@@ -156,6 +156,10 @@ The EEPROM monitor slot was not deleted. It remains
 `EECONFIG_USER_RESERVED_32` so later slot addresses do not move
 (`docs/contract_eeprom.md` §1). Nothing reads or writes it.
 
+RGB SLEEP may count SOF callbacks to notice a host that vanished while
+VBUS stayed up. That counter is not a stability score and must not call
+polling-mode apply/reset. The owner is `src/ap/modules/qmk/port/rgb_sleep.c`.
+
 ### 0x07 product boundary
 
 Selector `0x07` (`ERA_USB_DIAGNOSTICS_KEYBOARD_VALUE`) is observation

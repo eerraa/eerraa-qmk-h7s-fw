@@ -21,7 +21,7 @@ and progress do not live here.
 | Board list and PID | tree under `src/ap/modules/qmk/keyboards/era/` | `table` |
 | VIA wire envelopes (`0x06` / `0x07`) and value layer | source; the other side is the app ADRs (§7) | `tools/era_via_host_tests/run.ps1` |
 | raw-HID TX producer | `src/ap/modules/qmk/port/via_hid.c` | `tools/era_via_host_tests/check_single_producer.py` |
-| User-facing copy | `docs/readme.txt` | `version` (release filenames) |
+| User-facing copy | `docs/readme.txt`, `docs/via_keycodes.txt` | `version` (release filenames in readme) |
 | Where code lives and what it calls | source. Look up with source search | none — a derived index is not canonical |
 
 On a document/code mismatch, **code wins.** Edit the document and record
@@ -39,6 +39,7 @@ only this side breaks the app.
 | [manual_verify.md](manual_verify.md) | manual | Checks that run without a board and their commands, what only hardware can decide, symptom order |
 | [state_open.md](state_open.md) | state | Undecided items and start conditions. The only document that goes away with time |
 | [readme.txt](readme.txt) | (user document) | User copy shipped with a release. Exception to the agent-doc spec — §8 |
+| [via_keycodes.txt](via_keycodes.txt) | (user document) | TAPDANCE keycode examples shipped with a release. Exception to the agent-doc spec — §8 |
 
 `AGENTS.md` and `CLAUDE.md` are the entry chain, so they omit the header
 pair. Do not keep a second document list between those files and this
@@ -91,6 +92,7 @@ that file (`wire-values`).
 | 15 | `id_qmk_tapping` | O | O |
 | 16 | `id_qmk_tapdance` | O | O |
 | 17 | `id_qmk_mousekey` | O | O |
+| 18 | `id_qmk_rgb_sleep` | O | O |
 <!-- era-doc-refs: end -->
 
 ## 5. EEPROM USER slots
@@ -114,6 +116,7 @@ they have shipped (`docs/contract_eeprom.md` §1).
 | +52 | 12B | `EECONFIG_USER_TAPPING_TERM` |
 | +64 | 88B | `EECONFIG_USER_TAPDANCE` |
 | +152 | 16B | `EECONFIG_USER_MOUSEKEY` |
+| +168 | 4B | `EECONFIG_USER_RGB_SLEEP` |
 <!-- era-doc-refs: end -->
 
 ## 6. Structure questions are answered by source

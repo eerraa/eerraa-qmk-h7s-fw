@@ -49,6 +49,17 @@ Channel 2 (`id_qmk_rgblight_channel`) is handled in VIA core
 exposure is still `O`. Channels 1, 3, 4, and 5 are VIA-reserved and
 unused here; do not assign a new feature to those numbers. Channel 13
 value id 3 is retired (`docs/contract_usb.md` §4); do not reuse it.
+Channel 9 value 1 (Jump to Boot) GET is always 0; SET jumps only when the
+value byte is nonzero. Values 2–4 are EEPROM CLEAN
+(`docs/contract_eeprom.md` §2).
+Channel 18 (`id_qmk_rgb_sleep`) value 1 is the official minute preset
+(1/3/5/10/30/60). The EEPROM store is uint16 seconds (default 600).
+Official GET floors the stored seconds onto that menu and does not
+write. Official SET accepts only those six minutes and converts to
+seconds. USB Suspend and host disappearance (SOF stale 300 ms after a
+host was seen) share that RGB owner and are not separate VIA values.
+Exact-seconds VIA is not shipped; usevia.app reaches this control
+through the official `*-VIA.JSON` SLEEP dropdown.
 
 This file owns the value-id rows. `table` regenerates them from
 `src/ap/modules/qmk/quantum/via.h`.
@@ -59,6 +70,7 @@ This file owns the value-id rows. `table` regenerates them from
 | Global TAPPING term (exact) | 15 | 5 |
 | TD0–TD7 term (exact) | 16 | 41–48 |
 | MOUSE six controls | 17 | 1–6 |
+| RGB SLEEP timeout | 18 | 1 |
 <!-- era-doc-refs: end -->
 
 Peer `the-via-eerraa/docs/adr/0001-state-sync-protocol.md` and
@@ -141,6 +153,7 @@ CONFIG, compare-then-bump (a same-value SET is a no-op):
 | 15 tapping | `src/ap/modules/qmk/port/tapping_term.c` |
 | 16 tapdance | `src/ap/modules/qmk/port/tapdance.c` |
 | 17 mousekey | `src/ap/modules/qmk/port/mousekey_config.c` |
+| 18 RGB SLEEP | `src/ap/modules/qmk/port/rgb_sleep.c` |
 
 Always bump, no compare: `via_set_layout_options()`.
 `id_eeprom_reset` bumps all three domains.

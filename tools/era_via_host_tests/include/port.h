@@ -8,3 +8,4 @@
 #define EECONFIG_USER_TAPPING_TERM ((void *)((uintptr_t)52))
 #define EECONFIG_USER_TAPDANCE     ((void *)((uintptr_t)64))
 #define EECONFIG_USER_MOUSEKEY     ((void *)((uintptr_t)152))
+#define EECONFIG_USER_RGB_SLEEP    ((void *)((uintptr_t)168))

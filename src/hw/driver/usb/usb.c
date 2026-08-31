@@ -489,6 +489,16 @@ bool usbIsSuspended(void)
   return USBD_is_suspended();
 }
 
+bool usbHostSeen(void)
+{
+  return USBD_host_seen();  // V260901R1
+}
+
+uint32_t usbSofCount(void)
+{
+  return USBD_sof_count();  // V260901R1
+}
+
 UsbMode_t usbGetMode(void)
 {
   return is_usb_mode;

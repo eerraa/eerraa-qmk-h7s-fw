@@ -139,3 +139,9 @@ add_compile_definitions(KEYMAP_C="${QMK_KEYBOARD_PATH}/keymap.c")
 if (RGBLIGHT_ENABLE AND NOT _QMK_RGBLIGHT_DEFINED_BY_CONFIG)
   add_compile_definitions(RGBLIGHT_ENABLE)
 endif()
+
+# V260901R1: RGB 절전 상태의 단일 owner는 port/rgb_sleep.c 이다.
+#            quantum suspend 경로의 rgblight_suspend/wakeup과 겹치지 않게 한다.
+if (RGBLIGHT_ENABLE)
+  add_compile_definitions(ERA_RGB_SLEEP_OWNER)
+endif()
