@@ -75,7 +75,6 @@ file(GLOB QMK_SRC_FILES CONFIGURE_DEPENDS
   ${QMK_ROOT_PATH}/quantum/color.c
 
 
-  ${QMK_ROOT_PATH}/quantum/sequencer/*.c
   ${QMK_ROOT_PATH}/quantum/logging/*.c
   ${QMK_ROOT_PATH}/quantum/debounce_runtime.c
   ${QMK_ROOT_PATH}/quantum/debounce/asym_eager_defer_pk.c
@@ -84,7 +83,6 @@ file(GLOB QMK_SRC_FILES CONFIGURE_DEPENDS
   
 
   ${QMK_ROOT_PATH}/quantum/send_string/*.c
-  ${QMK_ROOT_PATH}/quantum/process_keycode/process_key_override.c
   ${QMK_ROOT_PATH}/quantum/process_keycode/process_grave_esc.c
   ${QMK_ROOT_PATH}/quantum/mousekey.c                        # V260823R1: 마우스 키 엔진
 
@@ -121,12 +119,11 @@ add_compile_definitions(DYNAMIC_KEYMAP_MACRO_DELAY=10)
 add_compile_definitions(VIA_ENABLE)
 add_compile_definitions(RAW_ENABLE)
 add_compile_definitions(DYNAMIC_KEYMAP_ENABLE)
-add_compile_definitions(KEY_OVERRIDE_ENABLE)
 # add_compile_definitions(HOLD_ON_OTHER_KEY_PRESS) // QMK와 디폴트와 매치하지 않음
 add_compile_definitions(EXTRAKEY_ENABLE)
 
 # V260823R1: 마우스 리포트는 EXK(shared) 인터페이스의 리포트 ID 2로 내보낸다.
-#            인터페이스 0(키보드)은 손대지 않는다. NKRO는 도입하지 않았다 — 근거는 docs/DECISIONS.md.
+#            인터페이스 0(키보드)은 손대지 않는다. NKRO는 도입하지 않았다 — 근거는 docs/contract_usb.md.
 add_compile_definitions(MOUSEKEY_ENABLE)
 add_compile_definitions(MOUSE_ENABLE)        # V260823R1: report.c의 마우스 리포트 헬퍼를 켠다
 add_compile_definitions(MOUSE_SHARED_EP)
@@ -141,4 +138,10 @@ add_compile_definitions(KEYMAP_C="${QMK_KEYBOARD_PATH}/keymap.c")
 
 if (RGBLIGHT_ENABLE AND NOT _QMK_RGBLIGHT_DEFINED_BY_CONFIG)
   add_compile_definitions(RGBLIGHT_ENABLE)
+endif()
+
+# V260901R1: RGB 절전 상태의 단일 owner는 port/rgb_sleep.c 이다.
+#            quantum suspend 경로의 rgblight_suspend/wakeup과 겹치지 않게 한다.
+if (RGBLIGHT_ENABLE)
+  add_compile_definitions(ERA_RGB_SLEEP_OWNER)
 endif()

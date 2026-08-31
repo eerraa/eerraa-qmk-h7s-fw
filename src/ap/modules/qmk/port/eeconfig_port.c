@@ -29,6 +29,10 @@ void eeconfig_init_user_datablock(void)
   mousekey_config_storage_apply_defaults();                    // V260823R1: VIA MOUSE 슬롯 기본값 기록
   mousekey_config_storage_flush(true);
 #endif
+#ifdef RGBLIGHT_ENABLE
+  rgb_sleep_storage_apply_defaults();                          // V260901R1: VIA RGB SLEEP 기본 10분
+  rgb_sleep_storage_flush(true);
+#endif
 #if defined(AUTO_FACTORY_RESET_FLAG_MAGIC) && defined(AUTO_FACTORY_RESET_COOKIE)
   eeprom_update_dword((uint32_t *)EECONFIG_USER_EEPROM_CLEAR_FLAG, AUTO_FACTORY_RESET_FLAG_MAGIC);
   eeprom_update_dword((uint32_t *)EECONFIG_USER_EEPROM_CLEAR_COOKIE, AUTO_FACTORY_RESET_COOKIE);

@@ -118,11 +118,12 @@ enum via_channel_id {
     id_qmk_kill_switch_lr     = 10,
     id_qmk_kill_switch_ud     = 11,
     id_qmk_kkuk               = 12,
-    id_qmk_usb_polling        = 13,  // V251108R1: BootMode/USB 모니터 전용 채널
+    id_qmk_usb_polling        = 13,  // V251108R1: BootMode 전용 채널. value id 3(구 USB 모니터 토글)은 V260823R2에서 폐기 — 재사용 금지, docs/contract_usb.md
     id_qmk_key_response       = 14,  // V251115R1: VIA 디바운스 프로필 제어 채널
     id_qmk_tapping            = 15,  // V251123R4: VIA TAPPING 제어 채널
     id_qmk_tapdance           = 16,  // V251124R8: VIA TAPDANCE 제어 채널
     id_qmk_mousekey           = 17,  // V260823R1: VIA MOUSE 제어 채널 (참조 QMK 13번은 H7S에서 USB POLLING이 점유)
+    id_qmk_rgb_sleep          = 18,  // V260901R1: VIA RGB SLEEP 타임아웃 채널
 };
 
 enum via_qmk_backlight_value {
@@ -248,6 +249,11 @@ enum via_qmk_mousekey_value {
     id_qmk_mousekey_cursor_interval     = 4,
     id_qmk_mousekey_wheel_interval      = 5,
     id_qmk_mousekey_wheel_acceleration  = 6,
+};
+
+// V260901R1: VIA RGB SLEEP. 공식 JSON은 분 단위 프리셋만 노출한다. 저장은 초.
+enum via_qmk_rgb_sleep_value {
+    id_qmk_rgb_sleep_timeout = 1,
 };
 
 // V251012R2: 커스텀 인디케이터 제어 값 ID

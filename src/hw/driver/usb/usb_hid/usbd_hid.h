@@ -56,7 +56,6 @@ extern "C" {
 #define USB_HID_CONFIG_DESC_SIZ                         91U  
 #define USB_HID_DESC_SIZ                                9U
 
-#define HID_MOUSE_REPORT_DESC_SIZE                      74U
 #define HID_KEYBOARD_REPORT_DESC_SIZE                   64U
 #define HID_KEYBOARD_VIA_REPORT_DESC_SIZE               34U
 #define HID_EXK_REPORT_DESC_SIZE                        129U  // V260823R1: SYSTEM/CONSUMER(50) + MOUSE(79)
@@ -91,13 +90,17 @@ typedef enum
   USBD_HID_BUSY,
 } USBD_HID_StateTypeDef;
 
+// V260824R1: IN 엔드포인트는 각자 FIFO와 전송 상태를 가진 독립 자원이므로 busy 상태를
+//            엔드포인트 번호별로 분리한다. 단일 state를 keyboard/VIA/EXK가 공유하면
+//            무관한 엔드포인트의 완료가 남의 busy를 풀어 활성 EP를 재무장할 수 있었다.
+#define USBD_HID_IN_EP_MAX  16U
 
 typedef struct
 {
   uint32_t Protocol;
   uint32_t IdleState;
   uint32_t AltSetting;
-  USBD_HID_StateTypeDef state;
+  volatile uint8_t in_ep_busy[USBD_HID_IN_EP_MAX];  // V260824R1: index = ep_addr & 0x0F
 } USBD_HID_HandleTypeDef;
 
 /*

@@ -89,6 +89,44 @@ static void usbHidInitTimer(void);
 static uint32_t usbHidBackupTimerOffsetUs(void);                       // V251012R1 FS 백업 전송 지연 재조정
 
 
+// V260824R1: 전송 시작은 메인 루프와 TIM2 ISR 양쪽에서 들어오므로 검사와 점유를
+//            분리하면 두 컨텍스트가 같은 엔드포인트를 이중으로 무장할 수 있다.
+//            PRIMASK 임계구역으로 test-and-set을 원자화한다(약 10 cycle).
+static bool usbHidEpTryAcquire(USBD_HID_HandleTypeDef *hhid, uint8_t ep_addr)
+{
+  uint8_t  index = (uint8_t)(ep_addr & 0x0FU);
+  uint32_t primask;
+  bool     acquired = false;
+
+  if (hhid == NULL)
+  {
+    return false;
+  }
+
+  primask = __get_PRIMASK();
+  __disable_irq();
+  if (hhid->in_ep_busy[index] == 0U)
+  {
+    hhid->in_ep_busy[index] = 1U;
+    acquired = true;
+  }
+  if (primask == 0U)
+  {
+    __enable_irq();
+  }
+
+  return acquired;
+}
+
+static void usbHidEpRelease(USBD_HID_HandleTypeDef *hhid, uint8_t ep_addr)
+{
+  if (hhid != NULL)
+  {
+    hhid->in_ep_busy[ep_addr & 0x0FU] = 0U;                            // V260824R1: 해당 EP만 해제
+  }
+}
+
+
 typedef struct
 {
   uint32_t diagnostic_request_us;
@@ -329,50 +367,6 @@ __ALIGN_BEGIN static uint8_t USBD_HID_DeviceQualifierDesc[USB_LEN_DEV_QUALIFIER_
 };
 #endif /* USE_USBD_COMPOSITE  */
 
-#if 0
-__ALIGN_BEGIN static uint8_t HID_MOUSE_ReportDesc[HID_MOUSE_REPORT_DESC_SIZE] __ALIGN_END =
-{
-  0x05, 0x01,        /* Usage Page (Generic Desktop Ctrls)     */
-  0x09, 0x02,        /* Usage (Mouse)                          */
-  0xA1, 0x01,        /* Collection (Application)               */
-  0x09, 0x01,        /*   Usage (Pointer)                      */
-  0xA1, 0x00,        /*   Collection (Physical)                */
-  0x05, 0x09,        /*     Usage Page (Button)                */
-  0x19, 0x01,        /*     Usage Minimum (0x01)               */
-  0x29, 0x03,        /*     Usage Maximum (0x03)               */
-  0x15, 0x00,        /*     Logical Minimum (0)                */
-  0x25, 0x01,        /*     Logical Maximum (1)                */
-  0x95, 0x03,        /*     Report Count (3)                   */
-  0x75, 0x01,        /*     Report Size (1)                    */
-  0x81, 0x02,        /*     Input (Data,Var,Abs)               */
-  0x95, 0x01,        /*     Report Count (1)                   */
-  0x75, 0x05,        /*     Report Size (5)                    */
-  0x81, 0x01,        /*     Input (Const,Array,Abs)            */
-  0x05, 0x01,        /*     Usage Page (Generic Desktop Ctrls) */
-  0x09, 0x30,        /*     Usage (X)                          */
-  0x09, 0x31,        /*     Usage (Y)                          */
-  0x09, 0x38,        /*     Usage (Wheel)                      */
-  0x15, 0x81,        /*     Logical Minimum (-127)             */
-  0x25, 0x7F,        /*     Logical Maximum (127)              */
-  0x75, 0x08,        /*     Report Size (8)                    */
-  0x95, 0x03,        /*     Report Count (3)                   */
-  0x81, 0x06,        /*     Input (Data,Var,Rel)               */
-  0xC0,              /*   End Collection                       */
-  0x09, 0x3C,        /*   Usage (Motion Wakeup)                */
-  0x05, 0xFF,        /*   Usage Page (Reserved 0xFF)           */
-  0x09, 0x01,        /*   Usage (0x01)                         */
-  0x15, 0x00,        /*   Logical Minimum (0)                  */
-  0x25, 0x01,        /*   Logical Maximum (1)                  */
-  0x75, 0x01,        /*   Report Size (1)                      */
-  0x95, 0x02,        /*   Report Count (2)                     */
-  0xB1, 0x22,        /*   Feature (Data,Var,Abs,NoWrp)         */
-  0x75, 0x06,        /*   Report Size (6)                      */
-  0x95, 0x01,        /*   Report Count (1)                     */
-  0xB1, 0x01,        /*   Feature (Const,Array,Abs,NoWrp)      */
-  0xC0               /* End Collection                         */
-};
-#endif
-
 __ALIGN_BEGIN static uint8_t HID_KEYBOARD_ReportDesc[HID_KEYBOARD_REPORT_DESC_SIZE] __ALIGN_END =
 {
   0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
@@ -589,7 +583,7 @@ static uint8_t USBD_HID_Init(USBD_HandleTypeDef *pdev, uint8_t cfgidx)
   pdev->ep_in[HID_EXK_EP_IN & 0xFU].is_used = 1U;
 
 
-  hhid->state = USBD_HID_IDLE;
+  memset((void *)hhid->in_ep_busy, 0, sizeof(hhid->in_ep_busy));       // V260824R1: 구성 시 전 EP 해제
 
   /* Prepare Out endpoint to receive next packet */
   (void)USBD_LL_PrepareReceive(pdev, HID_VIA_EP_OUT, via_hid_usb_report, 32);
@@ -860,18 +854,22 @@ bool USBD_HID_SendReport(uint8_t *report,
 
   if (pdev->dev_state == USBD_STATE_CONFIGURED)
   {
-    if (p_hhid->state == USBD_HID_IDLE)
+    if (usbHidEpTryAcquire(p_hhid, HID_EPIN_ADDR))                     // V260824R1: 키보드 EP만 점유
     {
       ret = true;
-      p_hhid->state = USBD_HID_BUSY;
       if (diagnostic_session_id != 0U)
       {
         // V260823R2: 활성 세션만 원 요청 시각을 연결해 비활성 8k 경로의 임계구역 비용을 없앤다.
+        // 표식은 전송보다 먼저 세운다. USB ISR이 그 사이에 완료를 보고할 수 있다.
         usbDiagnosticsOnReportTransferStarted(diagnostic_request_us,
                                               diagnostic_session_id,
                                               queued_reports);
       }
-      (void)USBD_LL_Transmit(pdev, HID_EPIN_ADDR, report, len);
+      if (USBD_LL_Transmit(pdev, HID_EPIN_ADDR, report, len) != USBD_OK)
+      {
+        usbHidEpRelease(p_hhid, HID_EPIN_ADDR);                        // V260824R1: 무장 실패 시 즉시 해제
+        ret = false;
+      }
     }
   }
 
@@ -896,11 +894,14 @@ bool USBD_HID_SendReportEXK(uint8_t *report, uint16_t len)
 
   if (pdev->dev_state == USBD_STATE_CONFIGURED)
   {
-    if (p_hhid->state == USBD_HID_IDLE)
+    if (usbHidEpTryAcquire(p_hhid, HID_EXK_EP_IN))                     // V260824R1: EXK EP만 점유
     {
       ret = true;
-      p_hhid->state = USBD_HID_BUSY;
-      (void)USBD_LL_Transmit(pdev, HID_EXK_EP_IN, report, len);
+      if (USBD_LL_Transmit(pdev, HID_EXK_EP_IN, report, len) != USBD_OK)
+      {
+        usbHidEpRelease(p_hhid, HID_EXK_EP_IN);                        // V260824R1: 무장 실패 시 즉시 해제
+        ret = false;
+      }
     }
   }
 
@@ -1035,10 +1036,9 @@ static uint8_t *USBD_HID_GetOtherSpeedCfgDesc(uint16_t *length)
   */
 static uint8_t USBD_HID_DataIn(USBD_HandleTypeDef *pdev, uint8_t epnum)
 {
-  UNUSED(epnum);
-  /* Ensure that the FIFO is empty before a new transfer, this condition could
-  be caused by  a new transfer before the end of the previous transfer */
-  ((USBD_HID_HandleTypeDef *)pdev->pClassDataCmsit[pdev->classId])->state = USBD_HID_IDLE;
+  // V260824R1: 완료된 엔드포인트만 해제한다. 이전에는 epnum과 무관하게 공용 state를
+  //            IDLE로 되돌려 VIA/EXK 완료가 진행 중인 키보드 전송을 풀어 버렸다.
+  usbHidEpRelease((USBD_HID_HandleTypeDef *)pdev->pClassDataCmsit[pdev->classId], epnum);
 
   if (epnum != (HID_EPIN_ADDR & 0x0F))
   {
@@ -1078,9 +1078,19 @@ uint8_t USBD_HID_SOF(USBD_HandleTypeDef *pdev)
 {
   if (qbufferAvailable(&via_report_q) && (millis()-via_report_pre_time) >= via_report_time)
   {
-    qbufferRead(&via_report_q, (uint8_t *)via_hid_usb_report, 1);
-    USBD_LL_Transmit(pdev, HID_VIA_EP_OUT, via_hid_usb_report, sizeof(via_hid_usb_report));
-    USBD_LL_PrepareReceive(pdev, HID_VIA_EP_OUT, via_hid_usb_report, sizeof(via_hid_usb_report));
+    // V260824R1: VIA 응답도 동일한 EP busy 규약에 편입한다. 이전에는 이 경로가 규약을
+    //            우회해 "IN 전송 진행 중"이라는 불변식 자체가 성립하지 않았다.
+    USBD_HID_HandleTypeDef *hhid = (USBD_HID_HandleTypeDef *)pdev->pClassDataCmsit[pdev->classId];
+
+    if (usbHidEpTryAcquire(hhid, HID_VIA_EP_IN))
+    {
+      qbufferRead(&via_report_q, (uint8_t *)via_hid_usb_report, 1);
+      if (USBD_LL_Transmit(pdev, HID_VIA_EP_OUT, via_hid_usb_report, sizeof(via_hid_usb_report)) != USBD_OK)
+      {
+        usbHidEpRelease(hhid, HID_VIA_EP_IN);                          // V260824R1: 무장 실패 시 즉시 해제
+      }
+      USBD_LL_PrepareReceive(pdev, HID_VIA_EP_OUT, via_hid_usb_report, sizeof(via_hid_usb_report));
+    }
   }
   return (uint8_t)USBD_OK;
 }
@@ -1329,7 +1339,7 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 {
   if (qbufferAvailable(&report_q) > 0)
   {
-    if (p_hhid->state == USBD_HID_IDLE)
+    if (p_hhid != NULL && p_hhid->in_ep_busy[HID_EPIN_ADDR & 0x0FU] == 0U)  // V260824R1
     {
       report_info_t report_info;
       uint16_t queued_reports = (uint16_t)qbufferAvailable(&report_q);
@@ -1348,7 +1358,7 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 
   if (qbufferAvailable(&report_exk_q) > 0)
   {
-    if (p_hhid->state == USBD_HID_IDLE)
+    if (p_hhid != NULL && p_hhid->in_ep_busy[HID_EXK_EP_IN & 0x0FU] == 0U)  // V260824R1
     {
       exk_report_info_t report_info;
 

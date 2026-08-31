@@ -51,11 +51,15 @@
 #include "micros.h"
 #include "usb_diagnostics.h"  // V260823R2: reset/suspend 하드 이벤트 카운터
 
+#define USBD_BOOT_DETACH_HOLD_MS  (100U)   // V260824R2: 부트로더 점프 진입 시 호스트가 디태치를 확정할 최소 시간
+
 
 PCD_HandleTypeDef hpcd_USB_OTG_HS;
 void Error_Handler(void);
 static bool is_connected = false;
 static bool is_suspended = false;
+static volatile uint32_t sof_count = 0;  // V260901R1: SOF 생존 카운터. 점수는 계산하지 않는다.
+static bool host_seen = false;           // V260901R1: 한 번이라도 주소를 받은 뒤에만 호스트 소실로 본다
 
 // V260823R2: USB Device Library 속도를 진단 프로토콜 값으로 정규화한다.
 static uint8_t usbDiagnosticsSpeedFromUsbd(USBD_SpeedTypeDef speed)
@@ -88,6 +92,16 @@ bool USBD_is_connected(void)
 bool USBD_is_suspended(void)
 {
   return is_suspended;
+}
+
+bool USBD_host_seen(void)
+{
+  return host_seen;  // V260901R1
+}
+
+uint32_t USBD_sof_count(void)
+{
+  return sof_count;  // V260901R1
 }
 
 /*******************************************************************************
@@ -191,6 +205,7 @@ static void PCD_SOFCallback(PCD_HandleTypeDef *hpcd)
 void HAL_PCD_SOFCallback(PCD_HandleTypeDef *hpcd)
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
 {
+  sof_count++;  // V260901R1: ISR에서는 카운터만 올린다. RGB 판정은 메인 루프.
   USBD_LL_SOF((USBD_HandleTypeDef*)hpcd->pData);
 }
 
@@ -436,6 +451,29 @@ USBD_StatusTypeDef USBD_LL_Start(USBD_HandleTypeDef *pdev)
   HAL_StatusTypeDef hal_status = HAL_OK;
   USBD_StatusTypeDef usb_status = USBD_OK;
 
+  // V260824R2: UF2 부트로더가 "점프"로 펌웨어를 시작하면 호스트가 USB 재열거를
+  //            하지 않아 키보드가 인식되지 않는 문제의 펌웨어 측 보완책이다.
+  //
+  //            부트로더 usbDeInit()은 RCC 클럭만 차단하고 DCTL.SDIS 를 세우지
+  //            않는다. 클럭 게이팅은 주변장치 레지스터를 리셋하지 않으므로 PHY 의
+  //            D+ 풀업/HS 터미네이션이 그대로 유지되고, 호스트는 장치가 분리된 게
+  //            아니라 "붙어 있는데 응답만 안 하는" 상태로 본다. 그 상태로 펌웨어가
+  //            올라오면 호스트는 예전 MSC 장치를 계속 상대하고, OTG 코어
+  //            소프트리셋으로 주소가 0 이 된 펌웨어는 영원히 열거되지 않는다.
+  //
+  //            한편 HAL_PCD_Init() 은 끝에서 USB_DevDisconnect()(SDIS=1)를 세워
+  //            두고, 곧바로 HAL_PCD_Start() 의 USB_DevConnect()(SDIS=0)가 되돌린다.
+  //            즉 펌웨어는 이미 분리 신호를 내고 있으나 그 구간이 수백 us 에
+  //            불과해 호스트/허브 디바운스(100ms)에 못 미쳐 인지되지 않았다.
+  //            여기서 지연을 주면 그 구간이 그대로 유효한 전기적 디태치가 된다.
+  //            (같은 기법의 선례: usb.c 의 usbProcessDeferredReset(), V251109R7)
+  //
+  //            근본 해결은 부트로더 V260824R1(점프 대신 시스템 리셋)이다. 부트로더는
+  //            UF2 로 갱신할 수 없어(내부 플래시, ST-LINK 필요) 기출하 보드에는
+  //            적용할 수 없으므로 본 지연을 배포한다.
+  //            상세: docs/contract_usb.md
+  delay(USBD_BOOT_DETACH_HOLD_MS);
+
   hal_status = HAL_PCD_Start(pdev->pData);
 
   usb_status =  USBD_Get_USB_Status(hal_status);
@@ -588,6 +626,7 @@ USBD_StatusTypeDef USBD_LL_SetUSBAddress(USBD_HandleTypeDef *pdev, uint8_t dev_a
   usb_status =  USBD_Get_USB_Status(hal_status);
 
   is_connected = true;
+  host_seen = true;  // V260901R1: 주소 할당 = 호스트가 한 번 나타났다. 이후에도 지우지 않는다.
 
   return usb_status;
 }

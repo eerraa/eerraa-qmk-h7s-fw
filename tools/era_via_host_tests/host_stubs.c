@@ -55,6 +55,14 @@ uint16_t timer_elapsed(uint16_t last) {
     return (uint16_t)(s_timer - last);
 }
 
+uint32_t timer_read32(void) {
+    return s_timer;
+}
+
+uint32_t timer_elapsed32(uint32_t last) {
+    return (uint32_t)s_timer - last;
+}
+
 void wait_ms(uint16_t ms) {
     (void)ms;
 }

@@ -163,11 +163,6 @@ uint16_t usbDiagnosticsGetSessionId(void)
   return s_session.session_id;
 }
 
-uint8_t usbDiagnosticsGetCurrentSpeed(void)
-{
-  return s_current_speed;
-}
-
 bool usbDiagnosticsStart(uint8_t  duration_seconds,
                          uint8_t  polling_mode,
                          uint32_t expected_interval_us,
