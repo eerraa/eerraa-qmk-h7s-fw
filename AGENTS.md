@@ -30,7 +30,7 @@ Select-String -Path src/hw/hw_def.h -Pattern "_DEF_FIRMWARE_VERSION"
 | EEPROM 계약 — `docs/contract_eeprom.md` | 슬롯, 버전 쿠키, 팩토리 리셋. 배치 표는 `docs/MAP.md` §5 | `python tools/era_doc_refs.py` |
 | 검증 절차 — `docs/manual_verify.md` | 명령, 툴체인 전제, 증상별 확인 순서 | 그 문서가 적은 명령을 그대로 |
 | 열린 항목 — `docs/state_open.md` | 아직 안 끝난 것, 되살리면 안 되는 것 | 해당 항목이 가리키는 실기 |
-| 사용자 문구 — `docs/readme.txt`, `docs/via_keycodes.txt` | 릴리스에 동봉하는 안내 | `python tools/era_doc_refs.py` |
+| 사용자 문구 — `docs/readme.txt`, `docs/usevia.txt`, `docs/via_keycodes.txt` | ZIP 루트 빠른 안내, 공식 VIA 상세 안내, 모든 보드 공용 TAPDANCE keycode 예시. `via_keycodes.txt`는 다른 EERRAA firmware repo의 배포본과 같은 내용으로 유지한다 | `python tools/era_doc_refs.py` |
 | — | 코드가 어디 살고 무엇을 부르는가 — 소스 검색 (`git grep -n`, `rg`) | — |
 
 ## 2. 먼저 알아야 손해를 안 보는 것
