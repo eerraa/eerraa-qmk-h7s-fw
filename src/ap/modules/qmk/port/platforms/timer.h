@@ -10,8 +10,8 @@
 #define TIMER_DIFF_32(a, b) TIMER_DIFF(a, b, UINT32_MAX)
 #define TIMER_DIFF_RAW(a, b) TIMER_DIFF_8(a, b)
 
+// V260901R1: 동작 없는 timer_clear 공개 선언을 제거한다.
 void     timer_init(void);
-void     timer_clear(void);
 uint16_t timer_read(void);
 uint32_t timer_read32(void);
 uint16_t timer_elapsed(uint16_t last);

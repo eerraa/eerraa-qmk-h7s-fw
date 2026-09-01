@@ -35,9 +35,7 @@ typedef struct
 {
   debounce_profile_values_t values;
   bool                      initialized;
-  bool                      applied;
-  bool                      requires_reboot;
-} debounce_profile_state_t;
+} debounce_profile_state_t;  // V260901R1: 소비자 없는 VIA STATUS 전용 복사 상태 제거
 
 static debounce_profile_state_t debounce_profile_state = {0};
 
@@ -48,7 +46,7 @@ static bool     debounce_profile_is_storage_valid(const debounce_profile_storage
 static uint8_t  debounce_profile_clamp_delay(uint8_t delay);
 static void     debounce_profile_store_current(void);
 static bool     debounce_profile_set_value_internal(uint8_t id, uint8_t value);
-static void     debounce_profile_get_value_internal(uint8_t id, uint8_t *value_data);
+static bool     debounce_profile_get_value_internal(uint8_t id, uint8_t *value_data);
 static void     debounce_profile_log_change(const char *source);
 static bool     debounce_profile_values_changed(const debounce_profile_values_t *before,
                                                 const debounce_profile_values_t *after);
@@ -71,9 +69,7 @@ void debounce_profile_init(void)
   }
 
   debounce_profile_sync_from_storage();
-  debounce_profile_state.applied         = false;
-  debounce_profile_state.requires_reboot = false;
-  debounce_profile_state.initialized     = true;
+  debounce_profile_state.initialized = true;
 }
 
 void debounce_profile_apply_current(void)
@@ -92,34 +88,14 @@ void debounce_profile_apply_current(void)
 
   if (!debounce_runtime_apply_config(&config))
   {
-    debounce_profile_state.applied         = false;
-    debounce_profile_state.requires_reboot = true;
     logPrintf("[!] Debounce profile apply failed (type %d)\n", config.type);  // V251115R1: 런타임 재초기화 실패 로그
     return;
   }
-
-  debounce_profile_state.applied         = debounce_runtime_is_ready();
-  debounce_profile_state.requires_reboot = (debounce_runtime_get_last_error() != DEBOUNCE_RUNTIME_ERROR_NONE);
 }
 
 const debounce_profile_values_t *debounce_profile_current(void)
 {
   return &debounce_profile_state.values;
-}
-
-debounce_profile_status_t debounce_profile_get_status(void)
-{
-  if (debounce_profile_state.requires_reboot)
-  {
-    return DEBOUNCE_PROFILE_STATUS_ERROR;
-  }
-
-  if (!debounce_profile_state.applied)
-  {
-    return DEBOUNCE_PROFILE_STATUS_PENDING;
-  }
-
-  return DEBOUNCE_PROFILE_STATUS_READY;
 }
 
 bool debounce_profile_set_mode(uint8_t mode)
@@ -148,8 +124,6 @@ bool debounce_profile_set_mode(uint8_t mode)
   }
 
   bool changed = debounce_profile_values_changed(&previous, &debounce_profile_state.values);
-  debounce_profile_state.applied         = false;
-  debounce_profile_state.requires_reboot = false;
   debounce_profile_store_current();
   debounce_profile_apply_current();
   if (changed)
@@ -171,7 +145,6 @@ bool debounce_profile_set_single_delay(uint8_t delay_ms)
   debounce_profile_state.values.pre_ms  = clamped;
   debounce_profile_state.values.post_ms = clamped;
   bool changed = debounce_profile_values_changed(&previous, &debounce_profile_state.values);
-  debounce_profile_state.applied        = false;
   debounce_profile_store_current();
   debounce_profile_apply_current();
   if (changed)
@@ -191,7 +164,6 @@ bool debounce_profile_set_press_delay(uint8_t delay_ms)
   debounce_profile_values_t previous = debounce_profile_state.values;
   debounce_profile_state.values.pre_ms = debounce_profile_clamp_delay(delay_ms);
   bool changed = debounce_profile_values_changed(&previous, &debounce_profile_state.values);
-  debounce_profile_state.applied       = false;
   debounce_profile_store_current();
   debounce_profile_apply_current();
   if (changed)
@@ -211,7 +183,6 @@ bool debounce_profile_set_release_delay(uint8_t delay_ms)
   debounce_profile_values_t previous = debounce_profile_state.values;
   debounce_profile_state.values.post_ms = debounce_profile_clamp_delay(delay_ms);
   bool changed = debounce_profile_values_changed(&previous, &debounce_profile_state.values);
-  debounce_profile_state.applied        = false;
   debounce_profile_store_current();
   debounce_profile_apply_current();
   if (changed)
@@ -262,17 +233,17 @@ bool debounce_profile_handle_via_command(uint8_t *data, uint8_t length)
 
       for (k = 0; k < sizeof(watched); k++)
       {
-        debounce_profile_get_value_internal(watched[k], &before[k]);
+        (void)debounce_profile_get_value_internal(watched[k], &before[k]);
       }
 
       handled = debounce_profile_set_value_internal(*value_id, value_data[0]);
       if (handled)
       {
-        debounce_profile_get_value_internal(*value_id, value_data);
+        (void)debounce_profile_get_value_internal(*value_id, value_data);
 
         for (k = 0; k < sizeof(watched); k++)
         {
-          debounce_profile_get_value_internal(watched[k], &after[k]);
+          (void)debounce_profile_get_value_internal(watched[k], &after[k]);
         }
         if (memcmp(before, after, sizeof(before)) != 0)
         {
@@ -283,8 +254,7 @@ bool debounce_profile_handle_via_command(uint8_t *data, uint8_t length)
     }
 
     case id_custom_get_value:
-      debounce_profile_get_value_internal(*value_id, value_data);
-      handled = true;
+      handled = debounce_profile_get_value_internal(*value_id, value_data);  // V260901R1: 알 수 없는 value는 id_unhandled
       break;
 
     case id_custom_save:
@@ -395,9 +365,6 @@ static bool debounce_profile_set_value_internal(uint8_t id, uint8_t value)
     case id_qmk_debounce_time_post:
       return debounce_profile_set_release_delay(value);
 
-    case id_qmk_debounce_status:
-      return true;
-
     default:
       break;
   }
@@ -405,34 +372,31 @@ static bool debounce_profile_set_value_internal(uint8_t id, uint8_t value)
   return false;
 }
 
-static void debounce_profile_get_value_internal(uint8_t id, uint8_t *value_data)
+static bool debounce_profile_get_value_internal(uint8_t id, uint8_t *value_data)
 {
   switch (id)
   {
     case id_qmk_debounce_mode:
       value_data[0] = (uint8_t)debounce_profile_state.values.type;
-      break;
+      return true;
 
     case id_qmk_debounce_time_single:
       value_data[0] = debounce_profile_state.values.pre_ms;
-      break;
+      return true;
 
     case id_qmk_debounce_time_pre:
       value_data[0] = debounce_profile_state.values.pre_ms;
-      break;
+      return true;
 
     case id_qmk_debounce_time_post:
       value_data[0] = debounce_profile_state.values.post_ms;
-      break;
-
-    case id_qmk_debounce_status:
-      value_data[0] = (uint8_t)debounce_profile_get_status();
-      break;
+      return true;
 
     default:
-      value_data[0] = 0U;
       break;
   }
+
+  return false;
 }
 
 static bool debounce_profile_values_changed(const debounce_profile_values_t *before,

@@ -53,6 +53,10 @@ value id 3 is retired (`docs/contract_usb.md` §4); do not reuse it.
 Channel 9 value 1 (Jump to Boot) GET is always 0; SET jumps only when the
 value byte is nonzero. Values 2–4 are EEPROM CLEAN
 (`docs/contract_eeprom.md` §2).
+Channel 14 exposes only debounce mode and timing values 1–4. Value 5 is
+unassigned: neither the five official JSON files nor the app definitions
+address it, and an unknown value returns `id_unhandled`. Runtime readiness,
+retry, and allocation-error state stay internal to the debounce engine.
 Channel 8 values 1–4 retain the shipped zero-based Year / Month / Day /
 Revision GET values for old definitions. Value 5 is the current official
 surface: GET returns `YYMMDDRn` plus NUL as nine bytes, copied from

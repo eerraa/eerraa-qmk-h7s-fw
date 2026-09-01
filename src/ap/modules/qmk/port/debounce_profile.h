@@ -13,19 +13,11 @@ typedef struct
   uint8_t                 post_ms;
 } debounce_profile_values_t;  // V251115R1: VIA 런타임 디바운스 값 캐시
 
-typedef enum
-{
-  DEBOUNCE_PROFILE_STATUS_READY   = 0,
-  DEBOUNCE_PROFILE_STATUS_PENDING = 1,
-  DEBOUNCE_PROFILE_STATUS_ERROR   = 2,
-} debounce_profile_status_t;   // V251115R1: VIA 표시용 상태 코드
-
-
+// V260901R1: 소비자 없고 런타임 재시도 결과와 어긋날 수 있는 VIA STATUS API 제거
 void                        debounce_profile_init(void);
 void                        debounce_profile_apply_current(void);
 const debounce_profile_values_t *
                              debounce_profile_current(void);
-debounce_profile_status_t   debounce_profile_get_status(void);
 bool                        debounce_profile_set_mode(uint8_t mode);
 bool                        debounce_profile_set_single_delay(uint8_t delay_ms);
 bool                        debounce_profile_set_press_delay(uint8_t delay_ms);

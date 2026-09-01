@@ -163,13 +163,12 @@ enum via_qmk_usb_polling_value {
     id_qmk_usb_bootmode_apply  = 2,
 };
 
-// V251115R1: VIA KEY RESPONSE 메뉴 value ID 매핑
+// V260901R1: 소비자 없는 STATUS를 제거하고 KEY RESPONSE value ID를 설정값 1~4로 한정
 enum via_qmk_key_response_value {
     id_qmk_debounce_mode        = 1,
     id_qmk_debounce_time_single = 2,
     id_qmk_debounce_time_pre    = 3,
     id_qmk_debounce_time_post   = 4,
-    id_qmk_debounce_status      = 5,
 };
 
 // V251123R4: VIA TAPPING 설정 value ID 매핑
