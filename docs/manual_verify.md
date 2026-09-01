@@ -14,12 +14,14 @@ what only hardware can decide and how to read it, and symptom order
 | `python tools/era_via_host_tests/run.py` | same host tests when `gcc` is on PATH |
 | cmake (§4) | compile, link, `_Static_assert`, size |
 | `PYTHONUTF8=1 python tools/era_doc_refs_selftest.py` | the checker is not empty |
+| `python hooks/test_pre_commit.py` | runnable-Python probe, WindowsApps fallback, LF/mode wiring |
 
 | Change | Owes |
 | --- | --- |
 | `docs/` only, not the checker | `PYTHONUTF8=1 python tools/era_doc_refs.py`. No ARM build. |
 | official VIA JSON | that checker (`menu`) |
 | `tools/era_doc_refs.py` or `tools/era_doc_refs_selftest.py` | checker and selftest |
+| `hooks/pre-commit`, `.gitattributes`, or `hooks/test_pre_commit.py` | checker and pre-commit launcher test |
 | `tools/era_via_host_tests/` or a firmware file that `tools/era_via_host_tests/run.ps1` compiles or that `tools/era_via_host_tests/check_single_producer.py` reads | the host-test command |
 | firmware `src/` | checker and §4. Also the host-test command when the previous row applies |
 
