@@ -250,9 +250,12 @@ enum via_qmk_mousekey_value {
     id_qmk_mousekey_wheel_acceleration  = 6,
 };
 
-// V260901R1: VIA RGB SLEEP. 공식 JSON은 분 단위 프리셋만 노출한다. 저장은 초.
+// V260901R1: VIA RGB SLEEP. 공식 JSON은 value 1 분 프리셋을 유지하고,
+//            Custom VIA는 additive value 2의 BE16 exact seconds를 사용한다. 저장은 공통 uint16 초.
 enum via_qmk_rgb_sleep_value {
-    id_qmk_rgb_sleep_timeout = 1,
+    id_qmk_rgb_sleep_timeout       = 1,
+    id_qmk_rgb_sleep_timeout_exact = 2,
+    id_qmk_rgb_sleep_enable        = 3,
 };
 
 // V251012R2: 커스텀 인디케이터 제어 값 ID

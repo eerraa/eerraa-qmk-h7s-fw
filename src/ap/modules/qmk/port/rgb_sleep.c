@@ -12,6 +12,8 @@
 
 #define RGB_SLEEP_SIGNATURE  (0x53U)  // 'S'
 #define RGB_SLEEP_VERSION    (1U)
+#define RGB_SLEEP_VERSION_MASK      (0x7FU)
+#define RGB_SLEEP_DISABLED_FLAG     (0x80U)  // V260901R1: 기존 version byte의 상위 비트를 inverted runtime enable로 사용
 
 
 typedef struct
@@ -24,8 +26,8 @@ typedef struct
 _Static_assert(sizeof(rgb_sleep_storage_t) == 4, "EECONFIG out of spec.");  // V260901R1: 슬롯 크기 고정
 
 
-static void via_qmk_rgb_sleep_get_value(uint8_t *data);
-static void via_qmk_rgb_sleep_set_value(uint8_t *data);
+static bool via_qmk_rgb_sleep_get_value(uint8_t *data, uint8_t length);
+static bool via_qmk_rgb_sleep_set_value(uint8_t *data, uint8_t length);
 static void rgb_sleep_apply_rgb(bool want_dark);
 static uint16_t rgb_sleep_normalized_seconds(uint16_t seconds);
 
@@ -42,6 +44,11 @@ EECONFIG_DEBOUNCE_HELPER_CHECKED(rgb_sleep_cfg, EECONFIG_USER_RGB_SLEEP, rgb_sle
 static uint16_t rgb_sleep_normalized_seconds(uint16_t seconds)
 {
   return (seconds == 0U) ? RGB_SLEEP_TIMEOUT_DEFAULT_SEC : seconds;
+}
+
+bool rgb_sleep_enabled(void)
+{
+  return (rgb_sleep_store.version & RGB_SLEEP_DISABLED_FLAG) == 0U;
 }
 
 uint16_t rgb_sleep_timeout_seconds(void)
@@ -65,7 +72,7 @@ bool eeconfig_check_valid_rgb_sleep_cfg(void)
 
   eeprom_read_block(&probe, EECONFIG_USER_RGB_SLEEP, sizeof(probe));
   return probe.signature == RGB_SLEEP_SIGNATURE &&
-         probe.version == RGB_SLEEP_VERSION &&
+         (probe.version & RGB_SLEEP_VERSION_MASK) == RGB_SLEEP_VERSION &&
          probe.timeout_seconds != 0U;
 }
 
@@ -90,7 +97,7 @@ void rgb_sleep_init(void)
 {
   eeconfig_init_rgb_sleep_cfg();
   if (rgb_sleep_store.signature != RGB_SLEEP_SIGNATURE ||
-      rgb_sleep_store.version != RGB_SLEEP_VERSION ||
+      (rgb_sleep_store.version & RGB_SLEEP_VERSION_MASK) != RGB_SLEEP_VERSION ||
       rgb_sleep_store.timeout_seconds == 0U)
   {
     rgb_sleep_storage_apply_defaults();
@@ -155,6 +162,7 @@ void rgb_sleep_task(void)
 
   want_dark = rgb_sleep_policy_local_requested(usbIsSuspended(),
                                                host_gone,
+                                               rgb_sleep_enabled(),
                                                rgb_sleep_timeout_seconds(),
                                                last_matrix_activity_elapsed());
   rgb_sleep_apply_rgb(want_dark);
@@ -164,8 +172,9 @@ bool rgb_sleep_handle_via_command(uint8_t *data, uint8_t length)
 {
   uint8_t *command_id;
   uint8_t *value_id_and_data;
-  uint16_t before;
-  uint16_t after;
+  rgb_sleep_storage_t before;
+  rgb_sleep_storage_t after;
+  bool     handled;
 
   if (data == NULL || length < 2U)
   {
@@ -184,11 +193,16 @@ bool rgb_sleep_handle_via_command(uint8_t *data, uint8_t length)
           *command_id = id_unhandled;
           return true;
         }
-        before = rgb_sleep_store.timeout_seconds;
-        via_qmk_rgb_sleep_set_value(value_id_and_data);
-        via_qmk_rgb_sleep_get_value(value_id_and_data);  // V260901R1: 거절된 SET은 보관값을 투영해 되돌려준다
-        after = rgb_sleep_store.timeout_seconds;
-        if (before != after)
+        before  = rgb_sleep_store;
+        handled = via_qmk_rgb_sleep_set_value(value_id_and_data, length);
+        if (!handled)
+        {
+          *command_id = id_unhandled;
+          return true;
+        }
+        (void)via_qmk_rgb_sleep_get_value(value_id_and_data, length);  // V260901R1: SET 응답은 펌웨어가 실제로 보관한 값을 에코한다
+        after = rgb_sleep_store;
+        if (memcmp(&before, &after, sizeof(before)) != 0)
         {
           era_state_sync_bump_config();
         }
@@ -196,7 +210,15 @@ bool rgb_sleep_handle_via_command(uint8_t *data, uint8_t length)
       }
     case id_custom_get_value:
       {
-        via_qmk_rgb_sleep_get_value(value_id_and_data);
+        if (length < 4U)
+        {
+          *command_id = id_unhandled;
+          return true;
+        }
+        if (!via_qmk_rgb_sleep_get_value(value_id_and_data, length))
+        {
+          *command_id = id_unhandled;
+        }
         break;
       }
     case id_custom_save:
@@ -213,22 +235,49 @@ bool rgb_sleep_handle_via_command(uint8_t *data, uint8_t length)
   return true;
 }
 
-static void via_qmk_rgb_sleep_get_value(uint8_t *data)
+static bool via_qmk_rgb_sleep_get_value(uint8_t *data, uint8_t length)
 {
   uint8_t *value_id   = &(data[0]);
   uint8_t *value_data = &(data[1]);
+  uint16_t seconds;
 
   switch (*value_id)
   {
     case id_qmk_rgb_sleep_timeout:
       {
+        if (length < 4U)
+        {
+          return false;
+        }
         value_data[0] = rgb_sleep_policy_preset_minutes(rgb_sleep_timeout_seconds());
-        break;
+        return true;
       }
+    case id_qmk_rgb_sleep_timeout_exact:
+      {
+        if (length < 5U)
+        {
+          return false;
+        }
+        seconds       = rgb_sleep_timeout_seconds();
+        value_data[0] = (uint8_t)(seconds >> 8);
+        value_data[1] = (uint8_t)(seconds & 0xFFU);
+        return true;
+      }
+    case id_qmk_rgb_sleep_enable:
+      {
+        if (length < 4U)
+        {
+          return false;
+        }
+        value_data[0] = rgb_sleep_enabled() ? 1U : 0U;
+        return true;
+      }
+    default:
+      return true;  // 기존 미등록 value id는 inert handled 상태를 유지한다
   }
 }
 
-static void via_qmk_rgb_sleep_set_value(uint8_t *data)
+static bool via_qmk_rgb_sleep_set_value(uint8_t *data, uint8_t length)
 {
   uint8_t *value_id   = &(data[0]);
   uint8_t *value_data = &(data[1]);
@@ -238,19 +287,52 @@ static void via_qmk_rgb_sleep_set_value(uint8_t *data)
   {
     case id_qmk_rgb_sleep_timeout:
       {
+        if (length < 4U)
+        {
+          return false;
+        }
         if (!rgb_sleep_timeout_is_preset(value_data[0]))
         {
-          break;  // V260901R1: 프리셋 밖 값은 거절하고 저장소를 바꾸지 않는다
+          return true;  // V260901R1: 기존 value 1의 프리셋 밖 값은 inert handled로 두고 저장소를 바꾸지 않는다
         }
         requested = (uint16_t)value_data[0] * 60U;
-        if (rgb_sleep_store.timeout_seconds != requested)
+        break;
+      }
+    case id_qmk_rgb_sleep_timeout_exact:
+      {
+        if (length < 5U)
         {
-          rgb_sleep_store.timeout_seconds = requested;
-          eeconfig_flag_rgb_sleep_cfg(true);
+          return false;
+        }
+        requested = ((uint16_t)value_data[0] << 8) | (uint16_t)value_data[1];
+        if (requested == 0U)
+        {
+          return false;  // V260901R1: exact seconds는 uint16 1..65535만 허용한다
         }
         break;
       }
+    case id_qmk_rgb_sleep_enable:
+      {
+        uint8_t version = rgb_sleep_store.version & RGB_SLEEP_VERSION_MASK;
+        bool enabled = value_data[0] != 0U;
+        uint8_t requested_version = version | (enabled ? 0U : RGB_SLEEP_DISABLED_FLAG);
+        if (rgb_sleep_store.version != requested_version)
+        {
+          rgb_sleep_store.version = requested_version;
+          eeconfig_flag_rgb_sleep_cfg(true);
+        }
+        return true;
+      }
+    default:
+      return true;  // 기존 미등록 value id는 inert handled 상태를 유지한다
   }
+
+  if (rgb_sleep_store.timeout_seconds != requested)
+  {
+    rgb_sleep_store.timeout_seconds = requested;
+    eeconfig_flag_rgb_sleep_cfg(true);
+  }
+  return true;
 }
 
 #endif

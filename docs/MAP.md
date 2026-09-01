@@ -33,7 +33,7 @@ only this side breaks the app.
 
 | Document | Genre | Owns |
 | --- | --- | --- |
-| [contract_via.md](contract_via.md) | contract | VIA/app wire contract. Channel addresses, exact-ms, `0x06`/`0x07` envelopes, single TX producer, MOUSE unit conversion |
+| [contract_via.md](contract_via.md) | contract | VIA/app wire contract. Channel addresses, exact-ms/exact-sec, `0x06`/`0x07` envelopes, single TX producer, MOUSE unit conversion |
 | [contract_usb.md](contract_usb.md) | contract | USB host contract. Interface/report layout, boot-protocol deviation, polling-mode ownership, retired automatic recovery, periodic-work timer rule |
 | [contract_eeprom.md](contract_eeprom.md) | contract | Persistent-state contract. USER slot ownership, version cookie and factory reset, 8 kHz write budget |
 | [manual_verify.md](manual_verify.md) | manual | Checks that run without a board and their commands, what only hardware can decide, symptom order |
@@ -147,10 +147,10 @@ its `AGENTS.md`.
 
 | Repository | Pairs with |
 | --- | --- |
-| `the-via-eerraa/docs/adr/0001-state-sync-protocol.md` | selector `0x06` envelope, 3-domain revision, exact-ms rule |
+| `the-via-eerraa/docs/adr/0001-state-sync-protocol.md` | selector `0x06` envelope, 3-domain revision, exact-ms rule and shared BE16 Custom Value transport |
 | `the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md` | selector `0x07` wire, measurement boundary, comparison validity |
 | `the-via-eerraa/docs/adr/0003-era-menu-help-ui.md` | menu labels (KKUK and others) and help copy |
-| `the-via-eerraa/docs/MAP.md` §3 | channel / value-id table (H7S TD is channel 16 / 41–48, MOUSE is 17) |
+| `the-via-eerraa/docs/MAP.md` §3 | channel / value-id table (H7S TD is channel 16 / 41–48, MOUSE is 17, RGB SLEEP exact-sec / enable are 18 / 2–3) |
 | `qmk_firmware_eerraa/keyboards/era/` | reference implementation. Channel numbers differ (§4 · `docs/contract_via.md` §2) |
 | `eerraa-qmk-h7s-boot` | UF2 bootloader. Handoff is `docs/contract_usb.md` §5 |
 

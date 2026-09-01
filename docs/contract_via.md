@@ -3,7 +3,7 @@
 Genre: contract
 Canonical for: what the app and VIA host exchange — the single raw-HID TX
 producer, channel and value-id assignment, the VERSION ASCII value,
-exact-ms value encoding,
+exact-ms / exact-sec value encoding,
 when KEYMAP/MACRO/CONFIG revisions bump, selector `0x06`/`0x07` byte
 envelopes, MOUSE unit conversion, and the checks that bite each of those
 
@@ -64,14 +64,21 @@ surface: GET returns `YYMMDDRn` plus NUL as nine bytes, copied from
 (`src/ap/modules/qmk/port/ver_port.c`). All five official JSON files expose
 one read-only `label` at value 5 and no dropdown. The additive id preserves
 old cached definitions without changing a shipped value's meaning.
-Channel 18 (`id_qmk_rgb_sleep`) value 1 is the official minute preset
-(1/3/5/10/30/60). The EEPROM store is uint16 seconds (default 600).
-Official GET floors the stored seconds onto that menu and does not
-write. Official SET accepts only those six minutes and converts to
-seconds. USB Suspend and host disappearance (SOF stale 300 ms after a
-host was seen) share that RGB owner and are not separate VIA values.
-Exact-seconds VIA is not shipped; usevia.app reaches this control
-through the official `*-VIA.JSON` SLEEP dropdown.
+Channel 18 (`id_qmk_rgb_sleep`) has two timeout surfaces over one uint16-second
+store (default 600) plus one shared runtime enable. Value 1
+(`id_qmk_rgb_sleep_timeout`) is the official minute
+preset (1/3/5/10/30/60). Official GET floors the stored seconds onto that menu
+and does not write; official SET accepts only those six minutes and converts to
+seconds. Value 2 (`id_qmk_rgb_sleep_timeout_exact`) is Custom VIA exact seconds,
+BE16 1..65535. Value 3 (`id_qmk_rgb_sleep_enable`) is a one-byte toggle exposed
+by both clients. Both timeout setters update the same store; OFF preserves that
+timeout, and all three controls persist only on SAVE. Value 3 is the RGB Sleep
+master: OFF gates input-idle timeout, explicit USB Suspend, and host disappearance
+(SOF stale 300 ms after a host was seen) together. `RGBLIGHT_SLEEP` remains
+compiled as the capability; `rgb_sleep.c` is the single runtime owner that
+decides whether to enter it. The five firmware-local official `*-VIA.JSON` files keep value 1 as the
+dropdown and add value 3; they do not expose value 2. Their timeout row is shown
+only while value 3 is on.
 
 This file owns the value-id rows. `table` regenerates them from
 `src/ap/modules/qmk/quantum/via.h`.
@@ -82,7 +89,7 @@ This file owns the value-id rows. `table` regenerates them from
 | Global TAPPING term (exact) | 15 | 5 |
 | TD0–TD7 term (exact) | 16 | 41–48 |
 | MOUSE six controls | 17 | 1–6 |
-| RGB SLEEP timeout | 18 | 1 |
+| RGB SLEEP timeout | 18 | 1–3 |
 <!-- era-doc-refs: end -->
 
 Peer `the-via-eerraa/docs/adr/0001-state-sync-protocol.md` and
@@ -96,6 +103,8 @@ moving a shipped number breaks the app overlay and the official JSON.
 | Global TAPPING term (exact) | channel 15 / value 5 | Same |
 | TD0–TD7 term (exact) | channel 0 / values 72–79 | channel 16 / values 41–48. Channel 16 is the Tap Dance channel; slot actions occupy values 1–40, exact terms append after that |
 | MOUSE (six controls) | channel 13 | channel 17. Channel 13 is `id_qmk_usb_polling`. Value ids 1–6 match the reference |
+| RGB SLEEP exact seconds | channel 9 / value 11 | channel 18 / value 2. Value 1 stays the official minute preset |
+| RGB SLEEP master | channel 9 / value 12 | channel 18 / value 3 |
 
 SOCD command names here are `id_qmk_kill_switch_lr` and
 `id_qmk_kill_switch_ud`. The reference uses a `socd` prefix.
@@ -112,7 +121,7 @@ This repo's half is `menu`. Cross-repo match is not checked
 > **REOPENS:** an additive id, shipped on both sides at once. Compacting
 > a hole is not that.
 
-## 3. exact-ms encoding
+## 3. exact-ms / exact-sec encoding
 
 Exact SET is a 2-byte big-endian `uint16` on `id_custom_set_value`
 (`0x07`) / `id_custom_get_value` (`0x08`). Inclusive range is 100–500
@@ -138,6 +147,21 @@ validity is `docs/contract_eeprom.md` §1.
 
 `tools/era_via_host_tests/test_era_via_exact_ms.c` bites the range,
 the short packet, and the GET/SET asymmetry.
+
+RGB SLEEP exact seconds uses the same two-byte BE Custom Value encoding on
+channel 18 / value 2, but its inclusive range is the complete nonzero uint16
+range 1..65535. Value 1 remains the one-byte official minute preset. A value-1
+GET projects an exact value onto the preset list without rewriting the exact
+store. A value-2 SET of 0 or a value-2 GET/SET shorter than five bytes is
+unhandled and leaves storage unchanged. Value 3 is the shared one-byte RGB Sleep
+master. OFF leaves the timeout bytes untouched and suppresses idle, USB Suspend,
+and host-loss sleep together. The persisted flag is inverted
+in the high bit of the existing storage version byte, so every previously shipped
+version-1 slot migrates as enabled without changing the four-byte EEPROM layout.
+`tools/era_via_host_tests/test_rgb_sleep.c` bites both timeout surfaces, value 3,
+the 137-second projection, 1 / 65535 bounds, no-op revision, short packets, SAVE
+persistence, legacy-slot migration, unknown ids, and master-off suppression of
+both USB Suspend and SOF-stale host loss.
 
 ## 4. Revisions bump when the published value changes
 

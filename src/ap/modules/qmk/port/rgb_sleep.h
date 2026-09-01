@@ -17,11 +17,12 @@
 
 
 static inline bool rgb_sleep_policy_local_requested(bool usb_suspended, bool frames_lost,
-                                                    uint16_t timeout_seconds, uint32_t matrix_idle_ms)
+                                                    bool rgb_sleep_enabled, uint16_t timeout_seconds,
+                                                    uint32_t matrix_idle_ms)
 {
   bool idle_timeout = (timeout_seconds != 0U) &&
                       (matrix_idle_ms >= ((uint32_t)timeout_seconds * 1000U));
-  return usb_suspended || frames_lost || idle_timeout;
+  return rgb_sleep_enabled && (usb_suspended || frames_lost || idle_timeout);
 }
 
 static inline bool rgb_sleep_timeout_is_preset(uint8_t minutes)
@@ -54,6 +55,7 @@ void     rgb_sleep_task(void);
 void     rgb_sleep_storage_apply_defaults(void);
 void     rgb_sleep_storage_flush(bool force);
 bool     rgb_sleep_handle_via_command(uint8_t *data, uint8_t length);
+bool     rgb_sleep_enabled(void);
 uint16_t rgb_sleep_timeout_seconds(void);
 uint8_t  rgb_sleep_timeout_min(void);
 bool     rgb_sleep_is_dark(void);
