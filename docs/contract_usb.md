@@ -28,9 +28,9 @@ Advertised `bInterval` on that HID-only descriptor:
 
 - HS (`USBD_HID_GetHSCfgDesc`): keyboard IN, VIA IN, VIA OUT, and EXK IN
   all take `usbBootModeGetHsInterval()`.
-- FS (`USBD_HID_GetFSCfgDesc`): only keyboard IN is patched to
-  `HID_FS_BINTERVAL` (1). VIA IN/OUT keep the static descriptor value 4;
-  EXK keeps the static `HID_HS_BINTERVAL` (1).
+- FS: keyboard IN, VIA IN, VIA OUT, and EXK IN all advertise a 1 ms interval.
+  VIA IN/OUT use `HID_FS_BINTERVAL` directly in the static descriptor; the
+  keyboard getter patches its endpoint to the same value.
 
 `FS 1K` enumerates as Full Speed (`PCD_SPEED_HIGH_IN_FULL`). The HS 2/4/8K
 modes enumerate as High Speed (`PCD_SPEED_HIGH`).

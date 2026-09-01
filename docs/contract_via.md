@@ -30,6 +30,14 @@ serial round-trip; a mix shows up as another request's reply, not as
 `raw_hid_send()` body stays empty, `via_hid_task()` enqueues, and
 `via.c` fills `id_era_state_sync` without TX.
 
+The USB class layer adds no wall-clock response throttle. `USBD_HID_DataOut()`
+copies the received report through the registered VIA callback and immediately
+re-arms `HID_VIA_EP_OUT`; response transmission does not own RX readiness.
+`USBD_HID_SOF()` drains the queued reply on the first SOF where
+`HID_VIA_EP_IN` is idle. This preserves the serial request/reply producer rule
+without the former 20 ms floor on every command. The transport invariant is
+checked by `tools/era_via_host_tests/check_via_transport_latency.py`.
+
 > **REFUSED:** filling in `raw_hid_send()` or adding a second VIA TX
 > path.
 > **WHY:** `via.c` already calls `raw_hid_send()` on every command; a

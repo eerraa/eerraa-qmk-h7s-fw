@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Portable host tests for VIA value layer, USB diagnostics, RGB SLEEP, CLEAN, VERSION, and TX producer.
+"""Portable host tests for VIA value/transport layers, USB diagnostics, RGB SLEEP, CLEAN, VERSION, and TX producer.
 
 Windows 문서 명령은 tools/era_via_host_tests/run.ps1 이다. 이 스크립트는 같은 검사를
 PATH의 gcc로 돌린다 (mingw 경로가 없는 Linux 포함).
@@ -176,6 +176,7 @@ def main() -> int:
     )
 
     run([sys.executable, str(HERE / "check_single_producer.py")])
+    run([sys.executable, str(HERE / "check_via_transport_latency.py")])
     return 0
 
 

@@ -153,9 +153,8 @@ static uint8_t ep0_req_buf[USB_MAX_EP0_SIZE];
 
 static qbuffer_t             via_report_q;
 static via_report_info_t     via_report_q_buf[128];
-static uint32_t              via_report_pre_time;
-static uint32_t              via_report_time = 20;
-__ALIGN_BEGIN static uint8_t via_hid_usb_report[32] __ALIGN_END;
+__ALIGN_BEGIN static uint8_t via_hid_usb_rx_report[32] __ALIGN_END;
+__ALIGN_BEGIN static uint8_t via_hid_usb_tx_report[32] __ALIGN_END;   // V260901R1: 즉시 OUT 재무장과 IN 전송이 같은 버퍼를 공유하지 않게 분리
 static void (*via_hid_receive_func)(uint8_t *data, uint8_t length) = NULL;
 
 
@@ -284,7 +283,7 @@ __ALIGN_BEGIN static uint8_t USBD_HID_CfgDesc[USB_HID_CONFIG_DESC_SIZ] __ALIGN_E
   USBD_EP_TYPE_INTR,                                  /* bmAttributes: Interrupt endpoint */
   HID_VIA_EP_SIZE,                                    /* wMaxPacketSize: */
   0x00,
-  4,                                                  /* bInterval: Polling Interval */
+  HID_FS_BINTERVAL,                                   /* V260901R1: FS VIA IN도 1ms polling */
 
   /* 59 */
   0x07,                                               /* bLength: Endpoint Descriptor size */
@@ -293,7 +292,7 @@ __ALIGN_BEGIN static uint8_t USBD_HID_CfgDesc[USB_HID_CONFIG_DESC_SIZ] __ALIGN_E
   USBD_EP_TYPE_INTR,                                  /* bmAttributes: Interrupt endpoint */
   HID_VIA_EP_SIZE,                                    /* wMaxPacketSize: */
   0x00,
-  4,                                                  /* bInterval: Polling Interval */
+  HID_FS_BINTERVAL,                                   /* V260901R1: FS VIA OUT도 1ms polling */
   /* 66 */
 
 
@@ -572,9 +571,9 @@ static uint8_t USBD_HID_Init(USBD_HandleTypeDef *pdev, uint8_t cfgidx)
   (void)USBD_LL_OpenEP(pdev, HID_VIA_EP_IN, USBD_EP_TYPE_INTR, HID_VIA_EP_SIZE);
   pdev->ep_in[HID_VIA_EP_IN & 0xFU].is_used = 1U;
 
-  pdev->ep_in[HID_VIA_EP_OUT & 0xFU].bInterval = pdev->dev_speed == USBD_SPEED_HIGH ? hs_interval:HID_FS_BINTERVAL;
+  pdev->ep_out[HID_VIA_EP_OUT & 0xFU].bInterval = pdev->dev_speed == USBD_SPEED_HIGH ? hs_interval:HID_FS_BINTERVAL;  // V260901R1: OUT 메타데이터는 ep_out 소유
   (void)USBD_LL_OpenEP(pdev, HID_VIA_EP_OUT, USBD_EP_TYPE_INTR, HID_VIA_EP_SIZE);
-  pdev->ep_in[HID_VIA_EP_OUT & 0xFU].is_used = 1U;
+  pdev->ep_out[HID_VIA_EP_OUT & 0xFU].is_used = 1U;                    // V260901R1: ST core의 OUT endpoint 소유권과 일치
 
   // EXK EP
   //
@@ -586,7 +585,7 @@ static uint8_t USBD_HID_Init(USBD_HandleTypeDef *pdev, uint8_t cfgidx)
   memset((void *)hhid->in_ep_busy, 0, sizeof(hhid->in_ep_busy));       // V260824R1: 구성 시 전 EP 해제
 
   /* Prepare Out endpoint to receive next packet */
-  (void)USBD_LL_PrepareReceive(pdev, HID_VIA_EP_OUT, via_hid_usb_report, 32);
+  (void)USBD_LL_PrepareReceive(pdev, HID_VIA_EP_OUT, via_hid_usb_rx_report, sizeof(via_hid_usb_rx_report));
 
 
   static bool is_first = true;
@@ -1068,28 +1067,31 @@ static uint8_t USBD_HID_DataOut(USBD_HandleTypeDef *pdev, uint8_t epnum)
 
   if (via_hid_receive_func != NULL)
   {
-    via_hid_receive_func(via_hid_usb_report, rx_size);
+    via_hid_receive_func(via_hid_usb_rx_report, rx_size);
   }
+
+  // V260901R1: RX 콜백이 32B를 자체 큐에 복사한 직후 OUT을 재무장해 응답 대기와 다음 수신을 분리
+  (void)USBD_LL_PrepareReceive(pdev, HID_VIA_EP_OUT, via_hid_usb_rx_report, sizeof(via_hid_usb_rx_report));
 
   return (uint8_t)USBD_OK;
 }
 
 uint8_t USBD_HID_SOF(USBD_HandleTypeDef *pdev)
 {
-  if (qbufferAvailable(&via_report_q) && (millis()-via_report_pre_time) >= via_report_time)
+  if (qbufferAvailable(&via_report_q))
   {
+    // V260901R1: VIA 응답의 20ms wall-clock throttle을 제거하고 IN EP가 비는 첫 SOF에 바로 전송
     // V260824R1: VIA 응답도 동일한 EP busy 규약에 편입한다. 이전에는 이 경로가 규약을
     //            우회해 "IN 전송 진행 중"이라는 불변식 자체가 성립하지 않았다.
     USBD_HID_HandleTypeDef *hhid = (USBD_HID_HandleTypeDef *)pdev->pClassDataCmsit[pdev->classId];
 
     if (usbHidEpTryAcquire(hhid, HID_VIA_EP_IN))
     {
-      qbufferRead(&via_report_q, (uint8_t *)via_hid_usb_report, 1);
-      if (USBD_LL_Transmit(pdev, HID_VIA_EP_OUT, via_hid_usb_report, sizeof(via_hid_usb_report)) != USBD_OK)
+      qbufferRead(&via_report_q, (uint8_t *)via_hid_usb_tx_report, 1);
+      if (USBD_LL_Transmit(pdev, HID_VIA_EP_IN, via_hid_usb_tx_report, sizeof(via_hid_usb_tx_report)) != USBD_OK)
       {
         usbHidEpRelease(hhid, HID_VIA_EP_IN);                          // V260824R1: 무장 실패 시 즉시 해제
       }
-      USBD_LL_PrepareReceive(pdev, HID_VIA_EP_OUT, via_hid_usb_report, sizeof(via_hid_usb_report));
     }
   }
   return (uint8_t)USBD_OK;
@@ -1158,7 +1160,6 @@ bool usbHidEnqueueViaResponse(const uint8_t *p_data, uint8_t length)
     return false;
   }
 
-  via_report_pre_time = millis();                                     // V251108R8: 전송 지연 타이머 갱신
   return true;
 }
 

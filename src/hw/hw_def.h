@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 // 펌웨어/보드 식별 정보
 // ---------------------------------------------------------------------------
-#define _DEF_FIRMWARE_VERSION       "V260901R1"   // V260901R1: RGB SLEEP·CLEAN·사용자 문서·미사용 타이머/STATUS 정리
+#define _DEF_FIRMWARE_VERSION       "V260901R1"   // V260901R1: RGB SLEEP·CLEAN·VIA 응답 지연 제거·FS 1ms polling 정리
 #define _DEF_BOARD_NAME             "ERA-QMK-H7S-FW"  // V251125R3: 사용자 표시용 보드명 ERA로 변경
 
 
