@@ -48,6 +48,7 @@
 #include "usbd_def.h"
 #include "usbd_core.h"
 #include "usbd_cdc.h"
+#include "usbd_hid.h"
 #include "micros.h"
 #include "usb_diagnostics.h"  // V260823R2: reset/suspend 하드 이벤트 카운터
 
@@ -261,6 +262,7 @@ void HAL_PCD_SuspendCallback(PCD_HandleTypeDef *hpcd)
 {
   /* Inform USB library that core enters in suspend Mode. */
   USBD_LL_Suspend((USBD_HandleTypeDef*)hpcd->pData);
+  usbHidOnSuspend();  // V260909R1: 비차단 wake와 현재 키 상태 보존
   __HAL_PCD_GATE_PHYCLOCK(hpcd);
   /* Enter in STOP mode. */
   /* USER CODE BEGIN 2 */
@@ -411,15 +413,16 @@ USBD_StatusTypeDef USBD_LL_Init(USBD_HandleTypeDef *pdev)
   HAL_PCD_RegisterIsoInIncpltCallback(&hpcd_USB_OTG_HS, PCD_ISOINIncompleteCallback);
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
   
-  //-- FIFO SIZE : 4KB
-  //
-  HAL_PCDEx_SetRxFiFo(&hpcd_USB_OTG_HS,    512);
-  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 0, 128);
-  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 1, 128);
-  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 2, 128);
-  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 3, 128);  
-  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 4, 128);  
-  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 5, 128);  
+  // V260909R1: OTG HS 1024-word 상한 내 752 words. 미사용 낮은 FIFO도 최소16 words.
+  enum { RX_WORDS = 512, TX0 = 32, TX1 = 32, TX2 = 128, TX3 = 16, TX4 = 16, TX5 = 16 };
+  _Static_assert(RX_WORDS + TX0 + TX1 + TX2 + TX3 + TX4 + TX5 <= 1024, "USB FIFO overflow");
+  HAL_PCDEx_SetRxFiFo(&hpcd_USB_OTG_HS, RX_WORDS);
+  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 0, TX0);
+  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 1, TX1);
+  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 2, TX2);
+  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 3, TX3);
+  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 4, TX4);
+  HAL_PCDEx_SetTxFiFo(&hpcd_USB_OTG_HS, 5, TX5);
   }
   return USBD_OK;
 }
@@ -511,6 +514,18 @@ USBD_StatusTypeDef USBD_LL_OpenEP(USBD_HandleTypeDef *pdev, uint8_t ep_addr, uin
   HAL_StatusTypeDef hal_status = HAL_OK;
   USBD_StatusTypeDef usb_status = USBD_OK;
 
+  PCD_HandleTypeDef *hpcd = pdev->pData;
+  uint32_t ep = ep_addr & 0x7FU;
+  if (hpcd == NULL || ep >= hpcd->Init.dev_endpoints) return USBD_FAIL;
+  uint32_t USBx_BASE = (uint32_t)hpcd->Instance;
+  if (ep == 0U) return USBD_Get_USB_Status(HAL_PCD_EP_Open(hpcd, ep_addr, ep_mps, ep_type));
+  if (ep_addr & 0x80U) {
+    if (USBx_INEP(ep)->DIEPCTL & USB_OTG_DIEPCTL_EPENA) return USBD_FAIL;
+    USBx_INEP(ep)->DIEPINT = USBx_INEP(ep)->DIEPINT;
+  } else {
+    if (USBx_OUTEP(ep)->DOEPCTL & USB_OTG_DOEPCTL_EPENA) return USBD_FAIL;
+    USBx_OUTEP(ep)->DOEPINT = USBx_OUTEP(ep)->DOEPINT;
+  }
   hal_status = HAL_PCD_EP_Open(pdev->pData, ep_addr, ep_mps, ep_type);
 
   usb_status =  USBD_Get_USB_Status(hal_status);
@@ -526,14 +541,28 @@ USBD_StatusTypeDef USBD_LL_OpenEP(USBD_HandleTypeDef *pdev, uint8_t ep_addr, uin
   */
 USBD_StatusTypeDef USBD_LL_CloseEP(USBD_HandleTypeDef *pdev, uint8_t ep_addr)
 {
-  HAL_StatusTypeDef hal_status = HAL_OK;
-  USBD_StatusTypeDef usb_status = USBD_OK;
-
-  hal_status = HAL_PCD_EP_Close(pdev->pData, ep_addr);
-
-  usb_status =  USBD_Get_USB_Status(hal_status);
-
-  return usb_status;
+  // V260909R1: 다음 bus generation에 이전 TXFE/XFRC/EPDISD가 섞이지 않도록 먼저 quiesce한다.
+  PCD_HandleTypeDef *hpcd = pdev->pData;
+  uint32_t ep = ep_addr & 0x7FU;
+  if (hpcd == NULL || ep >= hpcd->Init.dev_endpoints) return USBD_FAIL;
+  uint32_t irq = __get_PRIMASK();
+  __disable_irq();
+  uint32_t USBx_BASE = (uint32_t)hpcd->Instance;
+  if (ep_addr & 0x80U) USBx_DEVICE->DIEPEMPMSK &= ~(1UL << ep);
+  HAL_StatusTypeDef stopped = HAL_PCD_EP_Abort(hpcd, ep_addr);  // HAL의 유한 반복: SysTick 진행에 의존하지 않음
+  HAL_StatusTypeDef closed = HAL_PCD_EP_Close(hpcd, ep_addr);
+  if (ep_addr & 0x80U) {
+    USBx_INEP(ep)->DIEPINT = USBx_INEP(ep)->DIEPINT;
+    hpcd->IN_ep[ep].xfer_buff = NULL;
+    hpcd->IN_ep[ep].xfer_count = hpcd->IN_ep[ep].xfer_len = 0U;
+    if (stopped == HAL_OK && HAL_PCD_EP_Flush(hpcd, ep_addr) != HAL_OK) closed = HAL_ERROR;
+  } else {
+    USBx_OUTEP(ep)->DOEPINT = USBx_OUTEP(ep)->DOEPINT;
+    // RXFLVL가 이미 수신한 payload를 처리할 수 있으므로 OUT 버퍼 포인터는 유효하게 유지한다.
+    // 공유 RX FIFO를 flush하면 EP0/다른 class의 패킷까지 사라지므로 flush하지 않는다.
+  }
+  __set_PRIMASK(irq);
+  return USBD_Get_USB_Status(stopped == HAL_OK ? closed : stopped);
 }
 
 /**
@@ -697,38 +726,6 @@ USBD_StatusTypeDef USBD_LL_SetTestMode(USBD_HandleTypeDef *pdev, uint8_t testmod
   return USBD_OK;
 }
 #endif /* USBD_HS_TESTMODE_ENABLE */
-/**
-  * @brief  Static single allocation.
-  * @param  size: Size of allocated memory
-  * @retval None
-  */
-void *USBD_static_malloc(uint32_t size)
-{
-  UNUSED(size);
-  static uint32_t len = 0;
-  static uint32_t mem[4096]; /* On 32-bit boundary */
-  uint32_t offset;
-
-  offset = len;
-  if (len > 4096)
-  {
-    return NULL;
-  }
-  len += (size/4 + 1);
-
-  return &mem[offset];
-}
-
-/**
-  * @brief  Dummy memory free
-  * @param  p: Pointer to allocated  memory address
-  * @retval None
-  */
-void USBD_static_free(void *p)
-{
-  UNUSED(p);
-}
-
 /**
   * @brief  Delays routine for the USB device library.
   * @param  Delay: Delay in ms

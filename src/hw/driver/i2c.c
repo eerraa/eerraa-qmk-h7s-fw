@@ -61,6 +61,16 @@ static i2c_tbl_t i2c_tbl[I2C_MAX_CH] =
         { I2C3, &hi2c3, GPIOA, GPIO_PIN_8,  GPIOA, GPIO_PIN_9},
     };
 
+
+// V260909R1: async 드라이버와 IRQ가 검증된 같은 handle을 사용한다.
+I2C_HandleTypeDef *i2cGetHandle(uint8_t ch)
+{
+  return ch < I2C_MAX_CH ? i2c_tbl[ch].p_hi2c : NULL;
+}
+
+void I2C3_EV_IRQHandler(void) { HAL_I2C_EV_IRQHandler(&hi2c3); }
+void I2C3_ER_IRQHandler(void) { HAL_I2C_ER_IRQHandler(&hi2c3); }
+
 static int8_t i2cGetChannelFromHandle(I2C_HandleTypeDef *hi2c)
 {
   for (int ch = 0; ch < I2C_MAX_CH; ch++)
@@ -133,6 +143,8 @@ bool i2cIsInit(void)
 
 bool i2cBegin(uint8_t ch, uint32_t freq_khz)
 {
+  if (ch >= I2C_MAX_CH || i2cAsyncOwned(ch)) return false;  // V260909R1: 범위/단일 bus 소유권 검사
+
   bool ret = false;
 
   I2C_HandleTypeDef *p_handle = i2c_tbl[ch].p_hi2c;
@@ -221,11 +233,15 @@ uint32_t i2cGetTimming(uint32_t freq_khz)
 
 bool i2cIsBegin(uint8_t ch)
 {
+  if (ch >= I2C_MAX_CH) return false;  // V260909R1: 범위/단일 bus 소유권 검사
+
   return is_begin[ch];
 }
 
 void i2cReset(uint8_t ch)
 {
+  if (ch >= I2C_MAX_CH || i2cAsyncOwned(ch)) return;  // V260909R1: 범위/단일 bus 소유권 검사
+
   GPIO_InitTypeDef  GPIO_InitStruct;
   i2c_tbl_t *p_pin = &i2c_tbl[ch];
 
@@ -268,6 +284,8 @@ void i2cReset(uint8_t ch)
 
 bool i2cIsDeviceReady(uint8_t ch, uint8_t dev_addr)
 {
+  if (ch >= I2C_MAX_CH || i2cAsyncOwned(ch)) return false;  // V260909R1: 범위/단일 bus 소유권 검사
+
   bool ret = false;
   I2C_HandleTypeDef *p_handle = i2c_tbl[ch].p_hi2c;
   bool was_waiting;
@@ -275,7 +293,7 @@ bool i2cIsDeviceReady(uint8_t ch, uint8_t dev_addr)
   lock();
   if (HAL_I2C_IsDeviceReady(p_handle, dev_addr << 1, 10, 10) == HAL_OK)
   {
-    __enable_irq();
+    // V260909R1: 호출자의 interrupt mask를 변경하지 않는다.
     ret = true;
   }
   unLock();
@@ -321,6 +339,8 @@ bool i2cIsDeviceReady(uint8_t ch, uint8_t dev_addr)
 
 bool i2cRecovery(uint8_t ch)
 {
+  if (ch >= I2C_MAX_CH || i2cAsyncOwned(ch)) return false;  // V260909R1: 범위/단일 bus 소유권 검사
+
   bool ret;
 
   i2cReset(ch);
@@ -337,6 +357,8 @@ bool i2cReadByte (uint8_t ch, uint16_t dev_addr, uint16_t reg_addr, uint8_t *p_d
 
 bool i2cReadBytes(uint8_t ch, uint16_t dev_addr, uint16_t reg_addr, uint8_t *p_data, uint32_t length, uint32_t timeout)
 {
+  if (ch >= I2C_MAX_CH || i2cAsyncOwned(ch)) return false;  // V260909R1: 범위/단일 bus 소유권 검사
+
   bool ret;
   HAL_StatusTypeDef i2c_ret;
   I2C_HandleTypeDef *p_handle = i2c_tbl[ch].p_hi2c;
@@ -366,6 +388,8 @@ bool i2cReadBytes(uint8_t ch, uint16_t dev_addr, uint16_t reg_addr, uint8_t *p_d
 
 bool i2cReadA16Bytes(uint8_t ch, uint16_t dev_addr, uint16_t reg_addr, uint8_t *p_data, uint32_t length, uint32_t timeout)
 {
+  if (ch >= I2C_MAX_CH || i2cAsyncOwned(ch)) return false;  // V260909R1: 범위/단일 bus 소유권 검사
+
   bool ret;
   HAL_StatusTypeDef i2c_ret;
   I2C_HandleTypeDef *p_handle = i2c_tbl[ch].p_hi2c;
@@ -395,6 +419,8 @@ bool i2cReadA16Bytes(uint8_t ch, uint16_t dev_addr, uint16_t reg_addr, uint8_t *
 
 bool i2cReadData(uint8_t ch, uint16_t dev_addr, uint8_t *p_data, uint32_t length, uint32_t timeout)
 {
+  if (ch >= I2C_MAX_CH || i2cAsyncOwned(ch)) return false;  // V260909R1: 범위/단일 bus 소유권 검사
+
   bool ret;
   HAL_StatusTypeDef i2c_ret;
   I2C_HandleTypeDef *p_handle = i2c_tbl[ch].p_hi2c;
@@ -427,6 +453,8 @@ bool i2cWriteByte (uint8_t ch, uint16_t dev_addr, uint16_t reg_addr, uint8_t dat
 
 bool i2cWriteBytes(uint8_t ch, uint16_t dev_addr, uint16_t reg_addr, uint8_t *p_data, uint32_t length, uint32_t timeout)
 {
+  if (ch >= I2C_MAX_CH || i2cAsyncOwned(ch)) return false;  // V260909R1: 범위/단일 bus 소유권 검사
+
   bool ret;
   HAL_StatusTypeDef i2c_ret;
   I2C_HandleTypeDef *p_handle = i2c_tbl[ch].p_hi2c;
@@ -454,6 +482,8 @@ bool i2cWriteBytes(uint8_t ch, uint16_t dev_addr, uint16_t reg_addr, uint8_t *p_
 
 bool i2cWriteA16Bytes(uint8_t ch, uint16_t dev_addr, uint16_t reg_addr, uint8_t *p_data, uint32_t length, uint32_t timeout)
 {
+  if (ch >= I2C_MAX_CH || i2cAsyncOwned(ch)) return false;  // V260909R1: 범위/단일 bus 소유권 검사
+
   bool ret;
   HAL_StatusTypeDef i2c_ret;
   I2C_HandleTypeDef *p_handle = i2c_tbl[ch].p_hi2c;
@@ -483,6 +513,8 @@ bool i2cWriteA16Bytes(uint8_t ch, uint16_t dev_addr, uint16_t reg_addr, uint8_t 
 
 bool i2cWriteData(uint8_t ch, uint16_t dev_addr, uint8_t *p_data, uint32_t length, uint32_t timeout)
 {
+  if (ch >= I2C_MAX_CH || i2cAsyncOwned(ch)) return false;  // V260909R1: 범위/단일 bus 소유권 검사
+
   bool ret;
   HAL_StatusTypeDef i2c_ret;
   I2C_HandleTypeDef *p_handle = i2c_tbl[ch].p_hi2c;
@@ -512,21 +544,29 @@ bool i2cWriteData(uint8_t ch, uint16_t dev_addr, uint8_t *p_data, uint32_t lengt
 
 void i2cSetTimeout(uint8_t ch, uint32_t timeout)
 {
+  if (ch >= I2C_MAX_CH) return;  // V260909R1: 범위/단일 bus 소유권 검사
+
   i2c_timeout[ch] = timeout;
 }
 
 uint32_t i2cGetTimeout(uint8_t ch)
 {
+  if (ch >= I2C_MAX_CH) return 0U;  // V260909R1: 범위/단일 bus 소유권 검사
+
   return i2c_timeout[ch];
 }
 
 void i2cClearErrCount(uint8_t ch)
 {
+  if (ch >= I2C_MAX_CH) return;  // V260909R1: 범위/단일 bus 소유권 검사
+
   i2c_errcount[ch] = 0;
 }
 
 uint32_t i2cGetErrCount(uint8_t ch)
 {
+  if (ch >= I2C_MAX_CH) return 0U;  // V260909R1: 범위/단일 bus 소유권 검사
+
   return i2c_errcount[ch];
 }
 
@@ -566,23 +606,10 @@ void delayUs(uint32_t us)
 
 void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
 {
+  if (i2cAsyncOnError(hi2c)) return;
   int8_t ch = i2cGetChannelFromHandle(hi2c);
-  uint32_t err = HAL_I2C_GetError(hi2c);
-  uint32_t err_time = millis();                          // V251112R7: HAL 오류 타임스탬프 기록
-
-  if (ch >= 0)
-  {
-    i2c_errcount[ch]++;
-  }
-
-  logPrintf("[!] I2C error ch=%d code=0x%08lX t=%lums (BERR:%d ARLO:%d AF:%d OVR:%d)\n",
-            (int)(ch >= 0 ? ch + 1 : -1),
-            (unsigned long)err,
-            (unsigned long)err_time,
-            (err & HAL_I2C_ERROR_BERR) ? 1 : 0,
-            (err & HAL_I2C_ERROR_ARLO) ? 1 : 0,
-            (err & HAL_I2C_ERROR_AF)   ? 1 : 0,
-            (err & HAL_I2C_ERROR_OVR)  ? 1 : 0);
+  if (ch >= 0) i2c_errcount[ch]++;
+  // V260909R1: ISR에서 UART/USB 로그를 보내지 않는다. 오류는 카운터/저장 상태로 조회한다.
 }
 
 

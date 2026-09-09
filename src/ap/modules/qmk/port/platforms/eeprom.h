@@ -29,5 +29,8 @@ bool     eeprom_apply_factory_defaults(bool restore_factory_reset_sentinel);  //
 uint32_t eeprom_get_write_pending_count(void);                       // V251112R2: EEPROM 큐 현재 사용량 조회
 uint32_t eeprom_get_write_pending_max(void);                         // V251112R2: 부트 후 최고 사용량 조회
 uint32_t eeprom_get_write_overflow_count(void);                      // V251112R2: 직접 기록된 횟수 조회
-bool     eeprom_is_burst_mode_active(void);                          // V251112R5: 버스트 모드 상태 확인
-uint8_t  eeprom_get_burst_extra_calls(void);                         // V251112R5: 버스트 모드 시 추가 실행 횟수
+
+// V260909R1: pending count는 큐 엔트리가 아니라 아직 ACK되지 않은 서로 다른 byte 수다.
+bool eeprom_is_ready(void);
+uint32_t eeprom_get_write_failure_count(void);
+uint32_t eeprom_get_invalid_access_count(void);

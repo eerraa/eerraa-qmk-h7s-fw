@@ -100,7 +100,6 @@ typedef struct
   uint32_t Protocol;
   uint32_t IdleState;
   uint32_t AltSetting;
-  volatile uint8_t in_ep_busy[USBD_HID_IN_EP_MAX];  // V260824R1: index = ep_addr & 0x0F
 } USBD_HID_HandleTypeDef;
 
 /*
@@ -158,8 +157,21 @@ enum
   USB_HID_LED_KANA        = (1 << 4)
 };
 
-bool usbHidSetViaReceiveFunc(void (*func)(uint8_t *, uint8_t));
-bool usbHidEnqueueViaResponse(const uint8_t *p_data, uint8_t length);  // V251108R8: VIA 응답을 메인 루프에서 큐잉
+// V260909R1: 버스 세대가 다른 명령/응답을 섞지 않는다. 숫자는 boot 이후 누적 관측값이다.
+typedef struct {
+  uint32_t arm_failures;
+  uint32_t keyboard_coalesced;
+  uint32_t extra_coalesced;
+  uint32_t invalid_rx;
+  uint32_t invalid_control;
+  uint32_t session_discards;
+} usb_hid_transport_stats_t;
+bool usbHidReadViaRequest(uint8_t *data, uint32_t *generation);
+bool usbHidEnqueueViaResponse(const uint8_t *data, uint8_t length, uint32_t generation);
+bool usbHidViaResponsesPending(void);
+void usbHidOnSuspend(void);
+void usbHidWakeTick(void);
+void usbHidGetTransportStats(usb_hid_transport_stats_t *stats);
 bool usbHidSendReport(uint8_t *p_data, uint16_t length);
 bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length);
 void usbHidSetStatusLed(uint8_t led_bits);  // V260823R2: 레거시 HID rate/monitor API는 관측 전용 진단 API로 대체

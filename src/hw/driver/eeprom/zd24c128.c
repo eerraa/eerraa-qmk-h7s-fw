@@ -27,6 +27,53 @@ static uint8_t i2c_addr = 0x50;
 static uint8_t page_write_buf[EEPROM_PAGE_SIZE];                   // V251112R5: I2C 페이지 버퍼
 
 static bool eepromWaitReady(uint32_t timeout_ms);
+// V260909R1: page_write_buf의 소유권은 WRITE -> READY ACK가 끝날 때까지 유지한다.
+typedef enum { PAGE_IDLE, PAGE_WRITE, PAGE_WAIT_READY, PAGE_PROBE } page_state_t;
+static page_state_t page_state;
+static uint32_t page_ready_begin_ms, page_next_probe_ms;
+
+bool eepromWritePageStart(uint32_t addr, const uint8_t *data, uint32_t length)
+{
+  if (!is_init || page_state != PAGE_IDLE || data == NULL || length == 0U ||
+      addr >= EEPROM_MAX_SIZE || length > EEPROM_PAGE_SIZE - (addr % EEPROM_PAGE_SIZE) ||
+      length > EEPROM_MAX_SIZE - addr) return false;
+  memcpy(page_write_buf, data, length);
+  if (!i2cWriteA16BytesAsync(i2c_ch, i2c_addr, (uint16_t)addr, page_write_buf, (uint16_t)length)) return false;
+  page_state = PAGE_WRITE;
+  return true;
+}
+
+eeprom_async_result_t eepromWritePagePoll(void)
+{
+  if (page_state == PAGE_IDLE) return EEPROM_ASYNC_IDLE;
+  uint32_t now = millis();
+  if (page_state == PAGE_WRITE || page_state == PAGE_PROBE) {
+    i2c_async_result_t result = i2cAsyncPoll(i2c_ch, NULL);
+    if (result == I2C_ASYNC_BUSY) return EEPROM_ASYNC_BUSY;
+    if (page_state == PAGE_PROBE && result == I2C_ASYNC_DONE) {
+      page_state = PAGE_IDLE;
+      return EEPROM_ASYNC_DONE;
+    }
+    if (page_state == PAGE_WRITE && result == I2C_ASYNC_DONE) {
+      page_ready_begin_ms = now;
+      page_next_probe_ms = now;
+      page_state = PAGE_WAIT_READY;
+    } else if (page_state == PAGE_PROBE && result == I2C_ASYNC_NACK) {
+      page_next_probe_ms = now + 1U;
+      page_state = PAGE_WAIT_READY;
+    } else {
+      page_state = PAGE_IDLE;
+      return EEPROM_ASYNC_ERROR;
+    }
+  }
+  if ((uint32_t)(now - page_ready_begin_ms) >= EEPROM_WRITE_READY_TIMEOUT_MS) {
+    page_state = PAGE_IDLE;
+    return EEPROM_ASYNC_ERROR;
+  }
+  if ((int32_t)(now - page_next_probe_ms) >= 0 && i2cProbeAsync(i2c_ch, i2c_addr)) page_state = PAGE_PROBE;
+  return EEPROM_ASYNC_BUSY;
+}
+
 
 
 
@@ -71,6 +118,8 @@ bool eepromIsInit(void)
 
 bool eepromValid(uint32_t addr)
 {
+  if (page_state != PAGE_IDLE) return false;  // V260909R1: async 저장 소유권 보호
+
   uint8_t data;
   bool ret;
 
@@ -86,9 +135,11 @@ bool eepromValid(uint32_t addr)
 
 bool eepromReadByte(uint32_t addr, uint8_t *p_data)
 {
+  if (page_state != PAGE_IDLE) return false;  // V260909R1: async 저장 소유권 보호
+
   bool ret;
 
-  if (addr >= EEPROM_MAX_SIZE)
+  if (p_data == NULL || addr >= EEPROM_MAX_SIZE)
   {
     return false;
   }
@@ -100,6 +151,8 @@ bool eepromReadByte(uint32_t addr, uint8_t *p_data)
 
 bool eepromWritePage(uint32_t addr, uint8_t const *p_data, uint32_t length)
 {
+  if (page_state != PAGE_IDLE) return false;  // V260909R1: async 저장 소유권 보호
+
   // V251112R5: 큐에서 전달된 연속 구간을 32바이트 페이지로 전송
   bool ret = true;
   uint32_t page_offset;
@@ -108,7 +161,7 @@ bool eepromWritePage(uint32_t addr, uint8_t const *p_data, uint32_t length)
   {
     return true;
   }
-  if (addr >= EEPROM_MAX_SIZE || (addr + length) > EEPROM_MAX_SIZE)
+  if (p_data == NULL || addr >= EEPROM_MAX_SIZE || length > EEPROM_MAX_SIZE - addr)
   {
     return false;
   }
@@ -140,24 +193,15 @@ bool eepromWriteByte(uint32_t addr, uint8_t data_in)
 
 bool eepromRead(uint32_t addr, uint8_t *p_data, uint32_t length)
 {
-  bool ret = true;
-  uint32_t i;
-
-
-  for (i=0; i<length; i++)
-  {
-    ret = eepromReadByte(addr + i, &p_data[i]);
-    if (ret != true)
-    {
-      break;
-    }
-  }
-
-  return ret;
+  if (length == 0U) return true;
+  if (page_state != PAGE_IDLE || p_data == NULL || addr >= EEPROM_MAX_SIZE || length > EEPROM_MAX_SIZE - addr) return false;
+  return i2cReadA16Bytes(i2c_ch, i2c_addr, (uint16_t)addr, p_data, length, 100U);
 }
 
 bool eepromWrite(uint32_t addr, uint8_t *p_data, uint32_t length)
 {
+  if (page_state != PAGE_IDLE) return false;  // V260909R1: async 저장 소유권 보호
+
   bool ret = false;
 
   while (length > 0)
@@ -234,9 +278,13 @@ void cliEeprom(cli_args_t *args)
       cliPrintf("eeprom init   : %s\n", eepromIsInit() ? "True":"False");
       cliPrintf("eeprom length : %d bytes\n", eepromGetLength());
 #if defined(QMK_KEYMAP_CONFIG_H)
-      cliPrintf("eeprom queue cur : %lu entries\n", (unsigned long)eeprom_get_write_pending_count());   // V251112R2: QMK 큐 계측
-      cliPrintf("eeprom queue max : %lu entries\n", (unsigned long)eeprom_get_write_pending_max());     // V251112R2: 최고 사용량
-      cliPrintf("eeprom queue ofl : %lu events\n", (unsigned long)eeprom_get_write_overflow_count());  // V251112R2: 직접 쓰기 횟수
+      cliPrintf("eeprom dirty cur : %lu bytes\n", (unsigned long)eeprom_get_write_pending_count());   // V260909R1: 아직 ACK되지 않은 byte 수
+      cliPrintf("eeprom dirty max : %lu bytes\n", (unsigned long)eeprom_get_write_pending_max());     // V251112R2: 최고 사용량
+      cliPrintf("eeprom queue ofl : %lu events\n", (unsigned long)eeprom_get_write_overflow_count());  // V260909R1: 호환 조회이며 dirty bitmap에는 queue-full 없음
+#endif
+#if defined(QMK_KEYMAP_CONFIG_H)
+      cliPrintf("eeprom failures : %lu\n", (unsigned long)eeprom_get_write_failure_count());
+      cliPrintf("eeprom image ready : %d\n", eeprom_is_ready());
 #endif
       i2c_ready_wait_stats_t ready_stats;
       i2cGetReadyWaitStats(i2c_ch, &ready_stats);                           // V251112R9: Ready wait 계측 노출
@@ -296,7 +344,17 @@ void cliEeprom(cli_args_t *args)
       data = (uint8_t )args->getData(2);
 
       pre_time = millis();
+#if defined(QMK_KEYMAP_CONFIG_H)
+      // V260909R1: CLI도 QMK 이미지 범위 안에서는 단일 writer를 거친다. 유지보수 명령만 동기 대기한다.
+      if (addr < TOTAL_EEPROM_BYTE_COUNT) {
+        eeprom_write_byte((uint8_t *)(uintptr_t)addr, data);
+        eep_ret = eeprom_flush_pending();
+      } else {
+        eep_ret = eeprom_flush_pending() && eepromWriteByte(addr, data);
+      }
+#else
       eep_ret = eepromWriteByte(addr, data);
+#endif
 
       cliPrintf( "addr : %d\t 0x%02X %dms\n", addr, data, millis()-pre_time);
       if (eep_ret)

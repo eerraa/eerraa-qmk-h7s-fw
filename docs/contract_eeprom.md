@@ -90,29 +90,53 @@ finish a stale sequence. All three bits inside the window call
 clear the sentinel and reboot, so the next boot runs the same
 `eepromAutoFactoryResetCheck()` path.
 
-## 3. The write path stays inside the 8 kHz budget
+## 3. One RAM image, asynchronous persistence, explicit durability
 
-VIA/QMK writes enqueue in RAM. Each `eeprom_update()` call in
-`src/ap/modules/qmk/port/platforms/eeprom.c` spends at most
-`EEPROM_WRITE_SLICE_MAX_US` (100) microseconds in the lower driver. If the
-queue is at or above `EEPROM_WRITE_BURST_THRESHOLD` (512 entries),
-`src/ap/modules/qmk/qmk.c` makes `EEPROM_WRITE_BURST_EXTRA_CALLS` (2) extra
-calls of the same function — extra slices, not a longer slice.
+The runtime writer is `src/ap/modules/qmk/port/platforms/eeprom.c`. Its 4096-byte
+RAM image holds the latest desired values. A per-byte dirty bitmap records
+unacknowledged changes without a finite byte-event queue or direct-write fallback.
+Repeated writes to the same address coalesce in the image. Legacy pending/max
+getters now count distinct dirty bytes; the compatibility overflow getter is zero.
 
-> **REFUSED:** synchronous EEPROM writes on the QMK path, or raising
-> `EEPROM_WRITE_SLICE_MAX_US` without a new 8 kHz budget.
-> **WHY:** `eeprom_update()` runs in the same loop as USB polling; a longer
-> slice delays HID IN.
-> **REOPENS:** a measured budget that still meets the 8 kHz SOF deadline, or a
-> path that never runs in that loop.
+`eeprom_update()` either services one active page or examines at most eight page
+entries and starts one 32-byte snapshot. It never waits for the I2C wire transfer,
+the EEPROM write cycle or a retry deadline. The external ZD24C128 backend uses
+`src/hw/driver/i2c_async.c` for interrupt-driven memory write and address-only ACK
+probes. A NACK schedules a later probe; it does not block the keyboard loop.
+Completion is published only after write-cycle ACK, not merely after the last
+I2C data byte. The active hardware buffer is immutable until terminal completion.
 
-A full queue retries for `EEPROM_WRITE_QUEUE_WAIT_MS` (2) milliseconds, then
-falls back to a direct write and logs. The byte is not dropped silently.
+A completed page clears a dirty bit only if its snapshot still equals the latest
+RAM byte. An update made during that transfer therefore remains pending. Failed
+start, NACK timeout or lost interrupt retains desired data for a later retry.
+A stuck transfer is quiesced before buffer ownership is returned. Channel bounds
+and ownership are checked before the synchronous I2C APIs touch the bus, and
+readiness checks never enable a caller's masked interrupts.
+
+There is no claimed 100-microsecond wall-clock upper bound and no repeated burst
+slice in `qmkUpdate()`. The algorithm has bounded work per call; actual execution
+time, I2C interrupt load and scan/HID tail latency require measurement. Whole-page
+snapshots may send more wire bytes for an isolated one-byte change, while repeated
+updates collapse into fewer writes and do not stall the input loop.
+
+`eeprom_flush_pending()` is an explicit durability barrier for initialization,
+factory reset and maintenance. It requires thread context with interrupts enabled.
+A no-progress timeout returns false while preserving dirty data and any active
+transaction. Normal VIA SAVE schedules persistence; its response is not a power-loss
+commit record. User-requested USB reset waits for persistence and response completion
+without spinning in the normal loop. If storage or the host cannot complete them,
+the reset stays pending and keyboard processing continues.
+
+Initial image-read failure stops hardware initialization instead of booting from a
+partly filled image. Invalid accesses fail within the image bounds. CLI writes
+inside the QMK image use the same writer, preventing a later page snapshot from
+undoing an out-of-band byte write. Such maintenance commands may explicitly flush.
 
 The driver in use is external I2C EEPROM (`src/hw/driver/eeprom/zd24c128.c`,
-`EEPROM_PAGE_SIZE` 32). Internal flash emulation
-(`src/hw/driver/eeprom/emul.c`) implements the same API and is not
-hardware-verified (`docs/state_open.md`).
+`EEPROM_PAGE_SIZE` 32). Internal flash emulation (`src/hw/driver/eeprom/emul.c`)
+retains a synchronous fallback and is not hardware-verified (`docs/state_open.md`).
+Page ACK is not atomicity across multiple pages. Power-loss-safe transactions,
+journaling and persistence of in-flight RAM updates are not provided by this layout.
 
 USB diagnostics do not write EEPROM (`docs/contract_usb.md` §4).
 RGB SLEEP writes only its four-byte slot on VIA SAVE / CLEAN / invalid-slot

@@ -46,7 +46,7 @@
 #include <string.h>                                             // V251108R8: VIA 큐 헬퍼에서 memset 사용
 
 #include "log.h"
-#include "qbuffer.h"
+#include "hid_tx_queue.h"
 #include "report.h"
 #include "micros.h"
 #include "usbd_hid_internal.h"
@@ -84,89 +84,40 @@ static uint8_t *USBD_HID_GetUsrStrDescriptor(struct _USBD_HandleTypeDef *pdev, u
 #endif
 
 
-static bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev);
-static void usbHidInitTimer(void);
-static uint32_t usbHidBackupTimerOffsetUs(void);                       // V251012R1 FS 백업 전송 지연 재조정
+// V260909R1: TIM2/일반 PWM callback을 제거하고 EP별 FIFO와 완료 기반 pump로 통합한다.
+#define HID_TX_DEPTH 128U
+#define HID_VIA_RX_DEPTH 16U
+static hid_tx_packet_t keyboard_slots[HID_TX_DEPTH];
+static hid_tx_packet_t extra_slots[HID_TX_DEPTH];
+static hid_tx_packet_t via_slots[HID_TX_DEPTH];
+static hid_tx_queue_t keyboard_tx, extra_tx, via_tx;
+static hid_tx_packet_t keyboard_latest = { .length = HID_KEYBOARD_REPORT_SIZE };
+static hid_tx_packet_t extra_latest[3] = {
+  { .length = 6U, .data = {2U} },
+  { .length = 3U, .data = {3U} },
+  { .length = 3U, .data = {4U} },
+};
+static bool keyboard_reconcile;
+static uint8_t extra_reconcile;
+static uint32_t transport_generation;
+static usb_hid_transport_stats_t transport_stats;
+static uint8_t via_rx[HID_VIA_RX_DEPTH][HID_VIA_EP_SIZE];
+static uint8_t via_rx_head, via_rx_count;
+static bool via_rx_armed;
+__ALIGN_BEGIN static uint8_t via_hid_usb_rx_report[HID_VIA_EP_SIZE] __ALIGN_END;
+// V260909R1: HAL은 요청1바이트도 EP0 maxpacket 수신을 무장한다. 실제 packet을 수용한 후 길이를 거부한다.
+__ALIGN_BEGIN static uint8_t ep0_req_buf[USB_MAX_EP0_SIZE] __ALIGN_END;
+_Static_assert(sizeof(ep0_req_buf) >= 64U, "EP0 receive buffer must cover a full control packet");
+static bool ep0_led_pending;
+static volatile bool wake_pending, wake_active;
+static bool wake_attempted;
+static uint32_t suspend_ms, wake_start_ms;
 
-
-// V260824R1: 전송 시작은 메인 루프와 TIM2 ISR 양쪽에서 들어오므로 검사와 점유를
-//            분리하면 두 컨텍스트가 같은 엔드포인트를 이중으로 무장할 수 있다.
-//            PRIMASK 임계구역으로 test-and-set을 원자화한다(약 10 cycle).
-static bool usbHidEpTryAcquire(USBD_HID_HandleTypeDef *hhid, uint8_t ep_addr)
-{
-  uint8_t  index = (uint8_t)(ep_addr & 0x0FU);
-  uint32_t primask;
-  bool     acquired = false;
-
-  if (hhid == NULL)
-  {
-    return false;
-  }
-
-  primask = __get_PRIMASK();
-  __disable_irq();
-  if (hhid->in_ep_busy[index] == 0U)
-  {
-    hhid->in_ep_busy[index] = 1U;
-    acquired = true;
-  }
-  if (primask == 0U)
-  {
-    __enable_irq();
-  }
-
-  return acquired;
-}
-
-static void usbHidEpRelease(USBD_HID_HandleTypeDef *hhid, uint8_t ep_addr)
-{
-  if (hhid != NULL)
-  {
-    hhid->in_ep_busy[ep_addr & 0x0FU] = 0U;                            // V260824R1: 해당 EP만 해제
-  }
-}
-
-
-typedef struct
-{
-  uint32_t diagnostic_request_us;
-  uint16_t diagnostic_session_id;
-  uint8_t  buf[HID_KEYBOARD_REPORT_SIZE];
-} report_info_t;  // V260823R2: 큐 대기까지 포함한 요청→DataIn 지연을 보존
-
-_Static_assert(sizeof(report_info_t) == (HID_KEYBOARD_REPORT_SIZE + 6U),
-               "진단 메타데이터가 키보드 리포트 큐를 불필요하게 패딩한다.");  // V260823R2
-
-typedef struct
-{
-  uint8_t  buf[32];
-} via_report_info_t;
-
-typedef struct
-{
-  uint8_t len;
-  uint8_t buf[HID_EXK_EP_SIZE];
-} exk_report_info_t;
-
-static USBD_SetupReqTypedef ep0_req;
-static uint8_t ep0_req_buf[USB_MAX_EP0_SIZE];
-
-static qbuffer_t             via_report_q;
-static via_report_info_t     via_report_q_buf[128];
-__ALIGN_BEGIN static uint8_t via_hid_usb_rx_report[32] __ALIGN_END;
-__ALIGN_BEGIN static uint8_t via_hid_usb_tx_report[32] __ALIGN_END;   // V260901R1: 즉시 OUT 재무장과 IN 전송이 같은 버퍼를 공유하지 않게 분리
-static void (*via_hid_receive_func)(uint8_t *data, uint8_t length) = NULL;
-
-
-static qbuffer_t              report_q;
-static report_info_t          report_buf[128];
-__ALIGN_BEGIN  static uint8_t hid_buf[HID_KEYBOARD_REPORT_SIZE] __ALIGN_END = {0,};
-
-static qbuffer_t              report_exk_q;
-static exk_report_info_t      report_exk_buf[128];
-__ALIGN_BEGIN  static uint8_t hid_buf_exk[HID_EXK_EP_SIZE] __ALIGN_END = {0,};
-
-
+static void usbHidPumpLocked(USBD_HandleTypeDef *pdev);
+static void usbHidRearmViaLocked(USBD_HandleTypeDef *pdev);
+static void usbHidResetTransport(void);
+static uint32_t usbHidLock(void) { uint32_t p = __get_PRIMASK(); __disable_irq(); return p; }
+static void usbHidUnlock(uint32_t p) { __set_PRIMASK(p); }
 
 USBD_ClassTypeDef USBD_HID =
 {
@@ -508,7 +459,6 @@ _Static_assert(sizeof(report_extra_t) == 3U, "SYSTEM/CONSUMER 리포트 디스�
 static USBD_HID_HandleTypeDef *p_hhid = NULL;
 static uint8_t HIDInEpAdd = HID_EPIN_ADDR;
 extern USBD_HandleTypeDef USBD_Device;
-static TIM_HandleTypeDef htim2;
 
 // V260823R2: ST USB 속도 값을 진단 계약의 안정된 값으로 정규화한다.
 static uint8_t usbHidDiagnosticsSpeedCode(uint8_t speed)
@@ -535,81 +485,38 @@ static uint8_t usbHidDiagnosticsSpeedCode(uint8_t speed)
 static uint8_t USBD_HID_Init(USBD_HandleTypeDef *pdev, uint8_t cfgidx)
 {
   UNUSED(cfgidx);
-
-  USBD_HID_HandleTypeDef *hhid;
-
-  hhid = (USBD_HID_HandleTypeDef *)USBD_malloc(sizeof(USBD_HID_HandleTypeDef));
-
-  if (hhid == NULL)
-  {
-    pdev->pClassDataCmsit[pdev->classId] = NULL;
-    return (uint8_t)USBD_EMEM;
-  }
-
+  // V260909R1: 구성마다 새 세대, 완전 초기화. 정상적인 DeInit 없는 재진입도 누적 할당하지 않는다.
+  if (p_hhid != NULL) USBD_HID_DeInit(pdev, cfgidx);
+  USBD_HID_HandleTypeDef *hhid = USBD_malloc(sizeof(*hhid));
+  if (hhid == NULL) return (uint8_t)USBD_EMEM;
+  memset(hhid, 0, sizeof(*hhid));
+  hhid->Protocol = 1U;
+  pdev->pClassDataCmsit[pdev->classId] = hhid;
+  pdev->pClassData = hhid;
   p_hhid = hhid;
-
-  pdev->pClassDataCmsit[pdev->classId] = (void *)hhid;
-  pdev->pClassData = pdev->pClassDataCmsit[pdev->classId];
-
-  uint8_t hs_interval = usbBootModeGetHsInterval();                      // V250923R1 Dynamic HS polling interval
-
-
+  usbHidResetTransport();
 #ifdef USE_USBD_COMPOSITE
-  /* Get the Endpoints addresses allocated for this class instance */
-  HIDInEpAdd  = USBD_CoreGetEPAdd(pdev, USBD_EP_IN, USBD_EP_TYPE_INTR, (uint8_t)pdev->classId);
-#endif /* USE_USBD_COMPOSITE */
-  pdev->ep_in[HIDInEpAdd & 0xFU].bInterval = pdev->dev_speed == USBD_SPEED_HIGH ? hs_interval:HID_FS_BINTERVAL;
-
-  /* Open EP IN */
-  (void)USBD_LL_OpenEP(pdev, HIDInEpAdd, USBD_EP_TYPE_INTR, HID_EPIN_SIZE);
-  pdev->ep_in[HIDInEpAdd & 0xFU].is_used = 1U;
-
-
-  // VIA EP
-  //
-  pdev->ep_in[HID_VIA_EP_IN & 0xFU].bInterval = pdev->dev_speed == USBD_SPEED_HIGH ? hs_interval:HID_FS_BINTERVAL;
-  (void)USBD_LL_OpenEP(pdev, HID_VIA_EP_IN, USBD_EP_TYPE_INTR, HID_VIA_EP_SIZE);
-  pdev->ep_in[HID_VIA_EP_IN & 0xFU].is_used = 1U;
-
-  pdev->ep_out[HID_VIA_EP_OUT & 0xFU].bInterval = pdev->dev_speed == USBD_SPEED_HIGH ? hs_interval:HID_FS_BINTERVAL;  // V260901R1: OUT 메타데이터는 ep_out 소유
-  (void)USBD_LL_OpenEP(pdev, HID_VIA_EP_OUT, USBD_EP_TYPE_INTR, HID_VIA_EP_SIZE);
-  pdev->ep_out[HID_VIA_EP_OUT & 0xFU].is_used = 1U;                    // V260901R1: ST core의 OUT endpoint 소유권과 일치
-
-  // EXK EP
-  //
-  pdev->ep_in[HID_EXK_EP_IN & 0xFU].bInterval = pdev->dev_speed == USBD_SPEED_HIGH ? hs_interval:HID_FS_BINTERVAL;
-  (void)USBD_LL_OpenEP(pdev, HID_EXK_EP_IN, USBD_EP_TYPE_INTR, HID_EXK_EP_SIZE);
-  pdev->ep_in[HID_EXK_EP_IN & 0xFU].is_used = 1U;
-
-
-  memset((void *)hhid->in_ep_busy, 0, sizeof(hhid->in_ep_busy));       // V260824R1: 구성 시 전 EP 해제
-
-  /* Prepare Out endpoint to receive next packet */
-  (void)USBD_LL_PrepareReceive(pdev, HID_VIA_EP_OUT, via_hid_usb_rx_report, sizeof(via_hid_usb_rx_report));
-
-
-  static bool is_first = true;
-  if (is_first)
-  {
-    is_first = false;
-
-    qbufferCreateBySize(&report_q, (uint8_t *)report_buf, sizeof(report_info_t), 128); 
-    qbufferCreateBySize(&via_report_q, (uint8_t *)via_report_q_buf, sizeof(via_report_info_t), 128); 
-    // V260823R1: 원소 크기를 exk_report_info_t로 교정. 기존의 report_info_t는 HW_KEYS_PRESS_MAX+2(22)라
-    //            실제 원소 9바이트보다 커서, qbufferRead가 스택의 9바이트 지역변수에 22바이트를 썼다.
-    qbufferCreateBySize(&report_exk_q, (uint8_t *)report_exk_buf, sizeof(exk_report_info_t), 128); 
-
-    logPrintf("[OK] USB Hid\n");
-    logPrintf("     Keyboard\n");
-
-    usbHidInitTimer();
+  HIDInEpAdd = USBD_CoreGetEPAdd(pdev, USBD_EP_IN, USBD_EP_TYPE_INTR, (uint8_t)pdev->classId);
+#endif
+  const uint8_t endpoints[] = {HIDInEpAdd, HID_VIA_EP_IN, HID_EXK_EP_IN};
+  const uint16_t sizes[] = {HID_EPIN_SIZE, HID_VIA_EP_SIZE, HID_EXK_EP_SIZE};
+  uint8_t interval = pdev->dev_speed == USBD_SPEED_HIGH ? usbBootModeGetHsInterval() : HID_FS_BINTERVAL;
+  for (uint32_t i = 0; i < 3U; i++) {
+    if (USBD_LL_OpenEP(pdev, endpoints[i], USBD_EP_TYPE_INTR, sizes[i]) != USBD_OK) goto fail;
+    pdev->ep_in[endpoints[i] & 0xFU].is_used = 1U;
+    pdev->ep_in[endpoints[i] & 0xFU].bInterval = interval;
   }
-
-  // V260823R2: 최초 구성과 재구성을 항상 카운트하되 타임스탬프는 세션 중에만 읽는다.
+  if (USBD_LL_OpenEP(pdev, HID_VIA_EP_OUT, USBD_EP_TYPE_INTR, HID_VIA_EP_SIZE) != USBD_OK) goto fail;
+  pdev->ep_out[HID_VIA_EP_OUT & 0xFU].is_used = 1U;
+  pdev->ep_out[HID_VIA_EP_OUT & 0xFU].bInterval = interval;
+  usbHidRearmViaLocked(pdev);
+  if (!via_rx_armed) goto fail;
   usbDiagnosticsOnUsbConfigured(usbDiagnosticsIsActive() ? micros() : 0U,
                                 usbHidDiagnosticsSpeedCode(pdev->dev_speed));
-
   return (uint8_t)USBD_OK;
+fail:
+  USBD_HID_DeInit(pdev, cfgidx);
+  return (uint8_t)USBD_FAIL;
 }
 
 /**
@@ -622,24 +529,22 @@ static uint8_t USBD_HID_Init(USBD_HandleTypeDef *pdev, uint8_t cfgidx)
 static uint8_t USBD_HID_DeInit(USBD_HandleTypeDef *pdev, uint8_t cfgidx)
 {
   UNUSED(cfgidx);
-
-#ifdef USE_USBD_COMPOSITE
-  /* Get the Endpoints addresses allocated for this class instance */
-  HIDInEpAdd  = USBD_CoreGetEPAdd(pdev, USBD_EP_IN, USBD_EP_TYPE_INTR, (uint8_t)pdev->classId);
-#endif /* USE_USBD_COMPOSITE */
-
-  /* Close HID EPs */
-  (void)USBD_LL_CloseEP(pdev, HIDInEpAdd);
-  pdev->ep_in[HIDInEpAdd & 0xFU].is_used = 0U;
-  pdev->ep_in[HIDInEpAdd & 0xFU].bInterval = 0U;
-
-  /* Free allocated memory */
-  if (pdev->pClassDataCmsit[pdev->classId] != NULL)
-  {
-    (void)USBD_free(pdev->pClassDataCmsit[pdev->classId]);
-    pdev->pClassDataCmsit[pdev->classId] = NULL;
+  // V260909R1: 최초 bus reset에도 호출된다. 소유 중인 EP만 닫고 모든 alias를 무효화한다.
+  const uint8_t endpoints[] = {HIDInEpAdd, HID_VIA_EP_IN, HID_EXK_EP_IN};
+  p_hhid = NULL;
+  for (uint32_t i = 0; i < 3U; i++) {
+    if (pdev->ep_in[endpoints[i] & 0xFU].is_used) USBD_LL_CloseEP(pdev, endpoints[i]);
+    pdev->ep_in[endpoints[i] & 0xFU].is_used = 0U;
+    pdev->ep_in[endpoints[i] & 0xFU].bInterval = 0U;
   }
-
+  if (pdev->ep_out[HID_VIA_EP_OUT & 0xFU].is_used) USBD_LL_CloseEP(pdev, HID_VIA_EP_OUT);
+  pdev->ep_out[HID_VIA_EP_OUT & 0xFU].is_used = 0U;
+  pdev->ep_out[HID_VIA_EP_OUT & 0xFU].bInterval = 0U;
+  void *handle = pdev->pClassDataCmsit[pdev->classId];
+  if (pdev->pClassData == handle) pdev->pClassData = NULL;
+  pdev->pClassDataCmsit[pdev->classId] = NULL;
+  USBD_free(handle);
+  usbHidResetTransport();
   return (uint8_t)USBD_OK;
 }
 
@@ -663,6 +568,7 @@ static uint8_t USBD_HID_Setup(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *re
     return (uint8_t)USBD_FAIL;
   }
 
+  ep0_led_pending = false;  // V260909R1: 새 SETUP은 이전 control OUT 소유권을 취소한다.
   logDebug("HID_SETUP %d\n", pdev->classId);
   logDebug("  req->bmRequest : 0x%X\n", req->bmRequest);
   logDebug("  req->bRequest  : 0x%X\n", req->bRequest);
@@ -696,8 +602,16 @@ static uint8_t USBD_HID_Setup(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *re
 
         case USBD_HID_REQ_SET_REPORT:  
           logDebug("  USBD_HID_REQ_SET_REPORT  : 0x%X, 0x%d\n", req->wValue, req->wLength);     
-          ep0_req = *req;
-          USBD_CtlPrepareRx(pdev, ep0_req_buf, req->wLength);
+          // V260909R1: keyboard/output/report-id 0, 정확히 1바이트만 허용한다.
+          if (req->bmRequest != 0x21U || req->wIndex != 0U || req->wValue != 0x0200U || req->wLength != 1U) {
+            transport_stats.invalid_control++;
+            USBD_CtlError(pdev, req);
+            ret = USBD_FAIL;
+            break;
+          }
+          ep0_req_buf[0] = 0U;
+          ret = USBD_CtlPrepareRx(pdev, ep0_req_buf, 1U);
+          ep0_led_pending = ret == USBD_OK;
           break;
 
         default:
@@ -811,23 +725,11 @@ static uint8_t USBD_HID_Setup(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *re
   * @param  pdev: device instance
   * @retval status
   */
-uint8_t USBD_HID_EP0_RxReady(USBD_HandleTypeDef *pdev)
+static uint8_t USBD_HID_EP0_RxReady(USBD_HandleTypeDef *pdev)
 {
-  logDebug("USBD_HID_EP0_RxReady()\n");
-  logDebug("  req->bmRequest : 0x%X\n", ep0_req.bmRequest);
-  logDebug("  req->bRequest  : 0x%X\n", ep0_req.bRequest);
-  logDebug("  %d \n", ep0_req.wLength);
-  for (int i=0; i<ep0_req.wLength; i++)
-  {
-    logDebug("  %d : 0x%02X\n", i, ep0_req_buf[i]);
-  }
-
-  if (ep0_req.bRequest == USBD_HID_REQ_SET_REPORT)
-  {
-    uint8_t led_bits = ep0_req_buf[0];
-
-    usbHidSetStatusLed(led_bits);
-  }
+  if (p_hhid != NULL && ep0_led_pending && USBD_LL_GetRxDataSize(pdev, 0U) == 1U)
+    usbHidSetStatusLed(ep0_req_buf[0]);
+  ep0_led_pending = false;
   return (uint8_t)USBD_OK;
 }
 
@@ -837,43 +739,7 @@ uint8_t USBD_HID_EP0_RxReady(USBD_HandleTypeDef *pdev)
   * @param  buff: pointer to report
   * @retval status
   */
-bool USBD_HID_SendReport(uint8_t *report,
-                         uint16_t len,
-                         uint32_t diagnostic_request_us,
-                         uint16_t diagnostic_session_id,
-                         uint16_t queued_reports)
-{
-  USBD_HandleTypeDef *pdev = &USBD_Device;
-  bool ret = false;
 
-  if (p_hhid == NULL)
-  {
-    return false;
-  }
-
-  if (pdev->dev_state == USBD_STATE_CONFIGURED)
-  {
-    if (usbHidEpTryAcquire(p_hhid, HID_EPIN_ADDR))                     // V260824R1: 키보드 EP만 점유
-    {
-      ret = true;
-      if (diagnostic_session_id != 0U)
-      {
-        // V260823R2: 활성 세션만 원 요청 시각을 연결해 비활성 8k 경로의 임계구역 비용을 없앤다.
-        // 표식은 전송보다 먼저 세운다. USB ISR이 그 사이에 완료를 보고할 수 있다.
-        usbDiagnosticsOnReportTransferStarted(diagnostic_request_us,
-                                              diagnostic_session_id,
-                                              queued_reports);
-      }
-      if (USBD_LL_Transmit(pdev, HID_EPIN_ADDR, report, len) != USBD_OK)
-      {
-        usbHidEpRelease(p_hhid, HID_EPIN_ADDR);                        // V260824R1: 무장 실패 시 즉시 해제
-        ret = false;
-      }
-    }
-  }
-
-  return ret;
-}
 
 /**
   * @brief  USBD_HID_SendReportEXK
@@ -881,31 +747,7 @@ bool USBD_HID_SendReport(uint8_t *report,
   * @param  buff: pointer to report
   * @retval status
   */
-bool USBD_HID_SendReportEXK(uint8_t *report, uint16_t len)
-{
-  USBD_HandleTypeDef *pdev = &USBD_Device;
-  bool ret = false;
 
-  if (p_hhid == NULL)
-  {
-    return false;
-  }
-
-  if (pdev->dev_state == USBD_STATE_CONFIGURED)
-  {
-    if (usbHidEpTryAcquire(p_hhid, HID_EXK_EP_IN))                     // V260824R1: EXK EP만 점유
-    {
-      ret = true;
-      if (USBD_LL_Transmit(pdev, HID_EXK_EP_IN, report, len) != USBD_OK)
-      {
-        usbHidEpRelease(p_hhid, HID_EXK_EP_IN);                        // V260824R1: 무장 실패 시 즉시 해제
-        ret = false;
-      }
-    }
-  }
-
-  return ret;
-}
 
 /**
   * @brief  USBD_HID_GetPollingInterval
@@ -954,11 +796,11 @@ uint8_t *USBD_HID_GetUsrStrDescriptor(struct _USBD_HandleTypeDef *pdev, uint8_t 
   */
 static uint8_t *USBD_HID_GetFSCfgDesc(uint16_t *length)
 {
-  USBD_EpDescTypeDef *pEpDesc = USBD_GetEpDesc(USBD_HID_CfgDesc, HID_EPIN_ADDR);
-
-  if (pEpDesc != NULL)
-  {
-    pEpDesc->bInterval = HID_FS_BINTERVAL;
+  // V260909R1: HS descriptor 조회가 공유 배열을 변경하므로 FS 전환 시 모든 EP를 복원한다.
+  const uint8_t endpoints[] = {HID_EPIN_ADDR, HID_VIA_EP_IN, HID_VIA_EP_OUT, HID_EXK_EP_IN};
+  for (uint32_t i = 0; i < sizeof(endpoints); i++) {
+    USBD_EpDescTypeDef *pEpDesc = USBD_GetEpDesc(USBD_HID_CfgDesc, endpoints[i]);
+    if (pEpDesc != NULL) pEpDesc->bInterval = HID_FS_BINTERVAL;
   }
 
   *length = (uint16_t)sizeof(USBD_HID_CfgDesc);
@@ -1013,11 +855,11 @@ static uint8_t *USBD_HID_GetHSCfgDesc(uint16_t *length)
   */
 static uint8_t *USBD_HID_GetOtherSpeedCfgDesc(uint16_t *length)
 {
-  USBD_EpDescTypeDef *pEpDesc = USBD_GetEpDesc(USBD_HID_CfgDesc, HID_EPIN_ADDR);
-
-  if (pEpDesc != NULL)
-  {
-    pEpDesc->bInterval = HID_FS_BINTERVAL;
+  // V260909R1: HS descriptor 조회가 공유 배열을 변경하므로 FS 전환 시 모든 EP를 복원한다.
+  const uint8_t endpoints[] = {HID_EPIN_ADDR, HID_VIA_EP_IN, HID_VIA_EP_OUT, HID_EXK_EP_IN};
+  for (uint32_t i = 0; i < sizeof(endpoints); i++) {
+    USBD_EpDescTypeDef *pEpDesc = USBD_GetEpDesc(USBD_HID_CfgDesc, endpoints[i]);
+    if (pEpDesc != NULL) pEpDesc->bInterval = HID_FS_BINTERVAL;
   }
 
   *length = (uint16_t)sizeof(USBD_HID_CfgDesc);
@@ -1035,65 +877,50 @@ static uint8_t *USBD_HID_GetOtherSpeedCfgDesc(uint16_t *length)
   */
 static uint8_t USBD_HID_DataIn(USBD_HandleTypeDef *pdev, uint8_t epnum)
 {
-  // V260824R1: 완료된 엔드포인트만 해제한다. 이전에는 epnum과 무관하게 공용 state를
-  //            IDLE로 되돌려 VIA/EXK 완료가 진행 중인 키보드 전송을 풀어 버렸다.
-  usbHidEpRelease((USBD_HID_HandleTypeDef *)pdev->pClassDataCmsit[pdev->classId], epnum);
-
-  if (epnum != (HID_EPIN_ADDR & 0x0F))
-  {
-    return (uint8_t)USBD_OK;
+  uint32_t irq = usbHidLock();
+  if (p_hhid != NULL) {
+    if (epnum == (HIDInEpAdd & 0xFU)) {
+      if (hidTxComplete(&keyboard_tx) && usbDiagnosticsIsActive())
+        usbDiagnosticsOnReportTransferCompleted(micros());
+    } else if (epnum == (HID_EXK_EP_IN & 0xFU)) {
+      hidTxComplete(&extra_tx);
+    } else if (epnum == (HID_VIA_EP_IN & 0xFU)) {
+      hidTxComplete(&via_tx);
+    }
+    // V260909R1: 별도 타이머 위상/다음 SOF를 기다리지 않고 다음 head를 즉시 무장한다.
+    usbHidPumpLocked(pdev);
   }
-  
-  if (usbDiagnosticsIsActive())
-  {
-    usbDiagnosticsOnReportTransferCompleted(micros());                // V260823R2: 실제 키보드 IN 완료 시각
-  }
-
+  usbHidUnlock(irq);
   return (uint8_t)USBD_OK;
 }
 
 static uint8_t USBD_HID_DataOut(USBD_HandleTypeDef *pdev, uint8_t epnum)
 {
-  USBD_HID_HandleTypeDef *hhid = (USBD_HID_HandleTypeDef *)pdev->pClassDataCmsit[pdev->classId];
-
-  if (hhid == NULL)
-  {
+  uint32_t irq = usbHidLock();
+  if (p_hhid == NULL || epnum != (HID_VIA_EP_OUT & 0xFU) || !via_rx_armed) {
+    usbHidUnlock(irq);
     return (uint8_t)USBD_FAIL;
   }
-
-  /* Get the received data length */
-  uint32_t rx_size;
-  rx_size = USBD_LL_GetRxDataSize(pdev, epnum);
-
-  if (via_hid_receive_func != NULL)
-  {
-    via_hid_receive_func(via_hid_usb_rx_report, rx_size);
+  via_rx_armed = false;
+  uint32_t rx_size = USBD_LL_GetRxDataSize(pdev, epnum);
+  if (rx_size == HID_VIA_EP_SIZE && via_rx_count < HID_VIA_RX_DEPTH) {
+    memcpy(via_rx[(via_rx_head + via_rx_count) % HID_VIA_RX_DEPTH], via_hid_usb_rx_report, HID_VIA_EP_SIZE);
+    via_rx_count++;
+  } else {
+    transport_stats.invalid_rx++;
   }
-
-  // V260901R1: RX 콜백이 32B를 자체 큐에 복사한 직후 OUT을 재무장해 응답 대기와 다음 수신을 분리
-  (void)USBD_LL_PrepareReceive(pdev, HID_VIA_EP_OUT, via_hid_usb_rx_report, sizeof(via_hid_usb_rx_report));
-
+  // V260909R1: 여유가 있으면 즉시 재무장, 꽉 차면 ACK 후 폐기 대신 OUT NAK로 backpressure.
+  usbHidRearmViaLocked(pdev);
+  usbHidUnlock(irq);
   return (uint8_t)USBD_OK;
 }
 
-uint8_t USBD_HID_SOF(USBD_HandleTypeDef *pdev)
+static uint8_t USBD_HID_SOF(USBD_HandleTypeDef *pdev)
 {
-  if (qbufferAvailable(&via_report_q))
-  {
-    // V260901R1: VIA 응답의 20ms wall-clock throttle을 제거하고 IN EP가 비는 첫 SOF에 바로 전송
-    // V260824R1: VIA 응답도 동일한 EP busy 규약에 편입한다. 이전에는 이 경로가 규약을
-    //            우회해 "IN 전송 진행 중"이라는 불변식 자체가 성립하지 않았다.
-    USBD_HID_HandleTypeDef *hhid = (USBD_HID_HandleTypeDef *)pdev->pClassDataCmsit[pdev->classId];
-
-    if (usbHidEpTryAcquire(hhid, HID_VIA_EP_IN))
-    {
-      qbufferRead(&via_report_q, (uint8_t *)via_hid_usb_tx_report, 1);
-      if (USBD_LL_Transmit(pdev, HID_VIA_EP_IN, via_hid_usb_tx_report, sizeof(via_hid_usb_tx_report)) != USBD_OK)
-      {
-        usbHidEpRelease(hhid, HID_VIA_EP_IN);                          // V260824R1: 무장 실패 시 즉시 해제
-      }
-    }
-  }
+  uint32_t irq = usbHidLock();
+  usbHidPumpLocked(pdev);  // V260909R1: arm 실패/재구성 후의 bounded 재시도만 담당한다.
+  usbHidRearmViaLocked(pdev);
+  usbHidUnlock(irq);
   return (uint8_t)USBD_OK;
 }
 
@@ -1112,263 +939,209 @@ static uint8_t *USBD_HID_GetDeviceQualifierDesc(uint16_t *length)
 }
 #endif /* USE_USBD_COMPOSITE  */
 
-bool usbHidUpdateWakeUp(USBD_HandleTypeDef *pdev)
+// V260909R1: TX FIFO, PCD register RMW, lifecycle은 동일 PRIMASK 규약 아래에서만 접근한다.
+static bool usbHidArm(void *context, const hid_tx_packet_t *packet)
 {
-  PCD_HandleTypeDef *hpcd = (PCD_HandleTypeDef *)pdev->pData;
-  bool ret = false;
-  
-  if (pdev->dev_state == USBD_STATE_SUSPENDED)
-  {
-    logPrintf("[  ] USB WakeUp\n");
-
-    __HAL_PCD_UNGATE_PHYCLOCK((hpcd));
-    HAL_PCD_ActivateRemoteWakeup(hpcd);
-    delay(10);
-    HAL_PCD_DeActivateRemoteWakeup(hpcd);
-    ret = true;
-  }
-
-  return ret;
+  uint8_t ep = (uint8_t)(uintptr_t)context;
+  bool ok = USBD_LL_Transmit(&USBD_Device, ep, (uint8_t *)packet->data, packet->length) == USBD_OK;
+  if (!ok) transport_stats.arm_failures++;
+  if (ok && ep == HIDInEpAdd && packet->diagnostic_session != 0U)
+    usbDiagnosticsOnReportTransferStarted(packet->request_us, packet->diagnostic_session, keyboard_tx.count - 1U);
+  return ok;
 }
 
-bool usbHidSetViaReceiveFunc(void (*func)(uint8_t *, uint8_t))
+static bool usbHidSessionValid(USBD_HandleTypeDef *pdev)
 {
-  via_hid_receive_func = func;
-  return true;
+  return p_hhid != NULL && (pdev->dev_state == USBD_STATE_CONFIGURED ||
+      (pdev->dev_state == USBD_STATE_SUSPENDED && pdev->dev_old_state == USBD_STATE_CONFIGURED));
 }
 
-bool usbHidEnqueueViaResponse(const uint8_t *p_data, uint8_t length)
+static void usbHidPumpLocked(USBD_HandleTypeDef *pdev)
 {
-  via_report_info_t info;
-
-  if (p_data == NULL)
-  {
-    return false;
+  if (!usbHidSessionValid(pdev)) return;
+  // 정상 경로는 모든 전이를 FIFO에 유지한다. 유한 큐 overflow 뒤에만 최종 상태를 복구한다.
+  if (keyboard_reconcile && keyboard_tx.count == 0U) {
+    hidTxPush(&keyboard_tx, &keyboard_latest);
+    keyboard_reconcile = false;
   }
-
-  if (length > sizeof(info.buf))
-  {
-    length = sizeof(info.buf);
+  if (extra_reconcile && extra_tx.count == 0U) {
+    for (uint8_t i = 0; i < 3U; i++)
+      if (extra_reconcile & (1U << i)) hidTxPush(&extra_tx, &extra_latest[i]);
+    extra_reconcile = 0U;
   }
-
-  memset(info.buf, 0, sizeof(info.buf));
-  memcpy(info.buf, p_data, length);
-
-  if (qbufferWrite(&via_report_q, (uint8_t *)&info, 1) != true)
-  {
-    logPrintf("[!] VIA TX queue overflow\n");                         // V251108R8: 메인 루프 큐 적재 실패 감시
-    return false;
-  }
-
-  return true;
+  // V260909R1: 같은 세션의 suspend는 전이 큐를 유지하되 물리 IN 무장은 resume 이후만 한다.
+  if (pdev->dev_state != USBD_STATE_CONFIGURED) return;
+  hidTxKick(&keyboard_tx, usbHidArm, (void *)(uintptr_t)HIDInEpAdd);
+  hidTxKick(&extra_tx, usbHidArm, (void *)(uintptr_t)HID_EXK_EP_IN);
+  hidTxKick(&via_tx, usbHidArm, (void *)(uintptr_t)HID_VIA_EP_IN);
 }
 
-bool usbHidSendReport(uint8_t *p_data, uint16_t length)
+static void usbHidRearmViaLocked(USBD_HandleTypeDef *pdev)
 {
-  report_info_t report_info = {0};
-  uint16_t      diagnostic_session_id = 0U;
-  uint32_t      diagnostic_request_us = 0U;
-
-  if (length > HID_KEYBOARD_REPORT_SIZE)
-  {
-    return false;
+  if (p_hhid != NULL && !via_rx_armed && via_rx_count < HID_VIA_RX_DEPTH &&
+      pdev->ep_out[HID_VIA_EP_OUT & 0xFU].is_used) {
+    via_rx_armed = USBD_LL_PrepareReceive(pdev, HID_VIA_EP_OUT, via_hid_usb_rx_report,
+                                        sizeof(via_hid_usb_rx_report)) == USBD_OK;
   }
+}
 
-  if (!USBD_is_suspended())
-  {
-    if (usbDiagnosticsIsActive())
-    {
-      diagnostic_session_id = usbDiagnosticsGetSessionId();
-      diagnostic_request_us = micros();                            // V260823R2: 실제 리포트 요청 경계
+static void usbHidResetTransport(void)
+{
+  transport_stats.session_discards += keyboard_tx.count + extra_tx.count + via_tx.count + via_rx_count;
+  transport_generation++;
+  hidTxInit(&keyboard_tx, keyboard_slots, HID_TX_DEPTH);
+  hidTxInit(&extra_tx, extra_slots, HID_TX_DEPTH);
+  hidTxInit(&via_tx, via_slots, HID_TX_DEPTH);
+  keyboard_reconcile = true;
+  extra_reconcile = 7U;
+  keyboard_latest.request_us = 0U;
+  keyboard_latest.diagnostic_session = 0U;
+  via_rx_count = via_rx_head = 0U;
+  via_rx_armed = false;
+  ep0_led_pending = false;
+  if (wake_active && USBD_Device.pData != NULL)
+    HAL_PCD_DeActivateRemoteWakeup((PCD_HandleTypeDef *)USBD_Device.pData);
+  wake_pending = wake_active = wake_attempted = false;
+}
+
+bool usbHidReadViaRequest(uint8_t *data, uint32_t *generation)
+{
+  if (data == NULL || generation == NULL) return false;
+  uint32_t irq = usbHidLock();
+  // 응답 슬롯을 확보할 수 있을 때만 부작용을 가진 다음 명령을 꺼낸다. TX 생산자는 하나다.
+  bool ready = p_hhid != NULL && USBD_Device.dev_state == USBD_STATE_CONFIGURED &&
+               via_rx_count != 0U && via_tx.count < via_tx.capacity;
+  if (ready) {
+    memcpy(data, via_rx[via_rx_head], HID_VIA_EP_SIZE);
+    *generation = transport_generation;
+    via_rx_head = (via_rx_head + 1U) % HID_VIA_RX_DEPTH;
+    via_rx_count--;
+    usbHidRearmViaLocked(&USBD_Device);
+  }
+  usbHidUnlock(irq);
+  return ready;
+}
+
+bool usbHidEnqueueViaResponse(const uint8_t *data, uint8_t length, uint32_t generation)
+{
+  if (data == NULL || length != HID_VIA_EP_SIZE) return false;
+  hid_tx_packet_t packet = { .length = HID_VIA_EP_SIZE };
+  memcpy(packet.data, data, length);
+  uint32_t irq = usbHidLock();
+  bool ok = p_hhid != NULL && generation == transport_generation && hidTxPush(&via_tx, &packet);
+  usbHidPumpLocked(&USBD_Device);
+  usbHidUnlock(irq);
+  return ok;
+}
+
+static void usbHidRequestWakeLocked(void)
+{
+  if (USBD_Device.dev_state == USBD_STATE_SUSPENDED && USBD_Device.dev_remote_wakeup && !wake_attempted)
+    wake_pending = true;
+}
+
+bool usbHidSendReport(uint8_t *data, uint16_t length)
+{
+  if (data == NULL || length != HID_KEYBOARD_REPORT_SIZE) return false;
+  hid_tx_packet_t packet = { .length = HID_KEYBOARD_REPORT_SIZE };
+  memcpy(packet.data, data, length);
+  if (usbDiagnosticsIsActive()) {
+    packet.request_us = micros();
+    packet.diagnostic_session = usbDiagnosticsGetSessionId();
+  }
+  uint32_t irq = usbHidLock();
+  usbHidPumpLocked(&USBD_Device);  // V260909R1: 이전 세대의 재동기화를 새 전이보다 먼저 확정
+  keyboard_latest = packet;
+  bool configured = usbHidSessionValid(&USBD_Device);
+  usbHidRequestWakeLocked();
+  bool ok = configured && !keyboard_reconcile && hidTxPush(&keyboard_tx, &packet);
+  if (!ok) {
+    if (configured) {
+      transport_stats.keyboard_coalesced++;
+      usbDiagnosticsOnReportQueueDrop(usbDiagnosticsIsActive() ? micros() : 0U);
     }
+    keyboard_reconcile = true;
+  }
+  if (usbDiagnosticsIsActive()) usbDiagnosticsOnReportQueueDepth(keyboard_tx.count);
+  usbHidPumpLocked(&USBD_Device);
+  usbHidUnlock(irq);
+  return ok;
+}
 
-    memcpy(hid_buf, p_data, length);
-    if (!USBD_HID_SendReport((uint8_t *)hid_buf,
-                             HID_KEYBOARD_REPORT_SIZE,
-                             diagnostic_request_us,
-                             diagnostic_session_id,
-                             (uint16_t)qbufferAvailable(&report_q)))
-    {
-      memcpy(report_info.buf, p_data, length);
-      report_info.diagnostic_request_us = diagnostic_request_us;
-      report_info.diagnostic_session_id = diagnostic_session_id;
-      if (qbufferWrite(&report_q, (uint8_t *)&report_info, 1) != true)
-      {
-        usbDiagnosticsOnReportQueueDrop(usbDiagnosticsIsActive() ? micros() : 0U);  // V260823R2
-      }
-      else if (diagnostic_session_id != 0U)
-      {
-        usbDiagnosticsOnReportQueueDepth((uint16_t)qbufferAvailable(&report_q));
-      }
+bool usbHidSendReportEXK(uint8_t *data, uint16_t length)
+{
+  if (data == NULL || length == 0U || data[0] < 2U || data[0] > 4U ||
+      length != (data[0] == 2U ? 6U : 3U)) return false;
+  hid_tx_packet_t packet = { .length = (uint8_t)length };
+  memcpy(packet.data, data, length);
+  uint32_t irq = usbHidLock();
+  usbHidPumpLocked(&USBD_Device);
+  uint8_t index = data[0] - 2U;
+  extra_latest[index] = packet;
+  // 상대 이동/휠은 재연결 및 overflow 복구에서 반복하지 않는다. 버튼만 현재 상태다.
+  if (index == 0U) memset(&extra_latest[0].data[2], 0, 4U);
+  bool configured = usbHidSessionValid(&USBD_Device);
+  usbHidRequestWakeLocked();
+  bool ok = configured && !extra_reconcile && hidTxPush(&extra_tx, &packet);
+  if (!ok) {
+    if (configured) {
+      transport_stats.extra_coalesced++;
+      usbDiagnosticsOnReportQueueDrop(usbDiagnosticsIsActive() ? micros() : 0U);  // 기존 wire 집계는 keyboard + EXK
     }
+    extra_reconcile |= 1U << index;
   }
-  else
-  {
-    usbHidUpdateWakeUp(&USBD_Device);
-  }
-
-  return true;
+  usbHidPumpLocked(&USBD_Device);
+  usbHidUnlock(irq);
+  return ok;
 }
 
-bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length)
+void usbHidOnSuspend(void)
 {
-  exk_report_info_t report_info;
-
-  if (length > HID_EXK_EP_SIZE)
-    return false;
-
-  if (!USBD_is_suspended())
-  {
-    memcpy(hid_buf_exk, p_data, length);
-    if (!USBD_HID_SendReportEXK((uint8_t *)hid_buf_exk, length))
-    {
-      report_info.len = length;
-      memcpy(report_info.buf, p_data, length);
-      if (qbufferWrite(&report_exk_q, (uint8_t *)&report_info, 1) != true)
-      {
-        usbDiagnosticsOnReportQueueDrop(usbDiagnosticsIsActive() ? micros() : 0U);  // V260823R2: EXK/마우스 드롭도 하드 이벤트
-      }
-    }    
-  }
-  else
-  {
-    usbHidUpdateWakeUp(&USBD_Device);
-  }
-  
-  return true;
+  uint32_t irq = usbHidLock();
+  suspend_ms = millis();
+  wake_pending = wake_attempted = false;
+  // V260909R1: suspend는 reset이 아니다. 기존 backlog와 복귀 중의 짧은 press/release를 순서대로 보존한다.
+  usbHidUnlock(irq);
 }
 
-
-__weak void usbHidSetStatusLed(uint8_t led_bits)
+void usbHidWakeTick(void)
 {
-
-}
-
-static uint32_t usbHidBackupTimerOffsetUs(void)
-{
-  if (usbBootModeIsFullSpeed())
-  {
-    return 975U;                                                   // V251012R1 FS 프레임 종료 직전 백업 전송 예약
+  // SysTick에서만 pulse 종료를 관리해 메인 루프의 macro/EEPROM 대기에 의존하지 않는다.
+  if (!wake_pending && !wake_active) return;
+  uint32_t irq = usbHidLock();
+  uint32_t now = millis();
+  PCD_HandleTypeDef *pcd = (PCD_HandleTypeDef *)USBD_Device.pData;
+  if (wake_active && (uint32_t)(now - wake_start_ms) >= 10U) {
+    HAL_PCD_DeActivateRemoteWakeup(pcd);
+    wake_active = false;
   }
-
-  return 120U;                                                     // V251012R1 HS/uSOF 환경은 기존 120us 유지
-}
-
-void usbHidInitTimer(void)
-{
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_SlaveConfigTypeDef sSlaveConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-  TIM_OC_InitTypeDef sConfigOC = {0};
-
-  htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 299;
-  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 4294967295;
-  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_TIM_OC_Init(&htim2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sSlaveConfig.SlaveMode = TIM_SLAVEMODE_COMBINED_RESETTRIGGER;
-  sSlaveConfig.InputTrigger = TIM_TS_ITR13;
-  if (HAL_TIM_SlaveConfigSynchro(&htim2, &sSlaveConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sConfigOC.OCMode = TIM_OCMODE_TIMING;
-  sConfigOC.Pulse = usbHidBackupTimerOffsetUs();                    // V251012R1 속도별 백업 타이머 오프셋 적용
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  if (HAL_TIM_OC_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  HAL_TIM_OC_Start_IT(&htim2, TIM_CHANNEL_1);
-}
-
-void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* tim_baseHandle)
-{
-
-  if(tim_baseHandle->Instance==TIM2)
-  {
-    /* TIM2 clock enable */
-    __HAL_RCC_TIM2_CLK_ENABLE();
-
-    /* TIM2 interrupt Init */
-    HAL_NVIC_SetPriority(TIM2_IRQn, 0, 0);
-    HAL_NVIC_EnableIRQ(TIM2_IRQn);
-  }
-}
-
-void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* tim_baseHandle)
-{
-
-  if(tim_baseHandle->Instance==TIM2)
-  {
-    /* Peripheral clock disable */
-    __HAL_RCC_TIM2_CLK_DISABLE();
-
-    /* TIM2 interrupt Deinit */
-    HAL_NVIC_DisableIRQ(TIM2_IRQn);
-  }
-}
-
-void TIM2_IRQHandler(void)
-{
-  HAL_TIM_IRQHandler(&htim2);
-}
-
-void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
-{
-  if (qbufferAvailable(&report_q) > 0)
-  {
-    if (p_hhid != NULL && p_hhid->in_ep_busy[HID_EPIN_ADDR & 0x0FU] == 0U)  // V260824R1
-    {
-      report_info_t report_info;
-      uint16_t queued_reports = (uint16_t)qbufferAvailable(&report_q);
-
-      if (qbufferRead(&report_q, (uint8_t *)&report_info, 1) == true)
-      {
-        memcpy(hid_buf, report_info.buf, HID_KEYBOARD_REPORT_SIZE);
-        (void)USBD_HID_SendReport((uint8_t *)hid_buf,
-                                  HID_KEYBOARD_REPORT_SIZE,
-                                  report_info.diagnostic_request_us,
-                                  report_info.diagnostic_session_id,
-                                  queued_reports);                    // V260823R2: 큐 대기 시간을 유지한 전송
-      }
+  if (wake_pending) {
+    if (USBD_Device.dev_state != USBD_STATE_SUSPENDED || !USBD_Device.dev_remote_wakeup || pcd == NULL) {
+      wake_pending = false;
+    } else if ((uint32_t)(now - suspend_ms) >= 5U) {
+      __HAL_PCD_UNGATE_PHYCLOCK(pcd);
+      HAL_PCD_ActivateRemoteWakeup(pcd);
+      wake_start_ms = now;
+      wake_active = wake_attempted = true;
+      wake_pending = false;
     }
   }
+  usbHidUnlock(irq);
+}
 
-  if (qbufferAvailable(&report_exk_q) > 0)
-  {
-    if (p_hhid != NULL && p_hhid->in_ep_busy[HID_EXK_EP_IN & 0x0FU] == 0U)  // V260824R1
-    {
-      exk_report_info_t report_info;
+void usbHidGetTransportStats(usb_hid_transport_stats_t *stats)
+{
+  if (stats == NULL) return;
+  uint32_t irq = usbHidLock();
+  *stats = transport_stats;
+  usbHidUnlock(irq);
+}
 
-      qbufferRead(&report_exk_q, (uint8_t *)&report_info, 1);
-
-      memcpy(hid_buf_exk, report_info.buf, report_info.len);
-      USBD_HID_SendReportEXK((uint8_t *)hid_buf_exk, report_info.len);
-    }
-  }
-
-  return;
+// V260909R1: 사용자 Apply/reset은 큐에 넣기만 한 응답을 전송 완료로 오인하지 않는다.
+bool usbHidViaResponsesPending(void)
+{
+  uint32_t irq = usbHidLock();
+  bool pending = via_tx.busy || via_tx.count != 0U;
+  usbHidUnlock(irq);
+  return pending;
 }

@@ -45,6 +45,20 @@ checked by `tools/era_via_host_tests/check_via_transport_latency.py`.
 > `via_hid_task()` enqueue, and mix envelopes on one IN endpoint.
 > **REOPENS:** none while VIA IN remains a single 32 B endpoint.
 
+### Admission, scheduling and reset boundaries
+
+`USBD_HID_DataOut()` admits only a complete 32-byte frame. `raw_hid_receive()`
+validates that size again before board hooks. The four keymap/macro buffer
+commands reject a payload size greater than 28 before reading or writing the
+frame. Invalid buffer sizes use `id_unhandled` without side effects.
+
+`via_hid_task()` dispatches at most one request per main-loop iteration, after
+keyboard processing, and only with response credit. RX saturation uses USB NAK.
+The response carries a bus-generation token internally; no token or extra bytes
+are added to the wire protocol. Reset can reject an old response, but cannot undo
+a command already admitted to dispatch, including its later side effects. All envelope layouts below remain
+unchanged. `docs/contract_usb.md` owns queue and lifecycle mechanics.
+
 ## 2. Channel numbers are not the RP2040 layout
 
 The generated channel table is `docs/MAP.md` §4 (`via-channels`). Do
@@ -116,6 +130,28 @@ moving a shipped number breaks the app overlay and the official JSON.
 
 SOCD command names here are `id_qmk_kill_switch_lr` and
 `id_qmk_kill_switch_ud`. The reference uses a `socd` prefix.
+
+### Runtime rules for KKUK and SOCD
+
+KKUK normalizes enable to boolean and clamps Delay to 5..30 ticks and Repeat to
+5..20 ticks both on load and on live SET. A semantic live change starts a fresh
+tracking epoch. Keys that were already held before enable/reconfiguration are not
+retroactively counted; they enter the next epoch on a new press. Repeat timing is
+elapsed from a current timestamp, never from a future timestamp.
+
+SOCD manipulates only HID keyboard basic usages or modifier usages. Basic usages
+use the keyboard key array; modifiers use the modifier byte. A pair is runtime
+eligible only when mode 1 is active and both configured usages are reportable and
+distinct. If two enabled pairs share a usage, both overlapping pairs are runtime
+inert until the configuration is unambiguous. Unsupported 16-bit keycodes may be
+retained by GET/storage so the app can display and correct them, but they are never
+truncated into an 8-bit basic usage and never alter a keyboard report.
+
+Before a semantic SOCD live change, the old runtime restores every still-tracked
+usage that SOCD may have suppressed and emits the reconciled keyboard report; then
+all pair tracking starts a fresh epoch. The new mapping does not retroactively
+claim already-held keys. This gives configuration changes a defined boundary
+without fabricating physical transitions. Wire ids and EEPROM layout are unchanged.
 
 A new channel takes an unused number from `docs/MAP.md` §4 and is added
 to all five official JSON files and the app custom definition together.
@@ -203,7 +239,7 @@ Always bump, no compare: `via_set_layout_options()`.
 `id_eeprom_reset` bumps all three domains.
 
 Does not bump: channel 2 rgblight (VIA core), channel 8 version,
-channel 9 system, `id_custom_save` (EEPROM flush only; BootMode save is
+channel 9 system, `id_custom_save` (schedule EEPROM persistence only; BootMode save is
 a no-op), selector `0x07`.
 
 A no-op custom SET must not bump. Otherwise the app treats its own
@@ -257,9 +293,9 @@ Domain bits: `ERA_STATE_SYNC_DOMAIN_KEYMAP` `0x01`,
 byte (`3` or `6..31`) is `ERA_STATE_SYNC_STATUS_INVALID` (status 2);
 the tag is still echoed and revisions are not filled.
 
-`length < 32` is not INVALID. `era_state_sync_via_command` returns
-false and `via.c` sets `id_unhandled` (`0xFF`); the buffer is not
-rewritten as a v1 envelope. Peer observation, VIA unedited: the app
+`length < 32` is not INVALID. A direct `era_state_sync_via_command`
+call returns false; the buffer is not rewritten as a v1 envelope. The
+raw-HID transport rejects a short frame before command dispatch and sends no response. Peer observation, VIA unedited: the app
 parseStateSyncEnvelope returns null when length is not 32 (neither
 `0xFF` nor INVALID).
 
@@ -270,8 +306,8 @@ envelope, reserved INVALID, unsupported version, tag echo, and the
 > **REFUSED:** answering `ERA_STATE_SYNC_STATUS_INVALID` on
 > `length < 32`.
 > **WHY:** a short buffer is not an envelope;
-> `era_state_sync_via_command` returns false and `via.c` marks
-> `id_unhandled` (`0xFF`).
+> `era_state_sync_via_command` returns false; raw-HID transport rejects
+> a short frame before dispatch.
 > **REOPENS:** none while VIA IN is a 32 B report.
 
 ## 6. selector `0x07` — diagnostics envelope
@@ -309,8 +345,8 @@ chunk 0 with a nonzero sequence, or a duration other than 10 / 30 / 60
 is `ERA_USB_DIAGNOSTICS_STATUS_INVALID` (status 2). Unsupported
 version is checked first and wins over INVALID.
 
-`length < 32` is the same unhandled path as §5: the handler
-returns false and `via.c` sets `id_unhandled` (`0xFF`).
+`length < 32` follows §5: a direct handler call returns false; raw-HID
+transport rejects the short frame before dispatch.
 
 ### Response
 
@@ -371,30 +407,24 @@ clear, frozen multi-chunk, stale sequence, wrap, and saturation.
 > **REFUSED:** answering `ERA_USB_DIAGNOSTICS_STATUS_INVALID` on
 > `length < 32`.
 > **WHY:** a short buffer is not an envelope;
-> `era_usb_diagnostics_via_command` returns false and `via.c` marks
-> `id_unhandled` (`0xFF`).
+> `era_usb_diagnostics_via_command` returns false; raw-HID transport
+> rejects a short frame before dispatch.
 > **REOPENS:** none while VIA IN is a 32 B report.
 
-### 6-1. Axes that survive a phase redraw
+### 6-1. Comparing transport measurements
 
-Absolute microseconds are not comparable across runs. The same
-firmware and mode moved FS average 231 → 558 µs and HS 4K 232 → 184
-µs on re-enumeration alone. Reports leave on the debounce 1 ms tick
-boundary, and that tick's phase against the host USB frame is redrawn
-at random every boot. `min` is that phase.
+The recorded interval starts at a keyboard report request and ends at its DataIn
+completion. It is not physical-contact-to-OS latency. Host frame phase, real link
+speed, queue occupancy, debounce behavior and generated traffic can all affect
+its distribution. Compare multiple runs with the same workload, firmware and
+negotiated speed; report minimum, distribution, span, queue peak, drops and loop
+gaps together rather than treating one average or minimum as a stability score.
 
-Comparable axes are phase-independent: span (max − min), queue-depth
-peak, report drops, `>2× interval` counts, main-loop gap.
-
-The histogram's expected interval is the BootMode selected at START,
-not the negotiated link speed. HS 8K on an FS-only hub puts every
-sample in the top bucket. The snapshot already carries mode and
-negotiated speed; the app judges the mismatch. Firmware does not hide
-the selected mode or auto-correct it.
-
-Do not mix firmware versions in one comparison set. `V260824R1`
-split IN-endpoint busy (`in_ep_busy`) and lowered the latency and
-queue-depth baseline.
+The histogram's expected interval is the BootMode selected at START, not the
+negotiated speed. The snapshot carries both so the app can disclose a mismatch.
+No phase-only explanation or automatic correction is implied by the measurements.
+Do not pool versions with different transport ownership/scheduling architectures
+into one latency comparison set.
 
 ### 6-2. Instrumentation cost bound
 
@@ -407,9 +437,10 @@ that bound.
   plus 6 B of sequence / valid / speed / next-id. No heap. No EEPROM.
 - `usbDiagnosticsCapture()` copies 292 B (session 272 + counters 20)
   under a global IRQ mask. About 1 Hz.
-- Keyboard retry-queue entries carry 6 B of request time and session
-  id (`report_info_t`); 128 slots add 768 B. `_Static_assert` locks
-  that padding.
+- Fixed `hid_tx_packet_t` packets contain request time and diagnostic session ID
+  alongside the payload. Metadata is carried with each accepted FIFO entry and
+  then with its immutable active packet; it is not stored in a separate retry path.
+  The packet size and all endpoint storage must be included in the link-map budget.
 - Idle does not read TIM5 for this subsystem. `qmkUpdate()` calls
   `usbDiagnosticsTask(micros())` only while
   `usbDiagnosticsIsActive()`. A live session reads the counter once

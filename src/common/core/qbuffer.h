@@ -10,6 +10,8 @@ extern "C" {
 
 
 
+// V260909R1: 한 producer/한 consumer. length 항목 요청은 prefix 부분 성공이 가능하다.
+// create/flush는 외부에서 양쪽을 정지시킨 후 호출. peek 후 NULL-data write/read로 commit 가능.
 typedef struct
 {
   uint32_t in;

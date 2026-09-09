@@ -211,6 +211,20 @@ void bspMpuInit(void)
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
 
 
+  // V260909R1: ES0596 Rev10 2.2.17. H7S3에는 없는 GFXMMU 영역도 speculative access를 차단한다.
+  MPU_InitStruct.Number           = MPU_REGION_NUMBER5;
+  MPU_InitStruct.Enable           = MPU_REGION_ENABLE;
+  MPU_InitStruct.BaseAddress      = 0x25000000;
+  MPU_InitStruct.Size             = MPU_REGION_SIZE_16MB;
+  MPU_InitStruct.TypeExtField     = MPU_TEX_LEVEL0;
+  MPU_InitStruct.IsCacheable      = MPU_ACCESS_NOT_CACHEABLE;
+  MPU_InitStruct.IsBufferable     = MPU_ACCESS_BUFFERABLE;  // TEX=0,C=0,B=1: Device
+  MPU_InitStruct.IsShareable      = MPU_ACCESS_SHAREABLE;
+  MPU_InitStruct.SubRegionDisable = 0x0;
+  MPU_InitStruct.AccessPermission = MPU_REGION_NO_ACCESS;
+  MPU_InitStruct.DisableExec      = MPU_INSTRUCTION_ACCESS_DISABLE;
+  HAL_MPU_ConfigRegion(&MPU_InitStruct);
+
   /* Enable the MPU */
   HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
 }

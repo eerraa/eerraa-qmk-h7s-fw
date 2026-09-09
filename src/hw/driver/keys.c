@@ -14,6 +14,8 @@ static bool keysInitGpio(void);
 
 
 const static uint8_t row_wr_buf[] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20};
+_Static_assert(MATRIX_ROWS > 0 && MATRIX_ROWS <= sizeof(row_wr_buf), "matrix row drive table overflow");
+_Static_assert(MATRIX_COLS > 0 && MATRIX_COLS <= 16, "matrix column sample width overflow");
 
 __attribute__((section(".non_cache")))
 static volatile uint16_t col_rd_buf[MATRIX_ROWS] = {0x00,};  // V250924R5: DMA 직접 참조 재검토로 volatile 지정해 최신 값 보장
@@ -21,9 +23,12 @@ static volatile uint16_t col_rd_buf[MATRIX_ROWS] = {0x00,};  // V250924R5: DMA �
 
 
 static TIM_HandleTypeDef htim16;
+// V260909R1: DMA가 재읽는 linked-list descriptor도 payload와 같은 non-cache 영역에 둔다.
+__attribute__((section(".non_cache"), aligned(32)))
 static DMA_NodeTypeDef   Node_GPDMA1_Channel1;
 static DMA_QListTypeDef  List_GPDMA1_Channel1;
 static DMA_HandleTypeDef handle_GPDMA1_Channel1;
+__attribute__((section(".non_cache"), aligned(32)))
 static DMA_NodeTypeDef   Node_GPDMA1_Channel2;
 static DMA_QListTypeDef  List_GPDMA1_Channel2;
 static DMA_HandleTypeDef handle_GPDMA1_Channel2;
@@ -52,8 +57,8 @@ bool keysInit(void)
 
 
 
-  HAL_TIM_Base_Start(&htim16);
-  HAL_TIM_OC_Start(&htim16, TIM_CHANNEL_1);
+  // V260909R1: OC start가 channel과 counter를 함께 시작한다. 실패를 정상 scan으로 취급하지 않는다.
+  if (HAL_TIM_OC_Start(&htim16, TIM_CHANNEL_1) != HAL_OK) return false;
 
 
   // V251009R2: DMA 기반 자동 스캔이 상시 갱신되므로 CLI 키 매트릭스 뷰어를 제거함
@@ -232,7 +237,8 @@ bool keysInitDma(void)
     return false;
   }
 
-  HAL_DMAEx_List_Start(&handle_GPDMA1_Channel1);
+  __DSB();  // V260909R1: descriptor 게시 후 DMA에 소유권 전달
+  if (HAL_DMAEx_List_Start(&handle_GPDMA1_Channel1) != HAL_OK) return false;
 
 
   // Update Event
@@ -292,7 +298,8 @@ bool keysInitDma(void)
     return false;
   }
 
-  HAL_DMAEx_List_Start(&handle_GPDMA1_Channel2);
+  __DSB();
+  if (HAL_DMAEx_List_Start(&handle_GPDMA1_Channel2) != HAL_OK) return false;
 
   return true;
 }
@@ -309,7 +316,8 @@ bool keysReadBuf(uint8_t *p_data, uint32_t length)
 
 bool keysReadColsBuf(uint16_t *p_data, uint32_t rows_cnt)
 {
-  memcpy(p_data, (const void *)col_rd_buf, rows_cnt * sizeof(uint16_t));
+  if (p_data == NULL || rows_cnt > MATRIX_ROWS) return false;
+  for (uint32_t row = 0; row < rows_cnt; row++) p_data[row] = col_rd_buf[row];  // V260909R1: volatile halfword 관측 유지
   return true;
 }
 
@@ -323,6 +331,7 @@ bool keysGetPressed(uint16_t row, uint16_t col)
   bool     ret = false;
   uint16_t col_bit;
 
+  if (row >= MATRIX_ROWS || col >= MATRIX_COLS) return false;  // V260909R1: public accessor 범위 검사
   col_bit = col_rd_buf[row];
 
   if (col_bit & (1<<col))

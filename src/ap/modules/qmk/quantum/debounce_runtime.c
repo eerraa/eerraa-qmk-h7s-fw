@@ -52,15 +52,6 @@ typedef struct
   uint8_t                 max_post_ms;
 } debounce_algo_entry_t;
 
-// V260901R1: 외부 STATUS는 제거하되 재초기화와 입력 우회를 결정하는 오류 상태는 내부에 유지
-typedef enum
-{
-  DEBOUNCE_RUNTIME_ERROR_NONE = 0,
-  DEBOUNCE_RUNTIME_ERROR_UNSUPPORTED,
-  DEBOUNCE_RUNTIME_ERROR_ALLOC,
-} debounce_runtime_error_t;
-
-
 static const debounce_algo_entry_t k_algorithms[] =
 {
   {
@@ -90,210 +81,92 @@ static const debounce_algo_entry_t k_algorithms[] =
 };
 
 
-typedef struct
-{
+// V260909R1: 메인 루프만 설정/실행을 소유한다. 고정 메모리라 재시도/입력 bypass가 필요 없다.
+typedef struct {
   const debounce_algo_entry_t *algo;
-  debounce_runtime_config_t    config;
-  uint8_t                      rows;
-  bool                         rows_ready;
-  bool                         config_ready;
-  bool                         pending_reinit;
-  debounce_runtime_error_t     last_error;
+  debounce_runtime_config_t config;
+  uint8_t rows;
+  bool config_ready;
+  bool ready;
+  bool reconcile;
 } debounce_runtime_state_t;
-
-static debounce_runtime_state_t g_runtime = {0};
+static debounce_runtime_state_t g_runtime;
 static const debounce_runtime_config_t k_default_config = DEBOUNCE_RUNTIME_CFG(QMK_DEFAULT_DEBOUNCE_TYPE);
-
-
-static const debounce_algo_entry_t *debounce_runtime_find_algo(debounce_runtime_type_t type);
-static uint8_t                       debounce_runtime_clamp_delay(uint8_t value, uint8_t max_value);
-static bool                          debounce_runtime_apply_if_possible(void);
-static bool                          debounce_runtime_is_ready(void);
-static void                          debounce_runtime_free_active(void);
-static bool                          debounce_runtime_passthrough(matrix_row_t raw[],
-                                                                  matrix_row_t cooked[],
-                                                                  uint8_t      num_rows,
-                                                                  bool         changed);
-
-
-bool debounce_runtime_apply_config(const debounce_runtime_config_t *config)
-{
-  if (config == NULL)
-  {
-    return false;
-  }
-
-  const debounce_algo_entry_t *algo = debounce_runtime_find_algo(config->type);
-  if (algo == NULL)
-  {
-    g_runtime.last_error = DEBOUNCE_RUNTIME_ERROR_UNSUPPORTED;
-    return false;
-  }
-
-  debounce_runtime_config_t sanitized = *config;
-  sanitized.pre_ms  = debounce_runtime_clamp_delay(config->pre_ms, algo->max_pre_ms);
-  sanitized.post_ms = debounce_runtime_clamp_delay(config->post_ms, algo->max_post_ms);
-
-  bool type_changed = (g_runtime.algo != algo);
-  g_runtime.algo          = algo;
-  g_runtime.config        = sanitized;
-  g_runtime.config_ready  = true;
-  g_runtime.pending_reinit = true;
-  g_runtime.last_error    = DEBOUNCE_RUNTIME_ERROR_NONE;
-
-  if (type_changed)
-  {
-    debounce_runtime_free_active();
-  }
-
-  return debounce_runtime_apply_if_possible();
-}
-
-const debounce_runtime_config_t *debounce_runtime_get_config(void)
-{
-  if (g_runtime.config_ready)
-  {
-    return &g_runtime.config;
-  }
-  return &k_default_config;
-}
-
-const debounce_runtime_config_t *debounce_runtime_get_default_config(void)
-{
-  return &k_default_config;                                        // V251115R3: 보드 기본 디바운스 설정 반환
-}
-
-static bool debounce_runtime_is_ready(void)
-{
-  return (g_runtime.config_ready == true) &&
-         (g_runtime.pending_reinit == false) &&
-         (g_runtime.last_error == DEBOUNCE_RUNTIME_ERROR_NONE);
-}
-
-uint8_t debounce_runtime_press_delay(void)
-{
-  return debounce_runtime_get_config()->pre_ms;
-}
-
-uint8_t debounce_runtime_release_delay(void)
-{
-  return debounce_runtime_get_config()->post_ms;
-}
-
-void debounce_init(uint8_t num_rows)
-{
-  g_runtime.rows       = num_rows;
-  g_runtime.rows_ready = true;
-  debounce_runtime_apply_if_possible();                           // V251115R1: 매트릭스 초기화 시 현재 프로필을 적용
-}
-
-bool debounce(matrix_row_t raw[], matrix_row_t cooked[], uint8_t num_rows, bool changed)
-{
-  if (g_runtime.algo == NULL || !g_runtime.config_ready)
-  {
-    return debounce_runtime_passthrough(raw, cooked, num_rows, changed);      // V251115R6: 런타임 준비 실패 시 입력 우회 처리
-  }
-
-  if (!debounce_runtime_is_ready())                                             // V251115R4: 재초기화 대기/오류 시 안전 경로로 우회
-  {
-    debounce_runtime_apply_if_possible();
-    if (!debounce_runtime_is_ready())
-    {
-      return debounce_runtime_passthrough(raw, cooked, num_rows, changed);    // V251115R6: 적용 실패 시 키 입력 손실 방지
-    }
-  }
-
-  if (num_rows != g_runtime.rows)
-  {
-    return g_runtime.algo->run(raw, cooked, g_runtime.rows, changed);
-  }
-  return g_runtime.algo->run(raw, cooked, num_rows, changed);
-}
-
-void debounce_free(void)
-{
-  debounce_runtime_free_active();
-  g_runtime.rows_ready    = false;
-  g_runtime.pending_reinit = true;
-}
 
 static const debounce_algo_entry_t *debounce_runtime_find_algo(debounce_runtime_type_t type)
 {
-  for (size_t i = 0; i < (sizeof(k_algorithms)/sizeof(k_algorithms[0])); ++i)
-  {
-    if (k_algorithms[i].type == type)
-    {
-      return &k_algorithms[i];
-    }
-  }
+  for (size_t i = 0; i < sizeof(k_algorithms) / sizeof(k_algorithms[0]); i++)
+    if (k_algorithms[i].type == type) return &k_algorithms[i];
   return NULL;
 }
 
 static uint8_t debounce_runtime_clamp_delay(uint8_t value, uint8_t max_value)
 {
-  if (value == 0U)
-  {
-    value = 1U;
-  }
-  if (value > max_value)
-  {
-    value = max_value;
-  }
-  return value;
+  if (value == 0U) return 1U;
+  return value > max_value ? max_value : value;
 }
 
-static bool debounce_runtime_apply_if_possible(void)
+bool debounce_runtime_apply_config(const debounce_runtime_config_t *config)
 {
-  if (!g_runtime.config_ready || g_runtime.algo == NULL)
-  {
-    return false;
-  }
+  if (config == NULL) return false;
+  const debounce_algo_entry_t *next = debounce_runtime_find_algo(config->type);
+  if (next == NULL) return false;  // V260909R1: 잘못된 새 설정은 기존 정상 엔진을 건드리지 않는다.
+  debounce_runtime_config_t sanitized = *config;
+  sanitized.pre_ms = debounce_runtime_clamp_delay(config->pre_ms, next->max_pre_ms);
+  sanitized.post_ms = debounce_runtime_clamp_delay(config->post_ms, next->max_post_ms);
+  if (g_runtime.config_ready && g_runtime.algo == next &&
+      g_runtime.config.pre_ms == sanitized.pre_ms && g_runtime.config.post_ms == sanitized.post_ms)
+    return true;  // 동일 설정 SAVE/SET은 진행 중인 debounce deadline을 재시작하지 않는다.
 
-  if (!g_runtime.rows_ready)
-  {
-    g_runtime.pending_reinit = true;
-    return true;
-  }
-
-  if (g_runtime.pending_reinit == false)
-  {
-    return true;
-  }
-
-  debounce_runtime_free_active();
-
-  if (!g_runtime.algo->init(g_runtime.rows))
-  {
-    g_runtime.last_error     = DEBOUNCE_RUNTIME_ERROR_ALLOC;
-    g_runtime.pending_reinit = true;
-    return false;
-  }
-
-  g_runtime.pending_reinit = false;
-  g_runtime.last_error     = DEBOUNCE_RUNTIME_ERROR_NONE;
+  // 각 엔진의 고정 저장소는 독립적이다. 새 엔진이 준비된 뒤 이전 엔진을 정리한다.
+  if (g_runtime.rows != 0U && !next->init(g_runtime.rows)) return false;
+  if (g_runtime.algo != NULL && g_runtime.algo != next) g_runtime.algo->free();
+  g_runtime.algo = next;
+  g_runtime.config = sanitized;
+  g_runtime.config_ready = true;
+  g_runtime.ready = g_runtime.rows != 0U;
+  g_runtime.reconcile = true;
   return true;
 }
 
-static void debounce_runtime_free_active(void)
+const debounce_runtime_config_t *debounce_runtime_get_config(void)
 {
-  if (g_runtime.algo != NULL && g_runtime.algo->free != NULL)
-  {
-    g_runtime.algo->free();
-  }
+  return g_runtime.config_ready ? &g_runtime.config : &k_default_config;
 }
 
-static bool debounce_runtime_passthrough(matrix_row_t raw[], matrix_row_t cooked[], uint8_t num_rows, bool changed)
+const debounce_runtime_config_t *debounce_runtime_get_default_config(void)
 {
-  bool updated = changed;
+  return &k_default_config;
+}
 
-  for (uint8_t row = 0; row < num_rows; row++)
-  {
-    if (cooked[row] != raw[row])
-    {
-      cooked[row] = raw[row];
-      updated     = true;
-    }
-  }
+uint8_t debounce_runtime_press_delay(void) { return debounce_runtime_get_config()->pre_ms; }
+uint8_t debounce_runtime_release_delay(void) { return debounce_runtime_get_config()->post_ms; }
 
-  return updated;
+void debounce_init(uint8_t num_rows)
+{
+  if (num_rows == 0U || num_rows > MATRIX_ROWS) return;
+  if (!g_runtime.config_ready && !debounce_runtime_apply_config(&k_default_config)) return;
+  if (!g_runtime.algo->init(num_rows)) return;
+  g_runtime.rows = num_rows;
+  g_runtime.ready = true;
+  g_runtime.reconcile = true;
+}
+
+bool debounce(matrix_row_t raw[], matrix_row_t cooked[], uint8_t num_rows, bool changed)
+{
+  if (raw == NULL || cooked == NULL || num_rows == 0U || num_rows > MATRIX_ROWS) return false;
+  if (!g_runtime.ready || num_rows != g_runtime.rows) debounce_init(num_rows);
+  if (!g_runtime.ready) return false;
+  // V260909R1: 새 raw edge가 없어도 이전 엔진의 pending press/release를 다시 추적한다.
+  changed = changed || g_runtime.reconcile;
+  g_runtime.reconcile = false;
+  return g_runtime.algo->run(raw, cooked, num_rows, changed);
+}
+
+void debounce_free(void)
+{
+  if (g_runtime.algo != NULL) g_runtime.algo->free();
+  g_runtime.rows = 0U;
+  g_runtime.ready = false;
+  g_runtime.reconcile = true;
 }

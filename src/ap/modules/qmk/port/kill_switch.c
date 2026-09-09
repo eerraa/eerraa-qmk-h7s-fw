@@ -6,7 +6,7 @@
 #include "era_state_sync.h"  // V260823R1: SOCD(kill switch) 값 변경 시 CONFIG revision
 
 #define KILL_DEBUG_LOG            false
-#define KILL_SWITCH_MAX_CH        2
+#define KILL_SWITCH_MAX_CH        2U
 
 
 enum
@@ -41,123 +41,219 @@ _Static_assert(sizeof(kill_switch_config_t) == sizeof(uint64_t), "EECONFIG out o
 static void via_qmk_kill_switch_get_value(uint8_t type, uint8_t *data);
 static void via_qmk_kill_switch_set_value(uint8_t type, uint8_t *data);
 static void via_qmk_kill_switch_save(uint8_t type);
+static bool kill_switch_keycode_can_report(uint16_t keycode);
+static bool kill_switch_pair_local_valid(uint8_t type);
+static bool kill_switch_pair_can_run(uint8_t type);
+static void kill_switch_reset_runtime(void);
+static void kill_switch_release_runtime(void);
+static void kill_switch_add_report_key(uint16_t keycode);
+static void kill_switch_del_report_key(uint16_t keycode);
 
 
-static bool key_pressed_lr[KILL_SWITCH_MAX_CH] = {false, };
-static bool key_pressed_ud[KILL_SWITCH_MAX_CH] = {false, };
+static bool key_pressed[KILL_SWITCH_MAX_CH][2] = {{false, false}, {false, false}};
 static kill_switch_config_t kill_switch_config[KILL_SWITCH_MAX_CH];
 
-EECONFIG_DEBOUNCE_HELPER(kill_switch_lr,   EECONFIG_USER_KILL_SWITCH_LR,   kill_switch_config[KILL_SWITCH_LR]);
-EECONFIG_DEBOUNCE_HELPER(kill_switch_ud,   EECONFIG_USER_KILL_SWITCH_UD,   kill_switch_config[KILL_SWITCH_UD]);
+EECONFIG_DEBOUNCE_HELPER(kill_switch_lr, EECONFIG_USER_KILL_SWITCH_LR, kill_switch_config[KILL_SWITCH_LR]);
+EECONFIG_DEBOUNCE_HELPER(kill_switch_ud, EECONFIG_USER_KILL_SWITCH_UD, kill_switch_config[KILL_SWITCH_UD]);
 
 
+static bool kill_switch_keycode_can_report(uint16_t keycode)
+{
+  return IS_BASIC_KEYCODE(keycode) || IS_MODIFIER_KEYCODE(keycode);
+}
+
+static bool kill_switch_pair_local_valid(uint8_t type)
+{
+  if (type >= KILL_SWITCH_MAX_CH)
+  {
+    return false;
+  }
+
+  kill_switch_config_t *cfg = &kill_switch_config[type];
+  return cfg->mode == 1U &&
+         kill_switch_keycode_can_report(cfg->keycode[0]) &&
+         kill_switch_keycode_can_report(cfg->keycode[1]) &&
+         cfg->keycode[0] != cfg->keycode[1];
+}
+
+static bool kill_switch_pair_can_run(uint8_t type)
+{
+  if (type >= KILL_SWITCH_MAX_CH || !kill_switch_config[type].enable || !kill_switch_pair_local_valid(type))
+  {
+    return false;
+  }
+
+  // V260909R1: 두 활성 pair가 같은 HID usage를 공유하면 report-level ownership이 모호하다.
+  // 양쪽을 inert로 만들어 truncation/이중 suppress보다 안전하게 실패한다.
+  for (uint8_t other = 0U; other < KILL_SWITCH_MAX_CH; other++)
+  {
+    if (other == type || !kill_switch_config[other].enable || !kill_switch_pair_local_valid(other))
+    {
+      continue;
+    }
+    for (uint8_t i = 0U; i < 2U; i++)
+    {
+      for (uint8_t j = 0U; j < 2U; j++)
+      {
+        if (kill_switch_config[type].keycode[i] == kill_switch_config[other].keycode[j])
+        {
+          return false;
+        }
+      }
+    }
+  }
+  return true;
+}
+
+static void kill_switch_add_report_key(uint16_t keycode)
+{
+  if (IS_BASIC_KEYCODE(keycode))
+  {
+    add_key((uint8_t)keycode);
+  }
+  else if (IS_MODIFIER_KEYCODE(keycode))
+  {
+    add_mods(MOD_BIT((uint8_t)keycode));
+  }
+}
+
+static void kill_switch_del_report_key(uint16_t keycode)
+{
+  if (IS_BASIC_KEYCODE(keycode))
+  {
+    del_key((uint8_t)keycode);
+  }
+  else if (IS_MODIFIER_KEYCODE(keycode))
+  {
+    del_mods(MOD_BIT((uint8_t)keycode));
+  }
+}
+
+static void kill_switch_reset_runtime(void)
+{
+  memset(key_pressed, 0, sizeof(key_pressed));
+}
+
+static void kill_switch_release_runtime(void)
+{
+  bool had_tracked_key = false;
+
+  // V260909R1: live config 변경 전에 기존 SOCD가 숨긴 physical usage를 먼저 복원한다.
+  // 이후 새 설정은 fresh epoch로 시작하며 이미 눌린 키를 새 pair에 소급 편입하지 않는다.
+  for (uint8_t type = 0U; type < KILL_SWITCH_MAX_CH; type++)
+  {
+    if (!kill_switch_pair_can_run(type))
+    {
+      continue;
+    }
+    for (uint8_t i = 0U; i < 2U; i++)
+    {
+      if (key_pressed[type][i])
+      {
+        kill_switch_add_report_key(kill_switch_config[type].keycode[i]);
+        had_tracked_key = true;
+      }
+    }
+  }
+
+  kill_switch_reset_runtime();
+  if (had_tracked_key)
+  {
+    send_keyboard_report();
+  }
+}
 
 
 void kill_switch_init(void)
 {
+  bool flush_lr = false;
+  bool flush_ud = false;
+
   eeconfig_init_kill_switch_lr();
-  if (kill_switch_config[KILL_SWITCH_LR].mode != 1)
+  if (kill_switch_config[KILL_SWITCH_LR].mode != 1U)
   {
-    kill_switch_config[KILL_SWITCH_LR].mode = 1;
-    kill_switch_config[KILL_SWITCH_LR].enable = false;
-    kill_switch_config[KILL_SWITCH_LR].keycode[0] = KC_NO;
-    kill_switch_config[KILL_SWITCH_LR].keycode[1] = KC_NO;
+    kill_switch_config[KILL_SWITCH_LR].raw = 0U;
+    kill_switch_config[KILL_SWITCH_LR].mode = 1U;
+    flush_lr = true;
+  }
+  if (kill_switch_config[KILL_SWITCH_LR].enable > 1U)
+  {
+    kill_switch_config[KILL_SWITCH_LR].enable = 1U;
+    flush_lr = true;
+  }
+  if (flush_lr)
+  {
     eeconfig_flush_kill_switch_lr(true);
   }
 
   eeconfig_init_kill_switch_ud();
-  if (kill_switch_config[KILL_SWITCH_UD].mode != 1)
+  if (kill_switch_config[KILL_SWITCH_UD].mode != 1U)
   {
-    kill_switch_config[KILL_SWITCH_UD].mode = 1;
-    kill_switch_config[KILL_SWITCH_UD].enable = false;
-    kill_switch_config[KILL_SWITCH_UD].keycode[0] = KC_NO;
-    kill_switch_config[KILL_SWITCH_UD].keycode[1] = KC_NO;
+    kill_switch_config[KILL_SWITCH_UD].raw = 0U;
+    kill_switch_config[KILL_SWITCH_UD].mode = 1U;
+    flush_ud = true;
+  }
+  if (kill_switch_config[KILL_SWITCH_UD].enable > 1U)
+  {
+    kill_switch_config[KILL_SWITCH_UD].enable = 1U;
+    flush_ud = true;
+  }
+  if (flush_ud)
+  {
     eeconfig_flush_kill_switch_ud(true);
   }
 
+  kill_switch_reset_runtime();
   logPrintf("[ON] KILL SWITCH\n");
 }
 
 bool kill_switch_process(uint16_t keycode, keyrecord_t *record)
 {
-  static kill_switch_config_t *p_cfg_lr = &kill_switch_config[KILL_SWITCH_LR];
-  static kill_switch_config_t *p_cfg_ud = &kill_switch_config[KILL_SWITCH_UD];
-
-
-  if (p_cfg_lr->enable)
+  if (record == NULL)
   {
-    uint16_t next_i;
-
-    for (int i=0; i<2; i++)
-    {
-      next_i = 1-i;
-
-      if (keycode == p_cfg_lr->keycode[i])
-      {
-        if (record->event.pressed)
-        {
-          key_pressed_lr[i] = true;
-          if (key_pressed_lr[next_i])
-          {
-            // unregister_code(p_cfg_lr->keycode[next_i]);
-            del_key(p_cfg_lr->keycode[next_i]);
-            #if KILL_DEBUG_LOG
-            logPrintf(" unregister_code(%s)-0x%04X\n", next_i ? "RIGHT":"LEFT", p_cfg_lr->keycode[next_i]);
-            #endif
-          }
-        }
-        else
-        {
-          key_pressed_lr[i] = false;
-          if (key_pressed_lr[next_i])
-          {
-            // register_code(p_cfg_lr->keycode[next_i]);
-            add_key(p_cfg_lr->keycode[next_i]);
-            #if KILL_DEBUG_LOG
-            logPrintf(" register_code(%s)-0x%04X\n", next_i ? "RIGHT":"LEFT", p_cfg_lr->keycode[next_i]);
-            #endif
-          }        
-        }      
-      }
-    }
+    return true;
   }
 
-  if (kill_switch_config[KILL_SWITCH_UD].enable)
+  for (uint8_t type = 0U; type < KILL_SWITCH_MAX_CH; type++)
   {
-    uint16_t next_i;
-
-    for (int i=0; i<2; i++)
+    if (!kill_switch_pair_can_run(type))
     {
-      next_i = 1-i;
+      continue;
+    }
 
-      if (keycode == p_cfg_ud->keycode[i])
+    kill_switch_config_t *cfg = &kill_switch_config[type];
+    for (uint8_t i = 0U; i < 2U; i++)
+    {
+      if (keycode != cfg->keycode[i])
       {
-        if (record->event.pressed)
-        {
-          key_pressed_ud[i] = true;
-          if (key_pressed_ud[next_i])
-          {
-            // unregister_code(p_cfg_ud->keycode[next_i]);
-            del_key(p_cfg_ud->keycode[next_i]);
-            #if KILL_DEBUG_LOG
-            logPrintf(" unregister_code(%s)-0x%04X\n", next_i ? "DOWN":"UP", p_cfg_ud->keycode[next_i]);
-            #endif
-          }
-        }
-        else
-        {
-          key_pressed_ud[i] = false;
-          if (key_pressed_ud[next_i])
-          {
-            // register_code(p_cfg_ud->keycode[next_i]);
-            add_key(p_cfg_ud->keycode[next_i]);
-            #if KILL_DEBUG_LOG
-            logPrintf(" register_code(%s)-0x%04X\n", next_i ? "DOWN":"UP", p_cfg_ud->keycode[next_i]);
-            #endif
-          }        
-        }      
+        continue;
       }
-    }    
+
+      uint8_t other = (uint8_t)(1U - i);
+      if (record->event.pressed)
+      {
+        key_pressed[type][i] = true;
+        if (key_pressed[type][other])
+        {
+          kill_switch_del_report_key(cfg->keycode[other]);
+#if KILL_DEBUG_LOG
+          logPrintf(" unregister_code(%u)-0x%04X\n", other, cfg->keycode[other]);
+#endif
+        }
+      }
+      else
+      {
+        key_pressed[type][i] = false;
+        if (key_pressed[type][other])
+        {
+          kill_switch_add_report_key(cfg->keycode[other]);
+#if KILL_DEBUG_LOG
+          logPrintf(" register_code(%u)-0x%04X\n", other, cfg->keycode[other]);
+#endif
+        }
+      }
+      break;
+    }
   }
 
   return true;
@@ -165,39 +261,31 @@ bool kill_switch_process(uint16_t keycode, keyrecord_t *record)
 
 bool kill_switch_is_use(uint16_t keycode)
 {
-  bool ret = false;
-  static kill_switch_config_t *p_cfg_lr = &kill_switch_config[KILL_SWITCH_LR];
-  static kill_switch_config_t *p_cfg_ud = &kill_switch_config[KILL_SWITCH_UD];
-
-
-  if (p_cfg_lr->enable)
+  for (uint8_t type = 0U; type < KILL_SWITCH_MAX_CH; type++)
   {
-    if (keycode == p_cfg_lr->keycode[0])
+    if (!kill_switch_pair_can_run(type))
     {
-      ret = true;
+      continue;
     }
-    if (keycode == p_cfg_lr->keycode[1])
+    if (keycode == kill_switch_config[type].keycode[0] || keycode == kill_switch_config[type].keycode[1])
     {
-      ret = true;
+      return true;
     }
   }
-  if (p_cfg_ud->enable)
-  {
-    if (keycode == p_cfg_ud->keycode[0])
-    {
-      ret = true;
-    }
-    if (keycode == p_cfg_ud->keycode[1])
-    {
-      ret = true;
-    }
-  }
-
-  return ret;
+  return false;
 }
 
 void via_qmk_kill_swtich_command(uint8_t type, uint8_t *data, uint8_t length)
 {
+  if (data == NULL || length < 5U || type >= KILL_SWITCH_MAX_CH)
+  {
+    if (data != NULL && length > 0U)
+    {
+      data[0] = id_unhandled;
+    }
+    return;
+  }
+
   // data = [ command_id, channel_id, value_id, value_data ]
   uint8_t *command_id        = &(data[0]);
   uint8_t *value_id_and_data = &(data[2]);
@@ -219,87 +307,84 @@ void via_qmk_kill_swtich_command(uint8_t type, uint8_t *data, uint8_t length)
         break;
       }
     case id_custom_get_value:
+      via_qmk_kill_switch_get_value(type, value_id_and_data);
+      break;
+    case id_custom_save:
+      via_qmk_kill_switch_save(type);
+      break;
+    default:
+      *command_id = id_unhandled;
+      break;
+  }
+}
+
+static void via_qmk_kill_switch_get_value(uint8_t type, uint8_t *data)
+{
+  uint8_t *value_id   = &(data[0]);
+  uint8_t *value_data = &(data[1]);
+
+  switch (*value_id)
+  {
+    case id_qmk_kill_switch_enable:
+      value_data[0] = kill_switch_config[type].enable;
+      break;
+    case id_qmk_kill_switch_keycode_0:
+      value_data[0] = (uint8_t)(kill_switch_config[type].keycode[0] >> 8);
+      value_data[1] = (uint8_t)(kill_switch_config[type].keycode[0] & 0xFFU);
+      break;
+    case id_qmk_kill_switch_keycode_1:
+      value_data[0] = (uint8_t)(kill_switch_config[type].keycode[1] >> 8);
+      value_data[1] = (uint8_t)(kill_switch_config[type].keycode[1] & 0xFFU);
+      break;
+    default:
+      break;
+  }
+}
+
+static void via_qmk_kill_switch_set_value(uint8_t type, uint8_t *data)
+{
+  uint8_t *value_id   = &(data[0]);
+  uint8_t *value_data = &(data[1]);
+
+  switch (*value_id)
+  {
+    case id_qmk_kill_switch_enable:
       {
-        via_qmk_kill_switch_get_value(type, value_id_and_data);
+        uint8_t next = value_data[0] != 0U ? 1U : 0U;
+        if (kill_switch_config[type].enable != next)
+        {
+          kill_switch_release_runtime();
+          kill_switch_config[type].enable = next;
+        }
         break;
       }
-    case id_custom_save:
+    case id_qmk_kill_switch_keycode_0:
+    case id_qmk_kill_switch_keycode_1:
       {
-        via_qmk_kill_switch_save(type);
+        uint8_t index = (uint8_t)(*value_id - id_qmk_kill_switch_keycode_0);
+        uint16_t next = (uint16_t)(((uint16_t)value_data[0] << 8) | value_data[1]);
+        if (kill_switch_config[type].keycode[index] != next)
+        {
+          kill_switch_release_runtime();
+          kill_switch_config[type].keycode[index] = next;
+        }
         break;
       }
     default:
-      {
-        *command_id = id_unhandled;
-        break;
-      }
+      break;
   }
 }
 
-void via_qmk_kill_switch_get_value(uint8_t type, uint8_t *data)
-{
-  // data = [ value_id, value_data ]
-  uint8_t *value_id   = &(data[0]);
-  uint8_t *value_data = &(data[1]);
-
-  switch (*value_id)
-  {
-    case id_qmk_kill_switch_enable:
-      {
-        value_data[0] = kill_switch_config[type].enable;
-        break;
-      }    
-    case id_qmk_kill_switch_keycode_0:
-      {
-        value_data[0] = kill_switch_config[type].keycode[0] >> 8;
-        value_data[1] = kill_switch_config[type].keycode[0] & 0xFF;        
-        break;
-      }
-    case id_qmk_kill_switch_keycode_1:
-      {
-        value_data[0] = kill_switch_config[type].keycode[1] >> 8;
-        value_data[1] = kill_switch_config[type].keycode[1] & 0xFF;        
-        break;
-      }
-  }
-}
-
-void via_qmk_kill_switch_set_value(uint8_t type, uint8_t *data)
-{
-  // data = [ value_id, value_data ]
-  uint8_t *value_id   = &(data[0]);
-  uint8_t *value_data = &(data[1]);
-
-  switch (*value_id)
-  {
-    case id_qmk_kill_switch_enable:
-      {
-        kill_switch_config[type].enable = value_data[0];
-        break;
-      }
-    case id_qmk_kill_switch_keycode_0:
-      {
-        kill_switch_config[type].keycode[0] = value_data[0] << 8 | value_data[1];
-        break;
-      }
-    case id_qmk_kill_switch_keycode_1:
-      {
-        kill_switch_config[type].keycode[1] = value_data[0] << 8 | value_data[1];
-        break;
-      }
-  }
-}
-
-void via_qmk_kill_switch_save(uint8_t type)
+static void via_qmk_kill_switch_save(uint8_t type)
 {
   if (type == KILL_SWITCH_LR)
   {
     eeconfig_flush_kill_switch_lr(true);
-  }  
-  if (type == KILL_SWITCH_UD)
+  }
+  else if (type == KILL_SWITCH_UD)
   {
     eeconfig_flush_kill_switch_ud(true);
-  }  
+  }
 }
 
 #endif

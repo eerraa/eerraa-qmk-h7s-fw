@@ -34,8 +34,8 @@ only this side breaks the app.
 | Document | Genre | Owns |
 | --- | --- | --- |
 | [contract_via.md](contract_via.md) | contract | VIA/app wire contract. Channel addresses, exact-ms/exact-sec, `0x06`/`0x07` envelopes, single TX producer, MOUSE unit conversion |
-| [contract_usb.md](contract_usb.md) | contract | USB host contract. Interface/report layout, boot-protocol deviation, polling-mode ownership, retired automatic recovery, periodic-work timer rule |
-| [contract_eeprom.md](contract_eeprom.md) | contract | Persistent-state contract. USER slot ownership, version cookie and factory reset, 8 kHz write budget |
+| [contract_usb.md](contract_usb.md) | contract | USB host contract. Interface/report layout, boot-protocol deviation, polling-mode ownership, retired automatic recovery, report ownership and lifecycle |
+| [contract_eeprom.md](contract_eeprom.md) | contract | Persistent-state contract. USER slot ownership, version cookie and factory reset, asynchronous persistence and durability |
 | [manual_verify.md](manual_verify.md) | manual | Checks that run without a board and their commands, what only hardware can decide, symptom order |
 | [state_open.md](state_open.md) | state | Undecided items and start conditions. The only document that goes away with time |
 | [readme.txt](readme.txt) | (user document) | Short ZIP-root flash and configuration guide. Exception to the agent-doc spec — §8 |

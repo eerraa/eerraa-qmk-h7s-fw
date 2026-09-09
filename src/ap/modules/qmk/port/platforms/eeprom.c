@@ -6,54 +6,26 @@
 #include "qmk/port/port.h"
 
 
-#define EEPROM_WRITE_Q_BUF_MAX         (TOTAL_EEPROM_BYTE_COUNT + 1)
-#define EEPROM_WRITE_PAGE_SIZE         32          // V251112R5: 외부 EEPROM 페이지 크기
-#define EEPROM_WRITE_SLICE_MAX_US      100         // V251112R5: 8 kHz 루프당 100us 안에서만 실 기록
-#define EEPROM_WRITE_QUEUE_WAIT_MS     2           // V251112R2: 큐 가득 참 재시도 대기 시간
-#define EEPROM_UPDATE_BLOCK_CHUNK      64          // V251112R2: 고정 버퍼로 블록 비교
-#define EEPROM_WRITE_BURST_THRESHOLD   512         // V251112R5: 버스트 모드 진입 임계값(엔트리)
-#define EEPROM_WRITE_BURST_EXTRA_CALLS 2           // V251112R5: 버스트 모드 시 추가 실행 횟수
-#define EEPROM_FLUSH_STALL_TIMEOUT_MS  200         // V251124R5: flush 정체 감지 타임아웃(ms)
-#define EEPROM_FLUSH_MAX_SPIN          32000       // V251124R5: flush 정체 시 최대 반복 횟수
+// V260909R1: RAM 최신 이미지 + byte dirty bitmap. pending 데이터는 ACK 이전/실패 시 절대 제거하지 않는다.
+#define EEPROM_WRITE_PAGE_SIZE 32U
+#define EEPROM_PAGE_COUNT ((TOTAL_EEPROM_BYTE_COUNT + EEPROM_WRITE_PAGE_SIZE - 1U) / EEPROM_WRITE_PAGE_SIZE)
+#define EEPROM_SCAN_PAGES_PER_CALL 8U
+#define EEPROM_FLUSH_STALL_TIMEOUT_MS 200U
+#define EEPROM_FAILURE_BACKOFF_MS 10U
+static uint8_t eeprom_buf[TOTAL_EEPROM_BYTE_COUNT];
+static uint32_t dirty_pages[EEPROM_PAGE_COUNT];
+static uint8_t page_snapshot[EEPROM_WRITE_PAGE_SIZE];
+static uint32_t pending_bytes, pending_max, failure_count, invalid_accesses, completed_pages;
+static uint32_t page_cursor, active_page, active_length, retry_after_ms;
+static bool image_ready, write_active, retry_pending;
+_Static_assert(TOTAL_EEPROM_BYTE_COUNT <= 16384U, "EEPROM image exceeds chip");
 
-
-typedef struct
+static bool eeprom_address_valid(uintptr_t addr, size_t length)
 {
-  uint16_t addr;
-  uint8_t  data;
-} eeprom_write_t;
-
-static uint8_t        eeprom_buf[TOTAL_EEPROM_BYTE_COUNT];
-static qbuffer_t      write_q;
-static eeprom_write_t write_buf[EEPROM_WRITE_Q_BUF_MAX];
-static uint32_t       write_q_high_water = 0;
-static uint32_t       write_q_overflow   = 0;
-static uint8_t        page_batch_buf[EEPROM_WRITE_PAGE_SIZE];       // V251112R5: 페이지 단위 버퍼
-
-static bool eeprom_peek_queue_entry(uint32_t offset, eeprom_write_t *out_entry)
-{
-  uint32_t pending = qbufferAvailable(&write_q);
-
-  if (offset >= pending)
-  {
-    return false;
-  }
-
-  uint32_t slot = (write_q.out + offset) % write_q.len;
-
-  *out_entry = write_buf[slot];                                      // V251112R8: 큐 엔트리를 안전하게 참조
-  return true;
+  return addr <= TOTAL_EEPROM_BYTE_COUNT && length <= TOTAL_EEPROM_BYTE_COUNT - addr;
 }
 
-static void eeprom_update_queue_watermark(void)
-{
-  uint32_t pending = qbufferAvailable(&write_q);
-
-  if (pending > write_q_high_water)
-  {
-    write_q_high_water = pending;
-  }
-}
+bool eeprom_is_ready(void) { return image_ready; }
 
 static void eeprom_restore_auto_factory_reset_sentinel(void)
 {
@@ -66,108 +38,96 @@ static void eeprom_restore_auto_factory_reset_sentinel(void)
 
 void eeprom_init(void)
 {
-  eepromRead(0, eeprom_buf, TOTAL_EEPROM_BYTE_COUNT);
-  qbufferCreateBySize(&write_q, (uint8_t *)write_buf, sizeof(eeprom_write_t), EEPROM_WRITE_Q_BUF_MAX); 
+  // V260909R1: 재초기화도 미저장 의도를 버리지 않는다. 초기 읽기 실패는 hwInit이 전파한다.
+  if (pending_bytes != 0U && !eeprom_flush_pending()) return;
+  image_ready = eepromRead(0U, eeprom_buf, sizeof(eeprom_buf));
+  if (!image_ready) { failure_count++; return; }
+  memset(dirty_pages, 0, sizeof(dirty_pages));
+  pending_bytes = 0U;
+  page_cursor = 0U;
+  write_active = retry_pending = false;
+}
+
+static void eeprom_complete_page(void)
+{
+  uint32_t addr = active_page * EEPROM_WRITE_PAGE_SIZE;
+  // 전송 중 바뀐 byte는 dirty로 남긴다. 예전 완료가 새로운 저장 의도를 지울 수 없다.
+  for (uint32_t i = 0; i < active_length; i++) {
+    uint32_t bit = 1UL << i;
+    if ((dirty_pages[active_page] & bit) && eeprom_buf[addr + i] == page_snapshot[i]) {
+      dirty_pages[active_page] &= ~bit;
+      pending_bytes--;
+    }
+  }
+  completed_pages++;
 }
 
 void eeprom_update(void)
 {
-  uint32_t slice_begin = micros();
-
-  while (qbufferAvailable(&write_q) > 0)
-  {
-    if (eepromIsErasing() == true)
-    {
-      break;                                                          // V251112R8: 클린업 중이면 큐 제거 보류
+  if (!image_ready || pending_bytes == 0U || eepromIsErasing()) return;
+  if (write_active) {
+#if defined(EEPROM_CHIP_ZD24C128)
+    eeprom_async_result_t result = eepromWritePagePoll();
+    if (result == EEPROM_ASYNC_BUSY) return;
+    write_active = false;
+    if (result == EEPROM_ASYNC_DONE) {
+      eeprom_complete_page();
+    } else {
+      failure_count++;
+      retry_after_ms = millis() + EEPROM_FAILURE_BACKOFF_MS;
+      retry_pending = true;
     }
-
-    if ((uint32_t)(micros() - slice_begin) >= EEPROM_WRITE_SLICE_MAX_US)
-    {
-      break;
+#endif
+    return;  // 한 호출에 완료 처리 또는 시작 중 한 단계만 수행한다.
+  }
+  if (retry_pending) {
+    if ((int32_t)(millis() - retry_after_ms) < 0) return;
+    retry_pending = false;
+  }
+  // 전체 이미지를 매 loop 순회하지 않는다. 최대8 page 확인 후 다음 입력 처리로 돌아간다.
+  for (uint32_t scanned = 0; scanned < EEPROM_SCAN_PAGES_PER_CALL; scanned++) {
+    uint32_t page = page_cursor;
+    page_cursor = (page_cursor + 1U) % EEPROM_PAGE_COUNT;
+    if (dirty_pages[page] == 0U) continue;
+    uint32_t addr = page * EEPROM_WRITE_PAGE_SIZE;
+    active_page = page;
+    active_length = TOTAL_EEPROM_BYTE_COUNT - addr;
+    if (active_length > EEPROM_WRITE_PAGE_SIZE) active_length = EEPROM_WRITE_PAGE_SIZE;
+    memcpy(page_snapshot, &eeprom_buf[addr], active_length);
+#if defined(EEPROM_CHIP_ZD24C128)
+    write_active = eepromWritePageStart(addr, page_snapshot, active_length);
+    if (!write_active) {
+      failure_count++;
+      retry_after_ms = millis() + EEPROM_FAILURE_BACKOFF_MS;
+      retry_pending = true;
     }
-
-    eeprom_write_t first_entry;
-    if (eeprom_peek_queue_entry(0, &first_entry) != true)
-    {
-      break;
-    }
-
-    uint32_t chunk_addr    = first_entry.addr;
-    uint32_t page_end_addr = ((chunk_addr / EEPROM_WRITE_PAGE_SIZE) * EEPROM_WRITE_PAGE_SIZE) + EEPROM_WRITE_PAGE_SIZE;
-    uint32_t pending       = qbufferAvailable(&write_q);
-    uint8_t  chunk_len     = 0;
-
-    while (chunk_len < pending && chunk_len < EEPROM_WRITE_PAGE_SIZE)
-    {
-      eeprom_write_t entry;
-      if (eeprom_peek_queue_entry(chunk_len, &entry) != true)
-      {
-        break;
-      }
-
-      if (entry.addr != (chunk_addr + chunk_len))
-      {
-        break;
-      }
-      if ((chunk_addr + chunk_len) >= page_end_addr)
-      {
-        break;
-      }
-
-      page_batch_buf[chunk_len++] = entry.data;
-    }
-
-    if (chunk_len == 0)
-    {
-      break;
-    }
-
-    if (eepromWritePage(chunk_addr, page_batch_buf, chunk_len) != true)
-    {
-      if (eepromIsErasing() != true)
-      {
-        logPrintf("[!] eepromWritePage() fail addr=%lu len=%u\n", (unsigned long)chunk_addr, chunk_len);   // V251112R5: 페이지 쓰기 오류 감시
-      }
-      break;
-    }
-
-    qbufferRead(&write_q, NULL, chunk_len);
+#else
+    // 미검증 flash-emulation 빌드는 기존 동기 backend를 유지한다. 외부 EEPROM과 같은 시간 보장은 없다.
+    if (eepromWritePage(addr, page_snapshot, active_length)) eeprom_complete_page();
+    else { failure_count++; retry_after_ms = millis() + EEPROM_FAILURE_BACKOFF_MS; retry_pending = true; }
+#endif
+    return;
   }
 }
 
-bool eeprom_is_pending(void)
-{
-  return qbufferAvailable(&write_q) > 0;
-}
+bool eeprom_is_pending(void) { return pending_bytes != 0U; }
 
 bool eeprom_flush_pending(void)
 {
+  // V260909R1: 부팅/명시적 reset의 durability barrier만 대기한다. 일반 SAVE는 비동기다.
+  if (!image_ready || __get_IPSR() != 0U || __get_PRIMASK() != 0U) return false;
   uint32_t last_progress_ms = millis();
-  uint32_t stall_loops      = 0;
-
-  while (eeprom_is_pending())
-  {
-    uint32_t pending_before = qbufferAvailable(&write_q);
+  uint32_t last_completed = completed_pages;
+  while (eeprom_is_pending()) {
     eeprom_update();
-
-    if (qbufferAvailable(&write_q) < pending_before)
-    {
+    if (completed_pages != last_completed) {
+      last_completed = completed_pages;
       last_progress_ms = millis();
-      stall_loops      = 0;
-      continue;
-    }
-
-    stall_loops++;
-
-    if ((millis() - last_progress_ms) >= EEPROM_FLUSH_STALL_TIMEOUT_MS ||
-        stall_loops >= EEPROM_FLUSH_MAX_SPIN)
-    {
-      logPrintf("[!] EEPROM flush stalled pending=%lu\n", (unsigned long)qbufferAvailable(&write_q));  // V251124R5: 연속 실패 시 무한 루프 방지
-      qbufferFlush(&write_q);
-      return false;
+    } else if ((uint32_t)(millis() - last_progress_ms) >= EEPROM_FLUSH_STALL_TIMEOUT_MS) {
+      failure_count++;
+      return false;  // dirty 및 in-flight 소유권을 유지해 다음 service에서 계속 처리한다.
     }
   }
-
   return true;
 }
 
@@ -239,185 +199,81 @@ void eeprom_req_clean(void)
 #endif
 }
 
-uint8_t  eeprom_read_byte(const uint8_t *addr)
+uint8_t eeprom_read_byte(const uint8_t *addr)
 {
-  return eeprom_buf[(uint32_t)addr];
+  uintptr_t offset = (uintptr_t)addr;
+  if (!image_ready || !eeprom_address_valid(offset, 1U)) { invalid_accesses++; return 0xFFU; }
+  return eeprom_buf[offset];
 }
 
 uint16_t eeprom_read_word(const uint16_t *addr)
 {
-  uint16_t ret = 0;
-
-  ret  = eeprom_buf[((uint32_t)addr) + 0] << 0;
-  ret |= eeprom_buf[((uint32_t)addr) + 1] << 8;
-
-  return ret;
+  uintptr_t offset = (uintptr_t)addr;
+  if (!eeprom_address_valid(offset, 2U)) { invalid_accesses++; return UINT16_MAX; }
+  return (uint16_t)eeprom_read_byte((const uint8_t *)offset) |
+         ((uint16_t)eeprom_read_byte((const uint8_t *)(offset + 1U)) << 8);
 }
 
 uint32_t eeprom_read_dword(const uint32_t *addr)
 {
-  uint32_t ret = 0;
-  const uint8_t *p = (const uint8_t *)addr;
-
-  ret  = eeprom_read_byte(p + 0) << 0;
-  ret |= eeprom_read_byte(p + 1) << 8;
-  ret |= eeprom_read_byte(p + 2) << 16;
-  ret |= eeprom_read_byte(p + 3) << 24;
-
-  return ret;
-};
+  uintptr_t offset = (uintptr_t)addr;
+  if (!eeprom_address_valid(offset, 4U)) { invalid_accesses++; return UINT32_MAX; }
+  uint32_t result = 0U;
+  for (uint32_t i = 0; i < 4U; i++) result |= (uint32_t)eeprom_read_byte((const uint8_t *)(offset + i)) << (8U * i);
+  return result;
+}
 
 void eeprom_read_block(void *buf, const void *addr, uint32_t len)
 {
-  const uint8_t *p    = (const uint8_t *)addr;
-  uint8_t       *dest = (uint8_t *)buf;
-  while (len--)
-  {
-    *dest++ = eeprom_read_byte(p++);
+  if (buf == NULL) { invalid_accesses++; return; }
+  if (!image_ready || !eeprom_address_valid((uintptr_t)addr, len)) {
+    invalid_accesses++;
+    memset(buf, 0xFF, len);
+    return;
   }
+  memcpy(buf, &eeprom_buf[(uintptr_t)addr], len);
 }
 
 void eeprom_write_byte(uint8_t *addr, uint8_t value)
 {
-  eeprom_write_t write_byte;
-  uint32_t       pre_time;
-  bool           is_enqueued = false;
-
-  eeprom_buf[(uint32_t)addr] = value;
-
-  write_byte.addr = (uint32_t)addr;
-  write_byte.data = value;
-
-  pre_time = millis();
-  while (is_enqueued != true)
-  {
-    if (qbufferWrite(&write_q, (uint8_t *)&write_byte, 1))
-    {
-      is_enqueued = true;
-      eeprom_update_queue_watermark();                                 // V251112R2: 큐 하이워터 추적
-      break;
-    }
-
-    eeprom_update();                                                   // V251112R2: 큐가 가득 찼다면 즉시 비우기
-    if (millis()-pre_time >= EEPROM_WRITE_QUEUE_WAIT_MS)
-    {
-      break;
-    }
-  }
-
-  if (is_enqueued != true)
-  {
-    write_q_overflow++;
-    if (eepromWriteByte(write_byte.addr, write_byte.data) != true)
-    {
-      logPrintf("[!] EEPROM write queue overflow (addr=%lu) direct-write fail\n", write_byte.addr); // V251112R2 큐 오버플로 감시
-    }
-    else
-    {
-      logPrintf("[ ] EEPROM write queue overflow (addr=%lu) flushed inline\n", write_byte.addr);     // V251112R2 큐 오버플로 감시
-    }
+  uintptr_t offset = (uintptr_t)addr;
+  if (!image_ready || !eeprom_address_valid(offset, 1U)) { invalid_accesses++; return; }
+  if (eeprom_buf[offset] == value) return;
+  eeprom_buf[offset] = value;
+  uint32_t page = offset / EEPROM_WRITE_PAGE_SIZE;
+  uint32_t bit = 1UL << (offset % EEPROM_WRITE_PAGE_SIZE);
+  if (!(dirty_pages[page] & bit)) {
+    dirty_pages[page] |= bit;
+    pending_bytes++;
+    if (pending_bytes > pending_max) pending_max = pending_bytes;
   }
 }
 
 void eeprom_write_word(uint16_t *addr, uint16_t value)
 {
-	uint8_t *p = (uint8_t *)addr;
-	eeprom_write_byte(p++, value);
-	eeprom_write_byte(p, value >> 8);
+  if (!eeprom_address_valid((uintptr_t)addr, 2U)) { invalid_accesses++; return; }
+  for (uint32_t i = 0; i < 2U; i++) eeprom_write_byte((uint8_t *)((uintptr_t)addr + i), value >> (8U * i));
 }
 
 void eeprom_write_dword(uint32_t *addr, uint32_t value)
 {
-	uint8_t *p = (uint8_t *)addr;
-	eeprom_write_byte(p++, value);
-	eeprom_write_byte(p++, value >> 8);
-	eeprom_write_byte(p++, value >> 16);
-	eeprom_write_byte(p, value >> 24); 
+  if (!eeprom_address_valid((uintptr_t)addr, 4U)) { invalid_accesses++; return; }
+  for (uint32_t i = 0; i < 4U; i++) eeprom_write_byte((uint8_t *)((uintptr_t)addr + i), value >> (8U * i));
 }
 
 void eeprom_write_block(const void *buf, void *addr, size_t len)
 {
-  uint8_t       *p   = (uint8_t *)addr;
-  const uint8_t *src = (const uint8_t *)buf;
-  while (len--)
-  {
-    eeprom_write_byte(p++, *src++);
-  }
+  if (buf == NULL || !eeprom_address_valid((uintptr_t)addr, len)) { invalid_accesses++; return; }
+  const uint8_t *src = buf;
+  for (size_t i = 0; i < len; i++) eeprom_write_byte((uint8_t *)((uintptr_t)addr + i), src[i]);
 }
 
-void eeprom_update_byte(uint8_t *addr, uint8_t value)
-{
-  uint8_t orig = eeprom_read_byte(addr);
-  if (orig != value)
-  {
-    eeprom_write_byte(addr, value);
-  }
-}
-
-void eeprom_update_word(uint16_t *addr, uint16_t value)
-{
-  uint16_t orig = eeprom_read_word(addr);
-  if (orig != value)
-  {
-    eeprom_write_word(addr, value);
-  }
-}
-
-void eeprom_update_dword(uint32_t *addr, uint32_t value)
-{
-  uint32_t orig = eeprom_read_dword(addr);
-  if (orig != value)
-  {
-    eeprom_write_dword(addr, value);
-  }
-}
-
-void eeprom_update_block(const void *buf, void *addr, size_t len)
-{
-  const uint8_t *src  = (const uint8_t *)buf;
-  uint8_t       *dest = (uint8_t *)addr;
-  uint8_t        read_buf[EEPROM_UPDATE_BLOCK_CHUNK];
-
-  while (len > 0)
-  {
-    size_t chunk = len > EEPROM_UPDATE_BLOCK_CHUNK ? EEPROM_UPDATE_BLOCK_CHUNK : len;
-
-    eeprom_read_block(read_buf, dest, chunk);
-    for (size_t i = 0; i < chunk; i++)
-    {
-      if (src[i] != read_buf[i])
-      {
-        eeprom_write_byte(dest + i, src[i]);
-      }
-    }
-
-    len  -= chunk;
-    src  += chunk;
-    dest += chunk;
-  }
-}
-
-uint32_t eeprom_get_write_pending_count(void)
-{
-  return qbufferAvailable(&write_q);
-}
-
-uint32_t eeprom_get_write_pending_max(void)
-{
-  return write_q_high_water;
-}
-
-uint32_t eeprom_get_write_overflow_count(void)
-{
-  return write_q_overflow;
-}
-
-bool eeprom_is_burst_mode_active(void)
-{
-  return qbufferAvailable(&write_q) >= EEPROM_WRITE_BURST_THRESHOLD;     // V251112R5: 버스트 모드 임계값 비교
-}
-
-uint8_t eeprom_get_burst_extra_calls(void)
-{
-  return eeprom_is_burst_mode_active() ? EEPROM_WRITE_BURST_EXTRA_CALLS : 0;  // V251112R5: 추가 실행 횟수 산출
-}
+void eeprom_update_byte(uint8_t *addr, uint8_t value) { eeprom_write_byte(addr, value); }
+void eeprom_update_word(uint16_t *addr, uint16_t value) { eeprom_write_word(addr, value); }
+void eeprom_update_dword(uint32_t *addr, uint32_t value) { eeprom_write_dword(addr, value); }
+void eeprom_update_block(const void *buf, void *addr, size_t len) { eeprom_write_block(buf, addr, len); }
+uint32_t eeprom_get_write_pending_count(void) { return pending_bytes; }
+uint32_t eeprom_get_write_pending_max(void) { return pending_max; }
+uint32_t eeprom_get_write_overflow_count(void) { return 0U; }  // 호환 조회: dirty bitmap에는 queue-full이 없다.
+uint32_t eeprom_get_write_failure_count(void) { return failure_count; }
+uint32_t eeprom_get_invalid_access_count(void) { return invalid_accesses; }

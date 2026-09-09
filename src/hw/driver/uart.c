@@ -151,7 +151,7 @@ bool uartOpen(uint8_t ch, uint32_t baud)
           ret = false;
         }
 
-        uart_tbl[ch].qbuffer.in  = uart_tbl[ch].qbuffer.len - uart_tbl[ch].p_huart->hdmarx->Instance->CBR1;
+        uart_tbl[ch].qbuffer.in  = (uart_tbl[ch].qbuffer.len - uart_tbl[ch].p_huart->hdmarx->Instance->CBR1) % uart_tbl[ch].qbuffer.len;
         uart_tbl[ch].qbuffer.out = uart_tbl[ch].qbuffer.in;
       }
       break;
@@ -183,7 +183,7 @@ uint32_t uartAvailable(uint8_t ch)
   switch(ch)
   {
     case _DEF_UART1:
-      uart_tbl[ch].qbuffer.in = (uart_tbl[ch].qbuffer.len - uart_tbl[ch].p_huart->hdmarx->Instance->CBR1);
+      uart_tbl[ch].qbuffer.in = (uart_tbl[ch].qbuffer.len - uart_tbl[ch].p_huart->hdmarx->Instance->CBR1) % uart_tbl[ch].qbuffer.len;  // V260909R1: DMA terminal count도 유효 ring index로 변환
       ret = qbufferAvailable(&uart_tbl[ch].qbuffer);      
       break;
 

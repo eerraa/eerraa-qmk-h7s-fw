@@ -12,6 +12,11 @@
 #ifdef _USE_HW_EEPROM
 
 
+// V260909R1: start는 복사/무장만, poll은 한 단계만 진행한다. DONE은 write-cycle ACK 이후다.
+typedef enum { EEPROM_ASYNC_IDLE, EEPROM_ASYNC_BUSY, EEPROM_ASYNC_DONE, EEPROM_ASYNC_ERROR } eeprom_async_result_t;
+bool eepromWritePageStart(uint32_t addr, const uint8_t *data, uint32_t length);
+eeprom_async_result_t eepromWritePagePoll(void);
+
 bool     eepromInit();
 bool     eepromIsInit(void);
 bool     eepromValid(uint32_t addr);

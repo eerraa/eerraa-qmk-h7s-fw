@@ -1,3 +1,4 @@
+#include "usbd_hid.h"  // V260909R1: 비차단 remote-wakeup pulse 종료
 /* USER CODE BEGIN Header */
 /**
   ******************************************************************************
@@ -124,5 +125,6 @@ void PendSV_Handler(void)
 void SysTick_Handler(void)
 {
   HAL_IncTick();
+  usbHidWakeTick();
   /* V251124R2: V251123R8 메인 루프 헬스체크 계측 제거 */
 }

@@ -2355,6 +2355,26 @@ static void rgblight_flush_render_queue(void)
     rgblight_render_frame();  // V251018R6: 예약된 프레임을 주 루프에서만 전송
 }
 
+static uint32_t rgblight_task_next_run;
+static bool     rgblight_task_slice_armed;
+
+static bool rgblight_task_periodic_due(bool active, bool urgent, uint32_t now) {
+    if (!active) {
+        rgblight_task_slice_armed = false;
+        return false;
+    }
+    if (urgent) {
+        rgblight_task_slice_armed = false;
+        return true;
+    }
+    if (rgblight_task_slice_armed && !timer_expired32(now, rgblight_task_next_run)) {
+        return false;
+    }
+    rgblight_task_next_run    = now + 1U;
+    rgblight_task_slice_armed = true;
+    return true;
+}
+
 void rgblight_task(void) {
     bool urgent_pending = rgblight_render_pending || rgblight_host_led_pending;
     bool timer_disabled = !rgblight_status.timer_enabled;
@@ -2367,24 +2387,16 @@ void rgblight_task(void) {
     // V260823R3: EEPROM 디바운스 처리
     eeconfig_flush_rgblight_current(false);
 
-    if (!urgent_pending && timer_disabled && !velocikey_on) {
-        return;  // V251122R8: 긴급 이벤트, 타이머, Velocikey 모두 없을 때 250kHz 경로 부하를 줄이기 위해 즉시 반환
+    bool periodic_active = !timer_disabled || velocikey_on;
+    if (!urgent_pending && !periodic_active) {
+        (void)rgblight_task_periodic_due(false, false, 0U);  // V260909R1: 장기 비활성 동안 stale 16-bit deadline을 보존하지 않는다.
+        return;  // 긴급 이벤트, 타이머, Velocikey 모두 없을 때 250kHz 경로에서 timer read도 하지 않는다.
     }
 
-    if (!urgent_pending) {
-        // V251122R6: 캐시 연동 게이트를 제거하고 단순 1ms 슬라이스로 복원해 스톨 리스크 해소
-        static uint16_t rgblight_next_run = 0;  // V251121R5: 1kHz 슬라이스로 rgblight_task 호출 희박화
-        uint16_t       now               = sync_timer_read();
-
-        if (rgblight_next_run == 0) {
-            rgblight_next_run = now;  // V251121R5: 초기 호출은 즉시 통과
-        }
-
-        if (!timer_expired(now, rgblight_next_run)) {
-            return;  // V251121R5: 우선 이벤트가 없고 주기 전이면 조기 반환
-        }
-
-        rgblight_next_run = now + 1;  // V251121R5: 약 1ms 간격으로 평가
+    if (urgent_pending) {
+        (void)rgblight_task_periodic_due(true, true, 0U);    // 다음 비긴급 프레임은 새 epoch에서 즉시 시작
+    } else if (!rgblight_task_periodic_due(true, false, sync_timer_read32())) {
+        return;  // V260909R1: 32-bit wrap-safe 1ms gate. 장시간 inactive 후에도 즉시 재무장된다.
     }
 
     rgblight_consume_host_led_queue();

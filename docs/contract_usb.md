@@ -66,53 +66,76 @@ dropped: `add_key_byte()` in `src/ap/modules/qmk/port/protocol/report.c`
 leaves the report unchanged when no empty slot remains. It does not send an
 ErrorRollOver code.
 
-## 3. Boot-protocol size deviation is known and kept
+## 3. Report ownership, ordering, and USB lifecycle
 
-| | This firmware (interface 0) | HID Boot Keyboard |
-| --- | --- | --- |
-| IN report | 22 B — mods(1) + reserved(1) + keys[20] | 8 B — mods(1) + reserved(1) + keys[6] |
-| Output report | 1 B (5 LED bits + 3 bits padding) | Same |
-| Interface | subclass 1 (BOOT), protocol 1 (Keyboard) | Same |
+`src/hw/driver/usb/usb_hid/hid_tx_queue.c` owns a fixed FIFO per IN endpoint.
+Each FIFO has 128 pending slots and one separate active packet. Only the active
+packet is passed to `USBD_LL_Transmit`; it remains immutable until the matching
+DataIn completion. All queue and PCD-register operations use the same saved
+PRIMASK critical section. A failed arm does not consume the FIFO head. A new
+report cannot bypass older pending reports.
 
-The first 8 B of the 22 B IN report are the boot layout byte-for-byte. A
-host that reads only 8 B sees the same modifiers, reserved byte, and first
-six keys a boot keyboard would have sent.
+`USBD_HID_DataIn()` completes the endpoint and immediately pumps its next head.
+`USBD_HID_SOF()` supplies a bounded fallback retry, not a wall-clock throttle.
+There is no TIM2 report-service ISR and no USB work in a generic timer/PWM
+callback. This removes an additional scheduling phase; it does not change the
+host's polling interval or guarantee a measured end-to-end latency.
 
-Two deviations from boot protocol:
+Keyboard/EXK overflow is explicit: retain the accepted FIFO prefix, then append
+the newest state after that prefix drains. Intermediate events beyond finite
+capacity may be coalesced. Keyboard release, mouse buttons, system and consumer
+usages converge to the latest state. Relative mouse motion/wheel deltas are not
+replayed during reconciliation. This is not an unlimited lossless input log.
+The existing wire drop counter still aggregates keyboard and EXK saturation.
+`usbHidGetTransportStats()` additionally exposes local RAM-only arm failures,
+per-path coalescing, invalid packets and discarded session backlog; it does not
+change selector 0x07 or its reserved bytes.
 
-1. `USBD_HID_REQ_SET_PROTOCOL` stores `hhid->Protocol` and does not shrink
-   the IN report. `usbHidSendReport()` always transmits
-   `HID_KEYBOARD_REPORT_SIZE`. That field is not wired to QMK
-   `keyboard_protocol`.
-2. Interface 0 has no `USBD_HID_REQ_GET_REPORT` handler; the class SETUP
-   default STALLs it (`USBD_CtlError`).
+A configured session remains the same session during Suspend. Its accepted
+press/release FIFO is retained, including a short tap during wake latency.
+Physical IN arming waits for Resume. Remote wake requires the host-enable bit,
+a sufficient Suspend interval and one request per Suspend. SysTick starts and
+ends the bounded wake pulse without a 10 ms main-loop delay.
 
-The remaining risk is transfer size, not content. `wMaxPacketSize` is 64
-(`HID_EPIN_SIZE`). A host that arms an 8 B IN transfer against a 22 B
-packet can babble-halt the endpoint.
+Configuration/reset is a new transport generation. Init fully initializes the
+class state; DeInit closes every owned endpoint and clears aliases. The PCD
+adapter quiesces non-control endpoints, masks stale TXFE, clears completion
+flags and flushes private IN FIFOs before reuse. It does not flush the shared
+RX FIFO during a class close. Control endpoint lifecycle remains core-owned.
+`src/hw/driver/usb/usb_class_pool.c` provides bounded, reusable class slots rather
+than cumulative bump allocation. Latest key/button/usage state is reconciled
+in the new generation, but disconnected typing is not replayed as event history.
+Hardware stress must still verify callback/FIFO ordering across reset and detach.
 
-BIOS/UEFI compatibility is therefore the 8 B prefix match, not a spec
-guarantee. Do not blur that in this file or in release notes.
+VIA OUT has 16 queued 32-byte frames. A full RX queue stops rearming OUT, so the
+host receives NAK rather than an ACK followed by silent command loss. Main-loop
+processing is limited to one command after keyboard processing. A response slot
+must be available before dispatch, and the single response producer attaches the
+request's generation. Reset discards queued old commands and rejects old-generation
+responses. A command already admitted to dispatch may execute/finish its side effects; generation
+checks are not transactional rollback. `docs/contract_via.md` owns wire bytes.
 
-> **REFUSED:** shrinking the keyboard IN report to 8 B on boot protocol.
-> **WHY:** the 8 kHz send path (retry queue and SOF drain) would have to
-> become protocol-state variable length, and shipping images already run
-> this 22 B report with no field failure report.
-> **REOPENS:** a specific BIOS/KVM that fails; start with deviation 1.
+SET_REPORT accepts only the keyboard interface's report-ID-zero, one-byte LED
+Output report. Length, recipient, direction, type and ID are checked before the
+control receive is armed. The RX buffer nevertheless covers a full EP0 packet
+because HAL rounds the physical receive size up to the endpoint maximum. A
+non-one-byte actual payload is not applied as an LED value. A later SETUP
+invalidates the pending LED receive.
 
-> **REFUSED:** shipping NKRO (bitmap report, separate report ID).
-> **WHY:** the default report already holds 20 keys with no toggle, while a
-> 32 B NKRO report (`NKRO_REPORT_BITS` 30 plus ID and mods) would force EXK
-> from 8 B to 32 B and grow the EXK retry queue for every user, including
-> those who never enable it. A 6KRO↔NKRO toggle is a boot-compat versus
-> rollover trade-off this layout does not have.
-> **REOPENS:** field evidence that 20 keys is not enough. Reintroduction
-> still means an extra report ID on EXK and tying `keyboard_protocol` to
-> SET_PROTOCOL with `wIndex` 0.
+### Hardware allocation and errata
 
-NKRO was never offered. `NKRO_ENABLE` is not a compile definition
-(`src/ap/modules/qmk/CMakeLists.txt`), so `keymap_config.nkro` has no
-effect. Keeping 20-key reports is the status quo, not a regression.
+The HS FIFO allocation is RX 512 words plus TX 32/32/128/16/16/16 words: 752 of
+1024 words, with a compile-time bound. This also reserves the optional CDC bulk
+endpoint's maximum packet. FS descriptor requests restore the interval of all
+four HID endpoints after any HS descriptor request.
+
+ST ES0596 Rev 10, sections 2.2.17 and 2.21.3, govern two local mitigations:
+`src/bsp/bsp.c` maps the unimplemented GFXMMU aperture as inaccessible Device/XN;
+`src/lib/ST/STM32H7RSxx_HAL_Driver/Src/stm32h7rsxx_ll_usb.c` applies the documented
+NAK/enable sequencing only to IN zero-length packets, including EP0. Device-register
+reads supply minimum AHB-cycle gaps without an assumed CPU/HCLK ratio. Normal
+nonzero HID packets do not take that delay path. These mitigations require real
+silicon/host validation; they do not establish a cause for any historical event.
 
 ## 4. Automatic USB recovery is retired — do not restore it
 
@@ -221,7 +244,9 @@ Apply (`docs/contract_eeprom.md` §1).
 The main loop (`src/ap/ap.c`) runs `usbProcess()`, which drains that queue
 through `usbProcessBootModeApply()` → `usbBootModeSaveAndReset()`: write
 `EECONFIG_USER_BOOTMODE`, wait at least `USB_BOOTMODE_APPLY_GRACE_MS` (40)
-for the VIA response, then `usbProcessDeferredReset()` detaches
+for the VIA response. `usbProcessDeferredReset()` additionally waits until
+EEPROM has no unacknowledged writes and VIA has no queued/active responses,
+while the normal input loop continues. It then detaches
 (`USB_RESET_DETACH_DELAY_MS` 100) and resets the MCU. Apply of the already
 active mode still queues that reset.
 

@@ -38,29 +38,11 @@ static bool eepromWriteFlag(uint32_t addr, uint32_t value)
 bool eepromScheduleDeferredFactoryReset(void)
 {
 #if AUTO_FACTORY_RESET_ENABLE || defined(VIA_ENABLE)
-  const uint32_t flag_addr   = (uint32_t)((uintptr_t)EECONFIG_USER_EEPROM_CLEAR_FLAG);
-  const uint32_t cookie_addr = (uint32_t)((uintptr_t)EECONFIG_USER_EEPROM_CLEAR_COOKIE);
-  bool           flag_ok     = eepromWriteFlag(flag_addr, AUTO_FACTORY_RESET_FLAG_RESET);      // V251112R4: VIA/AUTO 공용 초기화 플래그
-  bool           cookie_ok   = true;
-
-  if (flag_ok)
-  {
-    cookie_ok = eepromWriteU32(cookie_addr, AUTO_FACTORY_RESET_FLAG_RESET);
-    if (cookie_ok != true)
-    {
-      logPrintf("[!] EEPROM auto factory reset : cookie write fail\n");
-    }
-  }
-
-  if (flag_ok && cookie_ok)
-  {
-#if LOG_LEVEL_VERBOSE || DEBUG_LOG_EEPROM
-    logPrintf("[  ] EEPROM auto factory reset : deferred clear scheduled\n");  // V251112R9: 기본 빌드에서는 시작/완료 로그만 유지
-#endif
-    return true;
-  }
-
-  return false;
+  // V260909R1: sentinel도 RAM 이미지와 같은 writer를 거친다. 기존 page 완료가 reset 의도를 덮지 못한다.
+  if (!eeprom_flush_pending()) return false;
+  eeprom_write_dword((uint32_t *)(uintptr_t)EECONFIG_USER_EEPROM_CLEAR_FLAG, AUTO_FACTORY_RESET_FLAG_RESET);
+  eeprom_write_dword((uint32_t *)(uintptr_t)EECONFIG_USER_EEPROM_CLEAR_COOKIE, AUTO_FACTORY_RESET_FLAG_RESET);
+  return eeprom_flush_pending();
 #else
   return false;
 #endif

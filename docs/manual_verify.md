@@ -70,7 +70,7 @@ the ARM toolchain. Which sources it compiles is the script.
 | `tools/era_via_host_tests/test_usb_diagnostics.c` | `docs/contract_via.md` §6 |
 | `tools/era_via_host_tests/test_rgb_sleep.c` | RGB SLEEP master + timeout GET/SET/SAVE, default ON / 600 s, CLEAN, master-off gating of idle/USB-suspend/host-loss reasons, legacy-slot migration, official GET projection |
 | `tools/era_via_host_tests/test_sys_eeprom_clean.c` | SYSTEM CLEAN three-toggle GET/SET, 10 s window, Jump to Boot SET 0 |
-| `tools/era_via_host_tests/test_version.c` | VERSION GET ASCII `YYMMDDRn` plus NUL at value 5, with legacy Year/Month/Day/Rev GET values 1–4 retained (`V260901R1`) |
+| `tools/era_via_host_tests/test_version.c` | VERSION GET ASCII `YYMMDDRn` plus NUL at value 5, with legacy Year/Month/Day/Rev GET values 1–4 retained (`V260909R1`) |
 | `tools/era_via_host_tests/check_single_producer.py` | `docs/contract_via.md` §1 |
 
 `tools/era_via_host_tests/check_single_producer.py` reads
@@ -132,3 +132,31 @@ the same enumeration. Reconnect and start a new session.
 | Boot stuck on LED blink | EEPROM auto-init failed three times. `docs/contract_eeprom.md` §2. |
 | EEPROM writes feel slow or lost | CLI `eeprom info`: queue max / overflow (`eeprom_get_write_pending_max`, `eeprom_get_write_overflow_count`). |
 | Stored polling mode disagrees with the boot log | CLI `boot info` prints `usbBootModeGet()`. No automatic revert. `docs/contract_usb.md` §4. |
+
+## Architecture regression and hardware acceptance
+
+Run `python tools/firmware_regression_tests/run.py` as well as the existing
+`python tools/era_via_host_tests/run.py` and `python tools/era_doc_refs.py`.
+The new tests compile production queue, HID class/pool, debounce,
+KKUK/SOCD input features and the RAM-image/EEPROM/I2C state-machine chain against
+deterministic hardware stubs. They retain HAL transmit pointers until completion,
+inject arm/NACK/IRQ failures, exercise overflow, repeat 2048 class configurations,
+retain a tap spanning Suspend/Resume, bite KKUK live/timing boundaries and SOCD
+modifier/invalid/live-remap ownership. Additional tests compile the actual VIA
+pre-dispatch guard, reset-service function and RGB long-idle scheduling helper.
+The generated source-region tests are not whole-stack hardware tests.
+`tools/firmware_regression_tests/README.md` states their limits and commands.
+
+On hardware, compare scan and report timing with baseline at FS 1 kHz and HS
+2/4/8 kHz, at idle and under RGB, VIA and EEPROM-write load. Record percentiles,
+maximum latency, missing/reordered transitions and queue counters, not just means.
+Test press/release during Suspend/Resume, configuration churn and replug, with a
+hub and multiple host stacks. Test short/oversized control and raw-HID reports.
+Validate I2C NACK, absent EEPROM and an interrupted transfer; pending data must
+not be reported durable before ACK. Test power interruption separately: the
+current EEPROM layout is not a journal. Verify row waveform/DMA descriptor memory,
+remote-wake pulse width and IN-ZLP behavior on real silicon.
+
+A new firmware version changes the reset cookie. Preserve user settings outside
+the board before flashing; a first boot may intentionally run factory defaults.
+Host tests and successful UF2 generation are not permission to flash a device.

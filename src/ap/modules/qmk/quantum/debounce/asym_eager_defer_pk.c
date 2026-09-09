@@ -26,14 +26,8 @@ releasing a key, that state is pushed after no changes occur for DEBOUNCE millis
 #include "debounce.h"
 #include "debounce_runtime.h"
 #include "timer.h"
-#include <stdlib.h>
 #include <string.h>
 
-#ifdef PROTOCOL_CHIBIOS
-#    if CH_CFG_USE_MEMCORE == FALSE
-#        error ChibiOS is configured without a memory allocator. Your keyboard may have set `#define CH_CFG_USE_MEMCORE FALSE`, which is incompatible with this debounce algorithm.
-#    endif
-#endif
 
 #define ROW_SHIFTER ((matrix_row_t)1)
 
@@ -42,7 +36,8 @@ typedef struct {
     uint8_t time : 7;
 } debounce_counter_t;
 
-static debounce_counter_t *debounce_counters;
+// V260909R1: 보드 최대 행 수에 고정 할당하여 설정 전환 시 힙 수명을 없앤다.
+static debounce_counter_t debounce_counters[MATRIX_ROWS * MATRIX_COLS];
 static fast_timer_t        last_time;
 static bool                counters_need_update;
 static bool                matrix_need_update;
@@ -55,11 +50,7 @@ static void transfer_matrix_values(matrix_row_t raw[], matrix_row_t cooked[], ui
 
 bool debounce_asym_eager_defer_pk_init(uint8_t num_rows)
 {
-    // V251115R5: 런타임 엔진에서 free 처리되므로 init에서는 해제하지 않음
-    debounce_counters = malloc((size_t)num_rows * MATRIX_COLS * sizeof(debounce_counter_t));
-    if (debounce_counters == NULL) {
-        return false;
-    }
+    if (num_rows == 0U || num_rows > MATRIX_ROWS) return false;
     memset(debounce_counters, 0, (size_t)num_rows * MATRIX_COLS * sizeof(debounce_counter_t));
     counters_need_update = false;
     matrix_need_update   = false;
@@ -70,8 +61,6 @@ bool debounce_asym_eager_defer_pk_init(uint8_t num_rows)
 
 void debounce_asym_eager_defer_pk_free(void)
 {
-    free(debounce_counters);
-    debounce_counters = NULL;
     counters_need_update = false;
     matrix_need_update   = false;
 }

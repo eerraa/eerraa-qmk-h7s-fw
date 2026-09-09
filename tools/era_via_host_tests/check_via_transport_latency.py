@@ -38,30 +38,28 @@ def main() -> int:
         return fail("VIA response wall-clock throttle state must stay removed")
 
     data_out = extract_function(source, "USBD_HID_DataOut")
-    receive_pos = data_out.find("via_hid_receive_func(via_hid_usb_rx_report, rx_size)")
-    rearm_pos = data_out.find("USBD_LL_PrepareReceive")
-    if receive_pos < 0 or rearm_pos <= receive_pos:
-        return fail("VIA OUT must be re-armed immediately after the RX callback copies the report")
-    if "HID_VIA_EP_OUT" not in data_out[rearm_pos:]:
-        return fail("VIA OUT re-arm must target HID_VIA_EP_OUT")
-    if "via_hid_usb_rx_report" not in data_out[rearm_pos:]:
-        return fail("VIA OUT re-arm must keep using the dedicated RX buffer")
-
+    if data_out.find("memcpy(") < 0 or data_out.find("usbHidRearmViaLocked(pdev)") < data_out.find("memcpy("):
+        return fail("VIA RX must copy into owned queue storage before rearm")
+    rearm = extract_function(source, "usbHidRearmViaLocked")
+    if "via_rx_count < HID_VIA_RX_DEPTH" not in rearm or "USBD_LL_PrepareReceive(pdev, HID_VIA_EP_OUT" not in rearm:
+        return fail("VIA OUT must rearm immediately only while a queue slot exists, otherwise NAK")
     sof = extract_function(source, "USBD_HID_SOF")
-    if "millis(" in sof or "delay(" in sof:
-        return fail("VIA SOF drain must not use a wall-clock delay")
-    if "qbufferAvailable(&via_report_q)" not in sof:
-        return fail("VIA SOF drain must check the response queue")
-    if "usbHidEpTryAcquire(hhid, HID_VIA_EP_IN)" not in sof:
-        return fail("VIA SOF drain must obey the VIA IN busy fence")
-    if "USBD_LL_Transmit(pdev, HID_VIA_EP_IN" not in sof:
-        return fail("VIA responses must transmit on HID_VIA_EP_IN")
-    if "via_hid_usb_tx_report" not in sof:
-        return fail("VIA IN transmission must use the dedicated TX buffer")
-    if "via_hid_usb_rx_report" in sof:
-        return fail("VIA SOF drain must not share the armed RX buffer")
-    if "USBD_LL_PrepareReceive" in sof:
-        return fail("VIA OUT re-arm must not wait for response drain")
+    completion = extract_function(source, "USBD_HID_DataIn")
+    if "usbHidPumpLocked(pdev)" not in completion or "hidTxComplete(&via_tx)" not in completion:
+        return fail("VIA completion must immediately pump the next response")
+    if "usbHidPumpLocked(pdev)" not in sof:
+        return fail("SOF must provide bounded retry after an arm failure")
+    pump = extract_function(source, "usbHidPumpLocked")
+    if "hidTxKick(&via_tx" not in pump:
+        return fail("VIA must use the immutable-active-buffer FIFO")
+    for body in (sof, completion, pump):
+        if "millis(" in body or "delay(" in body:
+            return fail("normal transport service must not impose a wall-clock throttle")
+    if "generation == transport_generation" not in extract_function(source, "usbHidEnqueueViaResponse"):
+        return fail("responses must not cross a bus generation")
+    request = extract_function(source, "usbHidReadViaRequest")
+    if "via_tx.count < via_tx.capacity" not in request:
+        return fail("a request needs reserved response credit before dispatch")
 
     if "pdev->ep_out[HID_VIA_EP_OUT & 0xFU].is_used = 1U" not in source:
         return fail("VIA OUT ownership must be registered in ep_out")
@@ -78,7 +76,7 @@ def main() -> int:
         if pos < 0 or "HID_FS_BINTERVAL" not in descriptor[pos : pos + 500]:
             return fail(f"{endpoint} must advertise the 1 ms FS interval")
 
-    print("PASS VIA transport has no 20ms throttle and rearms OUT immediately")
+    print("PASS VIA transport is completion-driven with immediate RX rearm/NAK, response credit and bus generations")
     return 0
 
 

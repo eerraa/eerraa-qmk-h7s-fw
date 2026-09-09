@@ -277,6 +277,9 @@ static void usbProcessDeferredReset(void)
     return;
   }
 
+  // V260909R1: 시간 유예는 durability/응답 완료의 증명이 아니다. 기다리는 동안 입력 루프는 계속 돈다.
+  if (eeprom_is_pending() || usbHidViaResponsesPending()) return;
+
   usb_reset_request.pending = false;
 
   USBD_Stop(&USBD_Device);                                               // V251109R6: 리셋 전에 USB를 강제 분리

@@ -98,8 +98,9 @@ bool hwInit(void)
   rtcInit();
   resetInit();    
   i2cInit();
-  eepromInit();
+  if (!eepromInit()) return false;  // V260909R1: 저장장치 오류에서 기본값 부팅을 진행하지 않는다.
   eeprom_init();                                              // V250923R1 Sync QMK EEPROM image before USB init
+  if (!eeprom_is_ready()) return false;  // V260909R1: 부분 읽기를 정상 mirror로 사용하지 않는다.
 #ifdef BOOTMODE_ENABLE
   bootmode_init();                                            // V251112R6: BootMode 기본값 초기화
 #endif

@@ -15,52 +15,40 @@ replies use the same numbers.
 
 ## 1. Waiting on a decision — data decides
 
-### D-2. VIA response-throttle reference point
+### D-4. Exposing per-path transport loss on the wire
 
-`usbHidEnqueueViaResponse()` refreshes the delay timer on **every
-enqueue**. SOF drains only after 20 ms from the last enqueue. The
-reference is last enqueue, not last transmit, so a request stream
-inside 20 ms keeps postponing drain. That is not a problem today
-because the host is serial.
+The existing `report_drops` field remains the aggregate of keyboard/EXK FIFO
+saturation. `usbHidGetTransportStats()` has separate local counters for each path,
+arm failures and discarded session backlog. Suspend preserves same-session
+transitions, and reset discards old-generation work explicitly. These local
+counters are not added to reserved selector 0x07 bytes.
 
-The practical effect is a 20 ms floor per VIA round-trip. One
-12-chunk snapshot takes about 240 ms, so a 1 Hz diagnostic session
-puts VIA traffic at about 25 % of wall-clock.
+**Start condition**: a coordinated app/firmware envelope revision and a defined
+meaning for active, queued and coalesced events. Do not silently reinterpret the
+existing aggregate or consume reserved bytes on only one side.
 
-**Start condition**: first confirm whether that 20 ms was to dodge a
-past host-side race. If there is no evidence, move the reference to
-**transmit time** (a real rate limit) or lower the value. If there is
-evidence, record the reason in `docs/contract_via.md` and close this
-item.
+### D-5. Tap Dance synthetic-key ownership
 
-### D-3. Loss-path count scope
+Tap-dance synthetic taps in `src/ap/modules/qmk/port/tapdance.c` still use the
+configured hold delay, including the QMK `TAP_HOLD_CAPS_DELAY` path for Caps Lock.
+That can block unrelated input for the configured interval. The same compatibility
+shape exists in QMK's generic tap helpers and the ERA reference implementation.
+Simply removing the delay or scheduling an unowned key-up can change Caps behavior
+or release a separately held physical key that resolves to the same HID usage.
 
-There are three report-loss paths and only one is counted — retry-queue
-saturation (counted), discard while suspended (silent), discard while
-unconfigured during TIM2 drain (silent). The current UI name is
-"Report queue drops", which is scoped exactly to the first, so **it is
-not false.**
-
-**Start condition**: if hardware shows the other two, widen the count
-and rename with it. If they are not observed, keep the current scope
-and close this item. Suspend and unconfigured already surface as hard
-events, so a user can care.
-
-### D-4. keyboard / EXK drop split
-
-`report_drops` sums both queues. Structurally they are separate queues
-with separate outcomes, so a split is right, but splitting needs a
-field in the snapshot payload and the app checks that reserved region
-as 0, so it is a **simultaneous change on both sides.**
-
-**Start condition**: only when hardware actually produces EXK drops.
-A mouse-key-heavy session has already returned drop 0, so do not add a
-metric without evidence.
+**Start condition**: define synthetic-versus-physical usage ownership and add
+host-visible overlap fixtures for "synthetic down + physical same-usage down/up".
+Only then replace the blocking tap with a nonblocking owner-aware state machine.
+Until that ownership exists, the bounded compatibility delay is intentionally
+retained rather than trading latency for a stuck/released-key correctness risk.
 
 ## 2. Hardware-unverified
 
 | Item | What to look at |
 | --- | --- |
+| Input/USB architecture | Verify real scan-to-host percentiles under FS/HS, RGB, VIA and writes; overflow/release convergence; short taps across wake; configuration churn, endpoint quiescence and optional CDC composite mode. |
+| Async external EEPROM | Verify real I2C IT/ACK-probe sequencing, missing-IRQ timeout quiescence, absent/stuck bus recovery, initial-read failure and page durability. Multi-page power-loss atomicity is not implemented. |
+| DMA/MPU/USB silicon guards | Confirm linked-list nodes in non-cache SRAM, unchanged row phase, GFXMMU Device/XN protection and ES0596 IN-ZLP sequencing including EP0. |
 | `V260824R2` bootloader-handoff complement | On a board still on the old bootloader, UF2 upload then auto-start succeeds 10 times in a row. Cold-boot enumeration delay is not perceptible. Re-enumeration after VIA reset and mode change. Via a hub and on a different PC. |
 | Bootloader-side root fix | Confirmable only on later shipments written with ST-LINK. `docs/contract_usb.md` §6. |
 | Official `usevia.app` MOUSE page | Whether the six controls read and write values, and whether setting `Cursor Acceleration` to Off actually swaps the row. |

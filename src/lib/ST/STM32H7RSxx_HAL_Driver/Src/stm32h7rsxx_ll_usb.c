@@ -758,6 +758,30 @@ HAL_StatusTypeDef USB_DeactivateDedicatedEndpoint(const USB_OTG_GlobalTypeDef *U
   *           1 : DMA feature used
   * @retval HAL status
   */
+// V260909R1: ES0596 Rev10 2.21.3, 모든 IN ZLP(EP0 포함)에만 적용한다.
+// Device register의 각 volatile read는 AHB 접근이다. CPU/HCLK 비율이나 NOP 최적화에 의존하지 않는다.
+static void USB_InZlpAhbDelay(__IO uint32_t *epctl, uint32_t cycles)
+{
+  while (cycles-- != 0U) (void)*epctl;
+}
+
+static void USB_EnableInTransfer(__IO uint32_t *epctl, uint32_t length, uint8_t dma)
+{
+  if (length != 0U) {
+    *epctl |= USB_OTG_DIEPCTL_CNAK | USB_OTG_DIEPCTL_EPENA;
+    return;
+  }
+  if (dma != 0U) {
+    *epctl = (*epctl & ~USB_OTG_DIEPCTL_CNAK) | USB_OTG_DIEPCTL_SNAK | USB_OTG_DIEPCTL_EPENA;
+  } else {
+    *epctl = (*epctl & ~USB_OTG_DIEPCTL_CNAK) | USB_OTG_DIEPCTL_SNAK;
+    USB_InZlpAhbDelay(epctl, 20U);
+    *epctl |= USB_OTG_DIEPCTL_EPENA;
+  }
+  USB_InZlpAhbDelay(epctl, 15U);
+  *epctl = (*epctl & ~USB_OTG_DIEPCTL_SNAK) | USB_OTG_DIEPCTL_CNAK;
+}
+
 HAL_StatusTypeDef USB_EPStartXfer(USB_OTG_GlobalTypeDef *USBx, USB_OTG_EPTypeDef *ep, uint8_t dma)
 {
   uint32_t USBx_BASE = (uint32_t)USBx;
@@ -828,12 +852,12 @@ HAL_StatusTypeDef USB_EPStartXfer(USB_OTG_GlobalTypeDef *USBx, USB_OTG_EPTypeDef
       }
 
       /* EP enable, IN data in FIFO */
-      USBx_INEP(epnum)->DIEPCTL |= (USB_OTG_DIEPCTL_CNAK | USB_OTG_DIEPCTL_EPENA);
+      USB_EnableInTransfer(&USBx_INEP(epnum)->DIEPCTL, ep->xfer_len, dma);
     }
     else
     {
       /* EP enable, IN data in FIFO */
-      USBx_INEP(epnum)->DIEPCTL |= (USB_OTG_DIEPCTL_CNAK | USB_OTG_DIEPCTL_EPENA);
+      USB_EnableInTransfer(&USBx_INEP(epnum)->DIEPCTL, ep->xfer_len, dma);
 
       if (ep->type != EP_TYPE_ISOC)
       {

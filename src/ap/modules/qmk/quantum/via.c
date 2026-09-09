@@ -280,6 +280,14 @@ __attribute__((weak)) bool via_command_kb(uint8_t *data, uint8_t length) {
 }
 
 void raw_hid_receive(uint8_t *data, uint8_t length) {
+    // V260909R1: 고정 프레임/버퍼 길이는 board hook 및 EEPROM 부작용 전에 검증한다.
+    if (data == NULL || length != 32U) return;
+    if ((data[0] == id_dynamic_keymap_macro_get_buffer || data[0] == id_dynamic_keymap_macro_set_buffer ||
+         data[0] == id_dynamic_keymap_get_buffer || data[0] == id_dynamic_keymap_set_buffer) && data[3] > 28U) {
+        data[0] = id_unhandled;
+        return;
+    }
+
     uint8_t *command_id   = &(data[0]);
     uint8_t *command_data = &(data[1]);
 
