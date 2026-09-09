@@ -250,6 +250,24 @@ static void test_suspend_tap(void)
 {
   drain(); delivered_count = 0U;
   uint8_t down[HID_KEYBOARD_REPORT_SIZE] = {0}, up[HID_KEYBOARD_REPORT_SIZE] = {0}; down[2] = 6U;
+  unsigned wake_base = wake_start_count;
+
+  // Physical input must be able to request remote wake without relying on a HID report.
+  clock_ms = 100U;
+  USBD_Device.dev_old_state = USBD_STATE_CONFIGURED;
+  USBD_Device.dev_state = USBD_STATE_SUSPENDED;
+  USBD_Device.dev_remote_wakeup = 1U;
+  usbHidOnSuspend();
+  assert(usbHidRequestRemoteWakeFromInput());
+  clock_ms += 4U; usbHidWakeTick(); assert(!wake_asserted);
+  clock_ms += 1U; usbHidWakeTick(); assert(wake_asserted && wake_start_count == wake_base + 1U);
+  clock_ms += 10U; usbHidWakeTick(); assert(!wake_asserted);
+
+  // A pulse that did not resume the host must not suppress a later physical key press.
+  assert(usbHidRequestRemoteWakeFromInput());
+  usbHidWakeTick(); assert(wake_asserted && wake_start_count == wake_base + 2U);
+  clock_ms += 10U; usbHidWakeTick(); assert(!wake_asserted);
+
   clock_ms = UINT32_MAX - 2U;
   USBD_Device.dev_old_state = USBD_STATE_CONFIGURED;
   USBD_Device.dev_state = USBD_STATE_SUSPENDED;
@@ -257,7 +275,7 @@ static void test_suspend_tap(void)
   usbHidOnSuspend();
   usbHidSendReport(down, sizeof(down)); usbHidSendReport(up, sizeof(up));
   clock_ms += 4U; usbHidWakeTick(); assert(!wake_asserted);
-  clock_ms += 1U; usbHidWakeTick(); assert(wake_asserted && wake_start_count == 1U);
+  clock_ms += 1U; usbHidWakeTick(); assert(wake_asserted && wake_start_count == wake_base + 3U);
   clock_ms += 10U; usbHidWakeTick(); assert(!wake_asserted && wake_end_count >= 1U);
   USBD_Device.dev_state = USBD_STATE_CONFIGURED;
   drain();
@@ -268,8 +286,8 @@ static void test_suspend_tap(void)
   }
   assert(saw_press && saw_release_after);  // a tap entirely during resume latency must not disappear
   USBD_Device.dev_state = USBD_STATE_SUSPENDED; USBD_Device.dev_remote_wakeup = 0U;
-  usbHidOnSuspend(); usbHidSendReport(down, sizeof(down)); clock_ms += 20U; usbHidWakeTick();
-  assert(!wake_asserted && wake_start_count == 1U);
+  usbHidOnSuspend(); assert(!usbHidRequestRemoteWakeFromInput()); usbHidSendReport(down, sizeof(down)); clock_ms += 20U; usbHidWakeTick();
+  assert(!wake_asserted && wake_start_count == wake_base + 3U);
   USBD_Device.dev_state = USBD_STATE_CONFIGURED; usbHidSendReport(up, sizeof(up)); drain();
 }
 static void test_descriptor_intervals(void)
@@ -296,6 +314,6 @@ int main(void)
   test_suspend_tap();
   test_descriptor_intervals();
   stop();
-  puts("PASS: actual HID class/pool: retained HAL pointers, FIFO ordering/retry/overflow, VIA NAK/credit/epochs, EP0 bounds, 2048 configurations, suspend tap/wake, FS/HS intervals");
+  puts("PASS: actual HID class/pool: retained HAL pointers, FIFO ordering/retry/overflow, VIA NAK/credit/epochs, EP0 bounds, 2048 configurations, physical-input remote wake/retry, suspend tap, FS/HS intervals");
   return 0;
 }

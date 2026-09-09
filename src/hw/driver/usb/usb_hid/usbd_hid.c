@@ -1040,6 +1040,24 @@ static void usbHidRequestWakeLocked(void)
     wake_pending = true;
 }
 
+bool usbHidRequestRemoteWakeFromInput(void)
+{
+  uint32_t irq = usbHidLock();
+  bool allowed = USBD_Device.dev_state == USBD_STATE_SUSPENDED && USBD_Device.dev_remote_wakeup &&
+                 USBD_Device.pData != NULL;
+
+  if (allowed && !wake_active)
+  {
+    // A physical press is a new wake intent. A previous pulse that did not resume the
+    // host must not suppress all later key presses for the remainder of this suspend.
+    wake_attempted = false;
+    wake_pending   = true;
+  }
+
+  usbHidUnlock(irq);
+  return allowed;
+}
+
 bool usbHidSendReport(uint8_t *data, uint16_t length)
 {
   if (data == NULL || length != HID_KEYBOARD_REPORT_SIZE) return false;

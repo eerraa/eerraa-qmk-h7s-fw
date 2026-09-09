@@ -80,6 +80,13 @@ int main(void) {
 }
 ''',encoding='utf-8')
     rgb=(root/'src/ap/modules/qmk/quantum/rgblight/rgblight.c').read_text(encoding='utf-8')
+    keyboard=(root/'src/ap/modules/qmk/quantum/keyboard.c').read_text(encoding='utf-8')
+    suspend=(root/'src/ap/modules/qmk/port/platforms/suspend.c').read_text(encoding='utf-8')
+    matrix_task=function(keyboard,'matrix_task')
+    wake_event=function(suspend,'suspend_wakeup_key_event')
+    assert 'suspend_wakeup_key_event(row, col, key_pressed);' in matrix_task
+    assert matrix_task.index('suspend_wakeup_key_event(row, col, key_pressed);') < matrix_task.index('action_exec(event);')
+    assert 'if (pressed)' in wake_event and 'usbHidRequestRemoteWakeFromInput()' in wake_event
     sleep=(root/'src/ap/modules/qmk/port/rgb_sleep.c').read_text(encoding='utf-8')
     sleep_apply=function(sleep,'rgb_sleep_apply_rgb')
     output_gate=function(rgb,'rgblight_set_output_suspend_state')

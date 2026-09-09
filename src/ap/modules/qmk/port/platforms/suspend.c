@@ -3,6 +3,7 @@
 
 #include "suspend.h"
 #include "matrix.h"
+#include "usbd_hid.h"
 
 // TODO: Move to more correct location
 __attribute__((weak)) void matrix_power_up(void) {}
@@ -48,6 +49,15 @@ bool suspend_wakeup_condition(void) {
         if (matrix_get_row(r)) return true;
     }
     return false;
+}
+
+void suspend_wakeup_key_event(uint8_t row, uint8_t col, bool pressed)
+{
+    (void)row;
+    (void)col;
+    if (pressed) {
+        (void)usbHidRequestRemoteWakeFromInput();
+    }
 }
 
 void suspend_power_down(void)

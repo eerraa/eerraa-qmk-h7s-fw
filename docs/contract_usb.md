@@ -94,8 +94,12 @@ change selector 0x07 or its reserved bytes.
 A configured session remains the same session during Suspend. Its accepted
 press/release FIFO is retained, including a short tap during wake latency.
 Physical IN arming waits for Resume. Remote wake requires the host-enable bit,
-a sufficient Suspend interval and one request per Suspend. SysTick starts and
-ends the bounded wake pulse without a 10 ms main-loop delay.
+a sufficient Suspend interval and a physical press or report-producing input.
+A debounced physical press requests wake before keycode/action filtering, so
+layer-only or otherwise consumed keys do not depend on a HID report to wake the
+host. Each new physical press may retry if an earlier pulse did not resume the
+same suspended session. SysTick starts and ends the bounded wake pulse without
+a 10 ms main-loop delay.
 
 Configuration/reset is a new transport generation. Init fully initializes the
 class state; DeInit closes every owned endpoint and clears aliases. The PCD

@@ -70,7 +70,7 @@ the ARM toolchain. Which sources it compiles is the script.
 | `tools/era_via_host_tests/test_usb_diagnostics.c` | `docs/contract_via.md` §6 |
 | `tools/era_via_host_tests/test_rgb_sleep.c` | RGB SLEEP master + timeout GET/SET/SAVE, default ON / 600 s, CLEAN, master-off gating of idle/USB-suspend/host-loss reasons, logical RGB effect preservation while dark, user RGB OFF preservation across wake, legacy-slot migration, official GET projection |
 | `tools/era_via_host_tests/test_sys_eeprom_clean.c` | SYSTEM CLEAN three-toggle GET/SET, 10 s window, Jump to Boot SET 0 |
-| `tools/era_via_host_tests/test_version.c` | VERSION GET ASCII `YYMMDDRn` plus NUL at value 5, with legacy Year/Month/Day/Rev GET values 1–4 retained (`V260909R2`) |
+| `tools/era_via_host_tests/test_version.c` | VERSION GET ASCII `YYMMDDRn` plus NUL at value 5, with legacy Year/Month/Day/Rev GET values 1–4 retained (`V260909R3`) |
 | `tools/era_via_host_tests/check_single_producer.py` | `docs/contract_via.md` §1 |
 
 `tools/era_via_host_tests/check_single_producer.py` reads
@@ -150,7 +150,7 @@ The generated source-region tests are not whole-stack hardware tests.
 On hardware, compare scan and report timing with baseline at FS 1 kHz and HS
 2/4/8 kHz, at idle and under RGB, VIA and EEPROM-write load. Record percentiles,
 maximum latency, missing/reordered transitions and queue counters, not just means.
-Test press/release during Suspend/Resume, configuration churn and replug, with a
+Test a physical key press from real PC sleep: the board must request Remote Wake even for a layer-only key, the PC must resume, and a second press must be able to retry if a first pulse was ignored. Then test press/release during Suspend/Resume, configuration churn and replug, with a
 hub and multiple host stacks. Test short/oversized control and raw-HID reports.
 Validate I2C NACK, absent EEPROM and an interrupted transfer; pending data must
 not be reported durable before ACK. Test power interruption separately: the

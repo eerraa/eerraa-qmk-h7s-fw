@@ -34,6 +34,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "sendchar.h"
 #include "eeconfig.h"
 #include "action_layer.h"
+#include "suspend.h"
 #ifdef BOOTMAGIC_ENABLE
 #    include "bootmagic.h"
 #endif
@@ -714,6 +715,10 @@ static bool matrix_task(void) {
             pending_changes &= pending_changes - 1;  // V250924R7: 처리한 비트를 제거해 반복 횟수를 줄임
 
             const bool key_pressed = current_row & col_mask;
+
+            // Remote wake belongs to the physical switch event, not to whether QMK later
+            // emits a keyboard HID report. This also wakes on layer-only/consumed keys.
+            suspend_wakeup_key_event(row, col, key_pressed);
 
             if (process_keypress) {
                 event.key.col = col;
