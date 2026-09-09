@@ -98,7 +98,11 @@ timeout, and all three controls persist only on SAVE. Value 3 is the RGB Sleep
 master: OFF gates input-idle timeout, explicit USB Suspend, and host disappearance
 (SOF stale 300 ms after a host was seen) together. `RGBLIGHT_SLEEP` remains
 compiled as the capability; `rgb_sleep.c` is the single runtime owner that
-decides whether to enter it. The five firmware-local official `*-VIA.JSON` files keep value 1 as the
+decides whether to enter it. Runtime darkness is a physical output gate: it does not
+change `rgblight_config.enable`, mode, hue, saturation, or value. VIA channel 2 therefore
+continues to report the user-selected effect while the LEDs are dark, deferred RGB SAVE
+cannot persist a sleep-induced OFF state, and RGB changes made while dark remain logical
+settings that take effect when the output gate opens. The five firmware-local official `*-VIA.JSON` files keep value 1 as the
 dropdown and add value 3; they do not expose value 2. Their timeout row is shown
 only while value 3 is on.
 

@@ -111,6 +111,7 @@ bool              is_rgblight_initialized = false;
 static bool is_suspended;
 static bool pre_suspend_enabled;
 #endif
+static bool output_suspended;
 
 #ifdef RGBLIGHT_USE_TIMER
 animation_status_t animation_status = {};
@@ -1604,6 +1605,16 @@ void rgblight_wakeup(void) {
     rgblight_timer_enable();
 }
 
+void rgblight_set_output_suspend_state(bool suspended) {
+    if (output_suspended == suspended) {
+        return;
+    }
+
+    output_suspended = suspended;
+    rgblight_request_render();
+}
+
+
 #endif
 
 // V251018R6: WS2812 전송 루틴을 별도 함수로 분리해 호출 컨텍스트를 제어
@@ -1707,7 +1718,12 @@ static void rgblight_render_frame(void)
         convert_rgb_to_rgbw(&start_led[i]);
     }
 #endif
-    rgblight_driver.setleds(start_led, num_leds);
+    if (output_suspended) {
+        rgb_led_t off_frame[RGBLIGHT_LED_COUNT] = {0};
+        rgblight_driver.setleds(off_frame, num_leds);
+    } else {
+        rgblight_driver.setleds(start_led, num_leds);
+    }
 }
 
 // V251018R6: 초기화 이후에는 렌더를 큐잉해 WS2812 전송을 주 루프에서만 수행
@@ -2386,6 +2402,13 @@ void rgblight_task(void) {
 
     // V260823R3: EEPROM 디바운스 처리
     eeconfig_flush_rgblight_current(false);
+
+    if (output_suspended) {
+        (void)rgblight_task_periodic_due(false, false, 0U);
+        rgblight_consume_host_led_queue();
+        rgblight_flush_render_queue();
+        return;
+    }
 
     bool periodic_active = !timer_disabled || velocikey_on;
     if (!urgent_pending && !periodic_active) {

@@ -80,6 +80,16 @@ int main(void) {
 }
 ''',encoding='utf-8')
     rgb=(root/'src/ap/modules/qmk/quantum/rgblight/rgblight.c').read_text(encoding='utf-8')
+    sleep=(root/'src/ap/modules/qmk/port/rgb_sleep.c').read_text(encoding='utf-8')
+    sleep_apply=function(sleep,'rgb_sleep_apply_rgb')
+    output_gate=function(rgb,'rgblight_set_output_suspend_state')
+    render=function(rgb,'rgblight_render_frame')
+    task=function(rgb,'rgblight_task')
+    assert 'rgblight_set_output_suspend_state(want_dark)' in sleep_apply
+    assert 'rgblight_suspend' not in sleep_apply and 'rgblight_disable_noeeprom' not in sleep_apply
+    assert 'rgblight_config' not in output_gate and 'rgblight_request_render' in output_gate
+    assert 'output_suspended' in render and 'off_frame' in render and 'rgblight_driver.setleds(off_frame, num_leds)' in render
+    assert 'if (output_suspended)' in task and 'rgblight_flush_render_queue()' in task
     gate=function(rgb,'rgblight_task_periodic_due')
     assert 'timer_expired32' in gate and 'rgblight_task_slice_armed = false' in gate
     out_rgb=build/'test_rgb_task_gate.c'

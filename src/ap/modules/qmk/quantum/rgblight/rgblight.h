@@ -429,6 +429,7 @@ void     rgblight_init(void);
 #ifdef RGBLIGHT_SLEEP
 void     rgblight_suspend(void);  // V251121R4: RGBLIGHT_SLEEP 정의 시에만 슬립 API를 노출
 void     rgblight_wakeup(void);   // V251121R4: RGBLIGHT_SLEEP 정의 시에만 웨이크업 API를 노출
+void     rgblight_set_output_suspend_state(bool suspended);
 #endif
 uint64_t rgblight_read_qword(void);
 void     rgblight_update_qword(uint64_t qword);

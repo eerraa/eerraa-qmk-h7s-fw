@@ -113,24 +113,12 @@ void rgb_sleep_init(void)
 static void rgb_sleep_apply_rgb(bool want_dark)
 {
 #if defined(RGBLIGHT_SLEEP)
-  if (want_dark)
+  if (want_dark != rgb_sleep_dark)
   {
-    // 물리 게이트는 논리 에지뿐 아니라 어긋난 켜짐에도 맞춘다. quantum wake / VIA RGB on
-    // 이 절전 중에 라이트를 켤 수 있다. 이미 어둡고 꺼져 있으면 핫패스에서 다시 호출하지 않는다.
-    if (!rgb_sleep_dark || rgblight_is_enabled())
-    {
-      rgblight_suspend();
-      if (rgblight_is_enabled())
-      {
-        rgblight_disable_noeeprom();  // V260901R1: suspend 뒤에도 켜져 있으면 owner가 재적용한다
-      }
-    }
-    rgb_sleep_dark = true;
-  }
-  else if (rgb_sleep_dark)
-  {
-    rgblight_wakeup();
-    rgb_sleep_dark = false;
+    // Sleep is a physical output gate. Keep rgblight_config untouched so VIA and SAVE
+    // continue to describe the user's selected effect while the LEDs are dark.
+    rgblight_set_output_suspend_state(want_dark);
+    rgb_sleep_dark = want_dark;
   }
 #else
   (void)want_dark;

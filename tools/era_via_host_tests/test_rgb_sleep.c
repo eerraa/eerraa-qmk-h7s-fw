@@ -113,6 +113,23 @@ void rgblight_wakeup(void)
   g_rgb_enabled = true;
 }
 
+void rgblight_set_output_suspend_state(bool suspended)
+{
+  if (g_rgb_suspended == suspended)
+  {
+    return;
+  }
+  g_rgb_suspended = suspended;
+  if (suspended)
+  {
+    g_suspend_calls++;
+  }
+  else
+  {
+    g_wakeup_calls++;
+  }
+}
+
 void rgblight_disable_noeeprom(void)
 {
   g_disable_noeeprom_calls++;
@@ -379,7 +396,9 @@ int main(void)
   reset_rgb_counts();
   g_eeprom_writes = 0;
   rgb_sleep_task();
-  expect_true("idle timeout suspends RGB", rgb_sleep_is_dark() && g_suspend_calls == 1);
+  expect_true("idle timeout gates RGB output", rgb_sleep_is_dark() && g_suspend_calls == 1 && g_rgb_suspended);
+  expect_true("sleep preserves logical RGB enable for VIA", g_rgb_enabled);
+  expect_true("pending RGB save still sees logical ON", g_rgb_enabled);
   expect_true("sleep does not write EEPROM", g_eeprom_writes == 0);
 
   reset_rgb_counts();
@@ -390,16 +409,24 @@ int main(void)
   g_rgb_enabled = true;
   reset_rgb_counts();
   rgb_sleep_task();
-  expect_true("owner reasserts if RGB is turned on while dark",
-              rgb_sleep_is_dark() && g_suspend_calls == 1);
+  expect_true("logical RGB changes while dark do not bypass output gate",
+              rgb_sleep_is_dark() && g_rgb_suspended && g_suspend_calls == 0 && g_rgb_enabled);
+
+  g_rgb_enabled = false;
+  reset_rgb_counts();
+  rgb_sleep_task();
+  expect_true("user RGB OFF while dark is preserved logically",
+              rgb_sleep_is_dark() && g_rgb_suspended && !g_rgb_enabled && g_suspend_calls == 0);
 
   g_matrix_idle_ms = 0;
   reset_rgb_counts();
   g_eeprom_writes = 0;
   rgb_sleep_task();
-  expect_true("keypress wakes RGB", !rgb_sleep_is_dark() && g_wakeup_calls == 1);
+  expect_true("keypress opens RGB output gate", !rgb_sleep_is_dark() && g_wakeup_calls == 1 && !g_rgb_suspended);
+  expect_true("wake preserves user RGB OFF", !g_rgb_enabled);
   expect_true("wake does not write EEPROM", g_eeprom_writes == 0);
 
+  g_rgb_enabled = true;
   g_usb_suspended = true;
   reset_rgb_counts();
   rgb_sleep_task();
@@ -446,6 +473,7 @@ int main(void)
   g_host_seen = true;
   g_sof_count = 10;
   g_now_ms = 5000;
+  g_rgb_suspended = false;  // test-only reboot fixture: production init runs once after BSS reset
   rgb_sleep_init();
   g_sof_count = 11;
   rgb_sleep_task();
