@@ -109,15 +109,27 @@ __ALIGN_BEGIN static uint8_t via_hid_usb_rx_report[HID_VIA_EP_SIZE] __ALIGN_END;
 __ALIGN_BEGIN static uint8_t ep0_req_buf[USB_MAX_EP0_SIZE] __ALIGN_END;
 _Static_assert(sizeof(ep0_req_buf) >= 64U, "EP0 receive buffer must cover a full control packet");
 static bool ep0_led_pending;
-static volatile bool wake_pending, wake_active;
-static bool wake_attempted;
-static uint32_t suspend_ms, wake_start_ms;
+typedef enum {
+  USB_HID_WAKE_IDLE = 0,
+  USB_HID_WAKE_SIGNALING,
+  USB_HID_WAKE_WAIT_RESUME,
+} usb_hid_wake_state_t;
+static volatile usb_hid_wake_state_t wake_state;
+static volatile bool wake_skip_stale_sof;
+static volatile uint32_t wake_suspend_epoch;
+static volatile uint32_t suspend_ms;
 
 static void usbHidPumpLocked(USBD_HandleTypeDef *pdev);
 static void usbHidRearmViaLocked(USBD_HandleTypeDef *pdev);
 static void usbHidResetTransport(void);
+static bool usbHidRemoteWakeSuspended(void) __attribute__((noinline));
 static uint32_t usbHidLock(void) { uint32_t p = __get_PRIMASK(); __disable_irq(); return p; }
 static void usbHidUnlock(uint32_t p) { __set_PRIMASK(p); }
+
+static USB_OTG_DeviceTypeDef *usbHidDeviceRegisters(PCD_HandleTypeDef *pcd)
+{
+  return (USB_OTG_DeviceTypeDef *)((uintptr_t)pcd->Instance + USB_OTG_DEVICE_BASE);
+}
 
 USBD_ClassTypeDef USBD_HID =
 {
@@ -999,9 +1011,8 @@ static void usbHidResetTransport(void)
   via_rx_count = via_rx_head = 0U;
   via_rx_armed = false;
   ep0_led_pending = false;
-  if (wake_active && USBD_Device.pData != NULL)
-    HAL_PCD_DeActivateRemoteWakeup((PCD_HandleTypeDef *)USBD_Device.pData);
-  wake_pending = wake_active = wake_attempted = false;
+  wake_state = USB_HID_WAKE_IDLE;
+  wake_skip_stale_sof = false;
 }
 
 bool usbHidReadViaRequest(uint8_t *data, uint32_t *generation)
@@ -1034,28 +1045,102 @@ bool usbHidEnqueueViaResponse(const uint8_t *data, uint8_t length, uint32_t gene
   return ok;
 }
 
-static void usbHidRequestWakeLocked(void)
+static bool usbHidRemoteWakeSuspended(void)
 {
-  if (USBD_Device.dev_state == USBD_STATE_SUSPENDED && USBD_Device.dev_remote_wakeup && !wake_attempted)
-    wake_pending = true;
+  uint32_t irq = usbHidLock();
+  PCD_HandleTypeDef *pcd = (PCD_HandleTypeDef *)USBD_Device.pData;
+  bool allowed = USBD_Device.dev_state == USBD_STATE_SUSPENDED && USBD_Device.dev_remote_wakeup &&
+                 pcd != NULL && pcd->Instance != NULL;
+  uint32_t suspend_stamp = suspend_ms;
+  uint32_t suspend_epoch = wake_suspend_epoch;
+  uint32_t generation = transport_generation;
+  usbHidUnlock(irq);
+  if (!allowed) return false;
+
+  // USB 2.0 requires at least 5 ms of suspend before device-driven resume signaling.
+  uint32_t suspended_for = (uint32_t)(millis() - suspend_stamp);
+  if (suspended_for < 5U) delay(5U - suspended_for);
+
+  irq = usbHidLock();
+  if (USBD_Device.dev_state != USBD_STATE_SUSPENDED || !USBD_Device.dev_remote_wakeup ||
+      USBD_Device.pData != pcd || pcd->Instance == NULL ||
+      suspend_epoch != wake_suspend_epoch || generation != transport_generation) {
+    usbHidUnlock(irq);
+    return false;
+  }
+
+  USB_OTG_DeviceTypeDef *device = usbHidDeviceRegisters(pcd);
+  if ((device->DSTS & USB_OTG_DSTS_SUSPSTS) == 0U) {
+    usbHidUnlock(irq);
+    return false;
+  }
+
+  // H7RS can raise WKUINT immediately when RWUSIG is asserted. Mask only WUIM for
+  // the commanded pulse so the vendor IRQ handler cannot clear RWUSIG prematurely.
+  uint32_t saved_wuim = pcd->Instance->GINTMSK & USB_OTG_GINTMSK_WUIM;
+  if (saved_wuim != 0U) {
+    pcd->Instance->GINTMSK &= ~USB_OTG_GINTMSK_WUIM;
+    __DSB();
+  }
+
+  wake_skip_stale_sof = (pcd->Instance->GINTSTS & USB_OTG_GINTSTS_SOF) != 0U;
+  wake_state = USB_HID_WAKE_SIGNALING;
+
+  // Suspend gates STOPCLK in usbd_conf.c. Use only the matching ST HAL ungate;
+  // do not manipulate GATECLK or add PHY recovery sequences.
+  __HAL_PCD_UNGATE_PHYCLOCK(pcd);
+  (void)HAL_PCD_ActivateRemoteWakeup(pcd);
+  bool asserted = (device->DCTL & USB_OTG_DCTL_RWUSIG) != 0U;
+  if (!asserted) {
+    wake_state = USB_HID_WAKE_IDLE;
+    wake_skip_stale_sof = false;
+    if (saved_wuim != 0U) {
+      pcd->Instance->GINTMSK |= saved_wuim;
+      __DSB();
+    }
+    usbHidUnlock(irq);
+    return false;
+  }
+  usbHidUnlock(irq);
+
+  // Keep RWUSIG asserted for the intended 10 ms window, independent of early WKUINT.
+  delay(10U);
+
+  irq = usbHidLock();
+  if (USBD_Device.pData == pcd && pcd->Instance != NULL) {
+    // A reset/reconfiguration owns the new USB generation; the old wake attempt
+    // must not deassert or classify signals in that new session.
+    if (generation == transport_generation) {
+      (void)HAL_PCD_DeActivateRemoteWakeup(pcd);
+
+      if (wake_state == USB_HID_WAKE_SIGNALING) {
+        // Discard only the device-generated early WKUINT. If hardware has actually
+        // resumed, preserve WKUINT so the normal HAL callback can complete USBD resume.
+        if ((pcd->Instance->GINTSTS & USB_OTG_GINTSTS_WKUINT) != 0U &&
+            (device->DSTS & USB_OTG_DSTS_SUSPSTS) != 0U) {
+          __HAL_PCD_CLEAR_FLAG(pcd, USB_OTG_GINTSTS_WKUINT);
+          __DSB();
+        }
+        wake_state = (suspend_epoch == wake_suspend_epoch &&
+                      USBD_Device.dev_state == USBD_STATE_SUSPENDED) ?
+                     USB_HID_WAKE_WAIT_RESUME : USB_HID_WAKE_IDLE;
+      }
+    }
+    // Restore only the interrupt bit this wake attempt changed.
+    if (saved_wuim != 0U) {
+      pcd->Instance->GINTMSK |= saved_wuim;
+      __DSB();
+    }
+  }
+  usbHidUnlock(irq);
+  return true;
 }
 
 bool usbHidRequestRemoteWakeFromInput(void)
 {
-  uint32_t irq = usbHidLock();
-  bool allowed = USBD_Device.dev_state == USBD_STATE_SUSPENDED && USBD_Device.dev_remote_wakeup &&
-                 USBD_Device.pData != NULL;
-
-  if (allowed && !wake_active)
-  {
-    // A physical press is a new wake intent. A previous pulse that did not resume the
-    // host must not suppress all later key presses for the remainder of this suspend.
-    wake_attempted = false;
-    wake_pending   = true;
-  }
-
-  usbHidUnlock(irq);
-  return allowed;
+  // Keep the configured physical-key path separate from all slow wake machinery.
+  if (USBD_Device.dev_state != USBD_STATE_SUSPENDED) return false;
+  return usbHidRemoteWakeSuspended();
 }
 
 bool usbHidSendReport(uint8_t *data, uint16_t length)
@@ -1071,7 +1156,6 @@ bool usbHidSendReport(uint8_t *data, uint16_t length)
   usbHidPumpLocked(&USBD_Device);  // V260909R1: 이전 세대의 재동기화를 새 전이보다 먼저 확정
   keyboard_latest = packet;
   bool configured = usbHidSessionValid(&USBD_Device);
-  usbHidRequestWakeLocked();
   bool ok = configured && !keyboard_reconcile && hidTxPush(&keyboard_tx, &packet);
   if (!ok) {
     if (configured) {
@@ -1099,7 +1183,6 @@ bool usbHidSendReportEXK(uint8_t *data, uint16_t length)
   // 상대 이동/휠은 재연결 및 overflow 복구에서 반복하지 않는다. 버튼만 현재 상태다.
   if (index == 0U) memset(&extra_latest[0].data[2], 0, 4U);
   bool configured = usbHidSessionValid(&USBD_Device);
-  usbHidRequestWakeLocked();
   bool ok = configured && !extra_reconcile && hidTxPush(&extra_tx, &packet);
   if (!ok) {
     if (configured) {
@@ -1116,35 +1199,32 @@ bool usbHidSendReportEXK(uint8_t *data, uint16_t length)
 void usbHidOnSuspend(void)
 {
   uint32_t irq = usbHidLock();
+  ++wake_suspend_epoch;
   suspend_ms = millis();
-  wake_pending = wake_attempted = false;
+  wake_state = USB_HID_WAKE_IDLE;
+  wake_skip_stale_sof = false;
   // V260909R1: suspend는 reset이 아니다. 기존 backlog와 복귀 중의 짧은 press/release를 순서대로 보존한다.
   usbHidUnlock(irq);
 }
 
-void usbHidWakeTick(void)
+void usbHidOnResume(void)
 {
-  // SysTick에서만 pulse 종료를 관리해 메인 루프의 macro/EEPROM 대기에 의존하지 않는다.
-  if (!wake_pending && !wake_active) return;
-  uint32_t irq = usbHidLock();
-  uint32_t now = millis();
-  PCD_HandleTypeDef *pcd = (PCD_HandleTypeDef *)USBD_Device.pData;
-  if (wake_active && (uint32_t)(now - wake_start_ms) >= 10U) {
-    HAL_PCD_DeActivateRemoteWakeup(pcd);
-    wake_active = false;
+  // The PCD -> USBD bridge owns physical bus state and logical Resume delivery.
+  // HID owns only the device-driven wake attempt and its SOF freshness bookkeeping.
+  wake_state = USB_HID_WAKE_IDLE;
+  wake_skip_stale_sof = false;
+}
+
+bool usbHidConsumeWakeSof(void)
+{
+  if (wake_state == USB_HID_WAKE_IDLE) return false;
+  if (wake_skip_stale_sof) {
+    // GINTSTS.SOF was already pending before RWUSIG; wait for the next callback.
+    wake_skip_stale_sof = false;
+    return false;
   }
-  if (wake_pending) {
-    if (USBD_Device.dev_state != USBD_STATE_SUSPENDED || !USBD_Device.dev_remote_wakeup || pcd == NULL) {
-      wake_pending = false;
-    } else if ((uint32_t)(now - suspend_ms) >= 5U) {
-      __HAL_PCD_UNGATE_PHYCLOCK(pcd);
-      HAL_PCD_ActivateRemoteWakeup(pcd);
-      wake_start_ms = now;
-      wake_active = wake_attempted = true;
-      wake_pending = false;
-    }
-  }
-  usbHidUnlock(irq);
+  wake_state = USB_HID_WAKE_IDLE;
+  return true;
 }
 
 void usbHidGetTransportStats(usb_hid_transport_stats_t *stats)

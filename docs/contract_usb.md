@@ -94,12 +94,46 @@ change selector 0x07 or its reserved bytes.
 A configured session remains the same session during Suspend. Its accepted
 press/release FIFO is retained, including a short tap during wake latency.
 Physical IN arming waits for Resume. Remote wake requires the host-enable bit,
-a sufficient Suspend interval and a physical press or report-producing input.
+a sufficient Suspend interval and a debounced physical press.
 A debounced physical press requests wake before keycode/action filtering, so
 layer-only or otherwise consumed keys do not depend on a HID report to wake the
 host. Each new physical press may retry if an earlier pulse did not resume the
-same suspended session. SysTick starts and ends the bounded wake pulse without
-a 10 ms main-loop delay.
+same suspended session. Report submission itself does not request wake and the
+ordinary SysTick path contains no Remote-Wake work.
+
+The Remote-Wake state is `IDLE -> SIGNALING -> WAIT_RESUME -> IDLE`. The request
+path first revalidates software Suspend, host permission, the PCD, the suspend
+epoch and transport generation, then requires hardware `DSTS.SUSPSTS=1`. It
+waits until at least 5 ms after Suspend, masks only `GINTMSK.WUIM`, uses the ST
+HAL STOPCLK ungate, asserts RWUSIG, verifies that RWUSIG was actually asserted,
+holds it for 10 ms, and explicitly deasserts it. No GATECLK write or additional
+PHY/recovery sequence is part of this contract.
+
+The WUIM mask is required by BRICK60 hardware: H7RS may raise device-driven
+WKUINT immediately after RWUSIG assertion while `DSTS.SUSPSTS` is still set,
+and the vendor IRQ handler otherwise clears RWUSIG before its Resume callback.
+At pulse end, such a pending WKUINT is discarded only if hardware still reports
+Suspend; WUIM is then restored. If hardware has resumed, WKUINT is preserved for
+normal HAL processing.
+
+Physical bus Suspend and ST USBD logical Suspend are separate owners. The PCD
+bridge alone owns the cached physical `bus_suspended` state: Suspend sets it;
+USB Reset clears it because Reset is bus activity; a Resume callback or SOF with
+`DSTS.SUSPSTS=0` also clears it. Remote-Wake state never gates that physical
+transition. QMK suspend hooks and RGB Sleep consume this physical bus state, so
+an enumeration Reset/fresh SOF cannot leave RGB dark because of a stale Suspend
+callback. Logical SOF recovery is instead gated by `pdev->dev_state ==
+USBD_STATE_SUSPENDED`, so clearing physical Suspend cannot suppress the next
+fresh SOF needed to complete ST USBD recovery.
+
+A Resume callback changes ST USBD state only when `DSTS.SUSPSTS=0`. Because a
+successful host Resume need not produce a second usable WKUINT, an outstanding
+Remote-Wake attempt also accepts the first fresh SOF for which `SUSPSTS=0` and
+calls `USBD_LL_Resume()` exactly once. An SOF already pending before signaling,
+an SOF while `SUSPSTS=1`, and a late WKUINT after SOF recovery cannot produce a
+false or duplicate logical Resume. BRICK60 hardware established the two
+underlying acceptance facts: a 10 ms WUIM-isolated signal wakes the PC from S3,
+and fresh-SOF logical recovery restores post-wake keyboard/VIA raw-HID service.
 
 Configuration/reset is a new transport generation. Init fully initializes the
 class state; DeInit closes every owned endpoint and clears aliases. The PCD

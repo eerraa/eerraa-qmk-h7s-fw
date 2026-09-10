@@ -392,6 +392,20 @@ int main(void)
   rgb_sleep_task();
   expect_true("fresh host stays lit", !rgb_sleep_is_dark());
 
+  // Boot may transiently see Suspend before enumeration Reset/SOF. Once the USB
+  // bridge reports the bus active again, RGB Sleep must recover without a VIA toggle.
+  g_usb_suspended = true;
+  reset_rgb_counts();
+  rgb_sleep_task();
+  expect_true("transient boot suspend darkens", rgb_sleep_is_dark() && g_suspend_calls == 1);
+  g_usb_suspended = false;
+  g_sof_count++;
+  g_now_ms++;
+  reset_rgb_counts();
+  rgb_sleep_task();
+  expect_true("boot reset/SOF clears transient suspend without toggle",
+              !rgb_sleep_is_dark() && g_wakeup_calls == 1 && via_get_enable());
+
   g_matrix_idle_ms = ten_min;
   reset_rgb_counts();
   g_eeprom_writes = 0;

@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 // 펌웨어/보드 식별 정보
 // ---------------------------------------------------------------------------
-#define _DEF_FIRMWARE_VERSION       "V260909R3"   // V260909R3: physical key events own USB Remote Wake requests
+#define _DEF_FIRMWARE_VERSION       "V260910R5"   // V260910R5: Remote Wake with explicit physical/logical suspend ownership
 #define _DEF_BOARD_NAME             "ERA-QMK-H7S-FW"  // V251125R3: 사용자 표시용 보드명 ERA로 변경
 
 

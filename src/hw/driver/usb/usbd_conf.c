@@ -58,7 +58,7 @@
 PCD_HandleTypeDef hpcd_USB_OTG_HS;
 void Error_Handler(void);
 static bool is_connected = false;
-static bool is_suspended = false;
+static volatile bool bus_suspended = false;
 static volatile uint32_t sof_count = 0;  // V260901R1: SOF 생존 카운터. 점수는 계산하지 않는다.
 static bool host_seen = false;           // V260901R1: 한 번이라도 주소를 받은 뒤에만 호스트 소실로 본다
 
@@ -92,7 +92,7 @@ bool USBD_is_connected(void)
 
 bool USBD_is_suspended(void)
 {
-  return is_suspended;
+  return bus_suspended;
 }
 
 bool USBD_host_seen(void)
@@ -103,6 +103,14 @@ bool USBD_host_seen(void)
 uint32_t USBD_sof_count(void)
 {
   return sof_count;  // V260901R1
+}
+
+static bool usbPcdHardwareActive(PCD_HandleTypeDef *hpcd)
+{
+  if (hpcd == NULL || hpcd->Instance == NULL) return false;
+  USB_OTG_DeviceTypeDef *device =
+      (USB_OTG_DeviceTypeDef *)((uintptr_t)hpcd->Instance + USB_OTG_DEVICE_BASE);
+  return (device->DSTS & USB_OTG_DSTS_SUSPSTS) == 0U;
 }
 
 /*******************************************************************************
@@ -200,14 +208,33 @@ void HAL_PCD_DataInStageCallback(PCD_HandleTypeDef *hpcd, uint8_t epnum)
   * @param  hpcd: PCD handle
   * @retval None
   */
+static void usbHidLogicalSuspendedSof(PCD_HandleTypeDef *hpcd) __attribute__((noinline));
+static void usbHidLogicalSuspendedSof(PCD_HandleTypeDef *hpcd)
+{
+  USBD_HandleTypeDef *pdev = (USBD_HandleTypeDef *)hpcd->pData;
+  if (pdev != NULL && usbPcdHardwareActive(hpcd) && usbHidConsumeWakeSof()) {
+    logPrintf("[  ] USB Resume (SOF)\n");
+    (void)USBD_LL_Resume(pdev);
+  }
+  (void)USBD_LL_SOF(pdev);
+}
+
 #if (USE_HAL_PCD_REGISTER_CALLBACKS == 1U)
 static void PCD_SOFCallback(PCD_HandleTypeDef *hpcd)
 #else
 void HAL_PCD_SOFCallback(PCD_HandleTypeDef *hpcd)
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
 {
-  sof_count++;  // V260901R1: ISR에서는 카운터만 올린다. RGB 판정은 메인 루프.
-  USBD_LL_SOF((USBD_HandleTypeDef*)hpcd->pData);
+  USBD_HandleTypeDef *pdev = (USBD_HandleTypeDef *)hpcd->pData;
+  sof_count++;  // V260901R1: RGB 판정은 메인 루프.
+  if (bus_suspended && usbPcdHardwareActive(hpcd)) {
+    bus_suspended = false;
+  }
+  if (pdev != NULL && pdev->dev_state == USBD_STATE_SUSPENDED) {
+    usbHidLogicalSuspendedSof(hpcd);
+    return;
+  }
+  (void)USBD_LL_SOF(pdev);
 }
 
 /**
@@ -241,6 +268,9 @@ void HAL_PCD_ResetCallback(PCD_HandleTypeDef *hpcd)
   }
   usbDiagnosticsOnUsbReset(usbDiagnosticsIsActive() ? micros() : 0U,
                            usbDiagnosticsSpeedFromUsbd(speed));       // V260823R2: 초기 reset도 부팅 누계에 포함
+  // USB Reset is bus activity and starts a new USB session. It authoritatively
+  // ends any cached physical-suspend state before the device stack is reset.
+  bus_suspended = false;
     /* Set Speed. */
   USBD_LL_SetSpeed((USBD_HandleTypeDef*)hpcd->pData, speed);
 
@@ -273,7 +303,7 @@ void HAL_PCD_SuspendCallback(PCD_HandleTypeDef *hpcd)
   }
 
   is_connected = false;
-  is_suspended = true;
+  bus_suspended = true;
   usbDiagnosticsOnUsbSuspend(usbDiagnosticsIsActive() ? micros() : 0U);  // V260823R2
   logPrintf("[  ] USB Suspend\n");
   /* USER CODE END 2 */
@@ -293,10 +323,17 @@ void HAL_PCD_ResumeCallback(PCD_HandleTypeDef *hpcd)
 {
   /* USER CODE BEGIN 3 */
 
-  is_suspended = false;
-  logPrintf("[  ] USB Resume\n");
+  USBD_HandleTypeDef *pdev = (USBD_HandleTypeDef *)hpcd->pData;
+  bool hardware_resumed = usbPcdHardwareActive(hpcd);
+  if (hardware_resumed) {
+    bus_suspended = false;
+  }
+  if (pdev != NULL && hardware_resumed && pdev->dev_state == USBD_STATE_SUSPENDED) {
+    usbHidOnResume();
+    logPrintf("[  ] USB Resume\n");
+    (void)USBD_LL_Resume(pdev);
+  }
   /* USER CODE END 3 */
-  USBD_LL_Resume((USBD_HandleTypeDef*)hpcd->pData);
 }
 
 /**

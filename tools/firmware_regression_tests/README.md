@@ -26,6 +26,12 @@ not included in firmware builds.
   injects arm failures and executes the actual class callbacks. Tests cover overflow,
   response credit and generations, EP0 input sizes, 2048 configurations, partial
   open failure, short taps during wake, first relative mouse input and FS/HS descriptors.
+  Remote-Wake cases inject the H7RS early-WKUINT behavior, enforce the 10 ms RWUSIG
+  window, reject stale/SUSPSTS SOF, de-duplicate late WKUINT and consume VIA after
+  fresh-SOF logical Resume.
+- Source guards keep PCD physical bus-Suspend ownership separate from HID logical
+  Resume: Reset and hardware-active SOF/Resume release the bus state independently,
+  while logical SOF fallback remains gated by ST USBD Suspend plus wake freshness.
 - The production runtime debounce and all three per-key algorithms cover all nine
   mode transitions, unchanged-config deadlines, pending press/release reconciliation,
   timer wrap, invalid configuration and row-buffer canaries.

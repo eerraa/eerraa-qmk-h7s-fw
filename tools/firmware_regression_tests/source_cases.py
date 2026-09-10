@@ -87,6 +87,53 @@ int main(void) {
     assert 'suspend_wakeup_key_event(row, col, key_pressed);' in matrix_task
     assert matrix_task.index('suspend_wakeup_key_event(row, col, key_pressed);') < matrix_task.index('action_exec(event);')
     assert 'if (pressed)' in wake_event and 'usbHidRequestRemoteWakeFromInput()' in wake_event
+
+    hid=(root/'src/hw/driver/usb/usb_hid/usbd_hid.c').read_text(encoding='utf-8')
+    wake_entry=function(hid,'usbHidRequestRemoteWakeFromInput')
+    wake=function(hid,'usbHidRemoteWakeSuspended')
+    keyboard_send=function(hid,'usbHidSendReport')
+    extra_send=function(hid,'usbHidSendReportEXK')
+    on_resume=function(hid,'usbHidOnResume')
+    accept_sof=function(hid,'usbHidConsumeWakeSof')
+    assert 'USBD_STATE_SUSPENDED' in wake_entry and 'usbHidRemoteWakeSuspended()' in wake_entry
+    assert 'usbHidLock' not in wake_entry and '__disable_irq' not in wake_entry
+    assert 'GINTMSK &= ~USB_OTG_GINTMSK_WUIM' in wake
+    assert 'delay(10U)' in wake and 'HAL_PCD_DeActivateRemoteWakeup(pcd)' in wake
+    assert 'USB_OTG_GINTSTS_WKUINT' in wake and 'USB_OTG_DSTS_SUSPSTS' in wake
+    assert 'USB_OTG_PCGCCTL_GATECLK' not in wake
+    assert 'usbHidRequestRemoteWakeFromInput' not in keyboard_send
+    assert 'usbHidRequestRemoteWakeFromInput' not in extra_send
+    assert 'USB_HID_WAKE_IDLE' in on_resume and 'wake_skip_stale_sof' in on_resume
+    assert 'USBD_STATE_SUSPENDED' not in on_resume and 'USB_OTG_DSTS_SUSPSTS' not in on_resume
+    assert 'USB_HID_WAKE_IDLE' in accept_sof and 'wake_skip_stale_sof' in accept_sof
+    assert 'USBD_STATE_SUSPENDED' not in accept_sof and 'USB_OTG_DSTS_SUSPSTS' not in accept_sof
+
+    irq=(root/'src/bsp/device/stm32h7rsxx_it.c').read_text(encoding='utf-8')
+    assert 'usbHidWakeTick' not in irq
+    conf=(root/'src/hw/driver/usb/usbd_conf.c').read_text(encoding='utf-8')
+    hardware_active=function(conf,'usbPcdHardwareActive')
+    suspended_sof=function(conf,'usbHidLogicalSuspendedSof')
+    sof_callback=conf[conf.index('* @brief  SOF callback.'):conf.index('* @brief  Reset callback.')]
+    reset_callback=conf[conf.index('* @brief  Reset callback.'):conf.index('* @brief  Suspend callback.')]
+    suspend_callback=conf[conf.index('* @brief  Suspend callback.'):conf.index('* @brief  Resume callback.')]
+    resume_callback=conf[conf.index('* @brief  Resume callback.'):conf.index('* @brief  ISOOUTIncomplete callback.')]
+    assert 'static volatile bool bus_suspended = false;' in conf
+    assert 'USB_OTG_DSTS_SUSPSTS' in hardware_active and '== 0U' in hardware_active
+    assert 'if (bus_suspended && usbPcdHardwareActive(hpcd))' in sof_callback
+    assert 'pdev->dev_state == USBD_STATE_SUSPENDED' in sof_callback and 'usbHidLogicalSuspendedSof(hpcd)' in sof_callback
+    assert 'usbHidConsumeWakeSof()' in suspended_sof
+    assert 'usbPcdHardwareActive(hpcd)' in suspended_sof
+    assert suspended_sof.index('usbHidConsumeWakeSof()') < suspended_sof.index('USBD_LL_SOF(pdev)')
+    assert 'bus_suspended = false;' in reset_callback
+    assert reset_callback.index('bus_suspended = false;') < reset_callback.index('USBD_LL_Reset')
+    assert 'bus_suspended = true;' in suspend_callback
+    assert 'hardware_resumed = usbPcdHardwareActive(hpcd)' in resume_callback
+    assert 'bus_suspended = false;' in resume_callback
+    assert 'pdev->dev_state == USBD_STATE_SUSPENDED' in resume_callback
+    assert 'usbHidOnResume()' in resume_callback
+    assert resume_callback.index('usbHidOnResume()') < resume_callback.index('USBD_LL_Resume(pdev)')
+    assert resume_callback.count('USBD_LL_Resume(pdev)') == 1
+
     sleep=(root/'src/ap/modules/qmk/port/rgb_sleep.c').read_text(encoding='utf-8')
     sleep_apply=function(sleep,'rgb_sleep_apply_rgb')
     output_gate=function(rgb,'rgblight_set_output_suspend_state')

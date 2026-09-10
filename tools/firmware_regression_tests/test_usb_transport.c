@@ -9,6 +9,8 @@
 
 uint32_t test_irqmask, test_ipsr;
 USBD_HandleTypeDef USBD_Device;
+test_otg_t test_otg;
+uint32_t test_pcgcctl;
 static PCD_HandleTypeDef pcd;
 static bool opened_in[16], opened_out[16];
 static const uint8_t *active[16];
@@ -18,17 +20,87 @@ static uint8_t *rx_buffer, *control_buffer;
 static uint32_t control_length, control_arms, control_errors, led_updates;
 static uint8_t led_value, open_fail, hs_interval = 1U;
 static uint32_t arm_fail[16], clock_ms, wake_start_count, wake_end_count;
+static uint32_t wake_irq_services, logical_resume_count, ungate_count;
 static bool wake_asserted;
+static bool delay_signal_reset;
+static void (*delay_event)(uint32_t ms);
 static struct { uint8_t ep, length, data[32]; } delivered[20000];
 static unsigned delivered_count;
 
 uint32_t millis(void) { return clock_ms; }
 uint32_t micros(void) { return clock_ms * 1000U; }
 uint8_t usbBootModeGetHsInterval(void) { return hs_interval; }
+static void complete_logical_resume(void)
+{
+  assert(USBD_Device.dev_state == USBD_STATE_SUSPENDED);
+  USBD_Device.dev_state = USBD_Device.dev_old_state;
+  logical_resume_count++;
+}
+static void bridge_resume_callback(void)
+{
+  if (USBD_Device.dev_state != USBD_STATE_SUSPENDED) return;
+  if ((test_otg.device.DSTS & USB_OTG_DSTS_SUSPSTS) != 0U) return;
+  usbHidOnResume();
+  complete_logical_resume();
+}
+static void bridge_sof_callback(void)
+{
+  if (USBD_Device.dev_state != USBD_STATE_SUSPENDED) return;
+  if ((test_otg.device.DSTS & USB_OTG_DSTS_SUSPSTS) != 0U) return;
+  if (!usbHidConsumeWakeSof()) return;
+  complete_logical_resume();
+}
+static void service_mock_wkuint(void)
+{
+  if ((test_otg.global.GINTMSK & USB_OTG_GINTMSK_WUIM) == 0U ||
+      (test_otg.global.GINTSTS & USB_OTG_GINTSTS_WKUINT) == 0U) return;
+  // Match the vendor IRQ order: RWUSIG is cleared before the Resume callback.
+  test_otg.device.DCTL &= ~USB_OTG_DCTL_RWUSIG;
+  wake_asserted = false;
+  wake_irq_services++;
+  bridge_resume_callback();
+  test_otg.global.GINTSTS &= ~USB_OTG_GINTSTS_WKUINT;
+}
+void delay(uint32_t ms)
+{
+  assert(test_irqmask == 0U);
+  service_mock_wkuint();
+  if (ms == 10U) assert(wake_asserted);  // R1 regression: early WKUINT must not shorten RWUSIG.
+  if (delay_event) {
+    void (*event)(uint32_t) = delay_event;
+    delay_event = NULL;
+    event(ms);
+  }
+  service_mock_wkuint();
+  if (ms == 10U && !delay_signal_reset) assert(wake_asserted);
+  delay_signal_reset = false;
+  clock_ms += ms;
+}
+void test_usb_ungate(PCD_HandleTypeDef *h)
+{
+  assert(h == &pcd && test_irqmask);
+  ungate_count++;
+  test_pcgcctl &= ~USB_OTG_PCGCCTL_STOPCLK;
+}
 HAL_StatusTypeDef HAL_PCD_ActivateRemoteWakeup(PCD_HandleTypeDef *h)
-{ assert(h == &pcd && test_irqmask); wake_asserted = true; wake_start_count++; return HAL_OK; }
+{
+  assert(h == &pcd && test_irqmask);
+  wake_start_count++;
+  if (test_otg.device.DSTS & USB_OTG_DSTS_SUSPSTS) {
+    test_otg.device.DCTL |= USB_OTG_DCTL_RWUSIG;
+    test_otg.global.GINTSTS |= USB_OTG_GINTSTS_WKUINT;  // H7RS early device-driven WKUINT.
+  }
+  wake_asserted = (test_otg.device.DCTL & USB_OTG_DCTL_RWUSIG) != 0U;
+  return HAL_OK;
+}
 HAL_StatusTypeDef HAL_PCD_DeActivateRemoteWakeup(PCD_HandleTypeDef *h)
-{ assert(h == &pcd); wake_asserted = false; wake_end_count++; return HAL_OK; }
+{
+  assert(h == &pcd && test_irqmask);
+  test_otg.device.DCTL &= ~USB_OTG_DCTL_RWUSIG;
+  wake_asserted = false;
+  wake_end_count++;
+  return HAL_OK;
+}
 void usbHidSetStatusLed(uint8_t value) { led_value = value; led_updates++; }
 USBD_StatusTypeDef USBD_LL_OpenEP(USBD_HandleTypeDef *d, uint8_t ep, uint8_t type, uint16_t size)
 {
@@ -107,6 +179,7 @@ static void stop(void)
 }
 static void configure(bool service)
 {
+  pcd.Instance = &test_otg.global;
   USBD_Device.pData = &pcd;
   USBD_Device.dev_speed = USBD_SPEED_HIGH;
   USBD_Device.dev_state = USBD_STATE_ADDRESSED;
@@ -246,37 +319,204 @@ static void test_pool_lifecycle(void)
   open_fail = 0U;
   configure(true);
 }
+
+static void begin_sleep(void)
+{
+  USBD_Device.dev_old_state = USBD_STATE_CONFIGURED;
+  USBD_Device.dev_state = USBD_STATE_SUSPENDED;
+  USBD_Device.dev_remote_wakeup = 1U;
+  test_otg.device.DSTS = USB_OTG_DSTS_SUSPSTS;
+  test_otg.device.DCTL = 0U;
+  test_otg.global.GINTSTS = 0U;
+  test_otg.global.GINTMSK = USB_OTG_GINTMSK_WUIM;
+  test_pcgcctl = USB_OTG_PCGCCTL_STOPCLK | USB_OTG_PCGCCTL_GATECLK;
+  wake_asserted = false;
+  delay_event = NULL;
+  usbHidOnSuspend();
+}
+
+static void host_resume_no_sof(uint32_t ms)
+{
+  (void)ms;
+  test_otg.device.DSTS = 0U;
+}
+
+static void host_resume_with_sof(uint32_t ms)
+{
+  (void)ms;
+  test_otg.device.DSTS = 0U;
+  test_otg.global.GINTSTS |= USB_OTG_GINTSTS_SOF;
+  bridge_sof_callback();
+  test_otg.global.GINTSTS &= ~USB_OTG_GINTSTS_SOF;
+}
+
+static void suspended_sof(uint32_t ms)
+{
+  (void)ms;
+  test_otg.global.GINTSTS |= USB_OTG_GINTSTS_SOF;
+  bridge_sof_callback();
+  assert(USBD_Device.dev_state == USBD_STATE_SUSPENDED);
+  test_otg.global.GINTSTS &= ~USB_OTG_GINTSTS_SOF;
+}
+
+static void stale_sof_then_hardware_resume(uint32_t ms)
+{
+  (void)ms;
+  test_otg.device.DSTS = 0U;
+  bridge_sof_callback();
+  assert(USBD_Device.dev_state == USBD_STATE_SUSPENDED);
+  test_otg.global.GINTSTS &= ~USB_OTG_GINTSTS_SOF;
+}
+
+static void deliver_fresh_resume_sof(void)
+{
+  test_otg.device.DSTS = 0U;
+  test_otg.global.GINTSTS |= USB_OTG_GINTSTS_SOF;
+  bridge_sof_callback();
+  test_otg.global.GINTSTS &= ~USB_OTG_GINTSTS_SOF;
+}
+
+static void reset_and_reconfigure_during_signal(uint32_t ms)
+{
+  assert(ms == 10U);
+  // Model the core reset clearing the old electrical wake signal before the new
+  // class generation is configured on the same PCD instance.
+  test_otg.device.DCTL = 0U;
+  test_otg.device.DSTS = 0U;
+  test_otg.global.GINTSTS = 0U;
+  test_otg.global.GINTMSK = USB_OTG_GINTMSK_WUIM;
+  wake_asserted = false;
+  delay_signal_reset = true;
+  stop();
+  configure(true);
+}
+
+static void test_remote_wake(void)
+{
+  unsigned starts = wake_start_count, ends = wake_end_count;
+  unsigned irq_base = wake_irq_services, resume_base = logical_resume_count, ungate_base = ungate_count;
+
+  // H7RS raises a device-driven WKUINT when RWUSIG is asserted. WUIM isolation must
+  // keep the signal alive for the full 10 ms, then discard only that still-suspended IRQ.
+  clock_ms = 100U;
+  begin_sleep();
+  assert(usbHidRequestRemoteWakeFromInput());
+  assert(clock_ms == 115U);  // 5 ms minimum suspend + 10 ms signal.
+  assert(!wake_asserted && wake_start_count == starts + 1U && wake_end_count == ends + 1U);
+  assert(wake_irq_services == irq_base && logical_resume_count == resume_base);
+  assert((test_otg.global.GINTSTS & USB_OTG_GINTSTS_WKUINT) == 0U);
+  assert((test_otg.global.GINTMSK & USB_OTG_GINTMSK_WUIM) != 0U);
+  assert(ungate_count == ungate_base + 1U);
+  assert((test_pcgcctl & USB_OTG_PCGCCTL_STOPCLK) == 0U);
+  assert((test_pcgcctl & USB_OTG_PCGCCTL_GATECLK) != 0U);  // no speculative GATECLK write.
+
+  // A failed pulse does not consume the whole suspend session; another physical press may retry.
+  assert(usbHidRequestRemoteWakeFromInput());
+  assert(wake_start_count == starts + 2U && wake_end_count == ends + 2U);
+
+  // Host-disabled Remote Wake never touches the signal path.
+  begin_sleep();
+  USBD_Device.dev_remote_wakeup = 0U;
+  assert(!usbHidRequestRemoteWakeFromInput());
+  assert(wake_start_count == starts + 2U);
+
+  // R2 failure regression: hardware Resume + fresh SOF must complete logical USBD Resume
+  // even when no second usable WKUINT arrives. Raw-HID OUT must be consumable afterward.
+  begin_sleep();
+  clock_ms += 5U;
+  delay_event = host_resume_with_sof;
+  resume_base = logical_resume_count;
+  irq_base = wake_irq_services;
+  assert(usbHidRequestRemoteWakeFromInput());
+  assert(USBD_Device.dev_state == USBD_STATE_CONFIGURED);
+  assert(logical_resume_count == resume_base + 1U && wake_irq_services == irq_base);
+  service_mock_wkuint();  // late duplicate WKUINT after SOF fallback.
+  assert(logical_resume_count == resume_base + 1U && wake_irq_services == irq_base + 1U);
+  delivered_count = 0U;
+  uint8_t key[HID_KEYBOARD_REPORT_SIZE] = {0};
+  key[2] = 4U;
+  assert(usbHidSendReport(key, sizeof(key)));
+  drain();
+  bool saw_keyboard = false;
+  for (unsigned i = 0; i < delivered_count; i++)
+    if (delivered[i].ep == 1U && delivered[i].data[2] == 4U) saw_keyboard = true;
+  assert(saw_keyboard);
+  uint8_t via[HID_VIA_EP_SIZE]; uint32_t generation;
+  via_packet(0x5AU, HID_VIA_EP_SIZE);
+  assert(usbHidReadViaRequest(via, &generation) && via[0] == 0x5AU);
+  assert(usbHidEnqueueViaResponse(via, HID_VIA_EP_SIZE, generation));
+  drain();
+
+  // A SOF that was already pending before RWUSIG is not fresh enough to recover USBD.
+  begin_sleep();
+  clock_ms += 5U;
+  test_otg.global.GINTSTS |= USB_OTG_GINTSTS_SOF;
+  delay_event = stale_sof_then_hardware_resume;
+  resume_base = logical_resume_count;
+  assert(usbHidRequestRemoteWakeFromInput());
+  assert(USBD_Device.dev_state == USBD_STATE_SUSPENDED && logical_resume_count == resume_base);
+  deliver_fresh_resume_sof();
+  assert(USBD_Device.dev_state == USBD_STATE_CONFIGURED && logical_resume_count == resume_base + 1U);
+  service_mock_wkuint();
+  assert(logical_resume_count == resume_base + 1U);
+
+  // A fresh-looking SOF while hardware still reports Suspend cannot recover USBD.
+  begin_sleep();
+  clock_ms += 5U;
+  delay_event = suspended_sof;
+  resume_base = logical_resume_count;
+  assert(usbHidRequestRemoteWakeFromInput());
+  assert(USBD_Device.dev_state == USBD_STATE_SUSPENDED && logical_resume_count == resume_base);
+  deliver_fresh_resume_sof();
+  assert(USBD_Device.dev_state == USBD_STATE_CONFIGURED && logical_resume_count == resume_base + 1U);
+
+  // A genuine post-pulse WKUINT is accepted only after DSTS says hardware Resume occurred.
+  begin_sleep();
+  clock_ms += 5U;
+  delay_event = host_resume_no_sof;
+  resume_base = logical_resume_count;
+  irq_base = wake_irq_services;
+  assert(usbHidRequestRemoteWakeFromInput());
+  assert(USBD_Device.dev_state == USBD_STATE_SUSPENDED);
+  service_mock_wkuint();
+  assert(wake_irq_services == irq_base + 1U && logical_resume_count == resume_base + 1U);
+  assert(USBD_Device.dev_state == USBD_STATE_CONFIGURED);
+
+  // A late/spurious WKUINT while SUSPSTS remains set is never a logical Resume.
+  begin_sleep();
+  clock_ms += 5U;
+  resume_base = logical_resume_count;
+  assert(usbHidRequestRemoteWakeFromInput());
+  test_otg.global.GINTSTS |= USB_OTG_GINTSTS_WKUINT;
+  service_mock_wkuint();
+  assert(USBD_Device.dev_state == USBD_STATE_SUSPENDED && logical_resume_count == resume_base);
+  deliver_fresh_resume_sof();
+  assert(USBD_Device.dev_state == USBD_STATE_CONFIGURED && logical_resume_count == resume_base + 1U);
+
+  // Reset/reconfiguration during signaling belongs to a new transport generation.
+  // The old attempt must not run its final HAL deactivation against that session.
+  begin_sleep();
+  clock_ms += 5U;
+  ends = wake_end_count;
+  delay_event = reset_and_reconfigure_during_signal;
+  assert(usbHidRequestRemoteWakeFromInput());
+  assert(USBD_Device.dev_state == USBD_STATE_CONFIGURED);
+  assert(wake_end_count == ends);
+  assert((test_otg.global.GINTMSK & USB_OTG_GINTMSK_WUIM) != 0U);
+}
+
 static void test_suspend_tap(void)
 {
   drain(); delivered_count = 0U;
   uint8_t down[HID_KEYBOARD_REPORT_SIZE] = {0}, up[HID_KEYBOARD_REPORT_SIZE] = {0}; down[2] = 6U;
   unsigned wake_base = wake_start_count;
 
-  // Physical input must be able to request remote wake without relying on a HID report.
-  clock_ms = 100U;
-  USBD_Device.dev_old_state = USBD_STATE_CONFIGURED;
-  USBD_Device.dev_state = USBD_STATE_SUSPENDED;
-  USBD_Device.dev_remote_wakeup = 1U;
-  usbHidOnSuspend();
-  assert(usbHidRequestRemoteWakeFromInput());
-  clock_ms += 4U; usbHidWakeTick(); assert(!wake_asserted);
-  clock_ms += 1U; usbHidWakeTick(); assert(wake_asserted && wake_start_count == wake_base + 1U);
-  clock_ms += 10U; usbHidWakeTick(); assert(!wake_asserted);
-
-  // A pulse that did not resume the host must not suppress a later physical key press.
-  assert(usbHidRequestRemoteWakeFromInput());
-  usbHidWakeTick(); assert(wake_asserted && wake_start_count == wake_base + 2U);
-  clock_ms += 10U; usbHidWakeTick(); assert(!wake_asserted);
-
+  // Report production during Suspend preserves the tap but does not own wake signaling;
+  // the physical matrix event is the sole Remote Wake trigger.
   clock_ms = UINT32_MAX - 2U;
-  USBD_Device.dev_old_state = USBD_STATE_CONFIGURED;
-  USBD_Device.dev_state = USBD_STATE_SUSPENDED;
-  USBD_Device.dev_remote_wakeup = 1U;
-  usbHidOnSuspend();
+  begin_sleep();
   usbHidSendReport(down, sizeof(down)); usbHidSendReport(up, sizeof(up));
-  clock_ms += 4U; usbHidWakeTick(); assert(!wake_asserted);
-  clock_ms += 1U; usbHidWakeTick(); assert(wake_asserted && wake_start_count == wake_base + 3U);
-  clock_ms += 10U; usbHidWakeTick(); assert(!wake_asserted && wake_end_count >= 1U);
+  assert(!wake_asserted && wake_start_count == wake_base);
   USBD_Device.dev_state = USBD_STATE_CONFIGURED;
   drain();
   bool saw_press = false, saw_release_after = false;
@@ -285,9 +525,9 @@ static void test_suspend_tap(void)
     if (saw_press && delivered[i].data[2] == 0U) saw_release_after = true;
   }
   assert(saw_press && saw_release_after);  // a tap entirely during resume latency must not disappear
-  USBD_Device.dev_state = USBD_STATE_SUSPENDED; USBD_Device.dev_remote_wakeup = 0U;
-  usbHidOnSuspend(); assert(!usbHidRequestRemoteWakeFromInput()); usbHidSendReport(down, sizeof(down)); clock_ms += 20U; usbHidWakeTick();
-  assert(!wake_asserted && wake_start_count == wake_base + 3U);
+  begin_sleep(); USBD_Device.dev_remote_wakeup = 0U;
+  assert(!usbHidRequestRemoteWakeFromInput()); usbHidSendReport(down, sizeof(down));
+  assert(!wake_asserted && wake_start_count == wake_base);
   USBD_Device.dev_state = USBD_STATE_CONFIGURED; usbHidSendReport(up, sizeof(up)); drain();
 }
 static void test_descriptor_intervals(void)
@@ -311,9 +551,10 @@ int main(void)
   test_via_and_epoch();
   test_control();
   test_pool_lifecycle();
+  test_remote_wake();
   test_suspend_tap();
   test_descriptor_intervals();
   stop();
-  puts("PASS: actual HID class/pool: retained HAL pointers, FIFO ordering/retry/overflow, VIA NAK/credit/epochs, EP0 bounds, 2048 configurations, physical-input remote wake/retry, suspend tap, FS/HS intervals");
+  puts("PASS: actual HID class/pool: FIFO/VIA/EP0 lifecycle plus isolated 10 ms Remote Wake, hardware-verified single Resume, stale/SUSPSTS SOF rejection, late-WKUINT idempotence, post-wake VIA");
   return 0;
 }

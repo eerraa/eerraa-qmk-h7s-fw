@@ -171,7 +171,8 @@ bool usbHidEnqueueViaResponse(const uint8_t *data, uint8_t length, uint32_t gene
 bool usbHidViaResponsesPending(void);
 void usbHidOnSuspend(void);
 bool usbHidRequestRemoteWakeFromInput(void);
-void usbHidWakeTick(void);
+void usbHidOnResume(void);
+bool usbHidConsumeWakeSof(void);
 void usbHidGetTransportStats(usb_hid_transport_stats_t *stats);
 bool usbHidSendReport(uint8_t *p_data, uint16_t length);
 bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length);

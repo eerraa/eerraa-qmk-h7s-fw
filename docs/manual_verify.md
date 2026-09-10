@@ -144,12 +144,20 @@ inject arm/NACK/IRQ failures, exercise overflow, repeat 2048 class configuration
 retain a tap spanning Suspend/Resume, bite KKUK live/timing boundaries and SOCD
 modifier/invalid/live-remap ownership. Additional tests compile the actual VIA
 pre-dispatch guard, reset-service function and RGB long-idle scheduling helper.
+The USB fixture also injects the H7RS early-WKUINT behavior, requires the complete
+10 ms RWUSIG command window, rejects stale/SUSPSTS SOF recovery, verifies single
+logical Resume across SOF plus late WKUINT, and consumes VIA raw-HID after recovery.
+Source guards require Reset/active SOF/genuine Resume to own physical bus-Suspend
+release independently of HID Remote-Wake state, and the RGB host fixture covers a
+transient boot Suspend followed by Reset/SOF recovery without an RGB Sleep toggle.
 The generated source-region tests are not whole-stack hardware tests.
 `tools/firmware_regression_tests/README.md` states their limits and commands.
 
 On hardware, compare scan and report timing with baseline at FS 1 kHz and HS
 2/4/8 kHz, at idle and under RGB, VIA and EEPROM-write load. Record percentiles,
 maximum latency, missing/reordered transitions and queue counters, not just means.
+After flashing/reboot, first verify RGB is active with RGB Sleep still enabled and
+without toggling the setting; this catches a stale boot-time physical Suspend latch.
 Test a physical key press from real PC sleep: the board must request Remote Wake even for a layer-only key, the PC must resume, and a second press must be able to retry if a first pulse was ignored. Then test press/release during Suspend/Resume, configuration churn and replug, with a
 hub and multiple host stacks. Test short/oversized control and raw-HID reports.
 Validate I2C NACK, absent EEPROM and an interrupted transfer; pending data must
