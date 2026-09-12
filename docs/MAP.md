@@ -152,7 +152,7 @@ its `AGENTS.md`.
 | `the-via-eerraa/docs/adr/0003-era-menu-help-ui.md` | menu labels (KKUK and others) and help copy |
 | `the-via-eerraa/docs/MAP.md` §3 | channel / value-id table (H7S TD is channel 16 / 41–48, MOUSE is 17, RGB SLEEP exact-sec / enable are 18 / 2–3) |
 | `qmk_firmware_eerraa/keyboards/era/` | reference implementation. Channel numbers differ (§4 · `docs/contract_via.md` §2) |
-| `eerraa-qmk-h7s-boot` | UF2 bootloader. Handoff is `docs/contract_usb.md` §5 |
+| `eerraa-qmk-h7s-boot` | UF2 bootloader. Handoff is `docs/contract_usb.md` §6 |
 
 **A new feature goes into the app custom definition and this
 repository's official JSON together.** A path that only the custom app

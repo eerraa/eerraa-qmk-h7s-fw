@@ -4,7 +4,7 @@ Genre: contract
 Canonical for: what the host is shown and in what shape — interface and
 endpoint layout, the 20-key report and boot-protocol size deviation, why NKRO
 is not shipped, polling-mode ownership, the retired automatic USB recovery
-path and why it must not be restored, bootloader-handoff detach, and the
+path and why it must not be restored, the bootloader handoff, and the
 main-loop periodic-work timer rule
 
 ## 1. Interface and endpoint layout
@@ -300,40 +300,41 @@ cannot continue on the same enumeration. How the host treats that boundary
 is `the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md` and
 `docs/contract_via.md` §6.
 
-## 6. Bootloader-to-firmware handoff needs a 100 ms detach hold
+## 6. Bootloader-to-firmware handoff resets the inherited USB blocks
 
-UF2 upload itself succeeds. Jump-entry from the bootloader can leave
-the host with a device that is electrically still attached: the
-bootloader clock-gates USB and does not set `DCTL.SDIS`, so D+ pull-up
-and HS termination stay. Firmware that then enumerates never gets a
-new address.
+Every firmware start is a jump from the bootloader. Its boot-up routine
+(`eerraa-qmk-h7s-boot/src/ap/ap.c`) copies FIRM into SRAM and jumps, on
+a cold boot and after a UF2 upload alike. The bootloader on current
+boards jumps after a UF2 upload with USB still enabled: it clock-gates
+the OTG core and USBPHYC without resetting them. Handed over that way,
+the core does not complete the soft reset that `HAL_PCD_Init()` issues;
+the HAL loop gives up after `HAL_USB_TIMEOUT`, about ten seconds, and
+`USBD_LL_Init()` in `src/hw/driver/usb/usbd_conf.c` stops in
+`Error_Handler()`.
 
-Firmware already disconnects. `HAL_PCD_Init()` ends with
-`USB_DevDisconnect()` (`DCTL.SDIS` = 1). `HAL_PCD_Start()` immediately
-calls `USB_DevConnect()` (`SDIS` = 0). That window is hundreds of
-microseconds — shorter than host/hub debounce (~100 ms).
+`HAL_PCD_MspInit()` in the same file therefore inspects the inherited
+core after enabling its clocks. `USB_OTG_GAHBCFG_GINT` set means the
+bootloader's TinyUSB armed it; the firmware then force-resets
+`USB_OTG_HS` and USBPHYC through RCC, clears the pending `OTG_HS_IRQn`,
+and holds `USBD_HANDOFF_RESET_HOLD_MS` (100) with the pull-up gone
+before the normal init continues. A cold boot, a VIA reset and the
+reset-style bootloader (`eerraa-qmk-h7s-boot` 19e0487) all hand over a
+core with that bit clear, so the branch costs nothing there, and the two
+fixes coexist.
 
-`USBD_LL_Start()` in `src/hw/driver/usb/usbd_conf.c` holds
-`USBD_BOOT_DETACH_HOLD_MS` (100) after that init disconnect, then
-starts PCD. It is a longer hold of an existing electrical detach, not
-a new USB behavior. `usbBegin()` runs once per boot (`src/hw/hw.c`),
-so the blocking delay is on the boot path only.
+> **REFUSED:** a boot-time detach hold — keeping the `DCTL.SDIS` that
+> `HAL_PCD_Init()` sets for 100 ms before `HAL_PCD_Start()` — as the
+> firmware-side fix (the V260824R2 approach).
+> **WHY:** on the old bootloader the failure is inside `HAL_PCD_Init()`,
+> before that hold could run; it changed nothing and cost 100 ms on
+> every boot.
+> **REOPENS:** none. The failing call is measured, and a hold placed
+> after it cannot reach it.
 
-The VIA reset path uses a different constant:
-`USB_RESET_DETACH_DELAY_MS` (100) in `src/hw/driver/usb/usb.c`, after
-`USBD_Stop`/`USBD_DeInit` and before `resetToReset()`. Pre-reset
-detach grace and boot-time detach hold stay independently tunable.
-
-Firmware does not detect jump-entry. Every boot takes the 100 ms hold.
-PCD init clocks the core and clears `DCFG.DAD` in the same call, so a
-detector would need a second init.
-
-This workaround is for boards already shipped. The bootloader-side
-root fix (detach, then system reset instead of a jump) is ST-LINK
-only and applies to later shipments. Firmware cannot intervene while
-the bootloader's UF2 copy has stalled USB. Field confirmation of
-auto-start stays in `docs/state_open.md`; this section does not close
-it.
+The VIA reset path is unchanged: `usbProcessDeferredReset()` in
+`src/hw/driver/usb/usb.c` stops USB, waits `USB_RESET_DETACH_DELAY_MS`
+(100), then resets the MCU. What is still owed on hardware is
+`docs/state_open.md` §2.
 
 ## 7. Do not skip rgblight lookup behind a 16-bit expiry cache
 

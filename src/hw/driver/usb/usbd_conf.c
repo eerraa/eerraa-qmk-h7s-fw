@@ -52,8 +52,7 @@
 #include "micros.h"
 #include "usb_diagnostics.h"  // V260823R2: reset/suspend 하드 이벤트 카운터
 
-#define USBD_BOOT_DETACH_HOLD_MS  (100U)   // V260824R2: 부트로더 점프 진입 시 호스트가 디태치를 확정할 최소 시간
-
+#define USBD_HANDOFF_RESET_HOLD_MS  (100U)   // V260912R1: 물려받은 USB 블록을 리셋한 뒤 호스트가 분리를 확정할 시간
 
 PCD_HandleTypeDef hpcd_USB_OTG_HS;
 void Error_Handler(void);
@@ -139,6 +138,25 @@ void HAL_PCD_MspInit(PCD_HandleTypeDef* pcdHandle)
     /* USB_OTG_HS clock enable */
     __HAL_RCC_USB_OTG_HS_CLK_ENABLE();
     __HAL_RCC_USBPHYC_CLK_ENABLE();
+
+    // V260912R1: 구 부트로더는 UF2 업로드 뒤 USB 를 켠 채 클럭만 끊고 펌웨어로 점프한다.
+    //            그렇게 물려받은 OTG 코어와 PHY 는 HAL_PCD_Init() 의 코어 소프트리셋에 응답하지
+    //            않아 HAL_USB_TIMEOUT 뒤(약 10 s) 실패하고 Error_Handler 에서 멈춘다.
+    //            부트로더 TinyUSB 가 세워 둔 GINT 가 켜져 있으면 그 코어를 물려받은 것이므로
+    //            두 블록을 RCC 로 리셋해 전원 인가 상태로 되돌리고, 부트로더 세션의 pending
+    //            인터럽트를 버린 뒤, 풀업이 떨어진 채로 유예를 두고 평소 초기화로 진행한다.
+    //            콜드부트·VIA 리셋·리셋 방식 부트로더는 GINT 가 0 이라 이 분기를 타지 않는다.
+    //            docs/contract_usb.md §6
+    if ((USB_OTG_HS->GAHBCFG & USB_OTG_GAHBCFG_GINT) != 0U)
+    {
+      __HAL_RCC_USB_OTG_HS_FORCE_RESET();
+      __HAL_RCC_USBPHYC_FORCE_RESET();
+      delay(1);
+      __HAL_RCC_USBPHYC_RELEASE_RESET();
+      __HAL_RCC_USB_OTG_HS_RELEASE_RESET();
+      NVIC_ClearPendingIRQ(OTG_HS_IRQn);
+      delay(USBD_HANDOFF_RESET_HOLD_MS);
+    }
 
     /* Peripheral interrupt init */
     HAL_NVIC_SetPriority(OTG_HS_IRQn, 2, 0);
@@ -491,29 +509,10 @@ USBD_StatusTypeDef USBD_LL_Start(USBD_HandleTypeDef *pdev)
   HAL_StatusTypeDef hal_status = HAL_OK;
   USBD_StatusTypeDef usb_status = USBD_OK;
 
-  // V260824R2: UF2 부트로더가 "점프"로 펌웨어를 시작하면 호스트가 USB 재열거를
-  //            하지 않아 키보드가 인식되지 않는 문제의 펌웨어 측 보완책이다.
-  //
-  //            부트로더 usbDeInit()은 RCC 클럭만 차단하고 DCTL.SDIS 를 세우지
-  //            않는다. 클럭 게이팅은 주변장치 레지스터를 리셋하지 않으므로 PHY 의
-  //            D+ 풀업/HS 터미네이션이 그대로 유지되고, 호스트는 장치가 분리된 게
-  //            아니라 "붙어 있는데 응답만 안 하는" 상태로 본다. 그 상태로 펌웨어가
-  //            올라오면 호스트는 예전 MSC 장치를 계속 상대하고, OTG 코어
-  //            소프트리셋으로 주소가 0 이 된 펌웨어는 영원히 열거되지 않는다.
-  //
-  //            한편 HAL_PCD_Init() 은 끝에서 USB_DevDisconnect()(SDIS=1)를 세워
-  //            두고, 곧바로 HAL_PCD_Start() 의 USB_DevConnect()(SDIS=0)가 되돌린다.
-  //            즉 펌웨어는 이미 분리 신호를 내고 있으나 그 구간이 수백 us 에
-  //            불과해 호스트/허브 디바운스(100ms)에 못 미쳐 인지되지 않았다.
-  //            여기서 지연을 주면 그 구간이 그대로 유효한 전기적 디태치가 된다.
-  //            (같은 기법의 선례: usb.c 의 usbProcessDeferredReset(), V251109R7)
-  //
-  //            근본 해결은 부트로더 V260824R1(점프 대신 시스템 리셋)이다. 부트로더는
-  //            UF2 로 갱신할 수 없어(내부 플래시, ST-LINK 필요) 기출하 보드에는
-  //            적용할 수 없으므로 본 지연을 배포한다.
-  //            상세: docs/contract_usb.md
-  delay(USBD_BOOT_DETACH_HOLD_MS);
-
+  // V260912R1: V260824R2가 여기 두었던 부팅 시 100 ms 디태치 유지를 제거했다.
+  //            구 부트로더 보드의 실패는 HAL_PCD_Init() 안에 있어 이 유지는 실행된 적이
+  //            없었다. 실제 조치는 HAL_PCD_MspInit() 의 물려받은 블록 리셋이다.
+  //            docs/contract_usb.md §6
   hal_status = HAL_PCD_Start(pdev->pData);
 
   usb_status =  USBD_Get_USB_Status(hal_status);
