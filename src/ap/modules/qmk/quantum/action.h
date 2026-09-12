@@ -31,6 +31,7 @@ extern "C" {
 #ifndef TAP_CODE_DELAY
 #    define TAP_CODE_DELAY 0
 #endif
+// V260911R3: macOS 호환 기본값을 유지하고, keyboard tap 유지 시간은 USB 큐가 처리한다.
 #ifndef TAP_HOLD_CAPS_DELAY
 #    define TAP_HOLD_CAPS_DELAY 80
 #endif
@@ -116,6 +117,8 @@ void register_code(uint8_t code);
 void unregister_code(uint8_t code);
 void tap_code(uint8_t code);
 void tap_code_delay(uint8_t code, uint16_t delay);
+// V260911R3: keyboard tap의 최소 리포트 간격. 논리 키 해제나 메인 루프를 지연하지 않는다.
+void tap_code_wait(uint16_t code, uint16_t delay);
 void register_mods(uint8_t mods);
 void unregister_mods(uint8_t mods);
 void register_weak_mods(uint8_t mods);

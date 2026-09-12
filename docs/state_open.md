@@ -29,23 +29,22 @@ existing aggregate or consume reserved bytes on only one side.
 
 ### D-5. Tap Dance synthetic-key ownership
 
-Tap-dance synthetic taps in `src/ap/modules/qmk/port/tapdance.c` still use the
-configured hold delay, including the QMK `TAP_HOLD_CAPS_DELAY` path for Caps Lock.
-That can block unrelated input for the configured interval. The same compatibility
-shape exists in QMK's generic tap helpers and the ERA reference implementation.
-Simply removing the delay or scheduling an unowned key-up can change Caps behavior
-or release a separately held physical key that resolves to the same HID usage.
+The nonblocking report-interval policy is `docs/contract_usb.md` §3. It delays
+USB snapshots, not synthetic key-up callbacks. QMK's shared HID usage state still does not distinguish
+a TD-generated usage from a separately held physical key with that same usage.
+This pre-existing overlap issue is not solved by changing a delay constant.
 
 **Start condition**: define synthetic-versus-physical usage ownership and add
 host-visible overlap fixtures for "synthetic down + physical same-usage down/up".
-Only then replace the blocking tap with a nonblocking owner-aware state machine.
-Until that ownership exists, the bounded compatibility delay is intentionally
-retained rather than trading latency for a stuck/released-key correctness risk.
+An implementation that later schedules logical key-up must define that ownership,
+including reconfiguration/cancellation and same-usage overlap. The report-interval
+implementation does not change the existing simultaneous logical-usage behavior.
 
 ## 2. Hardware-unverified
 
 | Item | What to look at |
 | --- | --- |
+| Caps host compatibility | Confirm TD, LT/MT and generic Caps taps on the supported host OSes at FS/HS, including fast repeated taps and a following letter. Host Caps filtering and indicator feedback require real host validation. |
 | Input/USB architecture | Verify real scan-to-host percentiles under FS/HS, RGB, VIA and writes; overflow/release convergence; short taps across wake; configuration churn, endpoint quiescence and optional CDC composite mode. |
 | Async external EEPROM | Verify real I2C IT/ACK-probe sequencing, missing-IRQ timeout quiescence, absent/stuck bus recovery, initial-read failure and page durability. Multi-page power-loss atomicity is not implemented. |
 | DMA/MPU/USB silicon guards | Confirm linked-list nodes in non-cache SRAM, unchanged row phase, GFXMMU Device/XN protection and ES0596 IN-ZLP sequencing including EP0. |

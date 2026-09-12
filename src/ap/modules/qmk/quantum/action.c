@@ -521,9 +521,9 @@ void process_action(keyrecord_t *record, action_t action) {
                         if (tap_count > 0) {
                             ac_dprintf("MODS_TAP: Tap: unregister_code\n");
                             if (action.layer_tap.code == KC_CAPS_LOCK) {
-                                wait_ms(TAP_HOLD_CAPS_DELAY);
+                                tap_code_wait(action.layer_tap.code, TAP_HOLD_CAPS_DELAY);
                             } else {
-                                wait_ms(TAP_CODE_DELAY);
+                                tap_code_wait(action.layer_tap.code, TAP_CODE_DELAY);
                             }
                             unregister_code(action.key.code);
                         } else {
@@ -703,9 +703,9 @@ void process_action(keyrecord_t *record, action_t action) {
                         if (tap_count > 0) {
                             ac_dprintf("KEYMAP_TAP_KEY: Tap: unregister_code\n");
                             if (action.layer_tap.code == KC_CAPS_LOCK) {
-                                wait_ms(TAP_HOLD_CAPS_DELAY);
+                                tap_code_wait(action.layer_tap.code, TAP_HOLD_CAPS_DELAY);
                             } else {
-                                wait_ms(TAP_CODE_DELAY);
+                                tap_code_wait(action.layer_tap.code, TAP_CODE_DELAY);
                             }
                             unregister_code(action.layer_tap.code);
                         } else {
@@ -720,9 +720,9 @@ void process_action(keyrecord_t *record, action_t action) {
                     } else {
                         ac_dprintf("KEYMAP_TAP_KEY: Tap: unregister_code\n");
                         if (action.layer_tap.code == KC_CAPS) {
-                            wait_ms(TAP_HOLD_CAPS_DELAY);
+                            tap_code_wait(action.layer_tap.code, TAP_HOLD_CAPS_DELAY);
                         } else {
-                            wait_ms(TAP_CODE_DELAY);
+                            tap_code_wait(action.layer_tap.code, TAP_CODE_DELAY);
                         }
                         unregister_code(action.layer_tap.code);
                     }
@@ -792,7 +792,7 @@ void process_action(keyrecord_t *record, action_t action) {
                         if (event.pressed) {
                             register_code(action.swap.code);
                         } else {
-                            wait_ms(TAP_CODE_DELAY);
+                            tap_code_wait(action.swap.code, TAP_CODE_DELAY);
                             unregister_code(action.swap.code);
                             *record = (keyrecord_t){}; // hack: reset tap mode
                         }
@@ -893,7 +893,7 @@ __attribute__((weak)) void register_code(uint8_t code) {
 #    endif
         add_key(KC_CAPS_LOCK);
         send_keyboard_report();
-        wait_ms(TAP_HOLD_CAPS_DELAY);
+        tap_code_wait(KC_CAPS_LOCK, TAP_HOLD_CAPS_DELAY);
         del_key(KC_CAPS_LOCK);
         send_keyboard_report();
 
@@ -1004,14 +1004,33 @@ __attribute__((weak)) void unregister_code(uint8_t code) {
     }
 }
 
+// V260911R3: 키보드 리포트만 비차단으로 유지한다. 다른 HID 인터페이스의 tap 의미는 보존한다.
+void tap_code_wait(uint16_t code, uint16_t delay)
+{
+  if (delay == 0U)
+  {
+    return;
+  }
+  uint8_t basic = (uint8_t)code;
+  if (code <= QK_MODS_MAX && (IS_BASIC_KEYCODE(basic) || IS_MODIFIER_KEYCODE(basic) ||
+      (basic == KC_NO && code > UINT8_MAX)))
+  {
+    host_keyboard_delay(delay);
+  }
+  else
+  {
+    wait_ms(delay);
+  }
+}
+
 /** \brief Tap a keycode with a delay.
  *
  * \param code The basic keycode to tap.
- * \param delay The amount of time in milliseconds to leave the keycode registered, before unregistering it.
+ * \param delay 호스트에 보이는 tap의 최소 유지 시간(ms). H7S keyboard 경로는 논리 해제 후에도 USB 스냅샷으로 유지한다.
  */
 __attribute__((weak)) void tap_code_delay(uint8_t code, uint16_t delay) {
     register_code(code);
-    wait_ms(delay);
+    tap_code_wait(code, delay);
     unregister_code(code);
 }
 

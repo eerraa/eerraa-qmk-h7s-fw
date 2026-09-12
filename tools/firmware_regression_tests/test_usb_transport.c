@@ -19,16 +19,17 @@ static uint32_t active_length[16], rx_length[16];
 static uint8_t *rx_buffer, *control_buffer;
 static uint32_t control_length, control_arms, control_errors, led_updates;
 static uint8_t led_value, open_fail, hs_interval = 1U;
+static uint16_t clock_us_fraction;
 static uint32_t arm_fail[16], clock_ms, wake_start_count, wake_end_count;
 static uint32_t wake_irq_services, logical_resume_count, ungate_count;
 static bool wake_asserted;
 static bool delay_signal_reset;
 static void (*delay_event)(uint32_t ms);
-static struct { uint8_t ep, length, data[32]; } delivered[20000];
+static struct { uint32_t time_ms; uint8_t ep, length, data[32]; } delivered[20000];
 static unsigned delivered_count;
 
 uint32_t millis(void) { return clock_ms; }
-uint32_t micros(void) { return clock_ms * 1000U; }
+uint32_t micros(void) { return clock_ms * 1000U + clock_us_fraction; }
 uint8_t usbBootModeGetHsInterval(void) { return hs_interval; }
 static void complete_logical_resume(void)
 {
@@ -152,6 +153,7 @@ static void complete(unsigned ep)
 {
   assert(ep < 16U && active[ep] != NULL && delivered_count < 20000U);
   assert(memcmp(active[ep], active_image[ep], active_length[ep]) == 0);
+  delivered[delivered_count].time_ms = clock_ms;
   delivered[delivered_count].ep = ep;
   delivered[delivered_count].length = active_length[ep];
   memcpy(delivered[delivered_count].data, active[ep], active_length[ep]);
@@ -225,6 +227,44 @@ static void test_first_mouse_and_order(void)
   drain();
   assert(delivered_count == 2U && delivered[0].data[2] == 4U && delivered[1].data[2] == 0U);
 }
+// V260911R2: 지연 없이 같은 버퍼로 연속 제출해도 Caps와 다음 키의 전이는 FIFO 순서를 보존한다.
+static void test_zero_delay_caps(void)
+{
+  USBD_HID_HandleTypeDef *hid = USBD_Device.pClassData;
+  for (unsigned mode = 0; mode < 4U; mode++)
+  {
+    drain();
+    delivered_count = 0U;
+    USBD_Device.dev_speed = (mode & 1U) ? USBD_SPEED_HIGH : USBD_SPEED_FULL;
+    hid->Protocol = (mode & 2U) ? 0U : 1U;
+    uint32_t start_ms = clock_ms;
+    uint8_t report[HID_KEYBOARD_REPORT_SIZE] = {0};
+    for (unsigned i = 0; i < 16U; i++)
+    {
+      report[2] = 0x39U;
+      assert(usbHidSendReport(report, sizeof(report)));
+      report[2] = 0U;
+      assert(usbHidSendReport(report, sizeof(report)));
+      report[2] = 4U;
+      assert(usbHidSendReport(report, sizeof(report)));
+      report[2] = 0U;
+      assert(usbHidSendReport(report, sizeof(report)));
+    }
+    assert(clock_ms == start_ms && delivered_count == 0U);
+    assert(active[1] && active[1][2] == 0x39U); // release로 원본 버퍼를 바꿔도 active press는 보존
+    for (unsigned i = 0; i < 64U; i++)
+    {
+      clock_ms += 5U; // 느린 호스트에서도 입력 생산은 기다리지 않았고 전송만 완료에 따라 진행한다.
+      complete(1U);
+      const uint8_t expected[] = {0x39U, 0U, 4U, 0U};
+      assert(delivered[i].ep == 1U && delivered[i].data[2] == expected[i % 4U]);
+    }
+    assert(delivered_count == 64U && active[1] == NULL);
+  }
+  hid->Protocol = 1U;
+  USBD_Device.dev_speed = USBD_SPEED_HIGH;
+}
+
 static void test_overflow(void)
 {
   delivered_count = 0U;
@@ -508,7 +548,7 @@ static void test_remote_wake(void)
 static void test_suspend_tap(void)
 {
   drain(); delivered_count = 0U;
-  uint8_t down[HID_KEYBOARD_REPORT_SIZE] = {0}, up[HID_KEYBOARD_REPORT_SIZE] = {0}; down[2] = 6U;
+  uint8_t down[HID_KEYBOARD_REPORT_SIZE] = {0}, up[HID_KEYBOARD_REPORT_SIZE] = {0}; down[2] = 0x39U;
   unsigned wake_base = wake_start_count;
 
   // Report production during Suspend preserves the tap but does not own wake signaling;
@@ -521,7 +561,7 @@ static void test_suspend_tap(void)
   drain();
   bool saw_press = false, saw_release_after = false;
   for (unsigned i = 0; i < delivered_count; i++) if (delivered[i].ep == 1U) {
-    if (delivered[i].data[2] == 6U) saw_press = true;
+    if (delivered[i].data[2] == 0x39U) saw_press = true;
     if (saw_press && delivered[i].data[2] == 0U) saw_release_after = true;
   }
   assert(saw_press && saw_release_after);  // a tap entirely during resume latency must not disappear
@@ -542,11 +582,15 @@ static void test_descriptor_intervals(void)
     for (unsigned i = 0; i < 4U; i++) assert(((USBD_EpDescTypeDef *)USBD_GetEpDesc(desc, endpoints[i]))->bInterval == 1U);
   }
 }
+#include "test_keyboard_intervals.h"
+
 int main(void)
 {
   uint8_t data[32] = {0};
   assert(!usbHidEnqueueViaResponse(data, 32U, 0U));
   test_first_mouse_and_order();
+  test_zero_delay_caps();
+  test_keyboard_intervals();
   test_overflow();
   test_via_and_epoch();
   test_control();

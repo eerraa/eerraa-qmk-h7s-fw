@@ -98,6 +98,11 @@ static hid_tx_packet_t extra_latest[3] = {
   { .length = 3U, .data = {4U} },
 };
 static bool keyboard_reconcile;
+// V260911R3: FIFO 스냅샷의 완료 시점과 유지 시간만 소유한다. QMK 키 상태는 만지지 않는다.
+static uint32_t keyboard_completed_us;
+static uint16_t keyboard_delay_ms;
+static uint16_t keyboard_active_delay_ms;
+static bool keyboard_completed;
 static uint8_t extra_reconcile;
 static uint32_t transport_generation;
 static usb_hid_transport_stats_t transport_stats;
@@ -892,8 +897,14 @@ static uint8_t USBD_HID_DataIn(USBD_HandleTypeDef *pdev, uint8_t epnum)
   uint32_t irq = usbHidLock();
   if (p_hhid != NULL) {
     if (epnum == (HIDInEpAdd & 0xFU)) {
-      if (hidTxComplete(&keyboard_tx) && usbDiagnosticsIsActive())
-        usbDiagnosticsOnReportTransferCompleted(micros());
+      if (hidTxComplete(&keyboard_tx))
+      {
+        keyboard_completed_us = micros();
+        keyboard_completed = true;
+        keyboard_delay_ms = keyboard_active_delay_ms;
+        keyboard_active_delay_ms = 0U;
+        if (usbDiagnosticsIsActive()) usbDiagnosticsOnReportTransferCompleted(keyboard_completed_us);
+      }
     } else if (epnum == (HID_EXK_EP_IN & 0xFU)) {
       hidTxComplete(&extra_tx);
     } else if (epnum == (HID_VIA_EP_IN & 0xFU)) {
@@ -957,6 +968,7 @@ static bool usbHidArm(void *context, const hid_tx_packet_t *packet)
   uint8_t ep = (uint8_t)(uintptr_t)context;
   bool ok = USBD_LL_Transmit(&USBD_Device, ep, (uint8_t *)packet->data, packet->length) == USBD_OK;
   if (!ok) transport_stats.arm_failures++;
+  if (ok && ep == HIDInEpAdd) keyboard_active_delay_ms = packet->delay_after_ms;
   if (ok && ep == HIDInEpAdd && packet->diagnostic_session != 0U)
     usbDiagnosticsOnReportTransferStarted(packet->request_us, packet->diagnostic_session, keyboard_tx.count - 1U);
   return ok;
@@ -983,7 +995,12 @@ static void usbHidPumpLocked(USBD_HandleTypeDef *pdev)
   }
   // V260909R1: 같은 세션의 suspend는 전이 큐를 유지하되 물리 IN 무장은 resume 이후만 한다.
   if (pdev->dev_state != USBD_STATE_CONFIGURED) return;
-  hidTxKick(&keyboard_tx, usbHidArm, (void *)(uintptr_t)HIDInEpAdd);
+  // V260911R3: 기본 경로는 시계를 읽지 않는다. 유지 중에도 다른 IN 엔드포인트는 계속 서비스한다.
+  if (keyboard_delay_ms == 0U || (uint32_t)(micros() - keyboard_completed_us) >= (uint32_t)keyboard_delay_ms * 1000U)
+  {
+    keyboard_delay_ms = 0U;
+    hidTxKick(&keyboard_tx, usbHidArm, (void *)(uintptr_t)HIDInEpAdd);
+  }
   hidTxKick(&extra_tx, usbHidArm, (void *)(uintptr_t)HID_EXK_EP_IN);
   hidTxKick(&via_tx, usbHidArm, (void *)(uintptr_t)HID_VIA_EP_IN);
 }
@@ -1008,6 +1025,9 @@ static void usbHidResetTransport(void)
   extra_reconcile = 7U;
   keyboard_latest.request_us = 0U;
   keyboard_latest.diagnostic_session = 0U;
+  keyboard_latest.delay_after_ms = 0U;
+  keyboard_delay_ms = keyboard_active_delay_ms = 0U;
+  keyboard_completed = false;
   via_rx_count = via_rx_head = 0U;
   via_rx_armed = false;
   ep0_led_pending = false;
@@ -1141,6 +1161,38 @@ bool usbHidRequestRemoteWakeFromInput(void)
   // Keep the configured physical-key path separate from all slow wake machinery.
   if (USBD_Device.dev_state != USBD_STATE_SUSPENDED) return false;
   return usbHidRemoteWakeSuspended();
+}
+
+// V260911R3: 마지막으로 수락한 리포트 뒤의 간격을 연장한다. active payload는 불변이다.
+void usbHidDelayKeyboardReport(uint16_t delay_ms)
+{
+  if (delay_ms == 0U)
+  {
+    return;
+  }
+  uint32_t irq = usbHidLock();
+  if (usbHidSessionValid(&USBD_Device))
+  {
+    uint16_t *interval = NULL;
+    if (keyboard_tx.count != 0U)
+    {
+      uint16_t tail = (keyboard_tx.head + keyboard_tx.count - 1U) % keyboard_tx.capacity;
+      interval = &keyboard_tx.slots[tail].delay_after_ms;
+    }
+    else if (keyboard_tx.busy)
+    {
+      interval = &keyboard_active_delay_ms;
+    }
+    else if (keyboard_completed)
+    {
+      interval = &keyboard_delay_ms;
+    }
+    if (interval != NULL && *interval < delay_ms)
+    {
+      *interval = delay_ms;
+    }
+  }
+  usbHidUnlock(irq);
 }
 
 bool usbHidSendReport(uint8_t *data, uint16_t length)

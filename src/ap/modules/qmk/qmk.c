@@ -59,6 +59,9 @@ void qmkUpdate(void)
     usbDiagnosticsTask(micros());                                // V260823R2: idle일 때 타이머 읽기/계측 task 없음
   }
   keyboard_task();
+#ifdef _USE_HW_WS2812
+  ws2812Task();                                      // V260910R6: RGB DMA 완료 후 대기 중 최신 프레임을 비차단 전송
+#endif
   via_hid_task();  // V260909R1: 입력 처리 후 한 명령만 실행
   eeprom_task();
   idle_task();

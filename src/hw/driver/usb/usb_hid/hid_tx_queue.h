@@ -10,6 +10,7 @@ typedef struct {
   uint8_t length;
   uint8_t reserved;
   uint8_t data[HID_TX_PACKET_BYTES];
+  uint16_t delay_after_ms; // V260911R3: 전송 완료 뒤 다음 keyboard 리포트까지의 최소 간격, wire 밖의 메타데이터
 } hid_tx_packet_t;
 
 typedef struct {

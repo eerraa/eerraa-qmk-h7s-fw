@@ -132,13 +132,12 @@ __attribute__((weak)) void unregister_code16(uint16_t code) {
 /** \brief Tap a keycode with a delay.
  *
  * \param code The modded keycode to tap.
- * \param delay The amount of time in milliseconds to leave the keycode registered, before unregistering it.
+ * \param delay 호스트에 보이는 tap의 최소 유지 시간(ms). H7S keyboard 경로는 논리 해제 후에도 USB 스냅샷으로 유지한다.
  */
 __attribute__((weak)) void tap_code16_delay(uint16_t code, uint16_t delay) {
     register_code16(code);
-    for (uint16_t i = delay; i > 0; i--) {
-        wait_ms(1);
-    }
+    // V260911R3: 16-bit tap도 공통 리포트 유지 경로로 처리한다.
+    tap_code_wait(code, delay);
     unregister_code16(code);
 }
 
@@ -308,11 +307,7 @@ bool process_record_quantum(keyrecord_t *record) {
     }
 #endif
 
-#ifdef RGBLIGHT_ENABLE
-    if (IS_KEYEVENT(record->event)) {
-        preprocess_rgblight(record->event.pressed, record->event.key.row, record->event.key.col);  // V251018R5: Pulse Hold 판정을 위해 release 이벤트 전달
-    }
-#endif
+    // V260911R1: RGB 물리 입력은 matrix_task가 전달하므로 tap/hold 판정 재생에서 중복 통지하지 않는다.
 
 #ifdef WPM_ENABLE
     if (record->event.pressed) {

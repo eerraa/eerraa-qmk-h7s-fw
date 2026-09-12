@@ -67,6 +67,13 @@ void wait_ms(uint16_t ms) {
     (void)ms;
 }
 
+// V260911R3: VIA 값 테스트의 실행 대역. 실제 비차단 tap/USB 시간 검증은 firmware_regression_tests가 담당한다.
+void tap_code_wait(uint16_t code, uint16_t ms)
+{
+  (void)code;
+  (void)ms;
+}
+
 action_t action_for_keycode(uint16_t keycode) {
     action_t action;
     (void)keycode;

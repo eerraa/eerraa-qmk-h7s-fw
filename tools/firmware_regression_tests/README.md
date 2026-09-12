@@ -12,7 +12,7 @@ The runner uses HOST_CC when set, otherwise the installed Windows host GCC or
 `gcc` from PATH. No ARM emulator, board, USB device or network is required.
 Executables and source-isolation copies are written below the ignored repository
 `build-firmware-regression-tests` directory. Individual groups can be selected
-with `--only queue`, `debounce`, `eeprom`, `usb`, `qbuffer` or `guards`.
+with `--only queue`, `debounce`, `eeprom`, `usb`, `qbuffer`, `input`, `rgb` or `guards`.
 All test binaries compile with warnings as errors. Stubs are test-only and are
 not included in firmware builds.
 
@@ -52,6 +52,27 @@ not included in firmware builds.
 Debounce runtime and the EEPROM image source are copied without statement edits
 solely so host headers can replace target-local matrix/timer/bootloader headers.
 The actual algorithm and state-machine implementations are not replaced by models.
+
+### Physical RGB input coverage
+
+`--only rgb` connects the unedited production matrix dispatch, QMK tapping buffer,
+TD callbacks, action execution, pulse state machine and RGB task in one host
+fixture. It checks TD/LT Caps taps and holds, delayed replay, filtered releases,
+all four pulse modes, last-pressed-key tracking, host indicator precedence,
+output sleep, RGB OFF, Velocikey and 32-bit wrap. It also retains the distinct
+TD interruption/double-action and LT quick-tap behavior. Matrix input, keymap
+lookup, host LED feedback, indicator composition and LED hardware are test
+adapters; USB transport and real WS2812 frames are not measured by this fixture.
+Oneshot and optional tapping policies are outside this fixture's configuration.
+MinGW uses GCC bitfield layout, checked against the production two-byte action.
+The fixture also includes the actual QMK wait/host ports and generic tap helpers.
+It requires the upstream 80 ms Caps interval request with zero calls to the delay
+backend, and checks ordinary explicit waits separately. The actual USB class
+fixture checks 80/200 ms intervals measured from completion, including completion
+at a fractional-ms boundary; EXK/VIA continue during the interval. It covers fast
+Caps/letter sequences, later same-usage snapshots, failed arms, overflow, Suspend,
+reset, and clock wrap under FS/HS and boot/report protocol. Existing zero-interval
+FIFO tests cover ordinary input. No host Caps-activation filter is emulated.
 
 ## What a pass does not establish
 

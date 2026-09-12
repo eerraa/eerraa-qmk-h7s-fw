@@ -27,6 +27,8 @@ __attribute__((section(".non_cache")))
 static uint8_t bit_buf_cpu[WS2812_BIT_BUF_LEN];            // V251116R1: CPU 작업 버퍼
 static uint8_t *ws2812_dma_buf = bit_buf_dma;              // V251116R1: DMA와 CPU 포인터 분리
 static uint8_t *ws2812_work_buf = bit_buf_cpu;
+static bool ws2812_transfer_active = false;                 // V260910R6: 진행 중 DMA는 완료 전까지 절대 중단하지 않는다
+static bool ws2812_refresh_pending = false;                 // V260910R6: busy 동안 최신 프레임 요청을 1개로 병합
 
 
 ws2812_t ws2812;
@@ -38,6 +40,8 @@ static DMA_HandleTypeDef handle_GPDMA1_Channel4;
 static void cliCmd(cli_args_t *args);
 #endif
 static bool ws2812InitHw(void);
+static bool ws2812StartTransfer(void);
+static void ws2812Service(void);
 
 
 
@@ -53,6 +57,10 @@ bool ws2812Init(void)
 
   memset(bit_buf_dma, 0, sizeof(bit_buf_dma));
   memset(bit_buf_cpu, 0, sizeof(bit_buf_cpu));
+  ws2812_dma_buf        = bit_buf_dma;
+  ws2812_work_buf       = bit_buf_cpu;
+  ws2812_transfer_active = false;
+  ws2812_refresh_pending = false;
   
   ws2812.h_timer = &htim15;
   ws2812.channel = TIM_CHANNEL_1;
@@ -189,25 +197,65 @@ bool ws2812InitHw(void)
   return true;
 }
 
-bool ws2812Refresh(void)
+static bool ws2812StartTransfer(void)
 {
   const uint32_t retry_limit = 3;
 
   for (uint32_t attempt = 0; attempt < retry_limit; attempt++)
   {
-    (void)HAL_TIM_PWM_Stop_DMA(ws2812.h_timer, ws2812.channel);
+    HAL_StatusTypeDef status = HAL_TIM_PWM_Start_DMA(ws2812.h_timer, ws2812.channel, (const uint32_t *)ws2812_work_buf, WS2812_BIT_BUF_LEN);
 
-    if (HAL_TIM_PWM_Start_DMA(ws2812.h_timer, ws2812.channel, (const uint32_t *)ws2812_work_buf, WS2812_BIT_BUF_LEN) == HAL_OK)
+    if (status == HAL_OK)
     {
       uint8_t *prev_dma_buf = ws2812_dma_buf;
       ws2812_dma_buf = ws2812_work_buf;
       ws2812_work_buf = prev_dma_buf;  // V251116R1: DMA 버퍼와 CPU 버퍼를 스왑하여 전송 중 덮어쓰기 차단
       memcpy(ws2812_work_buf, ws2812_dma_buf, WS2812_BIT_BUF_LEN);  // V260310R4: 다음 부분 갱신도 현재 프레임을 기준으로 누적되도록 작업 버퍼를 즉시 동기화
-      return true;  // V251018R1: DMA BUSY/ERROR 시 재시도 후 성공 시점만 반환
+      ws2812_transfer_active = true;
+      return true;
     }
+
+    (void)HAL_TIM_PWM_Stop_DMA(ws2812.h_timer, ws2812.channel);   // 시작 실패로 남은 HAL BUSY 상태만 정리; 활성 전송에는 도달하지 않음
   }
 
-  return false;  // V251018R1: 반복 실패 시 상위 레이어가 복구 루틴을 트리거 할 수 있도록 상태 전달
+  return false;
+}
+
+static void ws2812Service(void)
+{
+  if (ws2812_transfer_active)
+  {
+    if (HAL_DMA_GetState(&handle_GPDMA1_Channel4) != HAL_DMA_STATE_READY)
+    {
+      return;                                                   // V260910R6: 전송 중 프레임을 abort하면 WS2812 체인이 부분 프레임을 latch할 수 있다
+    }
+
+    (void)HAL_TIM_PWM_Stop_DMA(ws2812.h_timer, ws2812.channel);  // 완료된 DMA만 정리하여 TIM channel을 READY로 복귀
+    ws2812_transfer_active = false;
+  }
+
+  if (!ws2812_refresh_pending)
+  {
+    return;
+  }
+
+  if (ws2812StartTransfer())
+  {
+    ws2812_refresh_pending = false;                              // busy 동안 누적된 요청은 최신 work buffer 한 프레임으로 병합
+  }
+}
+
+void ws2812Task(void)
+{
+  ws2812Service();
+}
+
+bool ws2812Refresh(void)
+{
+  ws2812_refresh_pending = true;
+  ws2812Service();
+
+  return ws2812_transfer_active || !ws2812_refresh_pending;      // 전송 시작 또는 안전하게 queue된 경우 성공
 }
 
 void ws2812SetColor(uint32_t ch, uint32_t color)

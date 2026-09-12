@@ -90,6 +90,12 @@ led_t host_keyboard_led_state(void) {
     return (led_t)host_keyboard_leds();
 }
 
+// V260911R3: QMK는 논리 해제를 즉시 완료하고, 호스트에 보이는 간격은 전송 계층이 소유한다.
+void host_keyboard_delay(uint16_t delay_ms)
+{
+  usbHidDelayKeyboardReport(delay_ms);
+}
+
 /* send report */
 void host_keyboard_send(report_keyboard_t *report)
 {

@@ -166,6 +166,7 @@ typedef struct {
     bool     initialized;
     bool     output_on;
     bool     key_tracking_valid;
+    bool     input_pending;  // V260911R1: 입력은 상태만 기록하고 RGB task가 출력을 계산한다.
     uint8_t  key_row;
     uint8_t  key_col;
     uint32_t deadline_ms;
@@ -232,8 +233,14 @@ static uint16_t rgblight_effect_pulse_duration_ms(void)
            (uint16_t)rgblight_config.speed * (uint16_t)RGBLIGHT_EFFECT_PULSE_DURATION_STEP_MS;
 }
 
+static bool rgblight_effect_pulse_input_pending(void)
+{
+  return rgblight_pulse_effect_state.input_pending;
+}
+
 static void rgblight_effect_pulse_reset_state(void)
 {
+    rgblight_pulse_effect_state.input_pending      = false;
     rgblight_pulse_effect_state.latched            = false;
     rgblight_pulse_effect_state.initialized        = false;
     rgblight_pulse_effect_state.output_on          = false;
@@ -263,6 +270,7 @@ static void rgblight_effect_pulse_apply_output(bool on)
 
 static void rgblight_effect_pulse_evaluate_output(void)
 {
+    rgblight_pulse_effect_state.input_pending = false;  // V260911R1: 현재 입력 상태를 렌더 계층에서 한 번 소비
     if (!rgblight_effect_pulse_mode_active()) {
         return;
     }
@@ -298,7 +306,7 @@ static void rgblight_effect_pulse_on_base_mode_update(void)
     rgblight_effect_pulse_evaluate_output();
 }
 
-static void rgblight_effect_pulse_handle_keyevent(bool pressed, uint8_t row, uint8_t col)
+static void rgblight_effect_pulse_handle_keyevent(bool pressed, uint8_t row, uint8_t col, uint32_t now)
 {
     if (!rgblight_effect_pulse_mode_active() || !rgblight_config.enable) {
         if (!pressed) {
@@ -308,13 +316,12 @@ static void rgblight_effect_pulse_handle_keyevent(bool pressed, uint8_t row, uin
     }
 
     if (pressed) {
-        uint32_t now                              = sync_timer_read32();
         rgblight_pulse_effect_state.latched       = true;
         rgblight_pulse_effect_state.deadline_ms   = now + rgblight_effect_pulse_duration_ms();
         rgblight_pulse_effect_state.key_row       = row;
         rgblight_pulse_effect_state.key_col       = col;
         rgblight_pulse_effect_state.key_tracking_valid = true;
-        rgblight_effect_pulse_evaluate_output();
+        rgblight_pulse_effect_state.input_pending = true;
         return;
     }
 
@@ -325,14 +332,7 @@ static void rgblight_effect_pulse_handle_keyevent(bool pressed, uint8_t row, uin
     if (matches_tracked_key) {
         rgblight_pulse_effect_state.key_tracking_valid = false;
 
-        if (rgblight_effect_pulse_hold_mode_active()) {
-            uint32_t now = sync_timer_read32();
-            if ((int32_t)(now - rgblight_pulse_effect_state.deadline_ms) >= 0) {
-                rgblight_pulse_effect_state.latched     = false;
-                rgblight_pulse_effect_state.deadline_ms = 0;
-                rgblight_effect_pulse_evaluate_output();  // V251018R5: Hold 해제 시 즉시 상태 복구
-            }
-        }
+        rgblight_pulse_effect_state.input_pending = true;  // V260911R1: 만료/복구 계산도 RGB task에 위임
     }
 }
 
@@ -361,11 +361,13 @@ static void rgblight_effect_pulse_off_press_hold(animation_status_t *anim)
 }
 #else
 static inline void rgblight_effect_pulse_on_base_mode_update(void) {}
-static inline void rgblight_effect_pulse_handle_keyevent(bool pressed, uint8_t row, uint8_t col)
+static inline bool rgblight_effect_pulse_input_pending(void) { return false; }
+static inline void rgblight_effect_pulse_handle_keyevent(bool pressed, uint8_t row, uint8_t col, uint32_t now)
 {
     (void)pressed;
     (void)row;
     (void)col;
+    (void)now;
 }
 static inline void rgblight_effect_pulse_evaluate_output(void) {}
 #endif
@@ -2332,8 +2334,10 @@ void rgblight_effect_twinkle(animation_status_t *anim) {
 }
 #endif
 
-void preprocess_rgblight(bool pressed, uint8_t row, uint8_t col) {
-    rgblight_effect_pulse_handle_keyevent(pressed, row, col);  // V251018R5: Pulse 계열 입력 상태 갱신
+// V260911R1: 디바운스된 물리 전이만 받는다. 색 계산/LED 순회/전송은 하지 않는다.
+void rgblight_handle_physical_key(bool pressed, uint8_t row, uint8_t col, uint32_t time_ms)
+{
+    rgblight_effect_pulse_handle_keyevent(pressed, row, col, time_ms);
 
     if (!pressed) {
         return;
@@ -2392,7 +2396,7 @@ static bool rgblight_task_periodic_due(bool active, bool urgent, uint32_t now) {
 }
 
 void rgblight_task(void) {
-    bool urgent_pending = rgblight_render_pending || rgblight_host_led_pending;
+    bool urgent_pending = rgblight_render_pending || rgblight_host_led_pending || rgblight_effect_pulse_input_pending();
     bool timer_disabled = !rgblight_status.timer_enabled;
 #ifdef VELOCIKEY_ENABLE
     bool velocikey_on = rgblight_velocikey_enabled();
@@ -2422,6 +2426,9 @@ void rgblight_task(void) {
         return;  // V260909R1: 32-bit wrap-safe 1ms gate. 장시간 inactive 후에도 즉시 재무장된다.
     }
 
+    if (rgblight_effect_pulse_input_pending()) {
+        rgblight_effect_pulse_evaluate_output();  // V260911R1: 주기 게이트를 기다리지 않고 최신 물리 입력을 반영
+    }
     rgblight_consume_host_led_queue();
 #ifdef RGBLIGHT_USE_TIMER
     rgblight_timer_task();

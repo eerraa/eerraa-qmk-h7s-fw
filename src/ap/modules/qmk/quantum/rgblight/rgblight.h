@@ -449,7 +449,7 @@ void rgblight_mode_eeprom_helper(uint8_t mode, bool write_to_eeprom);
 #define EZ_RGB(val) rgblight_show_solid_color((val >> 16) & 0xFF, (val >> 8) & 0xFF, val & 0xFF)
 void rgblight_show_solid_color(uint8_t r, uint8_t g, uint8_t b);
 
-void preprocess_rgblight(bool pressed, uint8_t row, uint8_t col);  // V251018R5: Pulse 계열 입력 감지를 위해 위치 정보 전달
+void rgblight_handle_physical_key(bool pressed, uint8_t row, uint8_t col, uint32_t time_ms);  // V260911R1: 물리 입력/스캔 시각만 기록, 렌더는 RGB task 소유
 void rgblight_task(void);
 
 #ifdef RGBLIGHT_USE_TIMER

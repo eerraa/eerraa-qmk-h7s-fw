@@ -143,6 +143,7 @@ static void                  tapdance_register_keycode(uint16_t keycode, bool is
 static void                  tapdance_unregister_keycode(uint16_t keycode, bool is_tap);
 static void                  tapdance_tap_keycode(uint16_t keycode, bool is_tap);
 static void                  tapdance_set_runtime(uint8_t slot_index, tapdance_action_type_t action, uint16_t keycode, bool is_tap);
+static uint16_t              tapdance_tap_width_ms(uint16_t keycode);                                  // V260911R5: 합성 탭 폭 규칙
 
 
 void tapdance_init(void)
@@ -286,8 +287,17 @@ static void tapdance_tap_keycode(uint16_t keycode, bool is_tap)
   }
 
   tapdance_register_keycode(keycode, is_tap);
-  wait_ms(keycode == KC_CAPS_LOCK ? TAP_HOLD_CAPS_DELAY : TAP_CODE_DELAY);
+  // V260911R5: 합성 탭의 폭은 어느 경로가 만들었든 QMK 규칙 하나다(tapdance_tap_width_ms).
+  // V260911R3: TD와 LT의 호스트 유지 시간을 같은 전송 계층에 맡긴다.
+  tap_code_wait(keycode, tapdance_tap_width_ms(keycode));
   tapdance_unregister_keycode(keycode, is_tap);
+}
+
+// V260911R5: 합성 탭의 최소 유지 시간. QMK의 tap_code()와 LT/MT가 쓰는 규칙 그대로라 같은 keycode가
+// TD 슬롯에서도 같은 폭을 갖는다. Caps Lock은 macOS가 짧은 탭을 무시하므로 TAP_HOLD_CAPS_DELAY다.
+static uint16_t tapdance_tap_width_ms(uint16_t keycode)
+{
+  return (keycode == KC_CAPS_LOCK) ? TAP_HOLD_CAPS_DELAY : TAP_CODE_DELAY;
 }
 
 static void tapdance_set_runtime(uint8_t slot_index, tapdance_action_type_t action, uint16_t keycode, bool is_tap)
@@ -450,10 +460,14 @@ static void tapdance_on_reset(tap_dance_state_t *state, void *user_data)
 
   runtime = &tapdance_runtime[user->slot_index];
 
-  wait_ms(TAP_CODE_DELAY);
-
   if (tapdance_keycode_is_valid(runtime->active_keycode))
   {
+    // V260911R5: 판정이 등록한 탭은 합성 폭만큼 유지를 요청한다. 물리 홀드의 해제는 스위치가 이미 폭을 준 것이라 요청하지 않는다.
+    // V260911R3: 논리 해제는 지금 완료한다. 예약된 USB 리포트가 이후 입력의 키 상태를 건드리지 않는다.
+    if (runtime->active_is_tap)
+    {
+      tap_code_wait(runtime->active_keycode, tapdance_tap_width_ms(runtime->active_keycode));
+    }
     tapdance_unregister_keycode(runtime->active_keycode, runtime->active_is_tap);  // V251127R1: 등록된 tap/hold 경로에 맞춰 해제
   }
 

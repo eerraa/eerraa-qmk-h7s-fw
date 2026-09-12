@@ -720,6 +720,11 @@ static bool matrix_task(void) {
             // emits a keyboard HID report. This also wakes on layer-only/consumed keys.
             suspend_wakeup_key_event(row, col, key_pressed);
 
+#ifdef RGBLIGHT_ENABLE
+            // V260911R1: RGB 입력은 판정/재생 전 물리 전이가 소유하며 스캔 시각을 공유한다.
+            rgblight_handle_physical_key(key_pressed, row, col, event_time_32);
+#endif
+
             if (process_keypress) {
                 event.key.col = col;
                 event.pressed = key_pressed;

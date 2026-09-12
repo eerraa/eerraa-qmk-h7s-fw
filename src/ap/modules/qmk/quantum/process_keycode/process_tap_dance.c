@@ -180,7 +180,8 @@ bool process_tap_dance(uint16_t keycode, keyrecord_t *record) {
                     process_tap_dance_action_on_each_tap(action);
                     active_td = action->state.finished ? 0 : keycode;
                 } else {
-                    if (tapdance_should_finish_immediate(slot_index, action->state.count)) {
+                    // V260911R4: 완료된 dance의 release는 reset만 한다. 다른 슬롯의 active_td를 지우지 않는다.
+                    if (!action->state.finished && tapdance_should_finish_immediate(slot_index, action->state.count)) {
                         action->state.pressed = false;
                         process_tap_dance_action_on_dance_finished(action);  // V251125R1: Vial 호환 즉시 종료
                         break;

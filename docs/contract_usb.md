@@ -75,6 +75,43 @@ DataIn completion. All queue and PCD-register operations use the same saved
 PRIMASK critical section. A failed arm does not consume the FIFO head. A new
 report cannot bypass older pending reports.
 
+Caps taps keep the upstream `TAP_HOLD_CAPS_DELAY` default of 80 ms.
+[QMK's configuration documentation](https://docs.qmk.fm/config_options) identifies
+it as a macOS compatibility setting and notes that some macOS configurations may
+need 200 ms or more. USB FIFO ordering and host-side short-Caps filtering are
+separate requirements; a lossless FIFO does not justify removing the hold.
+
+`tap_code_wait()` in `src/ap/modules/qmk/quantum/action.c` routes keyboard tap
+intervals through the host port to `usbHidDelayKeyboardReport()`. TD, LT/MT and
+generic keyboard tap helpers use this same path. A Tap Dance synthesized tap requests
+the width the generic helper would, `TAP_HOLD_CAPS_DELAY` for Caps Lock and
+`TAP_CODE_DELAY` otherwise, and a hold's release requests none
+(`src/ap/modules/qmk/port/tapdance.c`). QMK completes its logical release
+synchronously, and the existing FIFO owns immutable report snapshots. There is
+no future `unregister_code()` callback that could release a later key or disturb
+its modifiers. Non-keyboard tap delays keep their existing synchronous path.
+The wait port in `src/ap/modules/qmk/port/platforms/wait.c` returns immediately
+for 0 ms instead of inheriting `HAL_Delay(0)`'s minimum tick wait.
+
+The transport attaches a minimum interval after the latest accepted keyboard
+snapshot, using pending-packet metadata, separate active-transfer metadata, or
+the last completed report's timestamp. Repeated requests take the larger minimum.
+Time is measured from DataIn completion with the existing microsecond counter,
+not from logical registration or enqueue. Time already elapsed since that
+completion counts toward the interval. Pending/active snapshots remain ordered;
+failed arms do not consume the interval or the FIFO head. A new transport
+generation discards old intervals along with the old backlog. Suspend preserves
+them, so a tap queued while asleep gets its hold after its press is delivered.
+
+During an interval, the next keyboard report and its successors wait in the FIFO.
+This preserves Caps-release/next-letter and modifier ordering; it is an intentional
+host-output delay. Matrix processing, tap/hold resolution, RGB rendering, EXK and
+VIA continue. No busy wait, new periodic ISR, dynamic allocation, or keycode scan
+is added to the USB pump. The ordinary pump bypasses the clock read when no
+interval is active; each keyboard completion records one timestamp. Finite queue
+limits below still apply: overflow can lose taps, while the accepted prefix's
+intervals and convergence to the latest release state remain intact.
+
 `USBD_HID_DataIn()` completes the endpoint and immediately pumps its next head.
 `USBD_HID_SOF()` supplies a bounded fallback retry, not a wall-clock throttle.
 There is no TIM2 report-service ISR and no USB work in a generic timer/PWM
@@ -365,3 +402,28 @@ Pulse-on-press paths already expire with a 32-bit signed compare on
 Diagnostic sessions follow the 32-bit rule: `usbDiagnosticsTask()`
 completes when `(int32_t)(now_us - deadline_us) >= 0`. Counters
 saturate at `UINT32_MAX`. TIM5 wrap is `docs/contract_via.md` §6-2.
+
+## 8. Reactive RGB input belongs to physical switch transitions
+
+Pulse effects and Velocikey consume debounced, ghost-filtered matrix transitions
+in `src/ap/modules/qmk/quantum/keyboard.c`, before QMK action filtering or tapping
+buffering. They use the scan's shared 32-bit timestamp. The input handler in
+`src/ap/modules/qmk/quantum/rgblight/rgblight.c` updates bounded RAM state only;
+color calculation, LED-buffer traversal and frame submission belong to the RGB
+task. Pending pulse input bypasses the periodic task gate without adding a wait.
+Logical action replay, TD-generated actions and synthetic records do not generate
+another physical press or release for RGB.
+
+Pulse duration starts at physical press. Hold variants extend that pulse while
+the most recently pressed key remains down; releasing an older key cannot clear
+the newer key's hold. This retains last-pressed-key tracking rather than changing
+the effect to track all simultaneously held keys. The Caps indicator remains an
+overlay of host LED Output state, independent of the physical pulse and local
+tap/hold decision. Host response time and frame coalescing may affect visibility;
+there is no guaranteed minimum number of visible pulse frames.
+
+An isolated short TD tap with only tap and hold configured resolves at release,
+as does the first LT tap. This does not make their full semantics identical: TD
+interruption and configured double actions, and LT tapping policies and quick-tap
+repetition still determine different logical action sequences. RGB must not gain
+those differences merely because one resolver buffers a physical event longer.

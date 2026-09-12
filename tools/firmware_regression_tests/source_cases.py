@@ -173,4 +173,97 @@ int main(void) {
   return 0;
 }
 ''',encoding='utf-8')
-    return out, out_reset, out_rgb
+
+    # V260911R2: TD/LT 지연 정책은 RGB 통합 fixture가 실제 wait 포트와 함께 실행해 검사한다.
+
+    qmk=(root/'src/ap/modules/qmk/qmk.c').read_text(encoding='utf-8')
+    qmk_update=function(qmk,'qmkUpdate')
+    assert 'keyboard_task();' in qmk_update and 'ws2812Task();' in qmk_update
+    assert qmk_update.index('keyboard_task();') < qmk_update.index('ws2812Task();')
+
+    ws=(root/'src/hw/driver/ws2812.c').read_text(encoding='utf-8')
+    ws_start=function(ws,'ws2812StartTransfer')
+    ws_service=function(ws,'ws2812Service')
+    ws_task=function(ws,'ws2812Task')
+    ws_refresh=function(ws,'ws2812Refresh')
+    assert 'HAL_TIM_PWM_Stop_DMA' not in ws_refresh
+    assert 'HAL_DMA_GetState' in ws_service and 'HAL_DMA_STATE_READY' in ws_service
+    assert ws_service.index('HAL_DMA_GetState') < ws_service.index('HAL_TIM_PWM_Stop_DMA')
+    assert 'ws2812_refresh_pending = true' in ws_refresh
+    out_ws=build/'test_ws2812_scheduler.c'
+    out_ws.write_text(r'''#include <assert.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+typedef int HAL_StatusTypeDef;
+typedef int HAL_DMA_StateTypeDef;
+typedef struct { int unused; } TIM_HandleTypeDef;
+typedef struct { int unused; } DMA_HandleTypeDef;
+#define HAL_OK 0
+#define HAL_ERROR 1
+#define HAL_DMA_STATE_READY 0
+#define HAL_DMA_STATE_BUSY 1
+#define WS2812_BIT_BUF_LEN 8
+typedef struct { TIM_HandleTypeDef *h_timer; uint32_t channel; } ws2812_t;
+static TIM_HandleTypeDef timer_handle;
+static DMA_HandleTypeDef handle_GPDMA1_Channel4;
+static ws2812_t ws2812 = {&timer_handle, 1U};
+static uint8_t bit_buf_dma[WS2812_BIT_BUF_LEN];
+static uint8_t bit_buf_cpu[WS2812_BIT_BUF_LEN];
+static uint8_t *ws2812_dma_buf = bit_buf_dma;
+static uint8_t *ws2812_work_buf = bit_buf_cpu;
+static bool ws2812_transfer_active;
+static bool ws2812_refresh_pending;
+static HAL_DMA_StateTypeDef dma_state = HAL_DMA_STATE_READY;
+static unsigned start_calls, stop_calls, forced_start_failures;
+static uint8_t started_frames[8][WS2812_BIT_BUF_LEN];
+static HAL_DMA_StateTypeDef HAL_DMA_GetState(DMA_HandleTypeDef *handle) {
+  (void)handle; return dma_state;
+}
+static HAL_StatusTypeDef HAL_TIM_PWM_Start_DMA(TIM_HandleTypeDef *timer, uint32_t channel,
+                                                const uint32_t *data, uint16_t length) {
+  (void)timer; (void)channel; assert(length == WS2812_BIT_BUF_LEN);
+  start_calls++;
+  if (forced_start_failures) { forced_start_failures--; return HAL_ERROR; }
+  assert(dma_state == HAL_DMA_STATE_READY);
+  memcpy(started_frames[start_calls - 1U], (const uint8_t *)data, WS2812_BIT_BUF_LEN);
+  dma_state = HAL_DMA_STATE_BUSY;
+  return HAL_OK;
+}
+static HAL_StatusTypeDef HAL_TIM_PWM_Stop_DMA(TIM_HandleTypeDef *timer, uint32_t channel) {
+  (void)timer; (void)channel; stop_calls++; dma_state = HAL_DMA_STATE_READY; return HAL_OK;
+}
+''' + ws_start + '\n' + ws_service + '\n' + ws_task + '\n' + ws_refresh + r'''
+static void fill(uint8_t value) { memset(ws2812_work_buf, value, WS2812_BIT_BUF_LEN); }
+int main(void) {
+  fill(1U);
+  assert(ws2812Refresh());
+  assert(start_calls == 1U && stop_calls == 0U && ws2812_transfer_active && !ws2812_refresh_pending);
+  for (unsigned i=0; i<WS2812_BIT_BUF_LEN; i++) assert(started_frames[0][i] == 1U);
+
+  fill(2U);
+  assert(ws2812Refresh());
+  assert(start_calls == 1U && stop_calls == 0U && ws2812_refresh_pending);
+  fill(3U);
+  assert(ws2812Refresh());
+  assert(start_calls == 1U && stop_calls == 0U && ws2812_refresh_pending);
+
+  dma_state = HAL_DMA_STATE_READY;
+  ws2812Task();
+  assert(stop_calls == 1U && start_calls == 2U && ws2812_transfer_active && !ws2812_refresh_pending);
+  for (unsigned i=0; i<WS2812_BIT_BUF_LEN; i++) assert(started_frames[1][i] == 3U);
+
+  dma_state = HAL_DMA_STATE_READY;
+  ws2812Task();
+  assert(stop_calls == 2U && start_calls == 2U && !ws2812_transfer_active && !ws2812_refresh_pending);
+
+  fill(4U); forced_start_failures = 1U;
+  assert(ws2812Refresh());
+  assert(start_calls == 4U && stop_calls == 3U && ws2812_transfer_active && !ws2812_refresh_pending);
+  for (unsigned i=0; i<WS2812_BIT_BUF_LEN; i++) assert(started_frames[3][i] == 4U);
+  puts("PASS: actual WS2812 scheduler never aborts an active DMA, coalesces busy refreshes to latest frame, and retries failed starts");
+  return 0;
+}
+''',encoding='utf-8')
+    return out, out_reset, out_rgb, out_ws

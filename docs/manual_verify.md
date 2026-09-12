@@ -150,6 +150,17 @@ logical Resume across SOF plus late WKUINT, and consumes VIA raw-HID after recov
 Source guards require Reset/active SOF/genuine Resume to own physical bus-Suspend
 release independently of HID Remote-Wake state, and the RGB host fixture covers a
 transient boot Suspend followed by Reset/SOF recovery without an RGB Sleep toggle.
+The physical-RGB fixture connects actual matrix dispatch, TD/LT resolution and
+RGB task regions. It checks physical press/release ownership and excludes color
+work from input dispatch; the contract is `docs/contract_usb.md` §8. It preserves
+the distinct TD interruption/double-action and LT quick-tap semantics. The fixture
+also runs the actual wait/host ports and generic tap helpers: Caps taps must request
+80 ms without calling the blocking delay backend. The USB fixture separately verifies
+80/200 ms from actual completion, independent EXK/VIA service, fractional-ms timing,
+rapid taps and following letters, same-usage snapshots, failed arms, overflow,
+Suspend/Resume, reset and wrap. It retains zero-interval report-order tests for the
+ordinary path. These tests do not emulate macOS Caps filters or host LED latency.
+Run this group alone with `python tools/firmware_regression_tests/run.py --only rgb`.
 The generated source-region tests are not whole-stack hardware tests.
 `tools/firmware_regression_tests/README.md` states their limits and commands.
 

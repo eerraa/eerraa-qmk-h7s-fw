@@ -23,6 +23,7 @@ extern "C" {
 bool ws2812Init(void);
 void ws2812SetColor(uint32_t ch, uint32_t color);
 bool ws2812Refresh(void);
+void ws2812Task(void);                                          // V260910R6: 완료 DMA 정리 및 병합된 최신 프레임 전송
 
 
 #endif

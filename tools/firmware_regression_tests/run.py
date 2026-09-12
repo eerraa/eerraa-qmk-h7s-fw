@@ -29,7 +29,7 @@ def execute(name: str, sources: list[Path], flags: list[str]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--only", choices=["queue", "debounce", "eeprom", "usb", "qbuffer", "input", "guards"])
+    parser.add_argument("--only", choices=["queue", "debounce", "eeprom", "usb", "qbuffer", "input", "guards", "rgb"])
     args = parser.parse_args()
     BUILD.mkdir(exist_ok=True)
     inc = [f"-I{HERE/'include'}", f"-I{ROOT/'src/common/hw/include'}", f"-I{ROOT/'src/ap/modules'}"]
@@ -58,12 +58,20 @@ def main() -> None:
     if args.only in (None, "input"):
         execute("test_input_features", [HERE/'test_input_features.c', QMK/'port/kkuk.c', QMK/'port/kill_switch.c'],
                 [f"-I{HERE/'input_include'}", f"-I{QMK/'port'}", "-DKKUK_ENABLE", "-DKILL_SWITCH_ENABLE", "-Wno-unused-parameter"])
+    if args.only in (None, "rgb"):
+        from rgb_input_cases import generate as generate_rgb
+        source = generate_rgb(ROOT, BUILD)
+        # V260911R1: MinGW의 MS bitfield 대신 ARM GCC와 같은 QMK action_t 배치를 사용한다.
+        layout = ["-mno-ms-bitfields"] if os.name == "nt" else []
+        execute("test_rgb_physical_input", [source], [f"-I{HERE}", f"-I{QMK/'quantum'}", *layout,
+                "-Wno-unused-parameter", "-Wno-unused-function", "-Wno-unused-variable"])
     if args.only in (None, "guards"):
         from source_cases import generate
-        via, reset, rgb_gate = generate(ROOT, BUILD)
+        via, reset, rgb_gate, ws2812 = generate(ROOT, BUILD)
         execute("test_via_guard", [via], [])
         execute("test_reset_barrier", [reset], [])
         execute("test_rgb_task_gate", [rgb_gate], [])
+        execute("test_ws2812_scheduler", [ws2812], [])
     print("All selected firmware regression tests passed.", flush=True)
 
 if __name__ == "__main__":

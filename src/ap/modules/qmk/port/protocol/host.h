@@ -19,6 +19,7 @@ uint8_t host_keyboard_leds(void);
 led_t   host_keyboard_led_state(void);
 void    host_keyboard_leds_update(uint8_t led_state);  // V251124R7: USB HID LED 상태를 캐시해 탭/홀드 분기 시 재사용
 void    host_keyboard_send(report_keyboard_t *report);
+void    host_keyboard_delay(uint16_t delay_ms); // V260911R3: 키 상태 대신 USB 스냅샷의 유지 시간을 예약
 void    host_nkro_send(report_nkro_t *report);
 void    host_mouse_send(report_mouse_t *report);
 void    host_system_send(uint16_t usage);
