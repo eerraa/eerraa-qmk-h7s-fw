@@ -59,7 +59,10 @@ The actual algorithm and state-machine implementations are not replaced by model
 TD callbacks, action execution, pulse state machine and RGB task in one host
 fixture. It checks TD/LT Caps taps and holds, delayed replay, filtered releases,
 all four pulse modes, last-pressed-key tracking, host indicator precedence,
-output sleep, RGB OFF, Velocikey and 32-bit wrap. It also retains the distinct
+output sleep, RGB OFF, Velocikey and 32-bit wrap. It also drives the actual
+`rgblight_sethsv_eeprom_helper()` commit: a brightness commit in a Pulse effect
+renders the committed value on the next task pass, a commit during a physical
+hold keeps the latch, and only a base-mode change drops it. It also retains the distinct
 TD interruption/double-action and LT quick-tap behavior. Matrix input, keymap
 lookup, host LED feedback, indicator composition and LED hardware are test
 adapters; USB transport and real WS2812 frames are not measured by this fixture.
@@ -90,3 +93,5 @@ listed in `docs/state_open.md`.
 `test_input_features.c` compiles the production `kkuk.c` and `kill_switch.c` against a deterministic report/timer stub. It covers KKUK activation/repeat timing, live value normalization, fresh-epoch reconfiguration and count saturation; SOCD basic/modifier report ownership, invalid 16-bit keycode inertness and live-remap stale-state release.
 
 The generated `test_rgb_task_gate.c` compiles the exact production `rgblight_task_periodic_due()` helper and checks inactivity disarm, resume after more than the 16-bit half-range, urgent-event rearm and 32-bit wrap.
+
+The generated `test_rgb_mode_transition.c` compiles the exact production saturation-restore rule (`rgblight_mode_transition_sat()`) and checks that it keys on the destination effect (Rainbow Mood/Swirl, Gradient, Christmas) from any different base mode rather than on leaving Solid Color. The same generator asserts that `rgblight_sethsv_eeprom_helper()` commits before it asks for a pulse evaluation and never evaluates pulse output itself.

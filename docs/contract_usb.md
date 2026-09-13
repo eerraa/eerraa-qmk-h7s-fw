@@ -410,9 +410,32 @@ in `src/ap/modules/qmk/quantum/keyboard.c`, before QMK action filtering or tappi
 buffering. They use the scan's shared 32-bit timestamp. The input handler in
 `src/ap/modules/qmk/quantum/rgblight/rgblight.c` updates bounded RAM state only;
 color calculation, LED-buffer traversal and frame submission belong to the RGB
-task. Pending pulse input bypasses the periodic task gate without adding a wait.
+task. A pending pulse evaluation (physical input, configuration commit, indicator
+overlay release) bypasses the periodic task gate without adding a wait.
+While a pulse is latched, its expiry is judged on the RGB task's 1 ms periodic
+gate, not by the animation timer interval, so that interval does not quantize
+the pulse width.
 Logical action replay, TD-generated actions and synthetic records do not generate
 another physical press or release for RGB.
+
+Configuration producers follow the same ownership. A VIA channel 2 SET or an RGB
+keycode commits `rgblight_config` first and then only requests a pulse
+evaluation; `rgblight_sethsv_eeprom_helper()` never computes pulse output itself.
+The RGB task derives the pulse base output from the committed hue, saturation
+and value, so a brightness or colour change in a Pulse effect shows the value
+just sent rather than the previous one. A colour-only commit keeps the physical
+latch and the tracked key; only a base-mode change resets them. An indicator
+overlay release raises the same request, and the task drains the host LED queue
+before that evaluation so the release and the restored base output land in one
+frame.
+
+> **REFUSED:** computing pulse output inside `rgblight_sethsv_eeprom_helper()`
+> or any other configuration setter.
+> **WHY:** the setter ran before its own commit, so every VIA brightness or
+> colour change in a Pulse effect rendered the previous request's values; the
+> frame only caught up on the next key press or the next change.
+> **REOPENS:** a setter whose commit and evaluation are one step and whose
+> output `python tools/firmware_regression_tests/run.py --only rgb` verifies.
 
 Pulse duration starts at physical press. Hold variants extend that pulse while
 the most recently pressed key remains down; releasing an older key cannot clear

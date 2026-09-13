@@ -106,6 +106,16 @@ settings that take effect when the output gate opens. The five firmware-local of
 dropdown and add value 3; they do not expose value 2. Their timeout row is shown
 only while value 3 is on.
 
+Channel 2 effect SET applies one saturation rule when the stored saturation is
+0, the white factory default on all five boards: entering Rainbow Mood, Rainbow
+Swirl, Gradient or Christmas from a different base effect stores saturation
+255, because those effects are carried by hue and are indistinguishable from
+Solid Color in white. Switching between variants of one effect, entering any
+other effect, and any saturation other than 0 leave the stored colour unchanged
+(`rgblight_mode_transition_sat()`). The firmware does not push the restored
+value; a client that caches the colour reads 255 on its next channel 2 colour
+GET, and re-sending its cached white restores the white rainbow.
+
 This file owns the value-id rows. `table` regenerates them from
 `src/ap/modules/qmk/quantum/via.h`.
 

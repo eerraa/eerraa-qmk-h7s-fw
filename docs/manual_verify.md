@@ -129,6 +129,8 @@ the same enumeration. Reconnect and start a new session.
 | Value gone after reboot | VIA SAVE is the flush. `docs/contract_eeprom.md` §1. |
 | VIA reply missing or is another request's reply | Two TX producers. `tools/era_via_host_tests/check_single_producer.py`. `docs/contract_via.md` §1. |
 | Firmware feature missing from VIA | Official JSON has no menu for that channel. Checker's `menu`. |
+| VIA brightness or colour shows the previous value in a Pulse effect | The setter must commit `rgblight_config` and only request an evaluation; pulse output is computed by the RGB task alone (`docs/contract_usb.md` §8). `python tools/firmware_regression_tests/run.py --only rgb` bites it. |
+| Rainbow Mood/Swirl, Gradient or Christmas looks like solid white after an effect change | Stored saturation is 0. Entry from a different base effect restores 255 (`docs/contract_via.md` §2); `python tools/firmware_regression_tests/run.py --only guards` bites the rule. If it still looks white, the client re-sent its cached white colour after the effect change. |
 | Boot stuck on LED blink | EEPROM auto-init failed three times. `docs/contract_eeprom.md` §2. |
 | EEPROM writes feel slow or lost | CLI `eeprom info`: queue max / overflow (`eeprom_get_write_pending_max`, `eeprom_get_write_overflow_count`). |
 | Stored polling mode disagrees with the boot log | CLI `boot info` prints `usbBootModeGet()`. No automatic revert. `docs/contract_usb.md` §4. |
@@ -151,8 +153,9 @@ Source guards require Reset/active SOF/genuine Resume to own physical bus-Suspen
 release independently of HID Remote-Wake state, and the RGB host fixture covers a
 transient boot Suspend followed by Reset/SOF recovery without an RGB Sleep toggle.
 The physical-RGB fixture connects actual matrix dispatch, TD/LT resolution and
-RGB task regions. It checks physical press/release ownership and excludes color
-work from input dispatch; the contract is `docs/contract_usb.md` §8. It preserves
+RGB task regions. It checks physical press/release ownership, excludes color
+work from input dispatch, and requires a configuration commit to render the
+committed value on the next task pass; the contract is `docs/contract_usb.md` §8. It preserves
 the distinct TD interruption/double-action and LT quick-tap semantics. The fixture
 also runs the actual wait/host ports and generic tap helpers: Caps taps must request
 80 ms without calling the blocking delay backend. The USB fixture separately verifies
