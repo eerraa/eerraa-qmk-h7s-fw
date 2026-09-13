@@ -45,8 +45,10 @@ static void reset_fixture(uint16_t keycode, uint8_t mode, uint32_t time)
   rgblight_config.enable = true;
   rgblight_config.velocikey = false;
   typing_speed = 0;
-  rgblight_config.speed = 30; // 50 ms pulse: tap 판정 term과 독립적이다.
+  rgblight_config.speed = 45; // 5 + 45 = 50 ms pulse: tap 판정 term과 독립적이다.
   rgblight_config.val = 76;
+  rgblight_config.hue = rgblight_config.sat = 0;
+  rgblight_config.mode = mode; // V260913R1: 실제 커밋 경로가 base_mode를 여기서 다시 계산한다.
   rgblight_status.base_mode = mode;
   rgblight_status.timer_enabled = true;
   rgblight_effect_pulse_on_base_mode_update();
@@ -242,6 +244,38 @@ static void check_plain_tap_requests_no_interval(void)
   assert(keyboard_delay_calls == 0U && blocking_delay_calls == 0U && layer_state == 0);
 }
 
+static void check_config_commit_renders_committed_value(void)
+{
+  // V260913R1: VIA·키코드 설정은 커밋 뒤 RGB task가 그린다. 설정 함수가 직접 그리면 직전 값이 보인다.
+  reset_fixture(KC_A, RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, 13000);
+  assert(visible_frame == 1 && visible_val == 76);
+  rgblight_sethsv_eeprom_helper(0, 0, 50, false);
+  assert(rgblight_config.val == 50 && visible_val == 76); // 커밋은 즉시, 프레임은 task가 만든다.
+  task();
+  assert(visible_val == 50);
+  rgblight_sethsv_eeprom_helper(0, 0, 200, false); task();
+  assert(visible_val == 200);
+
+  scan(13100, 0, true); task();
+  assert(visible_frame == 0);
+  rgblight_sethsv_eeprom_helper(0, 0, 120, false); task();
+  assert(visible_frame == 0 && rgblight_pulse_effect_state.latched && rgblight_pulse_effect_state.key_tracking_valid); // 색 커밋은 물리 hold를 끊지 않는다.
+  scan(13200, 0, false); task();
+  assert(visible_frame == 1 && visible_val == 120);
+
+  scan(13300, 0, true); task();
+  assert(visible_frame == 0);
+  rgblight_config.mode = RGBLIGHT_MODE_PULSE_ON_PRESS;
+  rgblight_sethsv_eeprom_helper(0, 0, 120, false); task();
+  assert(rgblight_status.base_mode == RGBLIGHT_MODE_PULSE_ON_PRESS && !rgblight_pulse_effect_state.latched); // 베이스 모드 전환만 래치를 버린다.
+  assert(visible_frame == 0); // Pulse On Press의 기본 출력은 OFF다.
+  scan(13400, 0, false); task();
+  assert(visible_frame == 0);
+  rgblight_config.mode = RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD;
+  rgblight_sethsv_eeprom_helper(0, 0, 90, false); task();
+  assert(visible_frame == 1 && visible_val == 90);
+}
+
 #include "test_tapdance_timing.h"
 
 int main(int argc, char **argv)
@@ -258,6 +292,7 @@ int main(int argc, char **argv)
   check_modes_and_last_key();
   check_filter_and_replay();
   check_indicators_sleep_wrap();
+  check_config_commit_renders_committed_value();
   check_distinct_tapping_semantics();
   check_velocikey_physical_presses();
   check_mod_tap_and_following_caps();

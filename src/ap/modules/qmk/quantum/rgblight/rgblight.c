@@ -84,7 +84,7 @@ static uint8_t mode_base_table[] = {
 #endif
 
 #if !defined(RGBLIGHT_DEFAULT_SPD)
-#    define RGBLIGHT_DEFAULT_SPD 0
+#    define RGBLIGHT_DEFAULT_SPD 15  // V260913R1: Pulse 최소 5 ms + 15 = 기본 펄스 20 ms를 이전과 같게 유지
 #endif
 
 #if !defined(RGBLIGHT_DEFAULT_ON)
@@ -166,7 +166,7 @@ typedef struct {
     bool     initialized;
     bool     output_on;
     bool     key_tracking_valid;
-    bool     input_pending;  // V260911R1: 입력은 상태만 기록하고 RGB task가 출력을 계산한다.
+    bool     evaluate_pending;  // V260911R1: 입력은 상태만 기록하고 RGB task가 출력을 계산한다. / V260913R1: 물리 전이·설정 커밋·오버레이 해제가 모두 이 요청 하나로 RGB task 평가를 부른다
     uint8_t  key_row;
     uint8_t  key_col;
     uint32_t deadline_ms;
@@ -233,14 +233,30 @@ static uint16_t rgblight_effect_pulse_duration_ms(void)
            (uint16_t)rgblight_config.speed * (uint16_t)RGBLIGHT_EFFECT_PULSE_DURATION_STEP_MS;
 }
 
-static bool rgblight_effect_pulse_input_pending(void)
+static bool rgblight_effect_pulse_evaluate_pending(void)
 {
-  return rgblight_pulse_effect_state.input_pending;
+  return rgblight_pulse_effect_state.evaluate_pending;
+}
+
+static void rgblight_effect_pulse_request_evaluate(void)
+{
+  rgblight_pulse_effect_state.evaluate_pending = true;  // V260913R1: 주기 게이트를 기다리지 않고 RGB task가 다음 패스에서 평가한다
+}
+
+static void rgblight_effect_pulse_invalidate_output(void)
+{
+  rgblight_pulse_effect_state.initialized = false;  // V260913R1: 출력 캐시를 버려 목표가 같아도 커밋된 설정으로 다시 그린다
+  rgblight_effect_pulse_request_evaluate();
+}
+
+static bool rgblight_effect_pulse_expiry_pending(void)
+{
+  return rgblight_pulse_effect_state.latched;  // V260913R1: 마감 대기 중이면 RGB task 1 ms 게이트마다 만료를 판정한다
 }
 
 static void rgblight_effect_pulse_reset_state(void)
 {
-    rgblight_pulse_effect_state.input_pending      = false;
+    rgblight_pulse_effect_state.evaluate_pending   = false;
     rgblight_pulse_effect_state.latched            = false;
     rgblight_pulse_effect_state.initialized        = false;
     rgblight_pulse_effect_state.output_on          = false;
@@ -270,7 +286,7 @@ static void rgblight_effect_pulse_apply_output(bool on)
 
 static void rgblight_effect_pulse_evaluate_output(void)
 {
-    rgblight_pulse_effect_state.input_pending = false;  // V260911R1: 현재 입력 상태를 렌더 계층에서 한 번 소비
+    rgblight_pulse_effect_state.evaluate_pending = false;  // V260911R1: 현재 입력 상태를 렌더 계층에서 한 번 소비 / V260913R1: 출력은 여기서만, 커밋된 rgblight_config로만 계산한다
     if (!rgblight_effect_pulse_mode_active()) {
         return;
     }
@@ -292,6 +308,7 @@ static void rgblight_effect_pulse_evaluate_output(void)
     }
 }
 
+// V260913R1: 베이스 모드가 바뀌었다. 래치·추적 키를 버리고 새 모드의 기본 출력은 RGB task에 맡긴다.
 static void rgblight_effect_pulse_on_base_mode_update(void)
 {
     if (!rgblight_effect_pulse_mode_active()) {
@@ -301,9 +318,18 @@ static void rgblight_effect_pulse_on_base_mode_update(void)
 
     rgblight_pulse_effect_state.latched            = false;
     rgblight_pulse_effect_state.deadline_ms        = 0;
-    rgblight_pulse_effect_state.initialized        = false;
     rgblight_pulse_effect_state.key_tracking_valid = false;
-    rgblight_effect_pulse_evaluate_output();
+    rgblight_effect_pulse_invalidate_output();  // V260913R1: 여기서 그리지 않는다. 설정 함수 안에서 그리면 커밋 전 값이 보인다
+}
+
+// V260913R1: 같은 모드에서 색·밝기만 커밋됐다. 물리 래치는 그대로 두고 현재 목표 출력만 새 값으로 다시 그린다.
+static void rgblight_effect_pulse_on_hsv_update(void)
+{
+    if (!rgblight_effect_pulse_mode_active()) {
+        return;
+    }
+
+    rgblight_effect_pulse_invalidate_output();
 }
 
 static void rgblight_effect_pulse_handle_keyevent(bool pressed, uint8_t row, uint8_t col, uint32_t now)
@@ -321,7 +347,7 @@ static void rgblight_effect_pulse_handle_keyevent(bool pressed, uint8_t row, uin
         rgblight_pulse_effect_state.key_row       = row;
         rgblight_pulse_effect_state.key_col       = col;
         rgblight_pulse_effect_state.key_tracking_valid = true;
-        rgblight_pulse_effect_state.input_pending = true;
+        rgblight_effect_pulse_request_evaluate();
         return;
     }
 
@@ -332,7 +358,7 @@ static void rgblight_effect_pulse_handle_keyevent(bool pressed, uint8_t row, uin
     if (matches_tracked_key) {
         rgblight_pulse_effect_state.key_tracking_valid = false;
 
-        rgblight_pulse_effect_state.input_pending = true;  // V260911R1: 만료/복구 계산도 RGB task에 위임
+        rgblight_effect_pulse_request_evaluate();  // V260911R1: 만료/복구 계산도 RGB task에 위임
     }
 }
 
@@ -361,7 +387,9 @@ static void rgblight_effect_pulse_off_press_hold(animation_status_t *anim)
 }
 #else
 static inline void rgblight_effect_pulse_on_base_mode_update(void) {}
-static inline bool rgblight_effect_pulse_input_pending(void) { return false; }
+static inline void rgblight_effect_pulse_on_hsv_update(void) {}
+static inline bool rgblight_effect_pulse_evaluate_pending(void) { return false; }
+static inline bool rgblight_effect_pulse_expiry_pending(void) { return false; }
 static inline void rgblight_effect_pulse_handle_keyevent(bool pressed, uint8_t row, uint8_t col, uint32_t now)
 {
     (void)pressed;
@@ -376,28 +404,42 @@ static volatile bool    rgblight_host_led_pending    = false;  // V251018R1: USB
 static volatile uint8_t rgblight_host_led_raw_buffer = 0;
 static bool             rgblight_render_pending      = false;  // V251018R1: rgblight_set 실행을 주 루프에서 단일 처리
 
+// V260913R1: 채도 0(흰색)이면 정체성이 사라지는 효과. Solid Color와 구분되지 않거나(Rainbow Mood/Swirl, Gradient) 정적으로 보인다(Christmas).
+static bool rgblight_mode_carries_hue(uint8_t base_mode)
+{
+    bool carries = false;
+    (void)base_mode;
+#ifdef RGBLIGHT_EFFECT_RAINBOW_MOOD
+    carries |= (base_mode == RGBLIGHT_MODE_RAINBOW_MOOD);
+#endif
+#ifdef RGBLIGHT_EFFECT_RAINBOW_SWIRL
+    carries |= (base_mode == RGBLIGHT_MODE_RAINBOW_SWIRL);
+#endif
+#ifdef RGBLIGHT_EFFECT_STATIC_GRADIENT
+    carries |= (base_mode == RGBLIGHT_MODE_STATIC_GRADIENT);
+#endif
+#ifdef RGBLIGHT_EFFECT_CHRISTMAS
+    carries |= (base_mode == RGBLIGHT_MODE_CHRISTMAS);
+#endif
+    return carries;
+}
+
 static uint8_t rgblight_mode_transition_sat(uint8_t old_mode, uint8_t new_mode, uint8_t sat)
 {
     if (sat != 0) {
         return sat;
     }
 
-    if (mode_base_table[old_mode] != RGBLIGHT_MODE_STATIC_LIGHT) {
-        return sat;
-    }
-
+    uint8_t old_base_mode = mode_base_table[old_mode];
     uint8_t new_base_mode = mode_base_table[new_mode];
 
-#ifdef RGBLIGHT_EFFECT_RAINBOW_MOOD
-    if (new_base_mode == RGBLIGHT_MODE_RAINBOW_MOOD) {
-        return UINT8_MAX;  // V260310R5: Solid Color 흰색(채도 0)에서 Rainbow Mood 진입 시 즉시 다색 효과가 보이도록 채도 복원
+    if (old_base_mode == new_base_mode) {
+        return sat;  // V260913R1: 같은 효과 안의 변형 전환은 사용자가 그 효과에서 고른 채도를 유지한다
     }
-#endif
-#ifdef RGBLIGHT_EFFECT_RAINBOW_SWIRL
-    if (new_base_mode == RGBLIGHT_MODE_RAINBOW_SWIRL) {
-        return UINT8_MAX;  // V260310R5: Solid Color 흰색(채도 0)에서 Rainbow Swirl 진입 시 즉시 다색 효과가 보이도록 채도 복원
+
+    if (rgblight_mode_carries_hue(new_base_mode)) {
+        return UINT8_MAX;  // V260310R5: Solid Color 흰색(채도 0)에서 Rainbow Mood/Swirl 진입 시 즉시 다색 효과가 보이도록 채도 복원 / V260913R1: 출발 모드를 Solid Color로 한정하지 않는다. Pulse·Breathing 등 흰색으로 보이던 어느 모드에서 와도 같고, Gradient·Christmas 진입도 같다
     }
-#endif
 
     return sat;
 }
@@ -598,8 +640,7 @@ static void rgblight_indicator_restore_pulse_effect(void)
 {
 #if defined(RGBLIGHT_EFFECT_PULSE_ON_PRESS) || defined(RGBLIGHT_EFFECT_PULSE_OFF_PRESS) || defined(RGBLIGHT_EFFECT_PULSE_ON_PRESS_HOLD) || defined(RGBLIGHT_EFFECT_PULSE_OFF_PRESS_HOLD)
     if (rgblight_effect_pulse_mode_active()) {
-        rgblight_pulse_effect_state.initialized = false;  // V251121R2: 인디케이터 종료 시 Pulse 계열 기본 출력 재적용
-        rgblight_effect_pulse_evaluate_output();
+        rgblight_effect_pulse_invalidate_output();  // V251121R2: 인디케이터 종료 시 Pulse 계열 기본 출력 재적용 / V260913R1: 직접 그리지 않고 같은 RGB task 패스의 평가에 맡긴다
     }
 #endif
 }
@@ -1240,8 +1281,8 @@ void rgblight_sethsv_eeprom_helper(uint8_t hue, uint8_t sat, uint8_t val, bool w
             RGBLIGHT_SPLIT_SET_CHANGE_HSVS;
         }
 #endif
+        uint8_t prev_base_mode    = rgblight_status.base_mode;  // V260913R1: Pulse 계열이 모드 전환과 색 커밋을 구분하는 기준
         rgblight_status.base_mode = mode_base_table[rgblight_config.mode];
-        rgblight_effect_pulse_on_base_mode_update();  // V251018R5: Pulse 계열 모드 전환 시 상태 초기화
         if (rgblight_config.mode == RGBLIGHT_MODE_STATIC_LIGHT) {
             // same static color
             rgb_led_t tmp_led;
@@ -1301,6 +1342,13 @@ void rgblight_sethsv_eeprom_helper(uint8_t hue, uint8_t sat, uint8_t val, bool w
         rgblight_config.hue = hue;
         rgblight_config.sat = sat;
         rgblight_config.val = val;
+        // V251018R5: Pulse 계열 모드 전환 시 상태 초기화 / V260913R1: 커밋 뒤에 요청만 남긴다. RGB task가 커밋된 hue/sat/val로 기본 출력을 그린다.
+        //            커밋 전에 여기서 직접 그리던 동안은 VIA·키코드 변경이 항상 직전 값으로 보였다.
+        if (prev_base_mode != rgblight_status.base_mode) {
+            rgblight_effect_pulse_on_base_mode_update();
+        } else {
+            rgblight_effect_pulse_on_hsv_update();
+        }
         if (write_to_eeprom) {
             eeconfig_update_rgblight(rgblight_config.raw);
             dprintf("rgblight set hsv [EEPROM]: %u,%u,%u\n", rgblight_config.hue, rgblight_config.sat, rgblight_config.val);
@@ -2396,7 +2444,7 @@ static bool rgblight_task_periodic_due(bool active, bool urgent, uint32_t now) {
 }
 
 void rgblight_task(void) {
-    bool urgent_pending = rgblight_render_pending || rgblight_host_led_pending || rgblight_effect_pulse_input_pending();
+    bool urgent_pending = rgblight_render_pending || rgblight_host_led_pending || rgblight_effect_pulse_evaluate_pending();
     bool timer_disabled = !rgblight_status.timer_enabled;
 #ifdef VELOCIKEY_ENABLE
     bool velocikey_on = rgblight_velocikey_enabled();
@@ -2426,10 +2474,10 @@ void rgblight_task(void) {
         return;  // V260909R1: 32-bit wrap-safe 1ms gate. 장시간 inactive 후에도 즉시 재무장된다.
     }
 
-    if (rgblight_effect_pulse_input_pending()) {
-        rgblight_effect_pulse_evaluate_output();  // V260911R1: 주기 게이트를 기다리지 않고 최신 물리 입력을 반영
+    rgblight_consume_host_led_queue();  // V260913R1: 오버레이 해제가 남긴 Pulse 평가 요청을 같은 패스의 프레임에 싣도록 큐를 먼저 비운다
+    if (rgblight_effect_pulse_evaluate_pending() || rgblight_effect_pulse_expiry_pending()) {  // V260913R1: 만료 판정도 1 ms 게이트에서 수행해 5 ms 애니메이션 타이머 위상에 묶이지 않는다
+        rgblight_effect_pulse_evaluate_output();  // V260911R1: 주기 게이트를 기다리지 않고 최신 물리 입력을 반영 / V260913R1: 설정 커밋·오버레이 해제 요청도 여기서만 그린다
     }
-    rgblight_consume_host_led_queue();
 #ifdef RGBLIGHT_USE_TIMER
     rgblight_timer_task();
 #endif

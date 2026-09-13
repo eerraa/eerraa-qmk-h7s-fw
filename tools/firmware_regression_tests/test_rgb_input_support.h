@@ -11,7 +11,7 @@
 #define RGBLIGHT_MODE_PULSE_OFF_PRESS 44
 #define RGBLIGHT_MODE_PULSE_ON_PRESS_HOLD 45
 #define RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD 46
-#define RGBLIGHT_EFFECT_PULSE_DURATION_MIN_MS 20
+#define RGBLIGHT_EFFECT_PULSE_DURATION_MIN_MS 5
 #define RGBLIGHT_EFFECT_PULSE_DURATION_STEP_MS 1
 #define TAPDANCE_ENABLE
 #define TAP_DANCE_ENABLE
@@ -40,8 +40,24 @@ typedef uint16_t matrix_row_t;
 typedef uint32_t layer_state_t;
 typedef int animation_status_t;
 typedef struct { uint8_t raw; } led_t;
-static struct { bool enable, velocikey; uint8_t speed, hue, sat, val; } rgblight_config;
+static struct { bool enable, velocikey; uint8_t mode, speed, hue, sat, val; uint64_t raw; } rgblight_config;
 static struct { uint8_t base_mode; bool timer_enabled; } rgblight_status;
+// V260913R1: 실제 rgblight_sethsv_eeprom_helper()를 커밋 경로로 연결한다. 색 계산과 EEPROM만 대역이다.
+#define RGBLIGHT_MODE_STATIC_LIGHT 1
+#ifndef dprintf
+#define dprintf(...) ((void)0)
+#endif
+typedef struct { uint8_t r, g, b; } rgb_led_t;
+static uint8_t mode_base_table[RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD + 1] = {
+  [RGBLIGHT_MODE_STATIC_LIGHT] = RGBLIGHT_MODE_STATIC_LIGHT,
+  [RGBLIGHT_MODE_PULSE_ON_PRESS] = RGBLIGHT_MODE_PULSE_ON_PRESS,
+  [RGBLIGHT_MODE_PULSE_OFF_PRESS] = RGBLIGHT_MODE_PULSE_OFF_PRESS,
+  [RGBLIGHT_MODE_PULSE_ON_PRESS_HOLD] = RGBLIGHT_MODE_PULSE_ON_PRESS_HOLD,
+  [RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD] = RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,
+};
+static uint8_t written_val, visible_val; // 마지막으로 LED 버퍼에 쓴 값과 마지막 프레임이 보여준 값
+static void sethsv(uint8_t h, uint8_t s, uint8_t v, rgb_led_t *led) { (void)h; (void)s; led->r = led->g = led->b = v; }
+static void eeconfig_update_rgblight(uint64_t raw) { (void)raw; }
 static struct { bool matrix; } debug_config;
 static bool rgblight_indicator_supported = true;
 static bool is_rgblight_initialized = true;
@@ -175,6 +191,7 @@ static void suspend_wakeup_key_event(uint8_t row, uint8_t col, bool pressed) { (
 static void rgblight_setrgb(uint8_t r, uint8_t g, uint8_t b)
 {
   background_on = r || g || b;
+  written_val = r;
   color_writes++;
   physical_color_writes += physical_dispatch;
   rgblight_request_render();
@@ -196,7 +213,8 @@ static void rgblight_render_frame(void)
 {
   assert(!physical_dispatch);
   visible_frame = output_suspended ? 0 : (indicator_on ? 2 : (background_on ? 1 : 0));
+  visible_val = written_val;
   frame_count++;
 }
 static void eeconfig_flush_rgblight_current(bool force) { (void)force; }
-static void rgblight_timer_task(void) { rgblight_effect_pulse_evaluate_output(); }
+static void rgblight_timer_task(void) {} // V260913R1: 만료는 rgblight_task의 1 ms 게이트가 판정한다. 애니메이션 타이머는 관여하지 않는다.

@@ -67,11 +67,12 @@ def main() -> None:
                 "-Wno-unused-parameter", "-Wno-unused-function", "-Wno-unused-variable"])
     if args.only in (None, "guards"):
         from source_cases import generate
-        via, reset, rgb_gate, ws2812 = generate(ROOT, BUILD)
+        via, reset, rgb_gate, ws2812, rgb_sat = generate(ROOT, BUILD)
         execute("test_via_guard", [via], [])
         execute("test_reset_barrier", [reset], [])
         execute("test_rgb_task_gate", [rgb_gate], [])
         execute("test_ws2812_scheduler", [ws2812], [])
+        execute("test_rgb_mode_transition", [rgb_sat], [])
     print("All selected firmware regression tests passed.", flush=True)
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 
 def function(source, name):
-    m=re.search(rf"(?:static\s+)?(?:void|bool)\s+{name}\([^;]*?\)\s*\{{",source)
+    m=re.search(rf"(?:static\s+)?(?:void|bool|uint\d+_t)\s+{name}\([^;]*?\)\s*\{{",source)  # V260913R1: uint8_t 반환 함수(채도 복원 규칙)도 추출한다
     assert m, name
     i=m.end(); depth=1
     while depth:
@@ -266,4 +266,56 @@ int main(void) {
   return 0;
 }
 ''',encoding='utf-8')
-    return out, out_reset, out_rgb, out_ws
+
+    # V260913R1: 채도 복원 규칙은 목적지 효과로 판정한다. Solid Color 출발 한정이 되살아나면 실패한다.
+    carries=function(rgb,'rgblight_mode_carries_hue')
+    transition=function(rgb,'rgblight_mode_transition_sat')
+    assert 'RGBLIGHT_MODE_STATIC_LIGHT' not in transition
+    assert 'old_base_mode == new_base_mode' in transition and 'rgblight_mode_carries_hue(new_base_mode)' in transition
+    helper=function(rgb,'rgblight_sethsv_eeprom_helper')
+    assert 'rgblight_effect_pulse_evaluate_output' not in helper
+    assert helper.index('rgblight_config.val = val;') < helper.index('rgblight_effect_pulse_on_base_mode_update();')
+    assert helper.index('rgblight_config.val = val;') < helper.index('rgblight_effect_pulse_on_hsv_update();')
+    assert task.index('rgblight_consume_host_led_queue();') < task.index('rgblight_effect_pulse_evaluate_output();')
+    out_sat=build/'test_rgb_mode_transition.c'
+    out_sat.write_text(r'''#include <assert.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#define RGBLIGHT_EFFECT_RAINBOW_MOOD
+#define RGBLIGHT_EFFECT_RAINBOW_SWIRL
+#define RGBLIGHT_EFFECT_STATIC_GRADIENT
+#define RGBLIGHT_EFFECT_CHRISTMAS
+enum { RGBLIGHT_MODE_STATIC_LIGHT = 1, RGBLIGHT_MODE_BREATHING = 2, RGBLIGHT_MODE_RAINBOW_MOOD = 6, RGBLIGHT_MODE_RAINBOW_SWIRL = 9,
+       RGBLIGHT_MODE_SNAKE = 15, RGBLIGHT_MODE_KNIGHT = 21, RGBLIGHT_MODE_CHRISTMAS = 24, RGBLIGHT_MODE_STATIC_GRADIENT = 25,
+       RGBLIGHT_MODE_RGB_TEST = 35, RGBLIGHT_MODE_ALTERNATING = 36, RGBLIGHT_MODE_TWINKLE = 37,
+       RGBLIGHT_MODE_PULSE_ON_PRESS = 43, RGBLIGHT_MODE_PULSE_OFF_PRESS = 44, RGBLIGHT_MODE_PULSE_ON_PRESS_HOLD = 45,
+       RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD = 46 };
+/* Board layout with every effect enabled: each variant maps onto its base mode exactly as rgblight_modes.h expands. */
+static const uint8_t mode_base_table[47] = {0, 1, 2, 2, 2, 2, 6, 6, 6, 9, 9, 9, 9, 9, 9, 15, 15, 15, 15, 15, 15, 21, 21, 21, 24,
+  25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 35, 36, 37, 37, 37, 37, 37, 37, 43, 44, 45, 46};
+''' + carries + '\n' + transition + r'''
+int main(void) {
+  /* white (sat 0) entering a hue-carrying effect restores full saturation, from any different base mode */
+  assert(rgblight_mode_transition_sat(RGBLIGHT_MODE_STATIC_LIGHT, RGBLIGHT_MODE_RAINBOW_MOOD, 0) == UINT8_MAX);
+  assert(rgblight_mode_transition_sat(RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, RGBLIGHT_MODE_RAINBOW_MOOD, 0) == UINT8_MAX);
+  assert(rgblight_mode_transition_sat(RGBLIGHT_MODE_BREATHING + 2, RGBLIGHT_MODE_RAINBOW_SWIRL + 3, 0) == UINT8_MAX);
+  assert(rgblight_mode_transition_sat(RGBLIGHT_MODE_PULSE_ON_PRESS, RGBLIGHT_MODE_STATIC_GRADIENT + 4, 0) == UINT8_MAX);
+  assert(rgblight_mode_transition_sat(RGBLIGHT_MODE_SNAKE, RGBLIGHT_MODE_CHRISTMAS, 0) == UINT8_MAX);
+  assert(rgblight_mode_transition_sat(RGBLIGHT_MODE_RAINBOW_MOOD, RGBLIGHT_MODE_RAINBOW_SWIRL, 0) == UINT8_MAX);
+  /* variants inside one effect, and effects that stay visible in white, keep the chosen saturation */
+  assert(rgblight_mode_transition_sat(RGBLIGHT_MODE_RAINBOW_MOOD, RGBLIGHT_MODE_RAINBOW_MOOD + 1, 0) == 0);
+  assert(rgblight_mode_transition_sat(RGBLIGHT_MODE_STATIC_GRADIENT, RGBLIGHT_MODE_STATIC_GRADIENT + 9, 0) == 0);
+  assert(rgblight_mode_transition_sat(RGBLIGHT_MODE_STATIC_LIGHT, RGBLIGHT_MODE_BREATHING, 0) == 0);
+  assert(rgblight_mode_transition_sat(RGBLIGHT_MODE_STATIC_LIGHT, RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, 0) == 0);
+  assert(rgblight_mode_transition_sat(RGBLIGHT_MODE_RAINBOW_MOOD, RGBLIGHT_MODE_STATIC_LIGHT, 0) == 0);
+  assert(rgblight_mode_transition_sat(RGBLIGHT_MODE_STATIC_LIGHT, RGBLIGHT_MODE_TWINKLE + 3, 0) == 0);
+  assert(rgblight_mode_transition_sat(RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, 0) == 0);
+  /* a saturated colour is never touched */
+  assert(rgblight_mode_transition_sat(RGBLIGHT_MODE_STATIC_LIGHT, RGBLIGHT_MODE_RAINBOW_MOOD, 17) == 17);
+  assert(rgblight_mode_transition_sat(RGBLIGHT_MODE_PULSE_OFF_PRESS, RGBLIGHT_MODE_CHRISTMAS, 255) == 255);
+  puts("PASS: actual saturation-restore rule keys on the destination effect, not on leaving Solid Color");
+  return 0;
+}
+''',encoding='utf-8')
+    return out, out_reset, out_rgb, out_ws, out_sat

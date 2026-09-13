@@ -51,6 +51,7 @@ def generate(root: Path, build: Path, source_root: Path | None = None) -> Path:
     ]
     chunks += [function(rgb, name) for name in (
         'rgblight_request_render', 'rgblight_indicator_restore_pulse_effect',
+        'rgblight_sethsv_eeprom_helper',  # V260913R1: 실제 설정 커밋 경로. 커밋 뒤 RGB task가 그려야 한다.
         'rgblight_indicator_post_host_event',
         'rgblight_handle_physical_key' if 'rgblight_handle_physical_key' in rgb else 'preprocess_rgblight',
         'rgblight_consume_host_led_queue', 'rgblight_flush_render_queue')]
