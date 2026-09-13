@@ -108,9 +108,14 @@ CONFIGURE -> LIGHTING에서 현재 보드가 지원하는 RGB ROW 또는 Undergl
 - Pulse On Press (Hold)
 - Pulse Off Press (Hold)
 
-일부 효과에서는 Velocikey를 켜면 입력 속도에 따라 효과 속도가 변합니다.
+Effect Speed는 Pulse에서만 표시되며 펄스 길이는 5 + 값 ms입니다.
+0은 5 ms, 255는 260 ms이고 기본값 15는 20 ms입니다. Hold 효과는 이 시간이
+끝나도 가장 최근에 누른 키가 눌려 있으면 유지됩니다. 일반 Breathing 1~4 등의
+속도는 Effect 번호로 선택합니다. 지원 효과에서 Velocikey를 켜면 입력 속도에
+따라 속도가 변합니다.
 INDICATOR에서는 Off / Caps Lock / Scroll Lock / Num Lock 중 표시할 상태를
-고르고 Indicator Brightness와 Indicator Color를 설정합니다.
+고르고 Indicator Brightness와 Indicator Color를 설정합니다. H7S 보드는
+논스플릿이며 TOMAK의 SPLIT LINK·EEPROM SYNC STATUS 색상표는 적용되지 않습니다.
 
 MAY65는 공장 초기화 뒤 Underglow가 꺼진 상태로 시작할 수 있으며 LIGHTING에서
 다시 켤 수 있습니다.
@@ -125,9 +130,11 @@ CONFIGURE -> SYSTEM -> USB POLLING에서 1 kHz (FS), 2 kHz (HS), 4 kHz (HS),
 포트에서는 사용할 수 없는 경우가 있습니다.
 
 SLEEP:
-CONFIGURE -> SYSTEM -> SLEEP에서 마지막 입력 뒤 RGB 절전 시간을
-1/3/5/10/30/60분 중 선택합니다. 기본값은 10분입니다. 키를 누르면 RGB가 다시
-켜집니다.
+CONFIGURE -> SYSTEM -> SLEEP의 RGB Sleep은 기본 On입니다. 끄면 유휴 시간,
+USB 절전, 호스트 소실에 따른 자동 RGB 절전 전체를 비활성화합니다. On일 때
+RGB Sleep Timeout (s)에서 1~65535초를 설정하며 기본값은 600초입니다.
+토글을 꺼도 시간 값은 보존됩니다. 자동 절전으로 꺼졌다면 입력이나 정상적인
+호스트 복귀로 켜지지만, 사용자가 끈 RGB를 자동으로 켜지는 않습니다.
 
 BOOT:
 Jump To BOOT는 켜는 즉시 부트로더로 진입합니다. 실행 후 항상 꺼진 값으로
@@ -244,9 +251,14 @@ effect, colour, and effect speed. Pulse effect names are:
 - Pulse On Press (Hold)
 - Pulse Off Press (Hold)
 
-For supported effects, Velocikey changes effect speed with typing speed.
+Effect Speed appears only for Pulse and sets duration to 5 + value ms: 0 is
+5 ms, 255 is 260 ms, and the default 15 is 20 ms. Hold effects continue after
+that duration while the most recently pressed key remains down. For ordinary
+effects such as Breathing 1–4, choose the numbered Effect variant. Velocikey
+changes speed with typing speed for supported effects.
 INDICATOR lets you choose Off, Caps Lock, Scroll Lock, or Num Lock, then set
-Indicator Brightness and Indicator Color.
+Indicator Brightness and Indicator Color. H7S boards are non-split; the TOMAK
+SPLIT LINK / EEPROM SYNC STATUS colour meanings do not apply.
 
 MAY65 can start with Underglow off after a factory reset; turn it back on in
 LIGHTING when desired.
@@ -261,8 +273,11 @@ rates require a port that negotiates USB High Speed, which hubs and front-panel
 headers often cannot.
 
 SLEEP:
-Choose RGB sleep after 1/3/5/10/30/60 minutes of inactivity in CONFIGURE ->
-SYSTEM -> SLEEP. The default is 10 minutes. Pressing a key wakes the RGB.
+RGB Sleep in CONFIGURE -> SYSTEM -> SLEEP is On by default. Turning it off
+disables automatic RGB sleep for idle timeout, USB suspend and host loss.
+While On, RGB Sleep Timeout (s) accepts 1–65535 seconds; the default is 600.
+Turning the toggle off keeps that timeout. Input or normal host recovery wakes
+automatically sleeping RGB, but does not turn on RGB disabled by the user.
 
 BOOT:
 Jump To BOOT enters the bootloader as soon as it is switched on and normally
