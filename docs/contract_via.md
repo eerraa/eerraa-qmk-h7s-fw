@@ -61,11 +61,11 @@ unchanged. `docs/contract_usb.md` owns queue and lifecycle mechanics.
 
 ## 2. Channel numbers are not the RP2040 layout
 
-The generated channel table is `docs/MAP.md` §4 (`via-channels`). Do
-not copy it here. Firmware routing means that board's
-`<board>/port/via_port.c` accepts the channel. JSON exposure means the
-official `*-VIA.JSON` lets the user reach that screen. Routing without
-exposure leaves a firmware feature with no UI — `menu` fails that case.
+Current channel numbers are source-owned by `src/ap/modules/qmk/quantum/via.h`.
+Firmware routing means `<board>/port/via_port.c` accepts the channel. JSON
+exposure means the official `*-VIA.JSON` lets the user reach that screen.
+Routing without exposure leaves a firmware feature with no UI — `menu` fails
+that case.
 
 Channel 2 (`id_qmk_rgblight_channel`) is handled in VIA core
 (`src/ap/modules/qmk/quantum/via.c`), so board routing is `-` and JSON
@@ -167,7 +167,7 @@ all pair tracking starts a fresh epoch. The new mapping does not retroactively
 claim already-held keys. This gives configuration changes a defined boundary
 without fabricating physical transitions. Wire ids and EEPROM layout are unchanged.
 
-A new channel takes an unused number from `docs/MAP.md` §4 and is added
+A new channel takes an unused number in `src/ap/modules/qmk/quantum/via.h` and is added
 to all five official JSON files and the app custom definition together.
 This repo's half is `menu`. Cross-repo match is not checked
 (`docs/MAP.md` §7).

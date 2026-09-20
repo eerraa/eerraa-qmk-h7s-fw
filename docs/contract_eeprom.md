@@ -6,16 +6,17 @@ immutability and per-slot validity, SAVE-not-SET flush for custom VIA values,
 the version-cookie factory-reset blast radius, and the 100 µs write slice
 against the 8 kHz budget
 
-Layout (offsets, sizes, symbols) is generated in `docs/MAP.md` §5 from
-`src/ap/modules/qmk/port/port.h`. This file is why that layout must stay that
-shape.
+The current layout (offsets, sizes, symbols) is source-owned by
+`src/ap/modules/qmk/port/port.h`. This file owns why shipped slot addresses
+must retain their shape.
 
 ## 1. Slot addresses do not move after they have shipped
 
 Retiring a feature does not delete its slot. `EECONFIG_USER_RESERVED_32` is the
 retired monitor toggle; nothing reads or writes it. New slots append after the
 last occupied offset. The USER block size is `EECONFIG_USER_DATA_SIZE`
-(`docs/MAP.md` §5; every `<board>/config.h`).
+(every `<board>/config.h`); current slot declarations are in
+`src/ap/modules/qmk/port/port.h`.
 
 > **REFUSED:** moving USER slot offsets after a layout has shipped.
 > **WHY:** compacting a hole shifts every later field on devices that already

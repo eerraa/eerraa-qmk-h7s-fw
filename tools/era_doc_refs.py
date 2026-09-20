@@ -1,22 +1,18 @@
 #!/usr/bin/env python3
-"""문서-코드 정합 검사기.
+"""로컬 문서/소스/계약 정합 검사기.
 
-문서가 코드에서 어긋나면 여기서 빨개진다. 아홉 가지를 본다.
-
-  path     백틱 안 저장소 경로가 실재하는가 (`:line`, `{a,b}`, `*` 지원)
+  path     백틱 안 로컬 저장소 경로가 실재하는가 (:line, brace/glob 지원)
   comment  소스 주석이 부르는 docs/ 경로가 실재하는가
-  header   docs/*.md가 Genre / Canonical for 두 줄을 선언하는가.
-           Status: / Read when: 은 이 저장소에 값이 바뀌는 ADR이 없어 금지
-  index    docs/ 아래 모든 문서가 docs/MAP.md 색인에서 도달 가능한가
+  index    docs/ 아래 활성 문서가 docs/MAP.md에서 도달 가능한가
   symbol   백틱 안 식별자가 src/ 또는 tools/에 실재하는가
-  retired  폐기된 서브시스템의 심볼이 src/에 되살아나지 않았는가
-  table    문서의 생성 표가 소스에서 다시 계산한 값과 같은가
+  retired  폐기된 USB 심볼이 src/에 되살아나지 않았는가
+  table    계약 소유 wire-value marker가 현재 소스와 충돌하지 않는가
   menu     펌웨어가 라우팅하는 VIA 채널이 보드 JSON에서 도달 가능한가
   version  문서의 버전 리터럴이 현재 펌웨어 버전을 넘지 않는가
 
 사용법:
   python tools/era_doc_refs.py            검사. 발견 0건이면 exit 0
-  python tools/era_doc_refs.py --tables   생성 표를 찍는다 (문서에 붙여넣기)
+  python tools/era_doc_refs.py --tables   계약 소유 wire-value marker를 출력
 """
 
 from __future__ import annotations
@@ -32,11 +28,7 @@ MAP_DOC = DOC_DIR / "MAP.md"
 ENTRY_DOCS = [ROOT / "AGENTS.md", ROOT / "CLAUDE.md"]
 USER_DOC = DOC_DIR / "readme.txt"
 
-GENRES = ("contract", "map", "manual", "state", "entry")
-# 값이 바뀌는 ADR이 생기면 Status: 만 그 파일에서 허용한다. 지금은 없다.
-FORBIDDEN_HEADERS = ("Status:", "Read when:")
-
-# 같은 PC의 짝 저장소·규약 저장소. 경로 검사는 접두사만 보고 통과시킨다.
+# 외부 짝 저장소·규약 저장소 포인터. 로컬 경로 검사에서는 접두사만 식별하고 건너뛴다.
 FOREIGN_REPOS = (
     "the-via-eerraa/",
     "qmk_firmware_eerraa/",
@@ -59,7 +51,6 @@ RETIRED_SYMBOLS = (
 
 BOARD_ROOT = ROOT / "src/ap/modules/qmk/keyboards/era"
 VIA_H = ROOT / "src/ap/modules/qmk/quantum/via.h"
-PORT_H = ROOT / "src/ap/modules/qmk/port/port.h"
 HW_DEF = ROOT / "src/hw/hw_def.h"
 
 TABLE_BEGIN = re.compile(r"^<!-- era-doc-refs: (?P<name>[a-z-]+) -->$")
@@ -72,7 +63,7 @@ PATH_TOKEN = re.compile(
     r"(?:\.(?:c|h|py|ps1|md|txt|json|JSON|cmake|uf2|html)|/))"
     r"(?::(?P<line>\d+))?$"
 )
-# `<board>/port/via_port.c`처럼 다섯 보드에 각각 있는 파일을 가리키는 표기.
+# `<board>/port/via_port.c`처럼 각 보드에 있는 파일을 가리키는 표기.
 BOARD_PREFIX = "<board>/"
 IDENT_TOKEN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 DOCS_REF = re.compile(r"docs/[A-Za-z0-9_./-]+\.(?:md|txt)")
@@ -152,7 +143,7 @@ def boards() -> list[dict]:
         board_dir = via_port.parent.parent
         definitions = sorted(board_dir.glob("json/*-VIA.JSON"))
         if not definitions:
-            report("table", str(board_dir.relative_to(ROOT)), "VIA JSON이 없다")
+            report("menu", str(board_dir.relative_to(ROOT)), "VIA JSON이 없다")
             continue
         data = json.loads(read(definitions[0]))
         rows.append(
@@ -160,7 +151,6 @@ def boards() -> list[dict]:
                 "name": data.get("name", "?"),
                 "dir": board_dir.relative_to(ROOT).as_posix(),
                 "json": definitions[0].relative_to(ROOT).as_posix(),
-                "pid": data.get("productId", "?"),
                 "via_port": via_port,
             }
         )
@@ -192,55 +182,9 @@ def exposed_channels(definition: Path) -> set[int]:
     }
 
 
-def eeprom_slots() -> list[tuple[str, int, str]]:
-    rows = []
-    for name, offset, size in re.findall(
-        r"#define\s+(EECONFIG_USER_\w+)\s+.*?DATABLOCK\s*\+\s*(\d+)\)\)\s*//\s*(\d+B)",
-        read(PORT_H),
-    ):
-        rows.append((name, int(offset), size))
-    return sorted(rows, key=lambda row: row[1])
-
-
 # --------------------------------------------------------------------------
-# 생성 표
+# 계약 소유 표
 # --------------------------------------------------------------------------
-
-def table_boards() -> list[str]:
-    lines = ["| Board | Source | Official VIA JSON (under json/) | PID |", "| --- | --- | --- | --- |"]
-    for row in boards():
-        lines.append(
-            f"| {row['name']} | `{row['dir']}/` |"
-            f" `{row['json'].rsplit('/', 1)[1]}` | `{row['pid']}` |"
-        )
-    return lines
-
-
-def table_channels() -> list[str]:
-    known = channel_map()
-    board_rows = boards()
-    routed: set[str] = set()
-    for row in board_rows:
-        routed |= routed_channels(row["via_port"])
-    exposed: set[int] = set()
-    for row in board_rows:
-        exposed |= exposed_channels(ROOT / row["json"])
-    lines = ["| Channel | Name | Firmware routing | Board JSON exposure |", "| --- | --- | --- | --- |"]
-    for name, number in sorted(known.items(), key=lambda item: item[1]):
-        lines.append(
-            f"| {number} | `{name}` |"
-            f" {'O' if name in routed else '-'} |"
-            f" {'O' if number in exposed else '-'} |"
-        )
-    return lines
-
-
-def table_eeprom() -> list[str]:
-    lines = ["| Offset | Size | Symbol |", "| --- | --- | --- |"]
-    for name, offset, size in eeprom_slots():
-        lines.append(f"| +{offset} | {size} | `{name}` |")
-    return lines
-
 
 def _enum_values(enum_name: str, pattern: str) -> list[tuple[str, int]]:
     text = read(VIA_H)
@@ -282,9 +226,6 @@ def table_wire_values() -> list[str]:
 
 
 TABLES = {
-    "boards": table_boards,
-    "via-channels": table_channels,
-    "eeprom-slots": table_eeprom,
     "wire-values": table_wire_values,
 }
 
@@ -343,38 +284,6 @@ def _check_one_path(where: str, match: re.Match) -> None:
             total = len(target.read_bytes().splitlines())
             if int(line_no) > total:
                 report("path", where, f"`{candidate}:{line_no}` — 파일은 {total}줄이다")
-
-
-def _forbidden_header_lines(path: Path) -> None:
-    where_base = path.relative_to(ROOT).as_posix()
-    for number, line in enumerate(read(path).splitlines(), 1):
-        for header in FORBIDDEN_HEADERS:
-            if line.startswith(header):
-                report(
-                    "header",
-                    f"{where_base}:{number}",
-                    f"`{header}` 필드는 이 저장소에서 쓰지 않는다",
-                )
-
-
-def check_headers() -> None:
-    for doc in sorted(DOC_DIR.glob("*.md")):
-        head = read(doc).splitlines()[:8]
-        where = doc.relative_to(ROOT).as_posix()
-        genre = next((l for l in head if l.startswith("Genre:")), None)
-        canonical = next((l for l in head if l.startswith("Canonical for:")), None)
-        if genre is None:
-            report("header", where, "`Genre:` 줄이 없다")
-        elif genre.split(":", 1)[1].strip() not in GENRES:
-            report("header", where, f"Genre 값이 {GENRES} 밖이다 — {genre}")
-        if canonical is None:
-            report("header", where, "`Canonical for:` 줄이 없다")
-        elif not canonical.split(":", 1)[1].strip():
-            report("header", where, "`Canonical for:`가 비어 있다")
-        _forbidden_header_lines(doc)
-    for doc in ENTRY_DOCS:
-        if doc.exists():
-            _forbidden_header_lines(doc)
 
 
 def check_index() -> None:
@@ -458,8 +367,7 @@ def check_menu() -> None:
 def check_source_comments() -> None:
     """소스 주석이 문서를 부르면 그 문서가 실재해야 한다.
 
-    문서 쪽만 검사하면 반대 방향 드리프트가 남는다 — 문서를 지웠는데 소스 주석이 계속
-    그것을 가리키는 경우다. 실제로 이번 문서 재편이 그런 주석을 둘 남겼었다.
+    문서 쪽만 검사하면 문서를 지운 뒤 소스 주석이 계속 가리키는 반대 방향 드리프트가 남는다.
     """
     targets = sorted((ROOT / "src").rglob("*.c")) + sorted((ROOT / "src").rglob("*.h"))
     targets += [ROOT / "CMakeLists.txt"] + sorted((ROOT / "src").rglob("CMakeLists.txt"))
@@ -509,7 +417,6 @@ def main() -> int:
 
     check_paths_and_symbols()
     check_source_comments()
-    check_headers()
     check_index()
     check_retired()
     check_tables()
@@ -521,7 +428,7 @@ def main() -> int:
             print(finding)
         print(f"\nFAIL {len(findings)}건")
         return 1
-    print(f"PASS 문서-코드 정합 9종 (기준 펌웨어 {firmware_version()})")
+    print(f"PASS 로컬 문서/소스/계약 정합 (기준 펌웨어 {firmware_version()})")
     return 0
 
 

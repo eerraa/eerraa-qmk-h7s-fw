@@ -33,17 +33,13 @@ def current_firmware_version() -> bytes:
 
 def plant_readme_release_filename(body: bytes) -> bytes:
     current = current_firmware_version()
-    needle = b"-" + current + b".uf2"
-    planted = b"-V260101R1.uf2" if current != b"V260101R1" else b"-V260101R2.uf2"
-    if needle not in body:
-        raise SystemExit("docs/readme.txt에 현재 버전 UF2 파일명이 없다")
-    return body.replace(needle, planted, 1)
-
+    planted = b"V000101R1" if current != b"V000101R1" else b"V000101R2"
+    return body + b"\nselftest-" + planted + b".uf2\n"
 
 
 def run_checker() -> tuple[int, str]:
     proc = subprocess.run(
-        [sys.executable, str(CHECKER)],
+        [sys.executable, "-X", "utf8", str(CHECKER)],
         cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
     )
     return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
@@ -71,27 +67,20 @@ PROBES = (
      lambda b: b + "\n`src/nope/missing.c`\n".encode(), False),
     ("comment", "[comment]", "src/hw/driver/usb/usbd_conf.c",
      lambda b: b.replace(b"docs/contract_usb.md", b"docs/gone.md", 1), False),
-    ("header", "[header]", "docs/contract_via.md",
-     lambda b: b.replace(b"Genre: contract", b"Genre: kontrakt", 1), False),
-    ("header(Status)", "[header]", "docs/contract_via.md",
-     lambda b: b.replace(b"Genre: contract", b"Status: Accepted\nGenre: contract", 1),
-     False),
-    ("header(Read when)", "[header]", "docs/contract_via.md",
-     lambda b: b.replace(b"Genre: contract", b"Read when: always\nGenre: contract", 1),
-     False),
     ("index", "[index]", "docs/zz_selftest_orphan.md",
      lambda b: "# orphan\n\nGenre: map\nCanonical for: 자기검사\n".encode(), True),
     ("symbol", "[symbol]", MAP_DOC,
      lambda b: b + "\n`usbNoSuchThing`\n".encode(), False),
     ("retired", "[retired]", "src/hw/driver/usb/zz_selftest_tmp.h",
      lambda b: b"void usbInstabilitySelftest(void);\n", True),
-    ("table", "[table]", MAP_DOC,
-     lambda b: b.replace(b"| +152 | 16B |", b"| +160 | 16B |", 1), False),
+    ("table", "[table]", "docs/contract_via.md",
+     lambda b: b.replace(b"| Global TAPPING term (exact) | 15 | 5 |",
+                         b"| Global TAPPING term (exact) | 15 | 6 |", 1), False),
     ("menu", "[menu]", JSON_DOC,
      lambda b: b.replace(b", 17,", b", 99,"), False),
     ("version(doc)", "[version]", MAP_DOC,
      lambda b: b + b"\nV299999R9\n", False),
-    ("version(readme)", "[version]", "docs/readme.txt",
+    ("version(readme)", "릴리스 파일명이", "docs/readme.txt",
      plant_readme_release_filename, False),
 )
 

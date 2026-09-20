@@ -9,16 +9,16 @@ what only hardware can decide and how to read it, and symptom order
 
 | Command | Bites |
 | --- | --- |
-| `PYTHONUTF8=1 python tools/era_doc_refs.py` | document–code match, nine checks (`docs/MAP.md` §8) |
+| `python -X utf8 tools/era_doc_refs.py` | local document/source/contract checks (`docs/MAP.md` §8) |
 | `pwsh -NoProfile -File tools/era_via_host_tests/run.ps1` | VIA value layer, `0x07` diagnostics, RGB SLEEP, EEPROM CLEAN, VERSION GET, single raw-HID TX producer |
 | `python tools/era_via_host_tests/run.py` | same host tests when `gcc` is on PATH |
 | cmake (§4) | compile, link, `_Static_assert`, size |
-| `PYTHONUTF8=1 python tools/era_doc_refs_selftest.py` | the checker is not empty |
+| `python -X utf8 tools/era_doc_refs_selftest.py` | positive baseline plus negative fixtures for active checks |
 | `python hooks/test_pre_commit.py` | runnable-Python probe, WindowsApps fallback, LF/mode wiring |
 
 | Change | Owes |
 | --- | --- |
-| `docs/` only, not the checker | `PYTHONUTF8=1 python tools/era_doc_refs.py`. No ARM build. |
+| `docs/` only, not the checker | `python -X utf8 tools/era_doc_refs.py`. No ARM build. |
 | official VIA JSON | that checker (`menu`) |
 | `tools/era_doc_refs.py` or `tools/era_doc_refs_selftest.py` | checker and selftest |
 | `hooks/pre-commit`, `.gitattributes`, or `hooks/test_pre_commit.py` | checker and pre-commit launcher test |
@@ -84,11 +84,11 @@ cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/keynetix/may65' -G "MinGW Ma
 cmake --build build -j10
 ```
 
-`KEYBOARD_PATH` is one of the five in `docs/MAP.md` §3. UF2 is a
-`CMakeLists.txt` POST_BUILD: `tools/uf2/uf2conv.py`, family
-`0xFFFF0002`. Five boards share source and differ by
-`-DKEYBOARD_PATH`. A change under `<board>/config.h` or `<board>/port/`
-is built with that board.
+`KEYBOARD_PATH` selects a board under `src/ap/modules/qmk/keyboards/era/`; locate
+current choices in that tree. UF2 is a `CMakeLists.txt` POST_BUILD:
+`tools/uf2/uf2conv.py`, family `0xFFFF0002`. The build selects board-specific
+configuration with `-DKEYBOARD_PATH`. A change under `<board>/config.h` or
+`<board>/port/` is built with that board.
 
 **Size compare only the same board and the same toolchain.** Name the
 baseline firmware version with any RAM/FLASH delta.
