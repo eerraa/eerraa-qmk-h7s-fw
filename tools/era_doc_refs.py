@@ -6,13 +6,11 @@
   index    docs/ 아래 활성 문서가 docs/MAP.md에서 도달 가능한가
   symbol   백틱 안 식별자가 src/ 또는 tools/에 실재하는가
   retired  폐기된 USB 심볼이 src/에 되살아나지 않았는가
-  table    계약 소유 wire-value marker가 현재 소스와 충돌하지 않는가
   menu     펌웨어가 라우팅하는 VIA 채널이 보드 JSON에서 도달 가능한가
   version  문서의 버전 리터럴이 현재 펌웨어 버전을 넘지 않는가
 
 사용법:
   python tools/era_doc_refs.py            검사. 발견 0건이면 exit 0
-  python tools/era_doc_refs.py --tables   계약 소유 wire-value marker를 출력
 """
 
 from __future__ import annotations
@@ -52,9 +50,6 @@ RETIRED_SYMBOLS = (
 BOARD_ROOT = ROOT / "src/ap/modules/qmk/keyboards/era"
 VIA_H = ROOT / "src/ap/modules/qmk/quantum/via.h"
 HW_DEF = ROOT / "src/hw/hw_def.h"
-
-TABLE_BEGIN = re.compile(r"^<!-- era-doc-refs: (?P<name>[a-z-]+) -->$")
-TABLE_END = "<!-- era-doc-refs: end -->"
 
 TICK = re.compile(r"`([^`\n]+)`")
 FENCE = re.compile(r"^\s*```")
@@ -183,54 +178,6 @@ def exposed_channels(definition: Path) -> set[int]:
 
 
 # --------------------------------------------------------------------------
-# 계약 소유 표
-# --------------------------------------------------------------------------
-
-def _enum_values(enum_name: str, pattern: str) -> list[tuple[str, int]]:
-    text = read(VIA_H)
-    block = re.search(rf"enum {enum_name}\s*\{{(.*?)\}}", text, re.S)
-    if not block:
-        raise SystemExit(f"via.h에서 {enum_name} enum을 찾지 못했다")
-    return [
-        (name, int(value))
-        for name, value in re.findall(r"(id_\w+)\s*=\s*(\d+)", block.group(1))
-        if re.search(pattern, name)
-    ]
-
-
-def _span(values: list[tuple[str, int]]) -> str:
-    numbers = sorted(number for _, number in values)
-    if not numbers:
-        raise SystemExit("value id를 찾지 못했다")
-    if numbers[-1] - numbers[0] + 1 != len(numbers):
-        raise SystemExit(f"value id가 연속이 아니다 — {numbers}")
-    return str(numbers[0]) if len(numbers) == 1 else f"{numbers[0]}–{numbers[-1]}"
-
-
-def table_wire_values() -> list[str]:
-    channels = channel_map()
-    rows = [
-        ("Global TAPPING term (exact)", channels["id_qmk_tapping"],
-         _span(_enum_values("via_qmk_tapping_value", r"_term_exact$"))),
-        ("TD0–TD7 term (exact)", channels["id_qmk_tapdance"],
-         _span(_enum_values("via_qmk_tapdance_value", r"_term_exact$"))),
-        ("MOUSE six controls", channels["id_qmk_mousekey"],
-         _span(_enum_values("via_qmk_mousekey_value", r"^id_qmk_mousekey_"))),
-        ("RGB SLEEP timeout", channels["id_qmk_rgb_sleep"],
-         _span(_enum_values("via_qmk_rgb_sleep_value", r"^id_qmk_rgb_sleep_"))),
-    ]
-    lines = ["| Control | Channel | value id |", "| --- | --- | --- |"]
-    for label, channel, span in rows:
-        lines.append(f"| {label} | {channel} | {span} |")
-    return lines
-
-
-TABLES = {
-    "wire-values": table_wire_values,
-}
-
-
-# --------------------------------------------------------------------------
 # 검사
 # --------------------------------------------------------------------------
 
@@ -319,37 +266,6 @@ def check_retired() -> None:
             report("retired", hits[0], f"폐기된 `{symbol}`이 되살아났다 ({len(hits)}개 파일)")
 
 
-def check_tables() -> None:
-    for doc in sorted(DOC_DIR.glob("*.md")):
-        lines = read(doc).splitlines()
-        where_base = doc.relative_to(ROOT).as_posix()
-        index = 0
-        while index < len(lines):
-            begin = TABLE_BEGIN.match(lines[index].strip())
-            if not begin:
-                index += 1
-                continue
-            name = begin.group("name")
-            try:
-                end = lines.index(TABLE_END, index)
-            except ValueError:
-                report("table", f"{where_base}:{index + 1}", f"`{name}` 블록이 닫히지 않았다")
-                return
-            if name not in TABLES:
-                report("table", f"{where_base}:{index + 1}", f"모르는 표 이름 — {name}")
-                index = end + 1
-                continue
-            actual = [line.rstrip() for line in lines[index + 1 : end] if line.strip()]
-            expected = TABLES[name]()
-            if actual != expected:
-                report(
-                    "table",
-                    f"{where_base}:{index + 1}",
-                    f"`{name}` 표가 소스와 다르다 — `python tools/era_doc_refs.py --tables`로 다시 받아라",
-                )
-            index = end + 1
-
-
 def check_menu() -> None:
     known = channel_map()
     for row in boards():
@@ -406,20 +322,10 @@ def check_versions() -> None:
 
 
 def main() -> int:
-    if "--tables" in sys.argv:
-        for name, builder in TABLES.items():
-            print(f"<!-- era-doc-refs: {name} -->")
-            for line in builder():
-                print(line)
-            print(TABLE_END)
-            print()
-        return 0
-
     check_paths_and_symbols()
     check_source_comments()
     check_index()
     check_retired()
-    check_tables()
     check_menu()
     check_versions()
 

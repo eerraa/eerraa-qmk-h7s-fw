@@ -96,9 +96,8 @@ owned by `docs/manual_verify.md`.
 
 `python -X utf8 tools/era_doc_refs.py` validates local document reachability and
 paths, source-comment document pointers, retired-USB non-restoration, official
-VIA JSON reachability, version consistency, and the contract-owned wire-value
-marker in `docs/contract_via.md`. It does not prove sentence meaning or peer-repo
-compatibility.
+VIA JSON reachability and version consistency. It does not prove sentence meaning
+or peer-repo compatibility.
 
 `python -X utf8 tools/era_doc_refs_selftest.py` first requires a clean positive
 checker result, then plants negative fixtures for the active checks and restores

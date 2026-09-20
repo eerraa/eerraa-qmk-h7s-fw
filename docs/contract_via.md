@@ -1,286 +1,85 @@
 # VIA wire contract
 
 Genre: contract
-Canonical for: what the app and VIA host exchange — the single raw-HID TX
-producer, channel and value-id assignment, the VERSION ASCII value,
-exact-ms / exact-sec value encoding,
-when KEYMAP/MACRO/CONFIG revisions bump, selector `0x06`/`0x07` byte
-envelopes, MOUSE unit conversion, and the checks that bite each of those
+Canonical for: official VIA compatibility, exact-value encoding, State Sync revision semantics, the single raw-HID TX producer, selector `0x06`/`0x07` wire rules, and firmware/app responsibility boundaries
 
-The other side lives in the app repo (`docs/MAP.md` §7). A mismatch can
-mean this side is wrong. Compare both before editing.
+Implementation-owned inventories are not repeated here. Current command/channel/value ids are in `src/ap/modules/qmk/quantum/via.h`; dispatch is in `src/ap/modules/qmk/quantum/via.c` and `<board>/port/via_port.c`; official VIA definitions are `src/ap/modules/qmk/keyboards/era/**/json/*-VIA.JSON`; the firmware version is `_DEF_FIRMWARE_VERSION` in `src/hw/hw_def.h`.
 
-## 1. One raw-HID TX producer
+The app-side owners are `the-via-eerraa/docs/adr/0001-state-sync-protocol.md` for State Sync/exact-ms and `the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md` for diagnostics. Local document checks prove only this repository; a peer or remote revision is not verified merely because these pointers exist.
 
-VIA replies leave through `via_hid_task()` in
-`src/ap/modules/qmk/port/via_hid.c`, which calls
-`usbHidEnqueueViaResponse()`. `raw_hid_send()` in that file is an empty
-stub. `src/ap/modules/qmk/quantum/via.c` still calls `raw_hid_send()` at
-the end of `raw_hid_receive()`; that call is a no-op. The GET switch,
-including `id_era_state_sync`, fills the 32 B buffer and does not own
-TX. `via_hid_task()` enqueues that same buffer after
-`raw_hid_receive()` returns.
+## 1. Official VIA compatibility and shipped ids
 
-Two producers would mix 32 B envelopes on the VIA IN endpoint, and SOF
-drain order would break request–response pairing. The host assumes a
-serial round-trip; a mix shows up as another request's reply, not as
-"no reply".
+Official VIA with the firmware-local official definitions must remain usable without the custom app. Custom-app controls are additive; they do not replace or silently reinterpret the legacy path.
 
-`tools/era_via_host_tests/check_single_producer.py` reads the sources:
-`raw_hid_send()` body stays empty, `via_hid_task()` enqueues, and
-`via.c` fills `id_era_state_sync` without TX.
+Shipped channel/value meanings are wire ABI. Do not renumber or reuse a shipped id to compact a hole. VIA-reserved channels 1, 3, 4, and 5 remain reserved; retired channel 13 value 3 remains reserved by `docs/contract_usb.md` §4. New features take unused additive ids and must be reflected in firmware, every affected official JSON, and the app definition in the same compatibility change. Use `via.h` and the JSON as the current id inventory rather than copying the full list here.
 
-The USB class layer adds no wall-clock response throttle. `USBD_HID_DataOut()`
-copies the received report through the registered VIA callback and immediately
-re-arms `HID_VIA_EP_OUT`; response transmission does not own RX readiness.
-`USBD_HID_SOF()` drains the queued reply on the first SOF where
-`HID_VIA_EP_IN` is idle. This preserves the serial request/reply producer rule
-without the former 20 ms floor on every command. The transport invariant is
-checked by `tools/era_via_host_tests/check_via_transport_latency.py`.
+The local `menu` check verifies that firmware-routed channels remain reachable from official JSON. It does not verify the peer app overlay.
 
-> **REFUSED:** filling in `raw_hid_send()` or adding a second VIA TX
-> path.
-> **WHY:** `via.c` already calls `raw_hid_send()` on every command; a
-> live stub would transmit twice, once from that call and once from
-> `via_hid_task()` enqueue, and mix envelopes on one IN endpoint.
-> **REOPENS:** none while VIA IN remains a single 32 B endpoint.
+### VERSION
 
-### Admission, scheduling and reset boundaries
+The shipped legacy Year/Month/Day/Revision values keep their zero-based meaning. The additive read-only VERSION string returns `_DEF_FIRMWARE_VERSION` without the leading `V`, followed by NUL (`YYMMDDRn\0`). SET and SAVE do not alter it. Firmware behavior is owned by `src/ap/modules/qmk/port/ver_port.c`; app presentation is owned by `the-via-eerraa/docs/adr/0003-era-menu-help-ui.md`.
 
-`USBD_HID_DataOut()` admits only a complete 32-byte frame. `raw_hid_receive()`
-validates that size again before board hooks. The four keymap/macro buffer
-commands reject a payload size greater than 28 before reading or writing the
-frame. Invalid buffer sizes use `id_unhandled` without side effects.
+### Non-obvious custom-control semantics
 
-`via_hid_task()` dispatches at most one request per main-loop iteration, after
-keyboard processing, and only with response credit. RX saturation uses USB NAK.
-The response carries a bus-generation token internally; no token or extra bytes
-are added to the wire protocol. Reset can reject an old response, but cannot undo
-a command already admitted to dispatch, including its later side effects. All envelope layouts below remain
-unchanged. `docs/contract_usb.md` owns queue and lifecycle mechanics.
+- RGB Sleep has one shared uint16-second timeout, default 600 seconds, and one shared master enable. Official VIA exposes channel 18 values 1 (minute presets) and 3 (master), not exact value 2; Custom VIA may use value 2. OFF preserves the timeout and SAVE owns persistence. The master gates input-idle sleep, explicit USB Suspend, and host-loss sleep after SOF has been stale for 300 ms once a host was seen. Sleep is a physical-output gate and must not rewrite the user's RGB enable, effect, hue, saturation, or value.
+- Entering a hue-driven RGB effect from a different base effect while stored saturation is zero restores saturation to 255. Switching variants of the same effect or any nonzero saturation leaves the stored colour unchanged. `rgblight_mode_transition_sat()` owns that implementation.
+- KKUK normalizes enable and clamps Delay to 5..30 ticks and Repeat to 5..20 ticks on load and live SET. A semantic live change starts a fresh tracking epoch; keys already held before the change are not retroactively counted, and repeat elapsed time is measured from a current timestamp.
+- SOCD acts only on reportable basic/modifier usages. A pair is eligible only in mode 1 with distinct reportable usages; ambiguous overlapping enabled pairs are inert. Before a semantic live change it restores still-tracked suppressed usages and emits the reconciled report, then starts a fresh epoch. Unsupported retained 16-bit keycodes may round-trip through storage/UI but must never be truncated into reportable usages.
 
-## 2. Channel numbers are not the RP2040 layout
+## 2. Single raw-HID TX producer
 
-Current channel numbers are source-owned by `src/ap/modules/qmk/quantum/via.h`.
-Firmware routing means `<board>/port/via_port.c` accepts the channel. JSON
-exposure means the official `*-VIA.JSON` lets the user reach that screen.
-Routing without exposure leaves a firmware feature with no UI — `menu` fails
-that case.
+VIA request handling has one response producer. `raw_hid_receive()` fills the 32-byte response buffer; `raw_hid_send()` in `src/ap/modules/qmk/port/via_hid.c` remains a no-op; `via_hid_task()` alone enqueues the completed response through `usbHidEnqueueViaResponse()`.
 
-Channel 2 (`id_qmk_rgblight_channel`) is handled in VIA core
-(`src/ap/modules/qmk/quantum/via.c`), so board routing is `-` and JSON
-exposure is still `O`. Channels 1, 3, 4, and 5 are VIA-reserved and
-unused here; do not assign a new feature to those numbers. Channel 13
-value id 3 is retired (`docs/contract_usb.md` §4); do not reuse it.
-Channel 9 value 1 (Jump to Boot) GET is always 0; SET jumps only when the
-value byte is nonzero. Values 2–4 are EEPROM CLEAN
-(`docs/contract_eeprom.md` §2).
-Channel 14 exposes only debounce mode and timing values 1–4. Value 5 is
-unassigned: neither the five official JSON files nor the app definitions
-address it, and an unknown value returns `id_unhandled`. Runtime readiness,
-retry, and allocation-error state stay internal to the debounce engine.
-Channel 8 values 1–4 retain the shipped zero-based Year / Month / Day /
-Revision GET values for old definitions. Value 5 is the current official
-surface: GET returns `YYMMDDRn` plus NUL as nine bytes, copied from
-`_DEF_FIRMWARE_VERSION` without its leading `V`; SET and SAVE do nothing
-(`src/ap/modules/qmk/port/ver_port.c`). All five official JSON files expose
-one read-only `label` at value 5 and no dropdown. The additive id preserves
-old cached definitions without changing a shipped value's meaning.
-Channel 18 (`id_qmk_rgb_sleep`) has two timeout surfaces over one uint16-second
-store (default 600) plus one shared runtime enable. Value 1
-(`id_qmk_rgb_sleep_timeout`) is the official minute
-preset (1/3/5/10/30/60). Official GET floors the stored seconds onto that menu
-and does not write; official SET accepts only those six minutes and converts to
-seconds. Value 2 (`id_qmk_rgb_sleep_timeout_exact`) is Custom VIA exact seconds,
-BE16 1..65535. Value 3 (`id_qmk_rgb_sleep_enable`) is a one-byte toggle exposed
-by both clients. Both timeout setters update the same store; OFF preserves that
-timeout, and all three controls persist only on SAVE. Value 3 is the RGB Sleep
-master: OFF gates input-idle timeout, explicit USB Suspend, and host disappearance
-(SOF stale 300 ms after a host was seen) together. `RGBLIGHT_SLEEP` remains
-compiled as the capability; `rgb_sleep.c` is the single runtime owner that
-decides whether to enter it. Runtime darkness is a physical output gate: it does not
-change `rgblight_config.enable`, mode, hue, saturation, or value. VIA channel 2 therefore
-continues to report the user-selected effect while the LEDs are dark, deferred RGB SAVE
-cannot persist a sleep-induced OFF state, and RGB changes made while dark remain logical
-settings that take effect when the output gate opens. The five firmware-local official `*-VIA.JSON` files keep value 1 as the
-dropdown and add value 3; they do not expose value 2. Their timeout row is shown
-only while value 3 is on.
+A second producer would allow duplicate/mixed responses on the one VIA IN endpoint and break the host's serialized request/reply pairing. Do not make `raw_hid_send()` live while `via_hid_task()` owns enqueue.
 
-Channel 2 effect SET applies one saturation rule when the stored saturation is
-0, the white factory default on all five boards: entering Rainbow Mood, Rainbow
-Swirl, Gradient or Christmas from a different base effect stores saturation
-255, because those effects are carried by hue and are indistinguishable from
-Solid Color in white. Switching between variants of one effect, entering any
-other effect, and any saturation other than 0 leave the stored colour unchanged
-(`rgblight_mode_transition_sat()`). The firmware does not push the restored
-value; a client that caches the colour reads 255 on its next channel 2 colour
-GET, and re-sending its cached white restores the white rainbow.
+Only complete 32-byte VIA OUT frames are admitted. Keymap/macro buffer commands reject a payload size greater than 28 before reading or writing the frame; invalid sizes become unhandled with no side effects. Main-loop dispatch handles at most one admitted request per iteration when response credit exists, and a full RX queue uses USB NAK instead of ACK-and-drop. Reset may discard old-generation queued work/responses but cannot roll back side effects of a command already admitted to dispatch. Queue/lifecycle mechanics are owned by `docs/contract_usb.md`.
 
-This file owns the value-id rows. `table` regenerates them from
-`src/ap/modules/qmk/quantum/via.h`.
+`tools/era_via_host_tests/check_single_producer.py` checks the single-producer rule; `tools/era_via_host_tests/check_via_transport_latency.py` checks the transport scheduling invariant.
 
-<!-- era-doc-refs: wire-values -->
-| Control | Channel | value id |
-| --- | --- | --- |
-| Global TAPPING term (exact) | 15 | 5 |
-| TD0–TD7 term (exact) | 16 | 41–48 |
-| MOUSE six controls | 17 | 1–6 |
-| RGB SLEEP timeout | 18 | 1–3 |
-<!-- era-doc-refs: end -->
+## 3. exact-ms / exact-sec
 
-Peer `the-via-eerraa/docs/adr/0001-state-sync-protocol.md` and
-`the-via-eerraa/docs/MAP.md` §3 use the same H7S ids. VIA caches a
-definition by `(vendorId, productId)`, so H7S numbers need not match
-RP2040 (`qmk_firmware_eerraa`). Each family froze its layout first;
-moving a shipped number breaks the app overlay and the official JSON.
+Exact Custom Value SET/GET uses the existing `id_custom_set_value` (`0x07`) / `id_custom_get_value` (`0x08`) commands. The exact value is a two-byte big-endian uint16 after command/channel/value-id.
 
-| Control | RP2040 | H7S |
-| --- | --- | --- |
-| Global TAPPING term (exact) | channel 15 / value 5 | Same |
-| TD0–TD7 term (exact) | channel 0 / values 72–79 | channel 16 / values 41–48. Channel 16 is the Tap Dance channel; slot actions occupy values 1–40, exact terms append after that |
-| MOUSE (six controls) | channel 13 | channel 17. Channel 13 is `id_qmk_usb_polling`. Value ids 1–6 match the reference |
-| RGB SLEEP exact seconds | channel 9 / value 11 | channel 18 / value 2. Value 1 stays the official minute preset |
-| RGB SLEEP master | channel 9 / value 12 | channel 18 / value 3 |
+### TAPPING and Tap Dance exact milliseconds
 
-SOCD command names here are `id_qmk_kill_switch_lr` and
-`id_qmk_kill_switch_ud`. The reference uses a `socd` prefix.
+H7S exact-ms addresses are global TAPPING channel 15 value 5 and Tap Dance channel 16 values 41..48. SET accepts 100..500 ms inclusive. Fewer than two value bytes (`length < 5`) or an out-of-range value is refused and leaves storage unchanged. Exact GET returns the stored uint16 without snapping.
 
-### Runtime rules for KKUK and SOCD
+Official `*-VIA.JSON` definitions keep the legacy one-byte ×10 ms controls. Legacy SET snaps onto the 100..500 / 20 ms grid; legacy GET projects the exact stored value onto that grid without writing storage. An official-VIA read therefore must not destroy a custom-app value such as 137 ms. Tap Dance slot terms remain independent of global `TAPPING_TERM`.
 
-KKUK normalizes enable to boolean and clamps Delay to 5..30 ticks and Repeat to
-5..20 ticks both on load and on live SET. A semantic live change starts a fresh
-tracking epoch. Keys that were already held before enable/reconfiguration are not
-retroactively counted; they enter the next epoch on a new press. Repeat timing is
-elapsed from a current timestamp, never from a future timestamp.
+`src/ap/modules/qmk/port/tapping_term.c` and `src/ap/modules/qmk/port/tapdance.c` own firmware conversion/range handling. App encoding and definition bounds are owned by `the-via-eerraa/docs/adr/0001-state-sync-protocol.md`.
 
-SOCD manipulates only HID keyboard basic usages or modifier usages. Basic usages
-use the keyboard key array; modifiers use the modifier byte. A pair is runtime
-eligible only when mode 1 is active and both configured usages are reportable and
-distinct. If two enabled pairs share a usage, both overlapping pairs are runtime
-inert until the configuration is unambiguous. Unsupported 16-bit keycodes may be
-retained by GET/storage so the app can display and correct them, but they are never
-truncated into an 8-bit basic usage and never alter a keyboard report.
+### RGB Sleep exact seconds
 
-Before a semantic SOCD live change, the old runtime restores every still-tracked
-usage that SOCD may have suppressed and emits the reconciled keyboard report; then
-all pair tracking starts a fresh epoch. The new mapping does not retroactively
-claim already-held keys. This gives configuration changes a defined boundary
-without fabricating physical transitions. Wire ids and EEPROM layout are unchanged.
+Channel 18 value 2 uses the same BE16 Custom Value encoding and accepts 1..65535 seconds inclusive. Zero or `length < 5` is unhandled and leaves storage unchanged. Value 1 remains the official 1/3/5/10/30/60-minute preset; its GET projects exact seconds onto that list without rewriting exact storage. Both setters target the same timeout. Value 3 is the one-byte master; OFF preserves timeout.
 
-A new channel takes an unused number in `src/ap/modules/qmk/quantum/via.h` and is added
-to all five official JSON files and the app custom definition together.
-This repo's half is `menu`. Cross-repo match is not checked
-(`docs/MAP.md` §7).
+The persisted master flag is encoded in the existing storage-version byte so previously shipped version-1 slots migrate as enabled without changing the four-byte slot layout. `src/ap/modules/qmk/port/rgb_sleep.c` owns the implementation; `the-via-eerraa/docs/MAP.md` §3 points to the app exact-sec owner.
 
-> **REFUSED:** moving a shipped H7S channel or value id.
-> **WHY:** official JSON and the app overlay already address those
-> numbers; a move desyncs one side and leaves the firmware feature
-> unreachable or writes the wrong slot.
-> **REOPENS:** an additive id, shipped on both sides at once. Compacting
-> a hole is not that.
+`tools/era_via_host_tests/test_era_via_exact_ms.c` and `tools/era_via_host_tests/test_rgb_sleep.c` cover exact bounds, short packets, projection/no-write behavior, persistence/migration, and unknown ids.
 
-## 3. exact-ms / exact-sec encoding
+## 4. State Sync revision meaning
 
-Exact SET is a 2-byte big-endian `uint16` on `id_custom_set_value`
-(`0x07`) / `id_custom_get_value` (`0x08`). Inclusive range is 100–500
-(`TAPPING_TERM_MIN_MS` / `TAPPING_TERM_MAX_MS` in
-`src/ap/modules/qmk/port/tapping_term.c`; `TAPDANCE_TERM_MIN_MS` /
-`TAPDANCE_TERM_MAX_MS` in `src/ap/modules/qmk/port/tapdance.c`). Out of
-range, or fewer than two value bytes (`length < 5` on the 32 B report),
-is refused and the store is unchanged.
+Selector `0x06` publishes three RAM uint32 equality tokens: KEYMAP, MACRO, and CONFIG. They start at 1 and skip 0 on wrap. They are invalidation tokens, not data values and not EEPROM addresses.
 
-Official `*-VIA.JSON` still expose the 1-byte × 10 ms legacy dropdown
-(global channel 15 value 1; TD slot `*_term` values 5, 10, … 40) and do
-not expose `_term_exact`. Firmware implements both. The custom-app JSON
-is the other side (`the-via-eerraa` ADR 0001).
+- KEYMAP and MACRO mutation commands bump their domain when the mutation command is accepted; those paths intentionally do not compare old/new payloads first.
+- CONFIG custom setters bump only when the value observable by GET changes. A same-value custom SET is a no-op and must not bump.
+- Layout-options write bumps CONFIG. EEPROM reset bumps all three domains.
+- Custom SAVE schedules persistence only and does not itself bump. Selector `0x07` diagnostics does not bump. VIA-core RGB state and read-only version/system paths are outside this CONFIG revision contract.
 
-Legacy SET floors onto the 100–500 / 20 ms grid. Legacy GET projects
-the stored exact millisecond value onto that grid and does not rewrite
-storage. Load and `tapping_term_sync_state_from_storage()` also leave a
-valid uint16 unsnapped. GET is not a write: an official-app query must
-not clip a custom-app 137 ms down to 120 ms.
+`src/ap/modules/qmk/port/era_state_sync.c` owns token storage/advance. Find mutation sites from `era_state_sync_bump_keymap()`, `era_state_sync_bump_macro()`, and `era_state_sync_bump_config()` in current source; this document does not maintain a handler inventory.
 
-Tap Dance slot terms are independent of global `TAPPING_TERM`. Slot
-validity is `docs/contract_eeprom.md` §1.
+The app treats revision inequality only as invalidation and re-reads authoritative values through existing VIA GET. Revision-bracketing, candidate commit, capability opt-in, and cache continuity are app-owned in `the-via-eerraa/docs/adr/0001-state-sync-protocol.md`.
 
-`tools/era_via_host_tests/test_era_via_exact_ms.c` bites the range,
-the short packet, and the GET/SET asymmetry.
+## 5. selector `0x06` — State Sync v1
 
-RGB SLEEP exact seconds uses the same two-byte BE Custom Value encoding on
-channel 18 / value 2, but its inclusive range is the complete nonzero uint16
-range 1..65535. Value 1 remains the one-byte official minute preset. A value-1
-GET projects an exact value onto the preset list without rewriting the exact
-store. A value-2 SET of 0 or a value-2 GET/SET shorter than five bytes is
-unhandled and leaves storage unchanged. Value 3 is the shared one-byte RGB Sleep
-master. OFF leaves the timeout bytes untouched and suppresses idle, USB Suspend,
-and host-loss sleep together. The persisted flag is inverted
-in the high bit of the existing storage version byte, so every previously shipped
-version-1 slot migrates as enabled without changing the four-byte EEPROM layout.
-`tools/era_via_host_tests/test_rgb_sleep.c` bites both timeout surfaces, value 3,
-the 137-second projection, 1 / 65535 bounds, no-op revision, short packets, SAVE
-persistence, legacy-slot migration, unknown ids, and master-off suppression of
-both USB Suspend and SOF-stale host loss.
-
-## 4. Revisions bump when the published value changes
-
-Tokens are RAM `uint32`, start at 1, and skip 0 on wrap
-(`era_state_sync_next()` in `src/ap/modules/qmk/port/era_state_sync.c`).
-This porting layer has no QMK EEPROM-write catch-all, so each handler
-bumps its domain.
-
-KEYMAP, on the write command, no compare:
-`id_dynamic_keymap_set_keycode`, `id_dynamic_keymap_reset`,
-`id_dynamic_keymap_set_buffer`, `id_dynamic_keymap_set_encoder`.
-
-MACRO, same: `id_dynamic_keymap_macro_set_buffer`,
-`id_dynamic_keymap_macro_reset`.
-
-CONFIG, compare-then-bump (a same-value SET is a no-op):
-
-| Channel | Handler |
-| --- | --- |
-| 14 debounce | `src/ap/modules/qmk/port/debounce_profile.c` |
-| 12 KKUK | `src/ap/modules/qmk/port/kkuk.c` |
-| 10 / 11 SOCD | `src/ap/modules/qmk/port/kill_switch.c` |
-| 0 indicator | `<board>/port/indicator_port.c` |
-| 13 BootMode select (value 1) | `src/ap/modules/qmk/port/bootmode.c`. Apply (value 2) does not bump |
-| 15 tapping | `src/ap/modules/qmk/port/tapping_term.c` |
-| 16 tapdance | `src/ap/modules/qmk/port/tapdance.c` |
-| 17 mousekey | `src/ap/modules/qmk/port/mousekey_config.c` |
-| 18 RGB SLEEP | `src/ap/modules/qmk/port/rgb_sleep.c` |
-
-Always bump, no compare: `via_set_layout_options()`.
-`id_eeprom_reset` bumps all three domains.
-
-Does not bump: channel 2 rgblight (VIA core), channel 8 version,
-channel 9 system, `id_custom_save` (schedule EEPROM persistence only; BootMode save is
-a no-op), selector `0x07`.
-
-A no-op custom SET must not bump. Otherwise the app treats its own
-write as a remote CONFIG change and storms GET.
-
-> **REFUSED:** bumping CONFIG on a custom SET that did not change the
-> published value.
-> **WHY:** the app refreshes CONFIG from revision inequality; a self
-> echo would loop GET against the same store.
-> **REOPENS:** none while State Sync poll uses equality tokens.
-
-## 5. selector `0x06` — State Sync envelope
-
-`id_get_keyboard_value` (`0x02`) + `id_era_state_sync` (`0x06`).
-Version `ERA_STATE_SYNC_ENVELOPE_VERSION` (`0x01`). Integers are
-big-endian. The layout is the 32 B VIA payload. SET is not routed on
-this selector; `via.c` marks `id_unhandled`. TX is §1.
-
-Byte layout matches `the-via-eerraa/docs/adr/0001-state-sync-protocol.md`.
+`id_get_keyboard_value` (`0x02`) + selector `0x06`; envelope version `0x01`; all multibyte integers are big-endian. SET is not routed for this selector. The payload is exactly 32 bytes.
 
 ### Request
 
 | Byte | Meaning |
-| ---: | ------- |
-| `0` | `id_get_keyboard_value` (`0x02`) |
-| `1` | `0x06` |
-| `2` | `0x01` |
+| ---: | --- |
+| `0` | GET keyboard value `0x02` |
+| `1` | selector `0x06` |
+| `2` | requested envelope version `0x01` |
 | `3` | `0` |
 | `4..5` | host request tag, BE16 |
 | `6..31` | `0` |
@@ -288,119 +87,106 @@ Byte layout matches `the-via-eerraa/docs/adr/0001-state-sync-protocol.md`.
 ### Response
 
 | Byte | Meaning |
-| ---: | ------- |
+| ---: | --- |
 | `0` | `0x02` |
 | `1` | `0x06` |
-| `2` | `0x01` (firmware writes envelope version, not the request version byte) |
-| `3` | status: `ERA_STATE_SYNC_STATUS_OK` `0x00`, `UNSUPPORTED_VERSION` `0x01`, `INVALID` `0x02` |
-| `4..5` | echoed tag, BE16 |
-| `6` | domain mask; OK writes `ERA_STATE_SYNC_DOMAIN_MASK_INITIAL` (`0x07`) |
+| `2` | firmware envelope version `0x01` |
+| `3` | status: OK `0x00`, unsupported version `0x01`, invalid `0x02` |
+| `4..5` | echoed host tag, BE16 |
+| `6` | domain mask; OK is KEYMAP `0x01` \| MACRO `0x02` \| CONFIG `0x04` = `0x07` |
 | `7` | `0` |
 | `8..11` | keymap revision, BE32 |
 | `12..15` | macro revision, BE32 |
 | `16..19` | config revision, BE32 |
 | `20..31` | `0` |
 
-Domain bits: `ERA_STATE_SYNC_DOMAIN_KEYMAP` `0x01`,
-`ERA_STATE_SYNC_DOMAIN_MACRO` `0x02`, `ERA_STATE_SYNC_DOMAIN_CONFIG`
-`0x04`. Version is checked before reserved bytes. A nonzero reserved
-byte (`3` or `6..31`) is `ERA_STATE_SYNC_STATUS_INVALID` (status 2);
-the tag is still echoed and revisions are not filled.
+Validation order is normative. A version other than `0x01` returns unsupported-version even if reserved bytes are nonzero. With a supported version, any nonzero reserved request byte (`3` or `6..31`) returns invalid. The tag is echoed in both cases; revisions are filled only for OK.
 
-`length < 32` is not INVALID. A direct `era_state_sync_via_command`
-call returns false; the buffer is not rewritten as a v1 envelope. The
-raw-HID transport rejects a short frame before command dispatch and sends no response. Peer observation, VIA unedited: the app
-parseStateSyncEnvelope returns null when length is not 32 (neither
-`0xFF` nor INVALID).
+`length < 32` is not an INVALID v1 envelope. The direct handler returns false; raw-HID admission rejects the short frame before dispatch, so there is no selector response. Do not synthesize a v1 error envelope for a short report.
 
-`tools/era_via_host_tests/test_era_via_exact_ms.c` bites the OK
-envelope, reserved INVALID, unsupported version, tag echo, and the
-31-byte false return.
+App responsibility: send tagged 32-byte GETs through the per-path serialized transport, match the echoed tag, require the complete v1/domain-mask shape, and use changed tokens only to invalidate/re-read existing VIA values. The authoritative host rules are in `the-via-eerraa/docs/adr/0001-state-sync-protocol.md`.
 
-> **REFUSED:** answering `ERA_STATE_SYNC_STATUS_INVALID` on
-> `length < 32`.
-> **WHY:** a short buffer is not an envelope;
-> `era_state_sync_via_command` returns false; raw-HID transport rejects
-> a short frame before dispatch.
-> **REOPENS:** none while VIA IN is a 32 B report.
+`src/ap/modules/qmk/port/era_state_sync.c` owns the firmware encoder. `tools/era_via_host_tests/test_era_via_exact_ms.c` covers OK, unsupported version, reserved-byte invalid, tag echo, and short-frame false return.
 
-## 6. selector `0x07` — diagnostics envelope
+## 6. selector `0x07` — H7S USB diagnostics v1
 
-`id_get_keyboard_value` (`0x02`) / `id_set_keyboard_value` (`0x03`) +
-`id_era_usb_diagnostics` (`0x07`). Protocol
-`ERA_USB_DIAGNOSTICS_PROTOCOL_VERSION` (`0x01`), big-endian, 32 B.
-Firmware answers the request; it is not an unsolicited producer.
-Observation-only product boundary is `docs/contract_usb.md` §4
-(do not copy it here). Byte layout matches
-`the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md`.
+Diagnostics uses GET keyboard value `0x02` / SET keyboard value `0x03` + selector `0x07`, protocol version `0x01`, a 32-byte payload, and big-endian multibyte integers. It is request/reply only; firmware must not emit unsolicited diagnostics packets.
+
+This protocol is observation-only with respect to polling policy. START selects only a diagnostic duration; mode selection/apply/reboot stays on the existing BootMode controls. Diagnostics must not automatically downgrade polling, write diagnostic history to EEPROM, reset the device, or become State Sync recovery. `docs/contract_usb.md` §4 owns that product boundary; the app side is `the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md`.
 
 ### Request
 
 | Byte | Field |
-| ---: | ----- |
-| `0` | command: GET `0x02` or SET `0x03` |
-| `1` | `0x07` |
-| `2` | `0x01` |
+| ---: | --- |
+| `0` | GET `0x02` or SET `0x03` |
+| `1` | selector `0x07` |
+| `2` | protocol `0x01` |
 | `3` | operation |
 | `4..5` | host tag, BE16 |
-| `6` | duration seconds or snapshot chunk index |
-| `7..8` | snapshot sequence; chunk 0 must send 0 |
-| `9..31` | reserved, must be 0 |
+| `6` | START duration seconds or SNAPSHOT chunk index; otherwise 0 |
+| `7..8` | snapshot sequence, BE16; chunk-0 SNAPSHOT sends 0 |
+| `9..31` | reserved, all 0 |
 
-Operations: capabilities `ERA_USB_DIAGNOSTICS_OP_CAPABILITIES` `0x00`
-and snapshot `ERA_USB_DIAGNOSTICS_OP_SNAPSHOT` `0x01` are GET. Start
-`ERA_USB_DIAGNOSTICS_OP_START` `0x10`, stop
-`ERA_USB_DIAGNOSTICS_OP_STOP` `0x11`, and clear
-`ERA_USB_DIAGNOSTICS_OP_CLEAR` `0x12` are SET. Start duration is
-10 / 30 / 60 only.
+| Operation | Id | Command |
+| --- | ---: | --- |
+| capabilities | `0x00` | GET |
+| snapshot | `0x01` | GET |
+| start | `0x10` | SET |
+| stop | `0x11` | SET |
+| clear | `0x12` | SET |
 
-Wrong command/operation pairing, a nonzero reserved byte (`9..31`),
-chunk 0 with a nonzero sequence, or a duration other than 10 / 30 / 60
-is `ERA_USB_DIAGNOSTICS_STATUS_INVALID` (status 2). Unsupported
-version is checked first and wins over INVALID.
-
-`length < 32` follows §5: a direct handler call returns false; raw-HID
-transport rejects the short frame before dispatch.
+START duration is exactly 10, 30, or 60 seconds.
 
 ### Response
 
 | Byte | Field |
-| ---: | ----- |
-| `0..5` | command, selector, v1, operation, echoed tag |
+| ---: | --- |
+| `0` | echoed command |
+| `1` | `0x07` |
+| `2` | `0x01` |
+| `3` | echoed operation |
+| `4..5` | echoed tag, BE16 |
 | `6` | status |
 | `7` | state: idle 0, running 1, complete 2, stopped 3 |
-| `8..9` | session ID, BE16; none is 0 |
+| `8..9` | session id, BE16; none is 0 |
 | `10..11` | frozen snapshot sequence, BE16 |
 | `12` | chunk index |
 | `13` | chunk count |
-| `14..31` | 18 B operation payload |
+| `14..31` | 18-byte operation payload |
 
-Codes: OK 0, unsupported version 1, invalid 2, busy 3, no session 4,
-stale snapshot 5. Tag matches the request in the transport queue.
-Sequence is the frozen snapshot those chunks belong to — not a second
-tag. Chunk 0 freezes a new nonzero sequence; later chunks must send
-that same sequence or the reply is stale.
+| Status | Id |
+| --- | ---: |
+| OK | `0x00` |
+| unsupported version | `0x01` |
+| invalid | `0x02` |
+| busy | `0x03` |
+| no session | `0x04` |
+| stale snapshot | `0x05` |
 
-START OK payload is duration, BootMode, expected interval µs (BE32).
-STOP with no running session is no session. CLEAR while running is
-busy. Concurrent START is busy.
+Version validation precedes request-shape validation. With a supported version, wrong GET/SET-to-operation pairing, nonzero reserved bytes, nonzero sequence on chunk 0, invalid START duration, or an invalid chunk index returns INVALID. `length < 32` follows §5: the direct handler returns false and raw-HID transport sends no selector reply.
 
-### Capabilities payload
+Concurrent START returns BUSY. STOP without a running session returns NO SESSION. CLEAR while running returns BUSY. SNAPSHOT chunk 0 freezes a new nonzero sequence; later chunks must present that sequence or receive STALE SNAPSHOT.
+
+### Capabilities payload (`14..31`)
 
 | Payload byte | Field |
-| -----------: | ----- |
+| ---: | --- |
 | `0` | flags: report timing `0x01`, histogram `0x02`, firmware timing `0x04`, timeline `0x08`, boot counters `0x10` |
-| `1` | duration mask 10 / 30 / 60, bits `0x07` |
-| `2..3` | histogram bins `USB_DIAGNOSTICS_HISTOGRAM_BUCKETS` 8, timeline capacity `USB_DIAGNOSTICS_TIMELINE_CAPACITY` 8 |
-| `4..5` | recommended snapshot interval 1000 ms, BE16 |
-| `6..7` | endian 1 (big), time unit 1 (µs) |
-| `8` | firmware version length, max 9 |
-| `9..17` | ASCII `_DEF_FIRMWARE_VERSION` and zero padding |
+| `1` | duration mask for 10/30/60 s, bits `0x07` |
+| `2` | histogram bins: 8 |
+| `3` | timeline capacity: 8 |
+| `4..5` | recommended snapshot interval: 1000 ms, BE16 |
+| `6` | endian: 1 = big |
+| `7` | time unit: 1 = µs |
+| `8` | firmware-version ASCII length, maximum 9 |
+| `9..17` | `_DEF_FIRMWARE_VERSION` ASCII and zero padding |
+
+START OK payload is duration, BootMode, and expected interval µs (BE32). STOP/CLEAR payload is zero. The expected interval is derived from selected BootMode at START, not negotiated link speed.
 
 ### Snapshot chunks
 
-| Chunk | 18 B payload |
-| ----: | ------------ |
+| Chunk | 18-byte payload |
+| ---: | --- |
 | `0` | mode U8, speed U8, duration U8, event count U8, elapsed ms U32, expected interval µs U32, report samples U32, bin/timeline count U8×2 |
 | `1` | latency min / average / max / window max U32×4, queue peak U16 |
 | `2..3` | histogram U32×4 each |
@@ -410,126 +196,30 @@ busy. Concurrent START is busy.
 | `7` | session suspends / speed changes / timeline overwrites U32×3, zero padding |
 | `8..11` | two events each: type U8 + relative ms U32 + value U32 |
 
-Base chunk count is `ERA_USB_DIAGNOSTICS_BASE_CHUNKS` (8). One extra
-chunk per two timeline events, max 12. Sequence 0 is skipped on wrap,
-same as State Sync tokens.
+Base chunk count is 8; timeline data adds one chunk per two events, up to 12. Sequence 0 is skipped on wrap. `src/ap/modules/qmk/port/era_usb_diagnostics.c` owns envelope encoding; `src/hw/driver/usb/usb_hid/usb_diagnostics.c` owns captured measurements.
 
-`tools/era_via_host_tests/test_usb_diagnostics.c` bites capability
-bytes, reserved INVALID, unsupported version, duration, busy / stop /
-clear, frozen multi-chunk, stale sequence, wrap, and saturation.
+### Instrumentation safety bound
 
-> **REFUSED:** answering `ERA_USB_DIAGNOSTICS_STATUS_INVALID` on
-> `length < 32`.
-> **WHY:** a short buffer is not an envelope;
-> `era_usb_diagnostics_via_command` returns false; raw-HID transport
-> rejects a short frame before dispatch.
-> **REOPENS:** none while VIA IN is a 32 B report.
+The accepted implementation is RAM-only with no heap and no EEPROM diagnostics history. The current bounded footprint is a 272-byte live session, 236-byte frozen wire snapshot, 20-byte boot counters, plus 6 bytes of sequence/valid/speed/next-id state. Snapshot capture copies 292 bytes under the global IRQ mask at about 1 Hz. Idle does not read TIM5 for diagnostics; an active session reads the 1 µs counter once per main loop and at report request/completion. The 32-bit microsecond counter wraps after about 4295 s, well beyond the 60 s maximum session.
 
-### 6-1. Comparing transport measurements
+These numbers are an 8 kHz-path safety/performance bound, not an invitation to duplicate structure layouts elsewhere. A change that materially grows RAM, IRQ-masked copy, timer-read frequency, or session duration must re-measure and restate the bound.
 
-The recorded interval starts at a keyboard report request and ends at its DataIn
-completion. It is not physical-contact-to-OS latency. Host frame phase, real link
-speed, queue occupancy, debounce behavior and generated traffic can all affect
-its distribution. Compare multiple runs with the same workload, firmware and
-negotiated speed; report minimum, distribution, span, queue peak, drops and loop
-gaps together rather than treating one average or minimum as a stability score.
+App responsibility: strict 32-byte parsing, per-path serial exchange, echoed-tag matching, frozen-sequence chunk reads, capability opt-in, display/persistence of long-term history, and comparison caveats. The app keeps mode changes user-driven and must not turn observations into an automatic stability verdict. See `the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md`.
 
-The histogram's expected interval is the BootMode selected at START, not the
-negotiated speed. The snapshot carries both so the app can disclose a mismatch.
-No phase-only explanation or automatic correction is implied by the measurements.
-Do not pool versions with different transport ownership/scheduling architectures
-into one latency comparison set.
+`tools/era_via_host_tests/test_usb_diagnostics.c` covers firmware envelope/status/chunk behavior. Hardware/host measurements remain separate; host tests do not prove physical latency or stability.
 
-### 6-2. Instrumentation cost bound
+## 7. MOUSE unit conversion
 
-This subsystem sits on the 8 kHz path because RAM is fixed and the
-critical section is short. A change that grows either must re-state
-that bound.
+VIA exposes pixels and milliseconds while the QMK engine stores step/ratio and event counts. The user-visible quantities are the contract; `src/ap/modules/qmk/port/mousekey_config.c` owns conversion.
 
-- Session `usb_diagnostics_session_internal_t` 272 B, wire frozen
-  snapshot `usb_diagnostics_snapshot_t` 236 B, boot counters 20 B,
-  plus 6 B of sequence / valid / speed / next-id. No heap. No EEPROM.
-- `usbDiagnosticsCapture()` copies 292 B (session 272 + counters 20)
-  under a global IRQ mask. About 1 Hz.
-- Fixed `hid_tx_packet_t` packets contain request time and diagnostic session ID
-  alongside the payload. Metadata is carried with each accepted FIFO entry and
-  then with its immutable active packet; it is not stored in a separate retry path.
-  The packet size and all endpoint storage must be included in the link-map budget.
-- Idle does not read TIM5 for this subsystem. `qmkUpdate()` calls
-  `usbDiagnosticsTask(micros())` only while
-  `usbDiagnosticsIsActive()`. A live session reads the counter once
-  per loop and once each at report request and DataIn complete.
+- Top speed is derived from first-step × ratio. Recompute the ratio with rounding and engine clamping when first speed changes; do not floor it or expose the raw pair as independent user controls.
+- Acceleration duration is held in time. Convert it to `mk_time_to_max` from the current interval with rounding. If the one-byte event count cannot represent the requested duration, GET reports the representable shorter value rather than echoing an impossible request.
+- Acceleration Off means the first-step speed is used immediately. Runtime max-speed is folded to 1 while the stored ratio is preserved, so re-enabling acceleration restores the user's ramp. GET of top speed continues to report the stored effective top.
 
-`micros()` is a 1 µs tick. TIM5 prescaler is
-`(SystemCoreClock / 2) / 1000000 - 1` (299 at 600 MHz). Wrap is
-`UINT32_MAX` + 1 µs, 4295 s, 71× the longest 60 s session. A 1 Hz
-host poll reaching firmware elapsed 30 000 ms at poll 31 is the field
-cross-check.
+`tools/era_via_host_tests/test_era_via_exact_ms.c` (`test_mousekey`) covers these round trips.
 
-## 7. MOUSE unit conversion — three places code alone does not reconstruct
+## 8. Verification boundary
 
-VIA draws pixels and milliseconds. The QMK engine stores
-`(mk_move_delta, mk_max_speed)` and `mk_time_to_max` as event counts.
-Channel 17 value ids 1–6 are in the generated table above. Conversion
-is `src/ap/modules/qmk/port/mousekey_config.c`. `MOUSEKEY_MOVE_MAX` is
-127. `id_custom_set_value` echoes the clamped value so the page draws
-what the firmware kept.
+For document-only changes run `python -X utf8 tools/era_doc_refs.py`. If the document checker changes, also run `python -X utf8 tools/era_doc_refs_selftest.py`; its planted failures are negative fixtures and it restores the tree.
 
-`tools/era_via_host_tests/test_era_via_exact_ms.c` (`test_mousekey`)
-bites 7-1, 7-2, and 7-3.
-
-### 7-1. Top speed is not stored
-
-The engine holds a (step, ratio) pair. Several pairs make the same top
-speed. Exposing the raw pair would fight the page. The page shows first
-step and top step in px; the firmware derives the ratio. Changing Start
-Speed holds the current top speed and recomputes `max_speed`. The
-ratio is rounded, not floored: step 8 and cap 127 floor to ratio 15
-(reads back 120) and round to 16 (engine clamp returns 127).
-
-> **REFUSED:** flooring the speed ratio, or exposing the raw
-> `(move_delta, max_speed)` pair as two independent knobs.
-> **WHY:** floor misses the 127 cap on round-trip; two knobs that
-> multiply would drag top speed when the user moves start speed.
-> **REOPENS:** none while `move_unit()` still clamps at
-> `MOUSEKEY_MOVE_MAX`.
-
-### 7-2. Acceleration is time on the page, event count in the engine
-
-`mk_time_to_max` counts move events. Passing the page value through
-would halve an untouched ramp when the user raises the update rate.
-The page holds duration; firmware stores
-`time_to_max ≈ duration / interval` (rounded) and, on interval SET,
-re-derives events from the held duration. Display unit
-`MOUSEKEY_CFG_RAMP_UNIT_MS` is 50. That unit is round-trip accuracy,
-not resolution: every duration × interval pair the official JSON
-offers either round-trips exactly or, if it does not fit in one
-byte of events, reads back shorter than requested — never the
-request.
-
-`mk_time_to_max` is `uint8`, so reach shrinks as the interval shortens.
-At 200 /s (5 ms) the cap is 255 × 5 ms = **1.275 s**. Official JSON
-offers 1.5 s (30) and 2.0 s (40) on the same page as 5 ms, so those
-pairs clip. GET of 1.5 s at 5 ms returns 26 (1.3 s). Honest readback
-is the contract; per-rate option lists are not expressible in VIA
-JSON.
-
-### 7-3. Acceleration Off locks the first step, not top speed
-
-`mk_time_to_max == 0` makes the engine's `repeat >= time_to_max` test
-true from the first repeat, so `mk_max_speed` would be every event's
-step. Writing the stored top speed there is unusable: 32 px at 50
-events/s is 1600 px/s before host pointer acceleration. Off therefore
-sets runtime `mk_max_speed` to 1, folding every branch onto
-`mk_move_delta`, and leaves the stored ratio untouched. Turning the
-ramp back on restores the user's ratio. GET of top speed still reports
-the stored top (`mousekey_config_effective_max_speed()`), which is why
-the JSON can hide that control behind `showIf` accel ≠ 0.
-
-> **REFUSED:** treating accel Off as "lock to top speed", or writing 0
-> into the stored ratio.
-> **WHY:** Off-as-top-speed is a jump the pointer host then
-> accelerates further; clearing the stored ratio would forget the
-> user's ramp.
-> **REOPENS:** none while `mk_time_to_max == 0` means "already at
-> max" on the first event.
+When VIA firmware behavior changes, run `pwsh -NoProfile -File tools/era_via_host_tests/run.ps1` plus only the build/hardware checks required by `docs/manual_verify.md`. App tests in `the-via-eerraa` and remote revisions are separate evidence and must not be reported as checked unless they were actually run against an identified peer revision.
