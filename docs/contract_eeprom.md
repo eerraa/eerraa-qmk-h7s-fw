@@ -1,22 +1,21 @@
 # Persistent-state contract
 
 Genre: contract
-Canonical for: what EEPROM keeps and when it is written — USER slot address
-immutability and per-slot validity, SAVE-not-SET flush for custom VIA values,
-the version-cookie factory-reset blast radius, and the 100 µs write slice
-against the 8 kHz budget
+Canonical for: shipped USER-slot address compatibility and per-slot validity,
+SAVE-not-SET persistence, the version-cookie factory-reset blast radius, and
+RAM-image/asynchronous durability and partial-failure semantics
 
-The current layout (offsets, sizes, symbols) is source-owned by
-`src/ap/modules/qmk/port/port.h`. This file owns why shipped slot addresses
-must retain their shape.
+The current USER layout (offsets, sizes, symbols) is source-owned by
+`src/ap/modules/qmk/port/port.h`; each board `config.h` owns its USER block
+size. This file owns why shipped addresses retain their shape, when writes
+become durable, and what reset or partial failure is allowed to discard.
 
 ## 1. Slot addresses do not move after they have shipped
 
-Retiring a feature does not delete its slot. `EECONFIG_USER_RESERVED_32` is the
-retired monitor toggle; nothing reads or writes it. New slots append after the
-last occupied offset. The USER block size is `EECONFIG_USER_DATA_SIZE`
-(every `<board>/config.h`); current slot declarations are in
-`src/ap/modules/qmk/port/port.h`.
+Retiring a feature does not delete its shipped slot. `EECONFIG_USER_RESERVED_32`
+is the retired monitor toggle; nothing reads or writes it. New persistent slots
+append after the last occupied slot. Current offsets and sizes stay in
+`src/ap/modules/qmk/port/port.h` rather than being copied here.
 
 > **REFUSED:** moving USER slot offsets after a layout has shipped.
 > **WHY:** compacting a hole shifts every later field on devices that already
@@ -47,24 +46,17 @@ exception: `id_custom_save` on that channel is a no-op; persist is Apply
 ## 2. Raising the version cookie factory-resets every device
 
 `AUTO_FACTORY_RESET_COOKIE` defaults from `_DEF_FIRMWARE_VERSION` in
-`src/hw/hw_def.h`. No board overrides it. On boot,
-`eepromAutoFactoryResetCheck()` in `src/hw/driver/eeprom_auto_factory_reset.c`
-reads `EECONFIG_USER_EEPROM_CLEAR_FLAG` (`AUTO_FACTORY_RESET_FLAG_MAGIC`) and
-`EECONFIG_USER_EEPROM_CLEAR_COOKIE`. Flag magic plus a matching cookie skips
-the reset. Any other pairing formats the chip (`eepromFormat()`), then
-`eeprom_apply_factory_defaults()` rewrites QMK defaults, including dynamic
-keymap, macros, and VIA settings (`eeconfig_init_via()`).
+`src/hw/hw_def.h`. The boot entry point is `eepromAutoFactoryResetCheck()` in
+`src/hw/driver/eeprom_auto_factory_reset.c`: matching sentinel magic and cookie
+preserve storage; any other pairing runs the full format/default path, including
+dynamic keymap, macros, and VIA settings.
 
-A version-string bump is therefore a decision to wipe every
-`AUTO_FACTORY_RESET_ENABLE` board on first boot. `src/hw/hw_def.h` defaults
-that flag to 0; every `<board>/config.h` sets it to 1.
-
-Factory-default macros such as `RGBLIGHT_DEFAULT_ON` are consumed when
-`eeconfig_update_rgblight_default()` runs — virgin EEPROM and post-reset
-storage with mode 0 — not on every boot of a device that already stored a
-mode. Changing the constant without a cookie bump leaves stored values in
-place. The cookie is global, not per board, so each default-changing release
-has to decide whether every shipped keyboard eats the reset.
+A version-string bump is therefore a decision to wipe every board that enables
+`AUTO_FACTORY_RESET_ENABLE` on first boot. Which boards enable it is owned by
+their current `config.h`, not by this contract. Stored defaults are not rewritten
+on every ordinary boot, so changing a default without a cookie bump leaves an
+already-stored value in place. The cookie is global rather than per board; each
+default-changing release must decide whether that global reset blast is intended.
 
 A JSON-only release (channel map, value ids, EEPROM layout, and firmware code
 unchanged) must not bump the cookie.
@@ -75,10 +67,10 @@ unchanged) must not bump the cookie.
 > settings included.
 > **REOPENS:** a per-board cookie or a narrower sentinel. Neither exists.
 
-**Failure stops boot.** `src/hw/hw.c` retries three times and blinks
-`_DEF_LED1` three times after each failure. Three failures make `hwInit()`
-return false and `src/main.c` sit in an LED-toggle loop. Half-initialized
-EEPROM must not boot quietly.
+**Failure stops boot.** EEPROM initialization/reset failure is fail-closed:
+`hwInit()` must return false and `src/main.c` must not continue with a
+half-initialized store. Retry count and LED indication are implementation detail
+owned by `src/hw/hw.c` and `src/main.c`.
 
 The in-product EEPROM reset is the system-channel confirm sequence in
 `src/ap/modules/qmk/port/sys_port.c`. Official JSON exposes three toggles
@@ -93,51 +85,41 @@ clear the sentinel and reboot, so the next boot runs the same
 
 ## 3. One RAM image, asynchronous persistence, explicit durability
 
-The runtime writer is `src/ap/modules/qmk/port/platforms/eeprom.c`. Its 4096-byte
-RAM image holds the latest desired values. A per-byte dirty bitmap records
-unacknowledged changes without a finite byte-event queue or direct-write fallback.
-Repeated writes to the same address coalesce in the image. Legacy pending/max
-getters now count distinct dirty bytes; the compatibility overflow getter is zero.
+The runtime writer is `src/ap/modules/qmk/port/platforms/eeprom.c`. One RAM image
+holds the latest desired EEPROM state; dirty state marks bytes not yet durably
+acknowledged. Repeated writes to the same address coalesce there instead of
+forming a finite write-event queue, and QMK-image writes do not bypass that owner.
 
-`eeprom_update()` either services one active page or examines at most eight page
-entries and starts one 32-byte snapshot. It never waits for the I2C wire transfer,
-the EEPROM write cycle or a retry deadline. The external ZD24C128 backend uses
-`src/hw/driver/i2c_async.c` for interrupt-driven memory write and address-only ACK
-probes. A NACK schedules a later probe; it does not block the keyboard loop.
-Completion is published only after write-cycle ACK, not merely after the last
-I2C data byte. The active hardware buffer is immutable until terminal completion.
+Normal service performs bounded work per call and returns before the physical
+write cycle completes. Current page/scan sizes and retry timing are source-owned.
+The external EEPROM path is asynchronous; completion means the backend has
+confirmed write-cycle readiness, not merely that the last I2C data byte was sent.
 
-A completed page clears a dirty bit only if its snapshot still equals the latest
-RAM byte. An update made during that transfer therefore remains pending. Failed
-start, NACK timeout or lost interrupt retains desired data for a later retry.
-A stuck transfer is quiesced before buffer ownership is returned. Channel bounds
-and ownership are checked before the synchronous I2C APIs touch the bus, and
-readiness checks never enable a caller's masked interrupts.
+Completion clears pending state only for bytes whose submitted snapshot still
+matches the latest RAM value. A newer write during the transfer therefore remains
+pending. Failed starts, NACK/timeout paths and lost interrupts retain desired data
+for retry, and a stuck transfer must be quiesced before its buffer is reused.
+Actual wall-clock cost, interrupt load and scan/HID tail latency require
+measurement; this contract claims no fixed microsecond upper bound.
 
-There is no claimed 100-microsecond wall-clock upper bound and no repeated burst
-slice in `qmkUpdate()`. The algorithm has bounded work per call; actual execution
-time, I2C interrupt load and scan/HID tail latency require measurement. Whole-page
-snapshots may send more wire bytes for an isolated one-byte change, while repeated
-updates collapse into fewer writes and do not stall the input loop.
-
-`eeprom_flush_pending()` is an explicit durability barrier for initialization,
+`eeprom_flush_pending()` is the explicit durability barrier for initialization,
 factory reset and maintenance. It requires thread context with interrupts enabled.
-A no-progress timeout returns false while preserving dirty data and any active
-transaction. Normal VIA SAVE schedules persistence; its response is not a power-loss
-commit record. User-requested USB reset waits for persistence and response completion
-without spinning in the normal loop. If storage or the host cannot complete them,
-the reset stays pending and keyboard processing continues.
+Failure to make progress returns false without discarding dirty state or ownership
+of an active transaction. Normal VIA SAVE schedules persistence; its response is
+not a power-loss commit record. A user-requested USB reset waits for persistence
+and response completion; if either cannot complete, the reset remains pending
+while keyboard processing continues.
 
-Initial image-read failure stops hardware initialization instead of booting from a
-partly filled image. Invalid accesses fail within the image bounds. CLI writes
-inside the QMK image use the same writer, preventing a later page snapshot from
-undoing an out-of-band byte write. Such maintenance commands may explicitly flush.
+Initial image-read failure stops hardware initialization rather than exposing a
+partly filled image. Invalid accesses fail within the image bounds. Maintenance
+writes inside the QMK image share the same writer so a later snapshot cannot undo
+an out-of-band byte write; maintenance code may use the durability barrier.
 
-The driver in use is external I2C EEPROM (`src/hw/driver/eeprom/zd24c128.c`,
-`EEPROM_PAGE_SIZE` 32). Internal flash emulation (`src/hw/driver/eeprom/emul.c`)
-retains a synchronous fallback and is not hardware-verified (`docs/state_open.md`).
-Page ACK is not atomicity across multiple pages. Power-loss-safe transactions,
-journaling and persistence of in-flight RAM updates are not provided by this layout.
+The shipped external I2C backend is the asynchronous path. Internal flash
+emulation (`src/hw/driver/eeprom/emul.c`) remains a synchronous fallback and is
+hardware-unverified (`docs/state_open.md`). Backend page completion is not a
+multi-page transaction: this layout provides no journaling, power-loss-safe
+transaction boundary, or persistence of in-flight RAM updates across power loss.
 
 USB diagnostics do not write EEPROM (`docs/contract_usb.md` §4).
 RGB SLEEP writes only its four-byte slot on VIA SAVE / CLEAN / invalid-slot
