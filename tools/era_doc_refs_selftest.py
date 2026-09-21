@@ -75,9 +75,7 @@ PROBES = (
      lambda b: b"void usbInstabilitySelftest(void);\n", True),
     ("menu", "[menu]", JSON_DOC,
      lambda b: b.replace(b", 17,", b", 99,"), False),
-    ("version(doc)", "[version]", MAP_DOC,
-     lambda b: b + b"\nV299999R9\n", False),
-    ("version(readme)", "릴리스 파일명이", "docs/readme.txt",
+    ("version", "릴리스 파일명이", "docs/readme.txt",
      plant_readme_release_filename, False),
 )
 

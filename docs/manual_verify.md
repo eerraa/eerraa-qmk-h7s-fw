@@ -1,184 +1,72 @@
 # Verification manual
 
 Genre: manual
-Canonical for: checks that run without a board and their commands,
-what each check bites, what a change owes, toolchain premises,
-what only hardware can decide and how to read it, and symptom order
+Canonical for: change-to-check routing, toolchain premises, and proof limits
 
-## 1. Commands and what a change owes
+## 1. Change-to-check routing
 
-| Command | Bites |
-| --- | --- |
-| `python -X utf8 tools/era_doc_refs.py` | local document/source/contract checks (`docs/MAP.md` §8) |
-| `pwsh -NoProfile -File tools/era_via_host_tests/run.ps1` | VIA value layer, `0x07` diagnostics, RGB SLEEP, EEPROM CLEAN, VERSION GET, single raw-HID TX producer |
-| `python tools/era_via_host_tests/run.py` | same host tests when `gcc` is on PATH |
-| cmake (§4) | compile, link, `_Static_assert`, size |
-| `python -X utf8 tools/era_doc_refs_selftest.py` | positive baseline plus negative fixtures for active checks |
-| `python hooks/test_pre_commit.py` | runnable-Python probe, WindowsApps fallback, LF/mode wiring |
+Run only the checks whose inputs or asserted behavior the change can affect.
 
-| Change | Owes |
-| --- | --- |
-| `docs/` only, not the checker | `python -X utf8 tools/era_doc_refs.py`. No ARM build. |
-| official VIA JSON | that checker (`menu`) |
-| `tools/era_doc_refs.py` or `tools/era_doc_refs_selftest.py` | checker and selftest |
-| `hooks/pre-commit`, `.gitattributes`, or `hooks/test_pre_commit.py` | checker and pre-commit launcher test |
-| `tools/era_via_host_tests/` or a firmware file that `tools/era_via_host_tests/run.ps1` compiles or that `tools/era_via_host_tests/check_single_producer.py` reads | the host-test command |
-| firmware `src/` | checker and §4. Also the host-test command when the previous row applies |
+| Change | Required check | Evidence boundary |
+| --- | --- | --- |
+| `docs/` only, checker unchanged | `python -X utf8 tools/era_doc_refs.py` | Local paths, pointers, reachability, menu exposure, retired-USB guard, and distribution version consistency; not sentence meaning, peer state, or hardware. |
+| Official `*-VIA.JSON` | `python -X utf8 tools/era_doc_refs.py` | The `menu` check proves firmware-routed channels are reachable in local official JSON only. |
+| `tools/era_doc_refs.py` or `tools/era_doc_refs_selftest.py` | checker plus `python -X utf8 tools/era_doc_refs_selftest.py` | Positive baseline plus planted negative fixtures for the document checker; not product behavior. |
+| `hooks/pre-commit`, `.gitattributes`, or `hooks/test_pre_commit.py` | checker plus `python hooks/test_pre_commit.py` | Hook wiring, staged-snapshot execution, interpreter fallback, and fail-closed launcher behavior. |
+| `tools/era_via_host_tests/` or firmware source covered by those fixtures | `pwsh -NoProfile -File tools/era_via_host_tests/run.ps1`; when host `gcc` is already on PATH, `python tools/era_via_host_tests/run.py` is the equivalent entry | Compiled host fixtures and source guards only; no ARM target or physical USB device. |
+| `tools/firmware_regression_tests/` or firmware source covered by a regression group | `python tools/firmware_regression_tests/run.py`, or an affected `--only` group from its README | Deterministic host/source-region regression coverage; no electrical, silicon, or real-host timing proof. |
+| Other firmware `src/` changes | document checker, affected host/regression checks, and an ARM build for each affected board configuration | Compile/link/static assertions and the selected executable fixtures. Add hardware only when the requirement is hardware-only. |
+| Firmware version or release/distribution preparation | Read `docs/contract_eeprom.md` §2 before changing `_DEF_FIRMWARE_VERSION`; run the document checker and the checks implied by changed firmware/source | A successful build or document check is not permission to flash, install, publish, or deploy. |
 
-**A change that does not touch firmware source does not owe an ARM
-build.** That sentence is the verification statement.
+A documentation-only change does not owe an ARM build or HIL. A skipped,
+unknown, not-run, or hardware-unmeasured item remains unverified.
 
-`hooks/pre-commit` runs the checker with `PYTHONUTF8=1` after one
-`git config core.hooksPath hooks` per clone. There is no CI workflow.
+## 2. Toolchain premises and commands
 
-## 2. Toolchain premises
+The document checker and selftest require Python 3. Use UTF-8 mode; the
+versioned pre-commit hook exports `PYTHONUTF8=1`. The hook validates a temporary
+checkout of the staged index, so unrelated unstaged user changes are not used
+as commit evidence.
 
-The checker needs Python 3. `PYTHONUTF8=1` is required when the host
-Python default is not UTF-8; `hooks/pre-commit` already exports it. It
-does not need ARM gcc. Host tests are a separate command because
-`tools/era_via_host_tests/run.ps1` hard-codes an absolute mingw gcc
-path.
+`tools/era_via_host_tests/run.ps1` owns its Windows host-compiler selection.
+The Python host-test entry requires `gcc` on PATH. The firmware-regression
+runner uses `HOST_CC` when set and otherwise its documented host-GCC discovery;
+`tools/firmware_regression_tests/README.md` owns current groups and fixture
+coverage. Do not copy a machine-specific compiler path into this manual.
 
-ARM gcc is not on PATH. On the Windows machine, Git Bash prepends:
-
-```bash
-export PATH="/d/baram-fw-tools_exe/arm_toolchain/arm_gcc/gcc-arm-none-eabi-10.3-2021.10/bin:$PATH"
-export PATH="/d/baram-fw-tools_exe/arm_toolchain/make/xpack-windows-build-tools-4.4.0-1/bin:$PATH"
-```
-
-`CMakeLists.txt` requires CMake 3.13 and Python 3 (UF2 post-build).
-`tools/arm-none-eabi-gcc.cmake` requires `ARM_TOOLCHAIN_DIR` on
-Windows; if it is unset on non-Windows, the prefix is `arm-none-eabi-`
-for PATH. The named firmware command uses `-G "MinGW Makefiles"`.
-
-Git Bash rewrites `-DKEYBOARD_PATH='/keyboards/...'` unless
-`MSYS_NO_PATHCONV=1`. That variable also blocks conversion of
-`ARM_TOOLCHAIN_DIR`, so that value is Windows form (`D:/...`). An MSYS
-form fails configure: "is not a full path to an existing compiler
-tool".
-
-## 3. Host tests
-
-`tools/era_via_host_tests/run.ps1` builds the host binaries with that
-mingw gcc, runs them, then
-`tools/era_via_host_tests/check_single_producer.py`. It does not use
-the ARM toolchain. Which sources it compiles is the script.
-
-| Source | Contract |
-| --- | --- |
-| `tools/era_via_host_tests/test_era_via_exact_ms.c` | `docs/contract_via.md` §3 exact-ms, §5 `0x06`, §7 MOUSE |
-| `tools/era_via_host_tests/test_usb_diagnostics.c` | `docs/contract_via.md` §6 |
-| `tools/era_via_host_tests/test_rgb_sleep.c` | RGB SLEEP master + timeout GET/SET/SAVE, default ON / 600 s, CLEAN, master-off gating of idle/USB-suspend/host-loss reasons, logical RGB effect preservation while dark, user RGB OFF preservation across wake, legacy-slot migration, official GET projection |
-| `tools/era_via_host_tests/test_sys_eeprom_clean.c` | SYSTEM CLEAN three-toggle GET/SET, 10 s window, Jump to Boot SET 0 |
-| `tools/era_via_host_tests/test_version.c` | VERSION GET ASCII `YYMMDDRn` plus NUL at value 5, with legacy Year/Month/Day/Rev GET values 1–4 retained (`V260909R3`) |
-| `tools/era_via_host_tests/check_single_producer.py` | `docs/contract_via.md` §1 |
-
-`tools/era_via_host_tests/check_single_producer.py` reads
-`src/ap/modules/qmk/port/via_hid.c` and
-`src/ap/modules/qmk/quantum/via.c`.
-
-## 4. ARM build
+For an ARM build, `CMakeLists.txt` requires CMake 3.13 and Python 3.
+`tools/arm-none-eabi-gcc.cmake` owns toolchain discovery; on Windows,
+`ARM_TOOLCHAIN_DIR` must resolve to the ARM toolchain. A representative build is:
 
 ```powershell
 cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/keynetix/may65' -G "MinGW Makefiles"
 cmake --build build -j10
 ```
 
-`KEYBOARD_PATH` selects a board under `src/ap/modules/qmk/keyboards/era/`; locate
-current choices in that tree. UF2 is a `CMakeLists.txt` POST_BUILD:
-`tools/uf2/uf2conv.py`, family `0xFFFF0002`. The build selects board-specific
-configuration with `-DKEYBOARD_PATH`. A change under `<board>/config.h` or
-`<board>/port/` is built with that board.
+Build the board whose `config.h` or `<board>/port/` is affected. In Git Bash,
+`MSYS_NO_PATHCONV=1` may be needed for the slash-prefixed `KEYBOARD_PATH`;
+keep `ARM_TOOLCHAIN_DIR` in the form expected by the CMake toolchain file.
+Compare size only for the same board and toolchain.
 
-**Size compare only the same board and the same toolchain.** Name the
-baseline firmware version with any RAM/FLASH delta.
+## 3. Proof limits
 
-## 5. Hardware-only
-
-What is still open is `docs/state_open.md`. This section is how to
-read a result.
-
-Comparable diagnostic axes are `docs/contract_via.md` §6-1. Absolute
-microseconds include a phase redrawn every enumeration and are not a
-run-to-run axis. Do not mix firmware versions in one set.
-
-Boot counters are RAM saturating `uint32`, copied into a snapshot.
-They are not a live page. CLEAR does not zero them
-(`docs/contract_usb.md` §4). A later GET of the same snapshot does not
-refresh them. To see whether an event was counted: snapshot after the
-event on the same boot (boot counters), or a session that contained
-the event (session fields). Apply stores the mode and resets the MCU
-(`docs/contract_usb.md` §5), so those counters start at 0 on that
-boot.
-
-Apply tears USB. An in-flight diagnostic session cannot continue on
-the same enumeration. Reconnect and start a new session.
-
-## 6. Symptom order
-
-| Symptom | Check |
-| --- | --- |
-| UF2 uploaded, firmware does not start by itself | Current bootloader uses reset handoff; legacy direct-jump bootloaders rely on the firmware-side inherited-USB recovery in `HAL_PCD_MspInit()` (`docs/contract_usb.md` §6). If it still happens, note the LED pattern and Device Manager state before touching anything: `docs/state_open.md` §2. |
-| No keys in BIOS/UEFI | Set USB POLLING to 1 kHz (FS). If still dead, the two boot-protocol deviations in `docs/contract_usb.md` §3. |
-| 21st key does not register | Specified. `docs/contract_usb.md` §2. |
-| Cursor never moves | Keymap needs a mouse keycode (`KC_MS_UP` and the rest). Channel 17 converts speed of a report that is already sending; it does not place the keycode. |
-| Accel Off is too fast | `mousekey_config_apply_runtime()` writes `mk_max_speed` 1 when `time_to_max == 0`. `docs/contract_via.md` §7-3. |
-| Accel 2.0 s reads back 1.3 s | 200 /s caps the ramp at 1.275 s; GET is the stored shorter value. `docs/contract_via.md` §7-2. |
-| Ramp duration moves when interval SET | Interval SET must re-derive events from the held duration. `docs/contract_via.md` §7-2. Host test. |
-| Official dropdown sent 130 ms, store is 120 ms | Legacy SET floors onto the 20 ms grid. `docs/contract_via.md` §3. |
-| Value gone after reboot | VIA SAVE is the flush. `docs/contract_eeprom.md` §1. |
-| VIA reply missing or is another request's reply | Two TX producers. `tools/era_via_host_tests/check_single_producer.py`. `docs/contract_via.md` §1. |
-| Firmware feature missing from VIA | Official JSON has no menu for that channel. Checker's `menu`. |
-| VIA brightness or colour shows the previous value in a Pulse effect | The setter must commit `rgblight_config` and only request an evaluation; pulse output is computed by the RGB task alone (`docs/contract_usb.md` §8). `python tools/firmware_regression_tests/run.py --only rgb` bites it. |
-| Rainbow Mood/Swirl, Gradient or Christmas looks like solid white after an effect change | Stored saturation is 0. Entry from a different base effect restores 255 (`docs/contract_via.md` §2); `python tools/firmware_regression_tests/run.py --only guards` bites the rule. If it still looks white, the client re-sent its cached white colour after the effect change. |
-| Boot stuck on LED blink | EEPROM auto-init failed three times. `docs/contract_eeprom.md` §2. |
-| EEPROM writes feel slow or lost | CLI `eeprom info`: queue max / overflow (`eeprom_get_write_pending_max`, `eeprom_get_write_overflow_count`). |
-| Stored polling mode disagrees with the boot log | CLI `boot info` prints `usbBootModeGet()`. No automatic revert. `docs/contract_usb.md` §4. |
-
-## Architecture regression and hardware acceptance
-
-Run `python tools/firmware_regression_tests/run.py` as well as the existing
-`python tools/era_via_host_tests/run.py` and `python tools/era_doc_refs.py`.
-The new tests compile production queue, HID class/pool, debounce,
-KKUK/SOCD input features and the RAM-image/EEPROM/I2C state-machine chain against
-deterministic hardware stubs. They retain HAL transmit pointers until completion,
-inject arm/NACK/IRQ failures, exercise overflow, repeat 2048 class configurations,
-retain a tap spanning Suspend/Resume, bite KKUK live/timing boundaries and SOCD
-modifier/invalid/live-remap ownership. Additional tests compile the actual VIA
-pre-dispatch guard, reset-service function and RGB long-idle scheduling helper.
-The USB fixture also injects the H7RS early-WKUINT behavior, requires the complete
-10 ms RWUSIG command window, rejects stale/SUSPSTS SOF recovery, verifies single
-logical Resume across SOF plus late WKUINT, and consumes VIA raw-HID after recovery.
-Source guards require Reset/active SOF/genuine Resume to own physical bus-Suspend
-release independently of HID Remote-Wake state, and the RGB host fixture covers a
-transient boot Suspend followed by Reset/SOF recovery without an RGB Sleep toggle.
-The physical-RGB fixture connects actual matrix dispatch, TD/LT resolution and
-RGB task regions. It checks physical press/release ownership, excludes color
-work from input dispatch, and requires a configuration commit to render the
-committed value on the next task pass; the contract is `docs/contract_usb.md` §8. It preserves
-the distinct TD interruption/double-action and LT quick-tap semantics. The fixture
-also runs the actual wait/host ports and generic tap helpers: Caps taps must request
-80 ms without calling the blocking delay backend. The USB fixture separately verifies
-80/200 ms from actual completion, independent EXK/VIA service, fractional-ms timing,
-rapid taps and following letters, same-usage snapshots, failed arms, overflow,
-Suspend/Resume, reset and wrap. It retains zero-interval report-order tests for the
-ordinary path. These tests do not emulate macOS Caps filters or host LED latency.
-Run this group alone with `python tools/firmware_regression_tests/run.py --only rgb`.
-The generated source-region tests are not whole-stack hardware tests.
-`tools/firmware_regression_tests/README.md` states their limits and commands.
-
-On hardware, compare scan and report timing with baseline at FS 1 kHz and HS
-2/4/8 kHz, at idle and under RGB, VIA and EEPROM-write load. Record percentiles,
-maximum latency, missing/reordered transitions and queue counters, not just means.
-After flashing/reboot, first verify RGB is active with RGB Sleep still enabled and
-without toggling the setting; this catches a stale boot-time physical Suspend latch.
-Test a physical key press from real PC sleep: the board must request Remote Wake even for a layer-only key, the PC must resume, and a second press must be able to retry if a first pulse was ignored. Then test press/release during Suspend/Resume, configuration churn and replug, with a
-hub and multiple host stacks. Test short/oversized control and raw-HID reports.
-Validate I2C NACK, absent EEPROM and an interrupted transfer; pending data must
-not be reported durable before ACK. Test power interruption separately: the
-current EEPROM layout is not a journal. Verify row waveform/DMA descriptor memory,
-remote-wake pulse width and IN-ZLP behavior on real silicon.
-
-A new firmware version changes the reset cookie. Preserve user settings outside
-the board before flashing; a first boot may intentionally run factory defaults.
-Host tests and successful UF2 generation are not permission to flash a device.
+- `tools/era_doc_refs.py` checks this repository only. It does not establish
+  peer-app compatibility, document semantics, or physical behavior.
+- `tools/era_doc_refs_selftest.py` proves that active document-checker failure
+  classes are caught by its positive/negative fixtures; it does not widen the
+  checker's product coverage.
+- `hooks/test_pre_commit.py` proves launcher and staged-index behavior. It does
+  not prove the checker itself beyond the checker process result.
+- VIA host tests and firmware regression tests execute selected production
+  source against host fixtures/stubs. Their source/README files own exact
+  coverage. They do not emulate the Cortex-M memory system, electrical timing,
+  real host scheduling, silicon errata, power interruption, or a physical
+  WS2812/USB/I2C path.
+- An ARM build proves configure/compile/link/UF2 generation for the selected
+  board and toolchain. It does not prove boot, USB enumeration, persistence,
+  host compatibility, or latency on a device.
+- Cross-repository compatibility is separate evidence and must name the peer
+  revision actually compared or tested.
+- Hardware/external questions still open are listed only in
+  `docs/state_open.md`. Run them only when the task is authorized to use the
+  required device/environment; otherwise report them as unverified.

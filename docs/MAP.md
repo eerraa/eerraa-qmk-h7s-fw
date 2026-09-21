@@ -31,8 +31,8 @@ conflict to resolve, not permission to weaken the contract.
 | [contract_via.md](contract_via.md) | contract | VIA/app wire contract. Channel addresses, exact-ms/exact-sec, `0x06`/`0x07` envelopes, single TX producer, MOUSE unit conversion |
 | [contract_usb.md](contract_usb.md) | contract | USB host contract. Interface/report layout, boot-protocol deviation, polling-mode ownership, retired automatic recovery, report ownership and lifecycle |
 | [contract_eeprom.md](contract_eeprom.md) | contract | Persistent-state contract. USER slot ownership, version cookie and factory reset, asynchronous persistence and durability |
-| [manual_verify.md](manual_verify.md) | manual | Checks that run without a board and their commands, what only hardware can decide, symptom order |
-| [state_open.md](state_open.md) | state | Undecided items and start conditions. The only document that goes away with time |
+| [manual_verify.md](manual_verify.md) | manual | Change-to-check routing, toolchain premises, and proof limits |
+| [state_open.md](state_open.md) | state | Unresolved decisions, unmeasured external/hardware checks, and next entry conditions |
 | [readme.txt](readme.txt) | (user document) | Short ZIP-root flash and configuration guide. Exception to the agent-doc spec — §8 |
 | [usevia.txt](usevia.txt) | (user document) | Detailed official-VIA guide placed under the distribution's usevia.app folder. Exception to the agent-doc spec — §8 |
 | [via_keycodes.txt](via_keycodes.txt) | (user document) | Board-neutral TAPDANCE keycode syntax and examples placed with the official-VIA guide. Exception to the agent-doc spec — §8 |
@@ -96,7 +96,7 @@ owned by `docs/manual_verify.md`.
 
 `python -X utf8 tools/era_doc_refs.py` validates local document reachability and
 paths, source-comment document pointers, retired-USB non-restoration, official
-VIA JSON reachability and version consistency. It does not prove sentence meaning
+VIA JSON reachability and distribution release-version consistency. It does not prove sentence meaning
 or peer-repo compatibility.
 
 `python -X utf8 tools/era_doc_refs_selftest.py` first requires a clean positive

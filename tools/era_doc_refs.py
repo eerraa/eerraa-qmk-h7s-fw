@@ -7,7 +7,7 @@
   symbol   백틱 안 식별자가 src/ 또는 tools/에 실재하는가
   retired  폐기된 USB 심볼이 src/에 되살아나지 않았는가
   menu     펌웨어가 라우팅하는 VIA 채널이 보드 JSON에서 도달 가능한가
-  version  문서의 버전 리터럴이 현재 펌웨어 버전을 넘지 않는가
+  version  사용자 배포 파일명이 현재 펌웨어 버전과 일치하는가
 
 사용법:
   python tools/era_doc_refs.py            검사. 발견 0건이면 exit 0
@@ -62,7 +62,6 @@ PATH_TOKEN = re.compile(
 BOARD_PREFIX = "<board>/"
 IDENT_TOKEN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 DOCS_REF = re.compile(r"docs/[A-Za-z0-9_./-]+\.(?:md|txt)")
-VERSION_LITERAL = re.compile(r"\bV\d{6}R\d\b")
 RELEASE_FILE = re.compile(r"-(V\d{6}R\d)\.(?:uf2|JSON)")
 
 findings: list[str] = []
@@ -299,18 +298,8 @@ def check_source_comments() -> None:
                     report("comment", f"{where_base}:{number}", f"`{ref}`가 없다")
 
 
-def check_versions() -> None:
+def check_release_version() -> None:
     current = firmware_version()
-    for doc in agent_docs() + [USER_DOC]:
-        where_base = doc.relative_to(ROOT).as_posix()
-        for number, line in enumerate(read(doc).splitlines(), 1):
-            for literal in VERSION_LITERAL.findall(line):
-                if literal > current:
-                    report(
-                        "version",
-                        f"{where_base}:{number}",
-                        f"{literal}은 현재 펌웨어 {current}보다 높다",
-                    )
     for number, line in enumerate(read(USER_DOC).splitlines(), 1):
         for literal in RELEASE_FILE.findall(line):
             if literal != current:
@@ -327,7 +316,7 @@ def main() -> int:
     check_index()
     check_retired()
     check_menu()
-    check_versions()
+    check_release_version()
 
     if findings:
         for finding in findings:

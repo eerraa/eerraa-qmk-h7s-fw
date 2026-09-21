@@ -1,22 +1,44 @@
 #!/bin/sh
-# 문서-코드 정합. 클론마다 한 번:
+# staged commit 후보의 문서-코드 정합을 검사한다. 클론마다 한 번:
 #   git config core.hooksPath hooks
-# --no-verify로 건너뛰지 마라. 결함을 고쳐라.
-# PYTHONUTF8=1 — 이 저장소 소스는 UTF-8이고, 호스트 Python 기본 코드 페이지가
+# --no-verify로 건너뛰지 말고 결함을 고친다.
+# 작업 트리의 unstaged 변경을 커밋 증거로 쓰지 않도록 index를 임시 디렉터리에
+# checkout한 뒤 그 스냅샷의 검사기를 실행한다.
+# PYTHONUTF8=1 — 이 저장소 소스는 UTF-8이고 호스트 Python 기본 코드 페이지가
 # 다를 수 있다.
-# 명령 이름만으로는 부족하다. WindowsApps의 Store 별칭은 python3로 검색되지만
-# 스크립트를 실행하지 못하므로 실제 인터프리터를 probe하고 fallback한다.
 
-ROOT=$(git rev-parse --show-toplevel)
+ROOT=$(git rev-parse --show-toplevel) || exit 1
 export PYTHONUTF8=1
 
+GIT_DIR=$(git -C "$ROOT" rev-parse --absolute-git-dir) || exit 1
+TMP_DIR=$(mktemp -d "$GIT_DIR/h7s-doc-check.XXXXXX") || {
+  echo "H7S pre-commit: staged index용 임시 디렉터리를 만들지 못했다." >&2
+  exit 1
+}
+trap 'rm -rf "$TMP_DIR"' EXIT INT TERM
+
+if ! git -C "$ROOT" checkout-index --all --prefix="$TMP_DIR/"; then
+  echo "H7S pre-commit: staged index 스냅샷을 만들지 못했다." >&2
+  exit 1
+fi
+
+CHECKER="$TMP_DIR/tools/era_doc_refs.py"
+if [ ! -f "$CHECKER" ]; then
+  echo "H7S pre-commit: staged index에 tools/era_doc_refs.py가 없다." >&2
+  exit 1
+fi
+
+# 명령 이름만으로는 부족하다. WindowsApps의 Store 별칭은 python3로 검색되지만
+# 스크립트를 실행하지 못하므로 실제 인터프리터를 probe하고 fallback한다.
 if command -v python3 >/dev/null 2>&1 &&
    python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1; then
-  exec python3 "$ROOT/tools/era_doc_refs.py"
+  python3 "$CHECKER"
+  exit $?
 fi
 if command -v python >/dev/null 2>&1 &&
    python -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1; then
-  exec python "$ROOT/tools/era_doc_refs.py"
+  python "$CHECKER"
+  exit $?
 fi
 echo "H7S pre-commit: 실행 가능한 Python 3.8+ 인터프리터를 python3 또는 python에서 찾지 못했다." >&2
 exit 1
