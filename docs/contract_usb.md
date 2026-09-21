@@ -1,452 +1,285 @@
 # USB host contract
 
 Genre: contract
-Canonical for: what the host is shown and in what shape — interface and
-endpoint layout, the 20-key report and boot-protocol size deviation, why NKRO
-is not shipped, polling-mode ownership, the retired automatic USB recovery
-path and why it must not be restored, the bootloader handoff, and the
-main-loop periodic-work timer rule
+Canonical for: host-visible HID shape, the 20-key and boot-protocol compatibility
+deviations, report/lifecycle ownership, user-owned polling mode, the retired
+automatic USB recovery boundary, legacy bootloader handoff compatibility, and
+main-loop periodic/reactive RGB ownership
+
+Current implementation details are source-owned. Start at
+`src/hw/driver/usb/usb_hid/usbd_hid.c` for descriptors/report transport,
+`src/hw/driver/usb/usb.c` and `src/ap/modules/qmk/port/bootmode.c` for polling
+apply/reset, and `src/ap/modules/qmk/port/` for QMK-facing behavior. VIA wire
+bytes are owned by `docs/contract_via.md`; EEPROM layout and persistence are
+owned by `docs/contract_eeprom.md`. The peer bootloader contract is
+`eerraa-qmk-h7s-boot/docs/uf2_auto_start.md`. This file owns the compatibility
+requirements and the reasons not to restore rejected behavior, not a duplicate
+call graph or constant inventory.
 
 ## 1. Interface and endpoint layout
 
-Shipped boards start `USB_HID_MODE` (`HW_USB_CMP` is 0 unless `_USE_HW_VCOM`
-is defined). The HID configuration descriptor in
-`src/hw/driver/usb/usb_hid/usbd_hid.c` declares three interfaces:
+The shipped HID shape is a host-compatibility contract:
 
-| Interface | Endpoint | wMaxPacketSize | subclass / protocol | Reports |
-| --- | --- | --- | --- | --- |
-| 0 | `HID_EPIN_ADDR` `0x81` IN | `HID_EPIN_SIZE` 64 B | 1 (BOOT) / 1 (Keyboard) | Keyboard IN, 22 B. No OUT endpoint; LED output is the 1 B HID SET_REPORT on EP0 |
-| 1 | `HID_VIA_EP_IN` `0x84` IN / `HID_VIA_EP_OUT` `0x04` OUT | `HID_VIA_EP_SIZE` 32 B | 0 / 0 | VIA raw HID, 32 B each way |
-| 2 | `HID_EXK_EP_IN` `0x85` IN | `HID_EXK_EP_SIZE` 8 B | 1 (BOOT) / 0 (none) | SYSTEM (`REPORT_ID_SYSTEM` 3, 3 B) / CONSUMER (`REPORT_ID_CONSUMER` 4, 3 B) / MOUSE (`REPORT_ID_MOUSE` 2, 6 B) |
+| Interface | Endpoint | Maximum packet | subclass / protocol | Host-visible reports |
+| --- | --- | ---: | --- | --- |
+| 0 keyboard | IN `0x81` | 64 B | BOOT / Keyboard | 22 B keyboard IN; LED Output is a one-byte SET_REPORT on EP0 |
+| 1 VIA raw HID | IN `0x84`, OUT `0x04` | 32 B | none / none | 32 B request/reply |
+| 2 EXK | IN `0x85` | 8 B | BOOT / none | SYSTEM and CONSUMER 3 B, MOUSE 6 B |
 
-The mouse report is 6 B (`report_mouse_t` with `MOUSE_SHARED_EP`) and fits
-the existing 8 B EXK endpoint. `_Static_assert` in
-`src/hw/driver/usb/usb_hid/usbd_hid.c` locks the report-descriptor sizes
-to the QMK structs.
+The descriptor and QMK report types are compile-time checked in
+`src/hw/driver/usb/usb_hid/usbd_hid.c`. Full-Speed mode advertises a 1 ms
+interval on all four HID endpoints. High-Speed modes apply the selected HS
+interval to those endpoints. FS 1 kHz enumerates as Full Speed; the 2/4/8 kHz
+modes enumerate as High Speed.
 
-Advertised `bInterval` on that HID-only descriptor:
+Optional VCOM/composite builds must preserve the same three HID functions.
+Current packet/descriptor details are source-owned by
+`src/hw/driver/usb/usb_cmp/usbd_cmp.c`. Do not prune `usb_cdc` or `usb_cmp`
+from the build merely because shipped HID-only boards have composite mode off:
+HID-only still links the CDC interface layer and VCOM needs the composite
+builder. Reconsider source selection only with separate selections that build
+the shipped HID configurations and a VCOM composite configuration.
 
-- HS (`USBD_HID_GetHSCfgDesc`): keyboard IN, VIA IN, VIA OUT, and EXK IN
-  all take `usbBootModeGetHsInterval()`.
-- FS: keyboard IN, VIA IN, VIA OUT, and EXK IN all advertise a 1 ms interval.
-  VIA IN/OUT use `HID_FS_BINTERVAL` directly in the static descriptor; the
-  keyboard getter patches its endpoint to the same value.
+## 2. Simultaneous keys are 20, not 6KRO or NKRO
 
-`FS 1K` enumerates as Full Speed (`PCD_SPEED_HIGH_IN_FULL`). The HS 2/4/8K
-modes enumerate as High Speed (`PCD_SPEED_HIGH`).
+The shipped keyboard report is mods + reserved + 20 key slots: 22 bytes.
+`HW_KEYS_PRESS_MAX` in `src/hw/hw_caps_keys.h` owns the current slot count and
+the report descriptor derives from it. A host that follows the descriptor sees
+20 simultaneous key slots. When all slots are occupied, an additional key is
+not inserted and no ErrorRollOver usage is substituted.
 
-When `_USE_HW_VCOM` is on, `src/hw/driver/usb/usb_cmp/usbd_cmp.c` builds the
-same three HID interfaces from the same size and report-descriptor-length
-constants. HS keyboard `wMaxPacketSize` then ORs `(2U << 11)` (three
-transactions per microframe); the HID-only descriptor does not.
+This array-report shape is compatibility behavior, not an invitation to enable
+QMK NKRO as a transparent refactor. Changing the report model requires an
+explicit host-compatibility change, including BIOS/UEFI and supported-OS
+validation.
 
-The root `CMakeLists.txt` deliberately keeps both `usb_cdc` and `usb_cmp` in
-the recursive `src/hw/*.c` source set. `_USE_HW_CDC` is always defined in
-`src/hw/hw_caps_usb.h`, and `cdcInit()` in `src/hw/driver/cdc.c` calls
-`cdcIfInit()` from `src/hw/driver/usb/usb_cdc/usbd_cdc_if.c` even on shipped
-`HW_USB_CMP == 0` images. The `HW_USB_CMP == 1` VCOM path uses the same source
-set for the composite builder.
+## 3. Report ownership, ordering, boot protocol, and USB lifecycle
 
-> **REFUSED:** removing `usb_cdc` or `usb_cmp` from the root source glob based
-> only on shipped boards having `HW_USB_CMP == 0`.
-> **WHY:** HID-only images still link `cdcIfInit()`, while the VCOM composite
-> path needs `usb_cmp`; an unconditional exclusion breaks one of those modes.
-> **REOPENS:** separate CMake source selections that link both modes, with all
-> five shipped HID images and a VCOM composite image built from that design.
+### Report ordering and nonblocking intervals
 
-## 2. Simultaneous keys are 20, not 6KRO
+Each IN path has one ordered transport owner. Once a report is accepted, an
+older accepted report cannot be bypassed; the active packet remains immutable
+until its matching DataIn completion, and a failed transmit arm does not consume
+the pending head. Queue capacity and data structures are source-owned by
+`src/hw/driver/usb/usb_hid/hid_tx_queue.c`.
 
-`HW_KEYS_PRESS_MAX` is 20 (`src/hw/hw_caps_keys.h`). No board overrides it.
-Interface 0 has no `KEYBOARD_SHARED_EP`, so `report_keyboard_t` is mods(1) +
-reserved(1) + `keys[20]` = `HID_KEYBOARD_REPORT_SIZE` / `KEYBOARD_REPORT_SIZE`
-**22 B**. The report descriptor's `REPORT_COUNT` is `HW_KEYS_PRESS_MAX`.
+Finite overflow is explicit. Preserve the already accepted prefix, then converge
+keyboard/button/system/consumer state to the newest state after the prefix
+drains. Intermediate events may be coalesced. Relative mouse motion/wheel deltas
+must not be replayed during reconciliation. The aggregate wire drop counter and
+the local transport counters keep their existing meanings; changing the
+diagnostic wire envelope is a `docs/contract_via.md` change.
 
-A host that parses the report descriptor sees 20 key slots. A 21st key is
-dropped: `add_key_byte()` in `src/ap/modules/qmk/port/protocol/report.c`
-leaves the report unchanged when no empty slot remains. It does not send an
-ErrorRollOver code.
+Keyboard tap timing is transport-owned and nonblocking. Requested keyboard
+intervals are measured from completion of the latest accepted keyboard snapshot,
+not from logical registration/enqueue; repeated requests keep the larger
+minimum. While that interval is active, only later keyboard reports wait.
+Matrix processing, QMK action resolution, RGB, EXK and VIA service continue.
+Suspend keeps same-generation accepted reports and their interval; a new
+transport generation discards the old backlog and interval. Do not replace this
+with a busy wait, a report-service timer ISR, or delayed synthetic key-up
+callbacks. The current Caps/tap timing cases are executable regression behavior
+under `tools/firmware_regression_tests/`. The configured Caps interval remains a
+separate host-compatibility requirement; FIFO ordering does not justify removing
+it. Keep the USB pump free of dynamic allocation and keycode scanning.
 
-## 3. Report ownership, ordering, and USB lifecycle
+### Boot-protocol deviations
 
-`src/hw/driver/usb/usb_hid/hid_tx_queue.c` owns a fixed FIFO per IN endpoint.
-Each FIFO has 128 pending slots and one separate active packet. Only the active
-packet is passed to `USBD_LL_Transmit`; it remains immutable until the matching
-DataIn completion. All queue and PCD-register operations use the same saved
-PRIMASK critical section. A failed arm does not consume the FIFO head. A new
-report cannot bypass older pending reports.
+Interface 0 advertises BOOT/Keyboard, but the current class request state is not
+an alternate report formatter:
 
-Caps taps keep the upstream `TAP_HOLD_CAPS_DELAY` default of 80 ms.
-[QMK's configuration documentation](https://docs.qmk.fm/config_options) identifies
-it as a macOS compatibility setting and notes that some macOS configurations may
-need 200 ms or more. USB FIFO ordering and host-side short-Caps filtering are
-separate requirements; a lossless FIFO does not justify removing the hold.
+1. SET_PROTOCOL changes the protocol state returned by GET_PROTOCOL; it does not
+   switch the keyboard sender to a separate boot-report implementation.
+2. Consequently Boot Protocol still uses the shipped 22-byte, 20-slot keyboard
+   report rather than the conventional 8-byte, six-key boot report.
 
-`tap_code_wait()` in `src/ap/modules/qmk/quantum/action.c` routes keyboard tap
-intervals through the host port to `usbHidDelayKeyboardReport()`. TD, LT/MT and
-generic keyboard tap helpers use this same path. A Tap Dance synthesized tap requests
-the width the generic helper would, `TAP_HOLD_CAPS_DELAY` for Caps Lock and
-`TAP_CODE_DELAY` otherwise, and a hold's release requests none
-(`src/ap/modules/qmk/port/tapdance.c`). QMK completes its logical release
-synchronously, and the existing FIFO owns immutable report snapshots. There is
-no future `unregister_code()` callback that could release a later key or disturb
-its modifiers. Non-keyboard tap delays keep their existing synchronous path.
-The wait port in `src/ap/modules/qmk/port/platforms/wait.c` returns immediately
-for 0 ms instead of inheriting `HAL_Delay(0)`'s minimum tick wait.
+These deviations are intentional compatibility facts. Do not "fix" them as a
+local cleanup; a change requires explicit BIOS/UEFI and supported-host
+acceptance.
 
-The transport attaches a minimum interval after the latest accepted keyboard
-snapshot, using pending-packet metadata, separate active-transfer metadata, or
-the last completed report's timestamp. Repeated requests take the larger minimum.
-Time is measured from DataIn completion with the existing microsecond counter,
-not from logical registration or enqueue. Time already elapsed since that
-completion counts toward the interval. Pending/active snapshots remain ordered;
-failed arms do not consume the interval or the FIFO head. A new transport
-generation discards old intervals along with the old backlog. Suspend preserves
-them, so a tap queued while asleep gets its hold after its press is delivered.
+### Suspend, Remote Wake, and Resume ownership
 
-During an interval, the next keyboard report and its successors wait in the FIFO.
-This preserves Caps-release/next-letter and modifier ordering; it is an intentional
-host-output delay. Matrix processing, tap/hold resolution, RGB rendering, EXK and
-VIA continue. No busy wait, new periodic ISR, dynamic allocation, or keycode scan
-is added to the USB pump. The ordinary pump bypasses the clock read when no
-interval is active; each keyboard completion records one timestamp. Finite queue
-limits below still apply: overflow can lose taps, while the accepted prefix's
-intervals and convergence to the latest release state remain intact.
+A configured transport remains the same generation through Suspend. Accepted
+press/release reports are retained, but physical IN arming waits for Resume.
+Remote Wake is requested by a debounced physical press before keycode/action
+filtering, so layer-only or consumed keys can wake the host. Each new physical
+press may retry while the same transport generation remains suspended. Report
+submission itself is not a wake request.
 
-`USBD_HID_DataIn()` completes the endpoint and immediately pumps its next head.
-`USBD_HID_SOF()` supplies a bounded fallback retry, not a wall-clock throttle.
-There is no TIM2 report-service ISR and no USB work in a generic timer/PWM
-callback. This removes an additional scheduling phase; it does not change the
-host's polling interval or guarantee a measured end-to-end latency.
+Remote Wake must remain fail-closed around real bus state: revalidate software
+Suspend, host permission, the current transport/suspend epoch and hardware
+`DSTS.SUSPSTS`; wait at least 5 ms after Suspend; isolate only
+`GINTMSK.WUIM`; use the ST HAL STOPCLK ungate; assert, verify and explicitly
+deassert RWUSIG after the 10 ms signal. Do not add a GATECLK write or an unrelated
+recovery sequence. The WUIM isolation is required because H7RS can raise
+device-driven WKUINT while hardware still reports Suspend. At pulse end, discard
+a pending WKUINT only if hardware still reports Suspend; if hardware has resumed,
+preserve it for normal HAL processing. Restore WUIM after the attempt.
 
-Keyboard/EXK overflow is explicit: retain the accepted FIFO prefix, then append
-the newest state after that prefix drains. Intermediate events beyond finite
-capacity may be coalesced. Keyboard release, mouse buttons, system and consumer
-usages converge to the latest state. Relative mouse motion/wheel deltas are not
-replayed during reconciliation. This is not an unlimited lossless input log.
-The existing wire drop counter still aggregates keyboard and EXK saturation.
-`usbHidGetTransportStats()` additionally exposes local RAM-only arm failures,
-per-path coalescing, invalid packets and discarded session backlog; it does not
-change selector 0x07 or its reserved bytes.
+Physical bus Suspend and ST USBD logical Suspend have separate owners. The PCD
+bridge owns the cached physical bus state; Reset, a genuinely active SOF, or a
+genuine Resume clears it independently of HID Remote-Wake state. Logical
+fresh-SOF fallback is allowed only for an outstanding wake attempt after
+hardware is active, and it may complete `USBD_LL_Resume()` exactly once.
+Pre-signal/stale SOF, SOF while `SUSPSTS` remains set, and a late WKUINT after
+SOF recovery must not create a false or duplicate logical Resume.
 
-A configured session remains the same session during Suspend. Its accepted
-press/release FIFO is retained, including a short tap during wake latency.
-Physical IN arming waits for Resume. Remote wake requires the host-enable bit,
-a sufficient Suspend interval and a debounced physical press.
-A debounced physical press requests wake before keycode/action filtering, so
-layer-only or otherwise consumed keys do not depend on a HID report to wake the
-host. Each new physical press may retry if an earlier pulse did not resume the
-same suspended session. Report submission itself does not request wake and the
-ordinary SysTick path contains no Remote-Wake work.
+### Generation, control, and hardware guards
 
-The Remote-Wake state is `IDLE -> SIGNALING -> WAIT_RESUME -> IDLE`. The request
-path first revalidates software Suspend, host permission, the PCD, the suspend
-epoch and transport generation, then requires hardware `DSTS.SUSPSTS=1`. It
-waits until at least 5 ms after Suspend, masks only `GINTMSK.WUIM`, uses the ST
-HAL STOPCLK ungate, asserts RWUSIG, verifies that RWUSIG was actually asserted,
-holds it for 10 ms, and explicitly deasserts it. No GATECLK write or additional
-PHY/recovery sequence is part of this contract.
+Configuration/reset starts a new transport generation. Old queued work,
+responses and report-delay state do not cross that boundary; current stable
+key/button/usage state may be reconciled, but disconnected typing is not replayed
+as event history. Endpoint/class teardown must quiesce old ownership before
+reuse. Class storage must be bounded and reusable across repeated configurations;
+configuration churn must not consume cumulative allocation. Class teardown must
+not flush the shared RX FIFO, and control endpoint lifecycle remains core-owned.
 
-The WUIM mask is required by BRICK60 hardware: H7RS may raise device-driven
-WKUINT immediately after RWUSIG assertion while `DSTS.SUSPSTS` is still set,
-and the vendor IRQ handler otherwise clears RWUSIG before its Resume callback.
-At pulse end, such a pending WKUINT is discarded only if hardware still reports
-Suspend; WUIM is then restored. If hardware has resumed, WKUINT is preserved for
-normal HAL processing.
+VIA OUT uses backpressure: when receive capacity is full, stop rearming so the
+host sees NAK rather than ACK-and-drop. Dispatch requires response capacity.
+Reset may discard old-generation queued work and responses, but generation
+checks are not rollback for side effects of a command already admitted to
+dispatch. `docs/contract_via.md` owns the wire request/reply rules.
 
-Physical bus Suspend and ST USBD logical Suspend are separate owners. The PCD
-bridge alone owns the cached physical `bus_suspended` state: Suspend sets it;
-USB Reset clears it because Reset is bus activity; a Resume callback or SOF with
-`DSTS.SUSPSTS=0` also clears it. Remote-Wake state never gates that physical
-transition. QMK suspend hooks and RGB Sleep consume this physical bus state, so
-an enumeration Reset/fresh SOF cannot leave RGB dark because of a stale Suspend
-callback. Logical SOF recovery is instead gated by `pdev->dev_state ==
-USBD_STATE_SUSPENDED`, so clearing physical Suspend cannot suppress the next
-fresh SOF needed to complete ST USBD recovery.
+Keyboard SET_REPORT accepts only the keyboard interface's report-id-zero,
+one-byte LED Output report. Validate request shape before arming EP0 receive, and
+do not apply an actual payload of another length. The receive buffer must still
+cover a full EP0 packet because HAL may round the physical receive size; a later
+SETUP invalidates any pending LED receive.
 
-A Resume callback changes ST USBD state only when `DSTS.SUSPSTS=0`. Because a
-successful host Resume need not produce a second usable WKUINT, an outstanding
-Remote-Wake attempt also accepts the first fresh SOF for which `SUSPSTS=0` and
-calls `USBD_LL_Resume()` exactly once. An SOF already pending before signaling,
-an SOF while `SUSPSTS=1`, and a late WKUINT after SOF recovery cannot produce a
-false or duplicate logical Resume. BRICK60 hardware established the two
-underlying acceptance facts: a 10 ms WUIM-isolated signal wakes the PC from S3,
-and fresh-SOF logical recovery restores post-wake keyboard/VIA raw-HID service.
-
-Configuration/reset is a new transport generation. Init fully initializes the
-class state; DeInit closes every owned endpoint and clears aliases. The PCD
-adapter quiesces non-control endpoints, masks stale TXFE, clears completion
-flags and flushes private IN FIFOs before reuse. It does not flush the shared
-RX FIFO during a class close. Control endpoint lifecycle remains core-owned.
-`src/hw/driver/usb/usb_class_pool.c` provides bounded, reusable class slots rather
-than cumulative bump allocation. Latest key/button/usage state is reconciled
-in the new generation, but disconnected typing is not replayed as event history.
-Hardware stress must still verify callback/FIFO ordering across reset and detach.
-
-VIA OUT has 16 queued 32-byte frames. A full RX queue stops rearming OUT, so the
-host receives NAK rather than an ACK followed by silent command loss. Main-loop
-processing is limited to one command after keyboard processing. A response slot
-must be available before dispatch, and the single response producer attaches the
-request's generation. Reset discards queued old commands and rejects old-generation
-responses. A command already admitted to dispatch may execute/finish its side effects; generation
-checks are not transactional rollback. `docs/contract_via.md` owns wire bytes.
-
-SET_REPORT accepts only the keyboard interface's report-ID-zero, one-byte LED
-Output report. Length, recipient, direction, type and ID are checked before the
-control receive is armed. The RX buffer nevertheless covers a full EP0 packet
-because HAL rounds the physical receive size up to the endpoint maximum. A
-non-one-byte actual payload is not applied as an LED value. A later SETUP
-invalidates the pending LED receive.
-
-### Hardware allocation and errata
-
-The HS FIFO allocation is RX 512 words plus TX 32/32/128/16/16/16 words: 752 of
-1024 words, with a compile-time bound. This also reserves the optional CDC bulk
-endpoint's maximum packet. FS descriptor requests restore the interval of all
-four HID endpoints after any HS descriptor request.
-
-ST ES0596 Rev 10, sections 2.2.17 and 2.21.3, govern two local mitigations:
-`src/bsp/bsp.c` maps the unimplemented GFXMMU aperture as inaccessible Device/XN;
-`src/lib/ST/STM32H7RSxx_HAL_Driver/Src/stm32h7rsxx_ll_usb.c` applies the documented
-NAK/enable sequencing only to IN zero-length packets, including EP0. Device-register
-reads supply minimum AHB-cycle gaps without an assumed CPU/HCLK ratio. Normal
-nonzero HID packets do not take that delay path. These mitigations require real
-silicon/host validation; they do not establish a cause for any historical event.
+USB FIFO allocation stays within the hardware bound enforced by source and its
+compile-time guard; optional CDC capacity remains accounted for there rather
+than duplicated here. ST ES0596 Rev 10 sections 2.2.17 and 2.21.3 remain the
+source requirements for the local GFXMMU Device/XN guard in `src/bsp/bsp.c`
+and the IN zero-length-packet sequencing in
+`src/lib/ST/STM32H7RSxx_HAL_Driver/Src/stm32h7rsxx_ll_usb.c`, including EP0.
+These mitigations still require real-silicon validation; they are not evidence
+that either erratum caused a historical symptom.
 
 ## 4. Automatic USB recovery is retired — do not restore it
 
-Gone from `src/` (0 hits). `tools/era_doc_refs.py` `retired`
-fails if any of these return: `usbMonitor`, `usbInstability`,
-`usbHidMonitor`, `usbRequestBootModeDowngrade`,
-`usbd_hid_instrumentation`, `USB_MONITOR_ENABLE`, `auto_downgrade`.
-What they implemented is also gone: SOF-interval scoring and
-warmup/timeout, enumeration/speed/suspend scoring, the automatic
-8k → 4k → 2k → 1k downgrade queue, the monitor EEPROM toggle, that
-toggle's VIA channel 13 value id 3, and the compile-time
-instrumentation unit. Channel 13 value id 3 is not in
-`src/ap/modules/qmk/quantum/via.h`; do not reuse it. Official JSON
-exposes value ids 1 and 2 only.
+The instability monitor and automatic polling downgrade are retired product
+behavior, not missing work. `tools/era_doc_refs.py` owns the executable
+`retired` symbol guard rather than this contract duplicating its symbol list.
 
-This is retired, not missing. Two reasons stand together.
+Two independent reasons prohibit restoration:
 
-1. **Product contract.** Firmware does not emit a stability score or a
-   stable/unstable verdict, and it does not revert polling mode on its
-   own. Mode choice is always user-owned (§5). The other side is
-   `the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md`. Observation
-   is the read-only `0x07` session; the byte envelope lives in
-   `docs/contract_via.md` §6, not here.
-2. **That code hung the keyboard for an unexplained reason.** A build
-   with `USB_MONITOR_ENABLE` defined froze after about 620 s from
-   boot, including the LED toggle. It reproduced with the runtime
-   toggle OFF. It did not reproduce when the macro was removed from
-   the build. Adding instrumentation made it vanish. The cause was
-   never identified. Restoring the path reimports that unresolved
-   risk.
+- **User authority:** firmware may expose observation, but it must not produce a
+  synthetic stability verdict or change polling mode on its own. Mode selection
+  and Apply remain explicit user actions under §5.
+- **Unresolved safety risk:** the former monitor-enabled path produced an
+  unexplained whole-keyboard hang even when its runtime toggle was off. The
+  cause was never identified, so restoring that path would reintroduce an
+  unresolved failure mechanism.
 
-> **REFUSED:** restoring the instability monitor or automatic polling
-> downgrade.
-> **WHY:** both reasons stand together — it would break the product
-> contract with the app, and it would reimport a hang path whose
-> cause was never identified.
-> **REOPENS:** none. If more observation is needed, widen the
-> selector `0x07` session.
+Channel 13 value id 3 from the retired monitor remains reserved and must not be
+reused. Its EEPROM slot remains `EECONFIG_USER_RESERVED_32` so later USER slot
+addresses do not move; nothing should read or write that reserved value. Storage
+ownership is `docs/contract_eeprom.md` §1.
 
-The EEPROM monitor slot was not deleted. It remains
-`EECONFIG_USER_RESERVED_32` so later slot addresses do not move
-(`docs/contract_eeprom.md` §1). Nothing reads or writes it.
+Selector `0x07` is observation-only. Its wire envelope is
+`docs/contract_via.md` §6. It must not apply/reset polling mode, write
+diagnostic history to EEPROM, become State Sync recovery, or emit a synthetic
+stability score. Session/counter storage is RAM-only; CLEAR zeros session state
+only and must not clear boot counters. RGB Sleep may use
+SOF activity to detect host loss, but that observation is not a stability score
+and must not invoke polling apply/reset.
 
-RGB SLEEP may count SOF callbacks to notice a host that vanished while
-VBUS stayed up. That counter is not a stability score and must not call
-polling-mode apply/reset. The owner is `src/ap/modules/qmk/port/rgb_sleep.c`.
-
-### 0x07 product boundary
-
-Selector `0x07` (`ERA_USB_DIAGNOSTICS_KEYBOARD_VALUE`) is observation
-only. It must not couple to polling-mode apply/reset or to State Sync
-recovery. That is the same product boundary as ADR 0002 (auto
-downgrade, auto mode benchmark, EEPROM diagnostic history, synthetic
-stability score, coupling `0x07` to polling mode or State Sync
-recovery). Firmware:
-
-- `src/ap/modules/qmk/port/era_usb_diagnostics.c` does not call
-  `usbBootModeScheduleApply`, `usbBootModeSaveAndReset`, or
-  `usbScheduleGraceReset`. START reads `usbBootModeGet()` only to
-  compute the histogram's expected interval.
-- That file does not include `src/ap/modules/qmk/port/era_state_sync.h`.
-  Channel 13 select still bumps CONFIG revision; `0x07` does not.
-- Session state and always-on counters live in RAM
-  (`src/hw/driver/usb/usb_hid/usb_diagnostics.c`). CLEAR zeros the
-  session; it does not write EEPROM and does not clear boot counters.
-- No synthetic score is computed.
-
-> **REFUSED:** coupling selector `0x07` to polling-mode apply/reset or
-> State Sync recovery, writing diagnostic history to EEPROM, or
-> emitting a synthetic stability score.
-> **WHY:** mode choice is always the user's, and observation that
-> changes the control plane, EEPROM, or recovery contaminates what it
-> measures.
-> **REOPENS:** none. If more observation is needed, widen the
-> read-only `0x07` session.
-
-Always-on counters (saturating `uint32`, event-driven): keyboard/EXK
-report-queue drop, USB reset, HID configuration, suspend, speed
-change. RAM only.
-
-Matrix development instrumentation
-(`src/ap/modules/qmk/port/matrix_instrumentation.c`) is a separate
-store and a separate compile flag (`_DEF_ENABLE_MATRIX_TIMING_PROBE`,
-0 on every shipped board). Do not add the two sets of numbers
-together — they measure different intervals.
+If more observation is required, extend the coordinated read-only diagnostics
+protocol. Do not restore automatic benchmarking, scoring, downgrade, or recovery
+control.
 
 ## 5. Polling mode is user-owned
 
-| enum | Link | HS `bInterval` (`usbBootModeGetHsInterval`) | VIA dropdown |
-| --- | --- | --- | --- |
-| `USB_BOOT_MODE_FS_1K` | FS 1 kHz | 1 (FS uses `HID_FS_BINTERVAL`) | 3 |
-| `USB_BOOT_MODE_HS_2K` | HS 2 kHz | 3 | 2 |
-| `USB_BOOT_MODE_HS_4K` | HS 4 kHz | 2 | 1 |
-| `USB_BOOT_MODE_HS_8K` | HS 8 kHz | 1 | 0 |
+The user-visible mapping is compatibility behavior:
 
-Default is **FS 1 kHz**. `USB_BOOT_MODE_DEFAULT_VALUE` is
-`USB_BOOT_MODE_FS_1K`; no board overrides it. All five boards set
-`BOOTMODE_ENABLE`.
+| VIA selection | Mode | Link / interval |
+| ---: | --- | --- |
+| 3 | FS 1 kHz | Full Speed, 1 ms |
+| 2 | HS 2 kHz | High Speed, `bInterval=3` |
+| 1 | HS 4 kHz | High Speed, `bInterval=2` |
+| 0 | HS 8 kHz | High Speed, `bInterval=1` |
 
-Channel 13 (`id_qmk_usb_polling`) in `src/ap/modules/qmk/port/bootmode.c`:
-`id_qmk_usb_bootmode_select` (value 1) SET updates `pending_boot_mode`
-only. `id_qmk_usb_bootmode_apply` (value 2) SET of a non-zero byte calls
-`usbBootModeScheduleApply()`. `id_custom_save` is a no-op; persist is
-Apply (`docs/contract_eeprom.md` §1).
+The default is FS 1 kHz. Enum/storage details are source-owned; channel/value ids
+are wire ABI under `docs/contract_via.md`.
 
-The main loop (`src/ap/ap.c`) runs `usbProcess()`, which drains that queue
-through `usbProcessBootModeApply()` → `usbBootModeSaveAndReset()`: write
-`EECONFIG_USER_BOOTMODE`, wait at least `USB_BOOTMODE_APPLY_GRACE_MS` (40)
-for the VIA response. `usbProcessDeferredReset()` additionally waits until
-EEPROM has no unacknowledged writes and VIA has no queued/active responses,
-while the normal input loop continues. It then detaches
-(`USB_RESET_DETACH_DELAY_MS` 100) and resets the MCU. Apply of the already
-active mode still queues that reset.
+Selecting a mode changes only the pending user choice. Apply is a distinct
+explicit action: it persists the selected mode and schedules USB teardown/MCU
+reset after the response and pending EEPROM work are allowed to complete.
+Applying the already active mode still requests that reset. Custom SAVE on this
+control is a no-op; persistence belongs to Apply. The CLI boot-mode setter is
+also an explicit user path with the same persist-and-reset boundary.
 
-CLI `boot info` / `boot set {1k|2k|4k|8k}` calls `usbBootModeSaveAndReset()`
-directly — same persist-and-reset, no pending queue.
+No diagnostic, monitor, State Sync or ordinary USB service path may call polling
+apply/reset on the user's behalf. Apply/reboot ends the current enumeration, so
+an in-flight diagnostic session cannot continue on it; host behavior across that
+boundary is owned by `docs/contract_via.md` §6 and
+`the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md`.
 
-Only those user paths call the apply/reset APIs.
-`src/ap/modules/qmk/port/era_usb_diagnostics.c` does not. Any automatic
-step in `usbProcess()` besides user apply/reset violates §4.
+## 6. Bootloader-to-firmware handoff
 
-Apply/reset tears down USB and reboots, so an in-flight diagnostic session
-cannot continue on the same enumeration. How the host treats that boundary
-is `the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md` and
-`docs/contract_via.md` §6.
+The current peer bootloader contract uses MCU reset after UF2 completion/eject so
+the firmware normally receives reset USB blocks; see
+`eerraa-qmk-h7s-boot/docs/uf2_auto_start.md` §3. Firmware must nevertheless
+retain compatibility with already shipped legacy bootloaders that can jump with
+TinyUSB's OTG core/USBPHYC state still inherited.
 
-## 6. Bootloader-to-firmware handoff resets the inherited USB blocks
+For that legacy handoff, recovery must occur before normal HAL USB
+initialization: when inherited TinyUSB ownership is detected,
+`src/hw/driver/usb/usbd_conf.c` / `HAL_PCD_MspInit()` restores the OTG core
+and USBPHYC to a clean reset state, clears stale interrupt ownership and provides
+the host-visible detach interval before normal initialization continues. Current
+detection and timing values are source-owned.
 
-Every firmware start is a jump from the bootloader. Its boot-up routine
-(`eerraa-qmk-h7s-boot/src/ap/ap.c`) copies FIRM into SRAM and jumps, on
-a cold boot and after a UF2 upload alike. The bootloader on current
-boards jumps after a UF2 upload with USB still enabled: it clock-gates
-the OTG core and USBPHYC without resetting them. Handed over that way,
-the core does not complete the soft reset that `HAL_PCD_Init()` issues;
-the HAL loop gives up after `HAL_USB_TIMEOUT`, about ten seconds, and
-`USBD_LL_Init()` in `src/hw/driver/usb/usbd_conf.c` stops in
-`Error_Handler()`.
+The current reset-handoff bootloader and the firmware compatibility branch must
+coexist: reset-state handoff must pass normally, while a legacy armed handoff
+must be normalized by firmware. Do not restore the rejected post-`HAL_PCD_Init()`
+boot-time detach hold as the compatibility fix; the legacy failure occurs inside
+`HAL_PCD_Init()`, before such a hold could run.
 
-`HAL_PCD_MspInit()` in the same file therefore inspects the inherited
-core after enabling its clocks. `USB_OTG_GAHBCFG_GINT` set means the
-bootloader's TinyUSB armed it; the firmware then force-resets
-`USB_OTG_HS` and USBPHYC through RCC, clears the pending `OTG_HS_IRQn`,
-and holds `USBD_HANDOFF_RESET_HOLD_MS` (100) with the pull-up gone
-before the normal init continues. A cold boot, a VIA reset and the
-reset-style bootloader (`eerraa-qmk-h7s-boot` 19e0487) all hand over a
-core with that bit clear, so the branch costs nothing there, and the two
-fixes coexist.
+Remaining board-level acceptance is tracked only in `docs/state_open.md` §2.
+Document/static review is not a substitute for unrun HIL.
 
-> **REFUSED:** a boot-time detach hold — keeping the `DCTL.SDIS` that
-> `HAL_PCD_Init()` sets for 100 ms before `HAL_PCD_Start()` — as the
-> firmware-side fix (the V260824R2 approach).
-> **WHY:** on the old bootloader the failure is inside `HAL_PCD_Init()`,
-> before that hold could run; it changed nothing and cost 100 ms on
-> every boot.
-> **REOPENS:** none. The failing call is measured, and a hold placed
-> after it cannot reach it.
+## 7. Main-loop periodic work must not depend on a stale 16-bit expiry cache
 
-The VIA reset path is unchanged: `usbProcessDeferredReset()` in
-`src/hw/driver/usb/usb.c` stops USB, waits `USB_RESET_DETACH_DELAY_MS`
-(100), then resets the MCU. What is still owed on hardware is
-`docs/state_open.md` §2.
+USB service, QMK/RGB work and persistence share the main loop. A periodic task
+that may sit idle beyond the 16-bit timer comparison window must not skip its
+state/effect lookup solely because a cached 16-bit deadline has not "expired".
+That pattern can leave stale effect/interval state and freeze rendering.
 
-## 7. Do not skip rgblight lookup behind a 16-bit expiry cache
-
-USB polling, RGB animation, EEPROM drain, and key scan share the main
-loop (`src/ap/ap.c`: `usbProcess()` then `qmkUpdate()`).
 `rgblight_timer_task()` in
-`src/ap/modules/qmk/quantum/rgblight/rgblight.c` expires with 16-bit
-`sync_timer_read()` / `timer_expired()`. That compare window is
-`UINT16_MAX / 2` milliseconds, about 32 s.
+`src/ap/modules/qmk/quantum/rgblight/rgblight.c` must therefore keep current
+state lookup outside that stale-cache gate. A future cache is acceptable only
+with wrap-safe 32-bit expiry and complete invalidation for the state that affects
+the deadline. The long-idle regression in `tools/firmware_regression_tests/`
+owns the executable guard.
 
-Every call recomputes `effect_func` and `interval_time` before the
-expiry check. `next_timer_due` is still the 16-bit next deadline.
-Pulse-on-press paths already expire with a 32-bit signed compare on
-`sync_timer_read32()`.
-
-> **REFUSED:** putting back an rgblight early branch that caches
-> `effect_func` and interval and skips that lookup until a 16-bit
-> `next_timer_due` expires.
-> **WHY:** when `next_timer_due` is pushed outside the 16-bit compare
-> window, or Velocikey / inactive state leaves the cache stale,
-> animation and render stop silently. That freeze reproduced around
-> ten minutes; it stopped only after the lookup-skipping cache was
-> removed.
-> **REOPENS:** an expiry design that uses a 32-bit clock and unsigned
-> wrap (the pulse paths already do). Cache itself is not forbidden; a
-> cache sitting on the 16-bit window is.
-
-Diagnostic sessions follow the 32-bit rule: `usbDiagnosticsTask()`
-completes when `(int32_t)(now_us - deadline_us) >= 0`. Counters
-saturate at `UINT32_MAX`. TIM5 wrap is `docs/contract_via.md` §6-2.
+Diagnostic deadlines use their separate 32-bit wrap-safe rule; selector
+semantics remain `docs/contract_via.md` §6.
 
 ## 8. Reactive RGB input belongs to physical switch transitions
 
-Pulse effects and Velocikey consume debounced, ghost-filtered matrix transitions
-in `src/ap/modules/qmk/quantum/keyboard.c`, before QMK action filtering or tapping
-buffering. They use the scan's shared 32-bit timestamp. The input handler in
-`src/ap/modules/qmk/quantum/rgblight/rgblight.c` updates bounded RAM state only;
-color calculation, LED-buffer traversal and frame submission belong to the RGB
-task. A pending pulse evaluation (physical input, configuration commit, indicator
-overlay release) bypasses the periodic task gate without adding a wait.
-While a pulse is latched, its expiry is judged on the RGB task's 1 ms periodic
-gate, not by the animation timer interval, so that interval does not quantize
-the pulse width.
-Logical action replay, TD-generated actions and synthetic records do not generate
-another physical press or release for RGB.
+Reactive pulse/Velocikey input is owned by debounced, ghost-filtered physical
+matrix transitions in `src/ap/modules/qmk/quantum/keyboard.c`, before QMK
+action filtering or tapping replay. Logical TD/LT/action replay must not create a
+second physical RGB press/release.
 
-Configuration producers follow the same ownership. A VIA channel 2 SET or an RGB
-keycode commits `rgblight_config` first and then only requests a pulse
-evaluation; `rgblight_sethsv_eeprom_helper()` never computes pulse output itself.
-The RGB task derives the pulse base output from the committed hue, saturation
-and value, so a brightness or colour change in a Pulse effect shows the value
-just sent rather than the previous one. A colour-only commit keeps the physical
-latch and the tracked key; only a base-mode change resets them. An indicator
-overlay release raises the same request, and the task drains the host LED queue
-before that evaluation so the release and the restored base output land in one
-frame.
+The input path records bounded state/timestamps only. Colour calculation, LED
+buffer traversal and frame submission belong to the RGB task. A pending
+physical/configuration/indicator evaluation may make that task run promptly, but
+it must not add a blocking wait.
 
-> **REFUSED:** computing pulse output inside `rgblight_sethsv_eeprom_helper()`
-> or any other configuration setter.
-> **WHY:** the setter ran before its own commit, so every VIA brightness or
-> colour change in a Pulse effect rendered the previous request's values; the
-> frame only caught up on the next key press or the next change.
-> **REOPENS:** a setter whose commit and evaluation are one step and whose
-> output `python tools/firmware_regression_tests/run.py --only rgb` verifies.
+Configuration producers must commit `rgblight_config` before requesting pulse
+reevaluation. Do not compute/render pulse output inside
+`rgblight_sethsv_eeprom_helper()` or another pre-commit setter; doing so can
+render the previous request's values. Colour-only changes preserve the current
+physical latch/key; a base-mode change may reset it. The host Caps indicator is
+an independent overlay and its release must restore the committed base output.
 
-Pulse duration starts at physical press. Hold variants extend that pulse while
-the most recently pressed key remains down; releasing an older key cannot clear
-the newer key's hold. This retains last-pressed-key tracking rather than changing
-the effect to track all simultaneously held keys. The Caps indicator remains an
-overlay of host LED Output state, independent of the physical pulse and local
-tap/hold decision. Host response time and frame coalescing may affect visibility;
-there is no guaranteed minimum number of visible pulse frames.
-
-An isolated short TD tap with only tap and hold configured resolves at release,
-as does the first LT tap. This does not make their full semantics identical: TD
-interruption and configured double actions, and LT tapping policies and quick-tap
-repetition still determine different logical action sequences. RGB must not gain
-those differences merely because one resolver buffers a physical event longer.
+Hold variants follow the most recently pressed physical key; releasing an older
+key must not clear the newer hold. Pulse expiry is owned by the RGB task's
+periodic gate rather than animation-interval quantization. The integrated
+physical-RGB fixture under `tools/firmware_regression_tests/` owns the
+executable TD/LT, commit-order, hold, overlay and wrap regression cases. This
+physical-input rule does not collapse TD/LT logical semantics. Host LED timing
+and frame coalescing may affect visibility; no minimum visible frame count is
+guaranteed.

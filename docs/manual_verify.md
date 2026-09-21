@@ -118,7 +118,7 @@ the same enumeration. Reconnect and start a new session.
 
 | Symptom | Check |
 | --- | --- |
-| UF2 uploaded, firmware does not start by itself | On the old bootloader the inherited USB core fails `HAL_PCD_Init()`; V260912R1 resets it in `HAL_PCD_MspInit()` (`docs/contract_usb.md` §6). If it still happens, note the LED pattern and the Device Manager state before touching anything: `docs/state_open.md` §2. |
+| UF2 uploaded, firmware does not start by itself | Current bootloader uses reset handoff; legacy direct-jump bootloaders rely on the firmware-side inherited-USB recovery in `HAL_PCD_MspInit()` (`docs/contract_usb.md` §6). If it still happens, note the LED pattern and Device Manager state before touching anything: `docs/state_open.md` §2. |
 | No keys in BIOS/UEFI | Set USB POLLING to 1 kHz (FS). If still dead, the two boot-protocol deviations in `docs/contract_usb.md` §3. |
 | 21st key does not register | Specified. `docs/contract_usb.md` §2. |
 | Cursor never moves | Keymap needs a mouse keycode (`KC_MS_UP` and the rest). Channel 17 converts speed of a report that is already sending; it does not place the keycode. |
