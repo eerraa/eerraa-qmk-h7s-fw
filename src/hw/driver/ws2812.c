@@ -4,12 +4,24 @@
 
 #ifdef _USE_HW_WS2812
 #include "cli.h"
+#include "micros.h"
 
-#define BIT_PERIOD (130) // 1300ns, 80Mhz
-#define BIT_HIGH   (70)  // 700ns
-#define BIT_LOW    (35)  // 350ns
-#define BIT_ZERO   (50)
-#define WS2812_BIT_BUF_LEN (BIT_ZERO + 24*(HW_WS2812_MAX_CH+1))  // V251116R1: DMA/CPU 더블 버퍼 크기 상수
+/* TIM15: 300 MHz / 3 = 100 MHz. WS2812B-2020 requires RESET > 280 us.
+ * Two extra zero symbols cover CCR preload and the last DMA write. A leading
+ * reset also resynchronizes the receiver after an aborted/failed transaction. */
+#define BIT_PERIOD 130U
+#define BIT_HIGH   70U
+#define BIT_LOW    35U
+#define WS2812_COUNTER_MHZ 100U
+#define WS2812_RESET_US 320U
+#define WS2812_PIPELINE_SLOTS 2U
+#define BIT_ZERO ((WS2812_RESET_US * WS2812_COUNTER_MHZ + BIT_PERIOD - 1U) / BIT_PERIOD + WS2812_PIPELINE_SLOTS)
+#define WS2812_BIT_BUF_LEN (BIT_ZERO + 24U * HW_WS2812_MAX_CH + BIT_ZERO)
+#define WS2812_FRAME_US ((WS2812_BIT_BUF_LEN * BIT_PERIOD + WS2812_COUNTER_MHZ - 1U) / WS2812_COUNTER_MHZ)
+#define WS2812_SERVICE_TIMEOUT_US (WS2812_FRAME_US + 2000U)
+_Static_assert((BIT_ZERO - WS2812_PIPELINE_SLOTS) * BIT_PERIOD > 280U * WS2812_COUNTER_MHZ, "WS2812 reset too short");
+_Static_assert(WS2812_BIT_BUF_LEN <= UINT16_MAX, "WS2812 DMA length exceeds HAL limit");
+_Static_assert(WS2812_FRAME_US < 5000U, "WS2812 frame cannot support 5 ms pulses");
 
 bool is_init = false;
 
@@ -21,14 +33,20 @@ typedef struct
   uint16_t led_cnt;
 } ws2812_t;
 
-__attribute__((section(".non_cache")))
+__attribute__((section(".non_cache"), aligned(4)))
 static uint8_t bit_buf_dma[WS2812_BIT_BUF_LEN];            // V251116R1: DMA 활성 버퍼
-__attribute__((section(".non_cache")))
+__attribute__((section(".non_cache"), aligned(4)))
 static uint8_t bit_buf_cpu[WS2812_BIT_BUF_LEN];            // V251116R1: CPU 작업 버퍼
 static uint8_t *ws2812_dma_buf = bit_buf_dma;              // V251116R1: DMA와 CPU 포인터 분리
 static uint8_t *ws2812_work_buf = bit_buf_cpu;
-static bool ws2812_transfer_active = false;                 // V260910R6: 진행 중 DMA는 완료 전까지 절대 중단하지 않는다
-static bool ws2812_refresh_pending = false;                 // V260910R6: busy 동안 최신 프레임 요청을 1개로 병합
+typedef enum { WS2812_IDLE, WS2812_ACTIVE, WS2812_QUIESCING } ws2812_phase_t;
+static ws2812_phase_t ws2812_phase;
+static bool ws2812_refresh_pending;
+static uint32_t ws2812_requested_generation;
+static uint32_t ws2812_inflight_generation;
+static uint32_t ws2812_completed_generation;
+static uint32_t ws2812_started_us;
+
 
 
 ws2812_t ws2812;
@@ -42,6 +60,7 @@ static void cliCmd(cli_args_t *args);
 static bool ws2812InitHw(void);
 static bool ws2812StartTransfer(void);
 static void ws2812Service(void);
+static void ws2812PinIdle(void);
 
 
 
@@ -59,8 +78,12 @@ bool ws2812Init(void)
   memset(bit_buf_cpu, 0, sizeof(bit_buf_cpu));
   ws2812_dma_buf        = bit_buf_dma;
   ws2812_work_buf       = bit_buf_cpu;
-  ws2812_transfer_active = false;
+  ws2812_phase = WS2812_IDLE;
   ws2812_refresh_pending = false;
+  ws2812_requested_generation = 0;
+  ws2812_inflight_generation = 0;
+  ws2812_completed_generation = 0;
+  ws2812_started_us = 0;
   
   ws2812.h_timer = &htim15;
   ws2812.channel = TIM_CHANNEL_1;
@@ -71,7 +94,7 @@ bool ws2812Init(void)
   __HAL_RCC_TIM15_CLK_ENABLE();
 
   htim15.Instance               = TIM15;
-  htim15.Init.Prescaler         = 2; // 300MHz / (2+1) = 100Mhz -> 10ns
+  htim15.Init.Prescaler         = 2; // BSP supplies TIM15 with 300 MHz; counter is 100 MHz.
   htim15.Init.CounterMode       = TIM_COUNTERMODE_UP;
   htim15.Init.Period            = BIT_PERIOD-1;
   htim15.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;
@@ -120,6 +143,9 @@ bool ws2812Init(void)
     return false;                                                // V251124R6: 브레이크/데드타임 설정 실패 시 상위로 실패 전파
   }
 
+  /* One symbol per UPDATE, independent of the previous symbol's duty cycle. */
+  __HAL_TIM_SELECT_CCDMAREQUEST(&htim15, TIM_CCDMAREQUEST_UPDATE);
+
   if (ws2812InitHw() != true)
   {
     return false;                                                 // V251124R6: WS2812 하드웨어 초기화 실패 시 상위로 전달
@@ -151,7 +177,7 @@ bool ws2812InitHw(void)
   GPIO_InitTypeDef GPIO_InitStruct = {0};
 
 
-  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   /**TIM15 GPIO Configuration
   PC12     ------> TIM15_CH1
   */
@@ -161,6 +187,7 @@ bool ws2812InitHw(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   GPIO_InitStruct.Alternate = GPIO_AF2_TIM15;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+  ws2812PinIdle();
 
 
   /* TIM15 DMA Init */
@@ -197,51 +224,121 @@ bool ws2812InitHw(void)
   return true;
 }
 
+/* The pin is actively LOW while stopped, including error recovery. Changing
+ * only MOE/CC1E can leave an AF pin undriven; ODR is preloaded before MODER. */
+static void ws2812PinMode(uint32_t mode)
+{
+  /* MODER is shared with other GPIOC pins; keep the read/modify/write atomic. */
+  uint32_t irq_state = __get_PRIMASK();
+  __disable_irq();
+  MODIFY_REG(GPIOC->MODER, 3UL << 24, mode << 24);
+  __set_PRIMASK(irq_state);
+}
+
+static void ws2812PinIdle(void)
+{
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, GPIO_PIN_RESET);
+  ws2812PinMode(1U);
+}
+
+static void ws2812StopOutput(void)
+{
+  ws2812PinIdle(); // Take over LOW before disabling the peripheral output.
+  (void)HAL_TIM_PWM_Stop_DMA(ws2812.h_timer, ws2812.channel);
+}
+
+/* Recover a delayed/missing IRQ through the same HAL handler, never by
+ * claiming completion or reusing a still-owned DMA buffer. */
+static void ws2812PollDma(void)
+{
+  uint32_t irq_state = __get_PRIMASK();
+  __disable_irq();
+  HAL_DMA_IRQHandler(&handle_GPDMA1_Channel4);
+  __set_PRIMASK(irq_state);
+}
+
 static bool ws2812StartTransfer(void)
 {
-  const uint32_t retry_limit = 3;
+  /* Flush the zero compare into the preload and start at a complete period. */
+  __HAL_TIM_DISABLE_DMA(ws2812.h_timer, TIM_DMA_CC1);
+  __HAL_TIM_SET_COMPARE(ws2812.h_timer, ws2812.channel, 0U);
+  ws2812.h_timer->Instance->EGR = TIM_EGR_UG;
+  __HAL_TIM_SET_COUNTER(ws2812.h_timer, 0U);
+  __HAL_TIM_CLEAR_FLAG(ws2812.h_timer, TIM_FLAG_UPDATE | TIM_FLAG_CC1);
 
-  for (uint32_t attempt = 0; attempt < retry_limit; attempt++)
+  /* Drive zero before connecting AF, then start DMA. Connecting after Start
+   * would lose data if an IRQ preempted the CPU longer than the leading reset. */
+  TIM_CCxChannelCmd(ws2812.h_timer->Instance, ws2812.channel, TIM_CCx_ENABLE);
+  __HAL_TIM_MOE_ENABLE(ws2812.h_timer);
+  ws2812PinMode(2U);
+  __DMB(); // Publish the non-cacheable work frame before handing it to DMA.
+  HAL_StatusTypeDef status = HAL_TIM_PWM_Start_DMA(ws2812.h_timer, ws2812.channel,
+                                                  (const uint32_t *)ws2812_work_buf, WS2812_BIT_BUF_LEN);
+  if (status != HAL_OK)
   {
-    HAL_StatusTypeDef status = HAL_TIM_PWM_Start_DMA(ws2812.h_timer, ws2812.channel, (const uint32_t *)ws2812_work_buf, WS2812_BIT_BUF_LEN);
-
-    if (status == HAL_OK)
-    {
-      uint8_t *prev_dma_buf = ws2812_dma_buf;
-      ws2812_dma_buf = ws2812_work_buf;
-      ws2812_work_buf = prev_dma_buf;  // V251116R1: DMA 버퍼와 CPU 버퍼를 스왑하여 전송 중 덮어쓰기 차단
-      memcpy(ws2812_work_buf, ws2812_dma_buf, WS2812_BIT_BUF_LEN);  // V260310R4: 다음 부분 갱신도 현재 프레임을 기준으로 누적되도록 작업 버퍼를 즉시 동기화
-      ws2812_transfer_active = true;
-      return true;
-    }
-
-    (void)HAL_TIM_PWM_Stop_DMA(ws2812.h_timer, ws2812.channel);   // 시작 실패로 남은 HAL BUSY 상태만 정리; 활성 전송에는 도달하지 않음
+    ws2812StopOutput();
+    ws2812_phase = WS2812_QUIESCING;
+    return false;
   }
 
-  return false;
+  uint8_t *previous_dma = ws2812_dma_buf;
+  ws2812_dma_buf = ws2812_work_buf;
+  ws2812_work_buf = previous_dma;
+  memcpy(ws2812_work_buf, ws2812_dma_buf, WS2812_BIT_BUF_LEN);
+  ws2812_inflight_generation = ws2812_requested_generation;
+  ws2812_started_us = micros();
+  ws2812_phase = WS2812_ACTIVE;
+  return true;
 }
 
 static void ws2812Service(void)
 {
-  if (ws2812_transfer_active)
+  if (ws2812_phase == WS2812_ACTIVE)
   {
+    if (HAL_DMA_GetState(&handle_GPDMA1_Channel4) == HAL_DMA_STATE_BUSY &&
+        (uint32_t)(micros() - ws2812_started_us) >= WS2812_SERVICE_TIMEOUT_US)
+    {
+      ws2812PollDma();
+      if (HAL_DMA_GetState(&handle_GPDMA1_Channel4) != HAL_DMA_STATE_READY)
+      {
+        ws2812StopOutput();
+        ws2812_refresh_pending = true;
+        ws2812_phase = WS2812_QUIESCING;
+        return;
+      }
+    }
     if (HAL_DMA_GetState(&handle_GPDMA1_Channel4) != HAL_DMA_STATE_READY)
     {
-      return;                                                   // V260910R6: 전송 중 프레임을 abort하면 WS2812 체인이 부분 프레임을 latch할 수 있다
+      return;
     }
 
-    (void)HAL_TIM_PWM_Stop_DMA(ws2812.h_timer, ws2812.channel);  // 완료된 DMA만 정리하여 TIM channel을 READY로 복귀
-    ws2812_transfer_active = false;
+    bool success = HAL_DMA_GetError(&handle_GPDMA1_Channel4) == HAL_DMA_ERROR_NONE;
+    ws2812StopOutput();
+    ws2812_phase = WS2812_IDLE;
+    if (success)
+    {
+      /* The DMA suffix has already emitted RESET plus preload/drain slack. */
+      ws2812_completed_generation = ws2812_inflight_generation;
+    }
+    else
+    {
+      ws2812_refresh_pending = true;
+    }
   }
 
-  if (!ws2812_refresh_pending)
+  if (ws2812_phase == WS2812_QUIESCING)
   {
-    return;
+    ws2812PollDma();
+    if (HAL_DMA_GetState(&handle_GPDMA1_Channel4) != HAL_DMA_STATE_READY)
+    {
+      return; // Abort is asynchronous. Keep both buffer ownership and LOW.
+    }
+    ws2812_phase = WS2812_IDLE;
   }
 
-  if (ws2812StartTransfer())
+  if (ws2812_refresh_pending && ws2812StartTransfer())
   {
-    ws2812_refresh_pending = false;                              // busy 동안 누적된 요청은 최신 work buffer 한 프레임으로 병합
+    ws2812_refresh_pending = false;
   }
 }
 
@@ -252,10 +349,27 @@ void ws2812Task(void)
 
 bool ws2812Refresh(void)
 {
+  ++ws2812_requested_generation;
+  if (ws2812_requested_generation == 0U) ++ws2812_requested_generation;
   ws2812_refresh_pending = true;
   ws2812Service();
+  return true; // Accepted, not necessarily transmitted. Failed starts remain queued.
+}
 
-  return ws2812_transfer_active || !ws2812_refresh_pending;      // 전송 시작 또는 안전하게 queue된 경우 성공
+uint32_t ws2812GetRequestedGeneration(void)
+{
+  return ws2812_requested_generation;
+}
+
+bool ws2812IsFrameComplete(uint32_t generation)
+{
+  return generation != 0U && ws2812_completed_generation != 0U &&
+         (int32_t)(ws2812_completed_generation - generation) >= 0;
+}
+
+uint32_t ws2812TimeUs(void)
+{
+  return micros();
 }
 
 void ws2812SetColor(uint32_t ch, uint32_t color)
@@ -392,6 +506,7 @@ void cliCmd(cli_args_t *args)
 
     while(cliKeepLoop())
     {
+      cliLoopIdle();
     }
     ws2812SetColor(0, 0);
     ws2812Refresh();

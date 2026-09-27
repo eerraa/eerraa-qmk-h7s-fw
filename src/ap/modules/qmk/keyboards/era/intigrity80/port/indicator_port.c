@@ -84,7 +84,8 @@ void led_init_ports(void)
 
 void led_update_ports(led_t led_state)
 {
-  rgblight_indicator_post_host_event(led_state);  // V251018R1: 모든 host LED 이벤트를 rgblight_task 큐로 위임
+  (void)led_state;
+  rgblight_indicator_request_host_refresh();
 }
 
 static bool indicator_target_from_host(uint8_t target, led_t host_state)

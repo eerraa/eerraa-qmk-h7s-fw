@@ -155,7 +155,7 @@ enum RGBLIGHT_EFFECT_MODE {
 #    define RGBLIGHT_EFFECT_TWINKLE_PROBABILITY 1 / 127
 #endif
 #ifndef RGBLIGHT_EFFECT_PULSE_DURATION_MIN_MS
-#    define RGBLIGHT_EFFECT_PULSE_DURATION_MIN_MS 5    // V251018R5: Pulse 계열 최소 지속 시간 / V260913R1: 20→5 ms. 하한은 WS2812 프레임 1장(≤1.1 ms)+래치 리셋과 소자 PWM 2 kHz 여러 주기 위에 둔다
+#    define RGBLIGHT_EFFECT_PULSE_DURATION_MIN_MS 5    // Minimum unoccluded wire dwell; settings still use physical-press deadlines.
 #endif
 #ifndef RGBLIGHT_EFFECT_PULSE_DURATION_STEP_MS
 #    define RGBLIGHT_EFFECT_PULSE_DURATION_STEP_MS 1   // V251018R5: Pulse 계열 ms/step
@@ -216,7 +216,10 @@ typedef struct {
 void rgblight_indicator_update_config(rgblight_indicator_config_t config);
 void rgblight_indicator_update_config_at(uint8_t slot, rgblight_indicator_config_t config);  // V260310R4: 멀티 슬롯 보드용 인디케이터 구성 갱신
 void rgblight_indicator_apply_host_led(led_t host_led_state);
-void rgblight_indicator_post_host_event(led_t host_led_state);  // V251018R1: IRQ에서 전달된 호스트 LED 이벤트 큐
+/* USB feedback is the sole publisher of authoritative host bits. */
+void rgblight_indicator_post_host_event(led_t host_led_state);
+/* Layer/LED reevaluation must not republish a stale sampled host value. */
+void rgblight_indicator_request_host_refresh(void);
 void rgblight_indicator_set_target_callback(rgblight_indicator_target_callback_t callback);  // V251016R8: 포트 콜백 등록
 void rgblight_indicator_set_ranges(const rgblight_indicator_range_t *ranges, uint8_t length);  // V251016R8: 키보드별 범위 전달
 void rgblight_indicator_set_ranges_at(uint8_t slot, const rgblight_indicator_range_t *ranges, uint8_t length);  // V260310R4: 슬롯별 범위 전달

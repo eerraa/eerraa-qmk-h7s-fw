@@ -65,13 +65,20 @@ def main() -> None:
         layout = ["-mno-ms-bitfields"] if os.name == "nt" else []
         execute("test_rgb_physical_input", [source], [f"-I{HERE}", f"-I{QMK/'quantum'}", *layout,
                 "-Wno-unused-parameter", "-Wno-unused-function", "-Wno-unused-variable"])
+        from rgb_frame_cases import generate as generate_frames
+        for board in ("brick60", "brick65"):
+            frame_source = generate_frames(ROOT, BUILD, board)
+            execute("test_rgb_frames_" + board, [frame_source], [f"-I{HERE}", f"-I{HERE/'ws2812_include'}",
+                    f"-I{ROOT/'src/common/hw/include'}", f"-I{QMK/'quantum'}", *layout, "-Wno-unused-function"])
     if args.only in (None, "guards"):
         from source_cases import generate
         via, reset, rgb_gate, ws2812, rgb_sat = generate(ROOT, BUILD)
         execute("test_via_guard", [via], [])
         execute("test_reset_barrier", [reset], [])
         execute("test_rgb_task_gate", [rgb_gate], [])
-        execute("test_ws2812_scheduler", [ws2812], [])
+        for channels in (19, 27, 30, 32):
+            execute("test_ws2812_transport_" + str(channels), [ws2812], [f"-I{HERE/'ws2812_include'}",
+                    f"-I{ROOT/'src/common/hw/include'}", f"-DHW_WS2812_MAX_CH={channels}", "-Wno-unused-function"])
         execute("test_rgb_mode_transition", [rgb_sat], [])
     print("All selected firmware regression tests passed.", flush=True)
 

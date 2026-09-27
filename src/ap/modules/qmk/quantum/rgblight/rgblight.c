@@ -122,6 +122,9 @@ rgb_led_t led[RGBLIGHT_LED_COUNT];
 #    define LED_ARRAY led
 #endif
 
+/* Base effects own led[]. Composition never writes overlays back into it. */
+static rgb_led_t rgblight_frame[RGBLIGHT_LED_COUNT];
+
 #ifdef RGBLIGHT_LAYERS
 rgblight_segment_t const *const *rgblight_layers = NULL;
 
@@ -170,6 +173,11 @@ typedef struct {
     uint8_t  key_row;
     uint8_t  key_col;
     uint32_t deadline_ms;
+    bool     present_pending;
+    bool     present_submitted;
+    bool     presented;
+    uint32_t present_generation;
+    uint32_t visible_until_us;
 } rgblight_pulse_effect_state_t;  // V251018R5: Pulse 계열 이펙트 상태 추적
 
 static rgblight_pulse_effect_state_t rgblight_pulse_effect_state = {
@@ -181,6 +189,55 @@ static rgblight_pulse_effect_state_t rgblight_pulse_effect_state = {
     .key_col = 0,
     .deadline_ms = 0,
 };
+
+static bool rgblight_pulse_output_visible(void);
+
+static void rgblight_effect_pulse_cancel_presentation(void)
+{
+    rgblight_pulse_effect_state.present_pending = false;
+    rgblight_pulse_effect_state.present_submitted = false;
+    rgblight_pulse_effect_state.presented = false;
+    rgblight_pulse_effect_state.present_generation = 0;
+    rgblight_pulse_effect_state.visible_until_us = 0;
+}
+
+/* A logical deadline cannot erase a pulse which has not reached the wire.
+ * Overlay/Sleep/config OFF cancel this protection rather than queue old pulses. */
+static bool rgblight_effect_pulse_presentation_pending(void)
+{
+    if (!rgblight_pulse_output_visible() || rgblight_driver.get_generation == NULL ||
+        rgblight_driver.is_complete == NULL || rgblight_driver.time_us == NULL)
+    {
+        rgblight_effect_pulse_cancel_presentation();
+        return false;
+    }
+    if (!rgblight_pulse_effect_state.present_pending) return false;
+    if (!rgblight_pulse_effect_state.present_submitted) return true;
+    if (!rgblight_pulse_effect_state.presented)
+    {
+        if (!rgblight_driver.is_complete(rgblight_pulse_effect_state.present_generation)) return true;
+        rgblight_pulse_effect_state.presented = true;
+        rgblight_pulse_effect_state.visible_until_us = rgblight_driver.time_us() +
+            (uint32_t)RGBLIGHT_EFFECT_PULSE_DURATION_MIN_MS * 1000U;
+    }
+    if ((int32_t)(rgblight_driver.time_us() - rgblight_pulse_effect_state.visible_until_us) < 0) return true;
+    rgblight_effect_pulse_cancel_presentation();
+    return false;
+}
+
+static void rgblight_effect_pulse_frame_submitted(void)
+{
+    if (rgblight_pulse_effect_state.present_pending && !rgblight_pulse_effect_state.present_submitted &&
+        rgblight_pulse_output_visible() && rgblight_driver.get_generation != NULL)
+    {
+        uint32_t generation = rgblight_driver.get_generation();
+        if (generation != 0U)
+        {
+            rgblight_pulse_effect_state.present_generation = generation;
+            rgblight_pulse_effect_state.present_submitted = true;
+        }
+    }
+}
 
 static bool rgblight_effect_pulse_mode_active(void)
 {
@@ -256,6 +313,7 @@ static bool rgblight_effect_pulse_expiry_pending(void)
 
 static void rgblight_effect_pulse_reset_state(void)
 {
+    rgblight_effect_pulse_cancel_presentation();
     rgblight_pulse_effect_state.evaluate_pending   = false;
     rgblight_pulse_effect_state.latched            = false;
     rgblight_pulse_effect_state.initialized        = false;
@@ -294,6 +352,7 @@ static void rgblight_effect_pulse_evaluate_output(void)
     if (rgblight_pulse_effect_state.latched) {
         uint32_t now     = sync_timer_read32();
         bool     expired = (int32_t)(now - rgblight_pulse_effect_state.deadline_ms) >= 0;
+        if (rgblight_effect_pulse_presentation_pending()) expired = false;
         if (expired && !(rgblight_effect_pulse_hold_mode_active() && rgblight_pulse_effect_state.key_tracking_valid)) {
             rgblight_pulse_effect_state.latched     = false;
             rgblight_pulse_effect_state.deadline_ms = 0;
@@ -311,6 +370,7 @@ static void rgblight_effect_pulse_evaluate_output(void)
 // V260913R1: 베이스 모드가 바뀌었다. 래치·추적 키를 버리고 새 모드의 기본 출력은 RGB task에 맡긴다.
 static void rgblight_effect_pulse_on_base_mode_update(void)
 {
+    rgblight_effect_pulse_cancel_presentation();
     if (!rgblight_effect_pulse_mode_active()) {
         rgblight_effect_pulse_reset_state();
         return;
@@ -342,6 +402,11 @@ static void rgblight_effect_pulse_handle_keyevent(bool pressed, uint8_t row, uin
     }
 
     if (pressed) {
+        if (!rgblight_pulse_effect_state.latched)
+        {
+            rgblight_effect_pulse_cancel_presentation();
+            rgblight_pulse_effect_state.present_pending = true;
+        }
         rgblight_pulse_effect_state.latched       = true;
         rgblight_pulse_effect_state.deadline_ms   = now + rgblight_effect_pulse_duration_ms();
         rgblight_pulse_effect_state.key_row       = row;
@@ -386,6 +451,8 @@ static void rgblight_effect_pulse_off_press_hold(animation_status_t *anim)
     rgblight_effect_pulse_evaluate_output();  // V251018R5: Pulse Off Press (Hold) 상태 머신 처리
 }
 #else
+static inline void rgblight_effect_pulse_cancel_presentation(void) {}
+static inline void rgblight_effect_pulse_frame_submitted(void) {}
 static inline void rgblight_effect_pulse_on_base_mode_update(void) {}
 static inline void rgblight_effect_pulse_on_hsv_update(void) {}
 static inline bool rgblight_effect_pulse_evaluate_pending(void) { return false; }
@@ -522,6 +589,28 @@ static bool rgblight_indicator_any_pending_render(void)
     return false;
 }
 
+/* Only pixels actually exposed by the final scene protect pulse dwell time.
+ * External indicator-only LEDs (range.count == 0) do not cover underglow. */
+static bool rgblight_pulse_output_visible(void)
+{
+    if (output_suspended || !rgblight_config.enable) return false;
+    uint16_t end = rgblight_ranges.clipping_start_pos + rgblight_ranges.clipping_num_leds;
+    if (end > RGBLIGHT_LED_COUNT) end = RGBLIGHT_LED_COUNT;
+    for (uint16_t i = rgblight_ranges.clipping_start_pos; i < end; ++i)
+    {
+        if (i < rgblight_ranges.effect_start_pos || i >= rgblight_ranges.effect_end_pos) continue;
+        bool covered = false;
+        for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot)
+        {
+            const rgblight_indicator_state_t *state = &rgblight_indicator_state[slot];
+            covered |= state->active && i >= state->range.start &&
+                       i < (uint16_t)state->range.start + state->range.count;
+        }
+        if (!covered) return true;
+    }
+    return false;
+}
+
 static void rgblight_indicator_apply_target_range(uint8_t slot, uint8_t target)
 {
     if (!rgblight_indicator_slot_valid(slot)) {
@@ -606,7 +695,7 @@ static rgb_led_t rgblight_indicator_compute_color(rgblight_indicator_config_t co
 }
 
 // V251016R9: 프레임 준비 로직이 호출부로 이관되어 오버레이 함수는 적용만 수행
-static void rgblight_indicator_apply_overlay(rgblight_indicator_state_t *state)
+static void rgblight_indicator_apply_overlay(rgblight_indicator_state_t *state, rgb_led_t *frame)
 {
     // V251121R1: 전체 오버레이는 재렌더 플래그와 무관하게 항상 적용해 우선순위를 유지
     if (state == NULL || !state->active) {
@@ -626,7 +715,7 @@ static void rgblight_indicator_apply_overlay(rgblight_indicator_state_t *state)
     uint16_t count = range.count;
 
     rgb_led_t  cached     = state->color;
-    rgb_led_t *target_led = &led[start];
+    rgb_led_t *target_led = &frame[start];
     rgb_led_t *target_end = target_led + count;
 
     while (target_led < target_end) {
@@ -672,19 +761,9 @@ static void rgblight_indicator_commit_state(uint8_t slot, bool should_enable, bo
     }
 
     if (was_active) {
-        if (rgblight_config.enable && is_static_effect(rgblight_config.mode)) {
-            rgblight_mode_noeeprom(rgblight_config.mode);  // V251018R3: 정적 효과는 즉시 재렌더해 원본 상태 복구
-        } else {
-#ifdef RGBLIGHT_USE_TIMER
-            if (rgblight_status.timer_enabled) {
-                animation_status.next_timer_due = sync_timer_read();  // V251122R7: 인디케이터 종료 시 베이스 이펙트를 즉시 재계산하도록 만료 시각을 당김
-                rgblight_timer_task();  // V251122R7: 다음 틱을 기다리지 않고 오버레이가 남지 않게 즉시 프레임 재계산
-            }
-#endif
-        }
-
-        rgblight_indicator_restore_pulse_effect();  // V251121R2: CAPS OFF에서 Pulse 기본 상태를 즉시 재적용
-        rgblight_request_render();  // V251120R1: CAPS OFF 시 기본 프레임을 즉시 큐잉해 잔상을 방지
+        /* Base pixels were never overwritten by the overlay. Recompose them. */
+        rgblight_indicator_restore_pulse_effect();
+        rgblight_request_render();
     }
 }
 
@@ -805,6 +884,11 @@ void rgblight_indicator_post_host_event(led_t host_led_state)
     rgblight_host_led_raw_buffer = host_led_state.raw;
     rgblight_host_led_pending    = true;
 }  // V251018R1: IRQ 컨텍스트에서는 상태만 저장하고 실제 처리는 rgblight_task로 위임
+
+void rgblight_indicator_request_host_refresh(void)
+{
+    if (rgblight_indicator_supported) rgblight_host_led_pending = true;
+}
 
 void rgblight_indicator_set_render_callback(rgblight_indicator_render_callback_t callback)
 {
@@ -1524,7 +1608,7 @@ bool rgblight_get_layer_state(uint8_t layer) {
 }
 
 // Write any enabled LED layers into the buffer
-static void rgblight_layers_write(void) {
+static void rgblight_layers_write(rgb_led_t *frame) {
 #    ifdef RGBLIGHT_LAYERS_RETAIN_VAL
     uint8_t current_val = rgblight_get_val();
 #    endif
@@ -1546,8 +1630,8 @@ static void rgblight_layers_write(void) {
                 break; // No more segments
             }
             // Write segment.count LEDs
-            rgb_led_t *const limit = &led[MIN(segment.index + segment.count, RGBLIGHT_LED_COUNT)];
-            for (rgb_led_t *led_ptr = &led[segment.index]; led_ptr < limit; led_ptr++) {
+            rgb_led_t *const limit = &frame[MIN(segment.index + segment.count, RGBLIGHT_LED_COUNT)];
+            for (rgb_led_t *led_ptr = &frame[segment.index]; led_ptr < limit; led_ptr++) {
 #    ifdef RGBLIGHT_LAYERS_RETAIN_VAL
                 sethsv(segment.hue, segment.sat, current_val, led_ptr);
 #    else
@@ -1661,6 +1745,7 @@ void rgblight_set_output_suspend_state(bool suspended) {
     }
 
     output_suspended = suspended;
+    if (suspended) rgblight_effect_pulse_cancel_presentation();
     rgblight_request_render();
 }
 
@@ -1670,109 +1755,66 @@ void rgblight_set_output_suspend_state(bool suspended) {
 // V251018R6: WS2812 전송 루틴을 별도 함수로 분리해 호출 컨텍스트를 제어
 static void rgblight_render_frame(void)
 {
-    rgb_led_t *start_led;
-    uint8_t    num_leds = rgblight_ranges.clipping_num_leds;
-    uint8_t clip_start       = rgblight_ranges.clipping_start_pos;
-    bool    indicator_overrides = false;
-
-    if (clip_start >= RGBLIGHT_LED_COUNT) {
-        for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot) {
+    uint8_t num_leds = rgblight_ranges.clipping_num_leds;
+    uint8_t clip_start = rgblight_ranges.clipping_start_pos;
+    if (clip_start >= RGBLIGHT_LED_COUNT || num_leds == 0 ||
+        (uint16_t)clip_start + num_leds > RGBLIGHT_LED_COUNT)
+    {
+        for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot)
             rgblight_indicator_state[slot].needs_render = false;
-        }
-        return;  // V251122R9: 클리핑 시작점이 범위를 벗어나면 전송을 생략해 OOB를 방지
-    }
-
-    for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot) {
-        rgblight_indicator_state_t *state = &rgblight_indicator_state[slot];
-
-        if (!rgblight_indicator_supported || !state->active || state->range.count == 0) {
-            state->needs_render = false;  // V260310R4: 비활성 슬롯 또는 외부 렌더 전용 슬롯은 버퍼 오버레이를 건너뛴다
-            continue;
-        }
-
-        if (state->overrides_all) {
-            indicator_overrides = true;
-        } else {
-            state->needs_render = true;   // V260310R4: 부분 오버레이 슬롯은 기본 이펙트 이후에 항상 재적용
-        }
-    }
-
-    if (num_leds == 0) {
-        for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot) {
-            rgblight_indicator_state[slot].needs_render = false;
-        }
+        rgblight_effect_pulse_cancel_presentation();
         return;
     }
 
-    if (!indicator_overrides) {
-        if (!rgblight_config.enable) {
-            for (uint8_t i = rgblight_ranges.effect_start_pos; i < rgblight_ranges.effect_end_pos; i++) {
-                led[i].r = 0;
-                led[i].g = 0;
-                led[i].b = 0;
-#ifdef RGBW
-                led[i].w = 0;
-#endif
-            }
-        }
-
+    memcpy(rgblight_frame, led, sizeof(rgblight_frame));
+    if (!rgblight_config.enable)
+    {
+        for (uint8_t i = rgblight_ranges.effect_start_pos; i < rgblight_ranges.effect_end_pos; ++i)
+            rgblight_frame[i] = (rgb_led_t){0};
+    }
 #ifdef RGBLIGHT_LAYERS
-        if (rgblight_layers != NULL
+    if (rgblight_layers != NULL
 #    if !defined(RGBLIGHT_LAYERS_OVERRIDE_RGB_OFF)
-            && rgblight_config.enable
+        && rgblight_config.enable
 #    elif defined(RGBLIGHT_SLEEP)
-            && !is_suspended
+        && !is_suspended
 #    endif
-        ) {
-            rgblight_layers_write();
-        }
+    ) rgblight_layers_write(rgblight_frame);
 #endif
+    for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot)
+    {
+        rgblight_indicator_apply_overlay(&rgblight_indicator_state[slot], rgblight_frame);
     }
-
-    for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot) {
-        rgblight_indicator_state_t *state = &rgblight_indicator_state[slot];
-
-        if (state->active && state->range.count > 0 &&
-            (state->overrides_all || state->needs_render)) {
-            rgblight_indicator_apply_overlay(state);  // V260310R4: 활성 슬롯 오버레이를 순차 적용
-        }
-    }
-
-    if (rgblight_indicator_supported && rgblight_indicator_render_callback != NULL) {
-        for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot) {
+    if (rgblight_indicator_supported && rgblight_indicator_render_callback != NULL)
+    {
+        for (uint8_t slot = 0; slot < RGBLIGHT_INDICATOR_SLOT_COUNT; ++slot)
+        {
             rgblight_indicator_state_t *state = &rgblight_indicator_state[slot];
-            rgb_led_t                   color = {0};
-
-            if (state->active) {
-                color = state->color;
-            } else {
-                state->needs_render = false;
-            }
-
-            rgblight_indicator_render_callback(slot, state->active, color);  // V260310R4: BRICK65 물리 인디케이터를 동일 프레임에 합성
+            bool active = state->active && !output_suspended;
+            rgblight_indicator_render_callback(slot, active, active ? state->color : (rgb_led_t){0});
         }
     }
 
 #ifdef RGBLIGHT_LED_MAP
-    rgb_led_t led0[RGBLIGHT_LED_COUNT];
-    for (uint8_t i = 0; i < num_leds; i++) {
-        led0[i] = led[pgm_read_byte(&led_map[clip_start + i])];  // V251122R8: 클리핑 범위만 매핑해 복사량 축소
-    }
-    start_led = led0;  // V251122R8: 부분 매핑에 맞춰 시작 포인터도 선형 버퍼로 조정
+    rgb_led_t mapped_frame[RGBLIGHT_LED_COUNT];
+    for (uint8_t i = 0; i < num_leds; ++i)
+        mapped_frame[i] = rgblight_frame[pgm_read_byte(&led_map[clip_start + i])];
+    rgb_led_t *start_led = mapped_frame;
 #else
-    start_led = led + clip_start;
+    rgb_led_t *start_led = rgblight_frame + clip_start;
 #endif
-
 #ifdef RGBW
-    for (uint8_t i = 0; i < num_leds; i++) {
-        convert_rgb_to_rgbw(&start_led[i]);
-    }
+    for (uint8_t i = 0; i < num_leds; ++i) convert_rgb_to_rgbw(&start_led[i]);
 #endif
-    if (output_suspended) {
-        rgb_led_t off_frame[RGBLIGHT_LED_COUNT] = {0};
-        rgblight_driver.setleds(off_frame, num_leds);
-    } else {
+    if (output_suspended)
+    {
+        memset(rgblight_frame, 0, sizeof(rgblight_frame));
+        rgblight_driver.setleds(rgblight_frame, num_leds);
+    }
+    else
+    {
         rgblight_driver.setleds(start_led, num_leds);
+        rgblight_effect_pulse_frame_submitted();
     }
 }
 
@@ -2408,8 +2450,12 @@ static void rgblight_consume_host_led_queue(void)
         return;
     }
 
+    /* Only the mailbox transfer is masked; no rendering/LED loop runs here. */
+    uint32_t irq_state = __get_PRIMASK();
+    __disable_irq();
     led_t pending = {.raw = rgblight_host_led_raw_buffer};
     rgblight_host_led_pending = false;
+    __set_PRIMASK(irq_state);
     rgblight_indicator_apply_host_led(pending);  // V251018R1: 큐에 적재된 상태를 메인 루프에서 처리
 }
 
@@ -2456,6 +2502,7 @@ void rgblight_task(void) {
     eeconfig_flush_rgblight_current(false);
 
     if (output_suspended) {
+        rgblight_effect_pulse_cancel_presentation();
         (void)rgblight_task_periodic_due(false, false, 0U);
         rgblight_consume_host_led_queue();
         rgblight_flush_render_queue();

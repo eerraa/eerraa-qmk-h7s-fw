@@ -142,7 +142,7 @@ int main(void) {
     assert 'rgblight_set_output_suspend_state(want_dark)' in sleep_apply
     assert 'rgblight_suspend' not in sleep_apply and 'rgblight_disable_noeeprom' not in sleep_apply
     assert 'rgblight_config' not in output_gate and 'rgblight_request_render' in output_gate
-    assert 'output_suspended' in render and 'off_frame' in render and 'rgblight_driver.setleds(off_frame, num_leds)' in render
+    assert 'output_suspended' in render and 'memset(rgblight_frame, 0' in render and 'rgblight_driver.setleds(rgblight_frame, num_leds)' in render
     assert 'if (output_suspended)' in task and 'rgblight_flush_render_queue()' in task
     gate=function(rgb,'rgblight_task_periodic_due')
     assert 'timer_expired32' in gate and 'rgblight_task_slice_armed = false' in gate
@@ -184,88 +184,25 @@ int main(void) {
     ws=(root/'src/hw/driver/ws2812.c').read_text(encoding='utf-8')
     ws_start=function(ws,'ws2812StartTransfer')
     ws_service=function(ws,'ws2812Service')
-    ws_task=function(ws,'ws2812Task')
     ws_refresh=function(ws,'ws2812Refresh')
     assert 'HAL_TIM_PWM_Stop_DMA' not in ws_refresh
-    assert 'HAL_DMA_GetState' in ws_service and 'HAL_DMA_STATE_READY' in ws_service
-    assert ws_service.index('HAL_DMA_GetState') < ws_service.index('HAL_TIM_PWM_Stop_DMA')
+    assert 'HAL_DMA_GetError' in ws_service and 'WS2812_QUIESCING' in ws_service
+    assert ws_service.index('HAL_DMA_GetError') < ws_service.index('ws2812StopOutput();', ws_service.index('HAL_DMA_GetError'))
     assert 'ws2812_refresh_pending = true' in ws_refresh
-    out_ws=build/'test_ws2812_scheduler.c'
-    out_ws.write_text(r'''#include <assert.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
-typedef int HAL_StatusTypeDef;
-typedef int HAL_DMA_StateTypeDef;
-typedef struct { int unused; } TIM_HandleTypeDef;
-typedef struct { int unused; } DMA_HandleTypeDef;
-#define HAL_OK 0
-#define HAL_ERROR 1
-#define HAL_DMA_STATE_READY 0
-#define HAL_DMA_STATE_BUSY 1
-#define WS2812_BIT_BUF_LEN 8
-typedef struct { TIM_HandleTypeDef *h_timer; uint32_t channel; } ws2812_t;
-static TIM_HandleTypeDef timer_handle;
-static DMA_HandleTypeDef handle_GPDMA1_Channel4;
-static ws2812_t ws2812 = {&timer_handle, 1U};
-static uint8_t bit_buf_dma[WS2812_BIT_BUF_LEN];
-static uint8_t bit_buf_cpu[WS2812_BIT_BUF_LEN];
-static uint8_t *ws2812_dma_buf = bit_buf_dma;
-static uint8_t *ws2812_work_buf = bit_buf_cpu;
-static bool ws2812_transfer_active;
-static bool ws2812_refresh_pending;
-static HAL_DMA_StateTypeDef dma_state = HAL_DMA_STATE_READY;
-static unsigned start_calls, stop_calls, forced_start_failures;
-static uint8_t started_frames[8][WS2812_BIT_BUF_LEN];
-static HAL_DMA_StateTypeDef HAL_DMA_GetState(DMA_HandleTypeDef *handle) {
-  (void)handle; return dma_state;
-}
-static HAL_StatusTypeDef HAL_TIM_PWM_Start_DMA(TIM_HandleTypeDef *timer, uint32_t channel,
-                                                const uint32_t *data, uint16_t length) {
-  (void)timer; (void)channel; assert(length == WS2812_BIT_BUF_LEN);
-  start_calls++;
-  if (forced_start_failures) { forced_start_failures--; return HAL_ERROR; }
-  assert(dma_state == HAL_DMA_STATE_READY);
-  memcpy(started_frames[start_calls - 1U], (const uint8_t *)data, WS2812_BIT_BUF_LEN);
-  dma_state = HAL_DMA_STATE_BUSY;
-  return HAL_OK;
-}
-static HAL_StatusTypeDef HAL_TIM_PWM_Stop_DMA(TIM_HandleTypeDef *timer, uint32_t channel) {
-  (void)timer; (void)channel; stop_calls++; dma_state = HAL_DMA_STATE_READY; return HAL_OK;
-}
-''' + ws_start + '\n' + ws_service + '\n' + ws_task + '\n' + ws_refresh + r'''
-static void fill(uint8_t value) { memset(ws2812_work_buf, value, WS2812_BIT_BUF_LEN); }
-int main(void) {
-  fill(1U);
-  assert(ws2812Refresh());
-  assert(start_calls == 1U && stop_calls == 0U && ws2812_transfer_active && !ws2812_refresh_pending);
-  for (unsigned i=0; i<WS2812_BIT_BUF_LEN; i++) assert(started_frames[0][i] == 1U);
-
-  fill(2U);
-  assert(ws2812Refresh());
-  assert(start_calls == 1U && stop_calls == 0U && ws2812_refresh_pending);
-  fill(3U);
-  assert(ws2812Refresh());
-  assert(start_calls == 1U && stop_calls == 0U && ws2812_refresh_pending);
-
-  dma_state = HAL_DMA_STATE_READY;
-  ws2812Task();
-  assert(stop_calls == 1U && start_calls == 2U && ws2812_transfer_active && !ws2812_refresh_pending);
-  for (unsigned i=0; i<WS2812_BIT_BUF_LEN; i++) assert(started_frames[1][i] == 3U);
-
-  dma_state = HAL_DMA_STATE_READY;
-  ws2812Task();
-  assert(stop_calls == 2U && start_calls == 2U && !ws2812_transfer_active && !ws2812_refresh_pending);
-
-  fill(4U); forced_start_failures = 1U;
-  assert(ws2812Refresh());
-  assert(start_calls == 4U && stop_calls == 3U && ws2812_transfer_active && !ws2812_refresh_pending);
-  for (unsigned i=0; i<WS2812_BIT_BUF_LEN; i++) assert(started_frames[3][i] == 4U);
-  puts("PASS: actual WS2812 scheduler never aborts an active DMA, coalesces busy refreshes to latest frame, and retries failed starts");
-  return 0;
-}
-''',encoding='utf-8')
+    assert 'TIM_CCDMAREQUEST_UPDATE' in function(ws,'ws2812Init')
+    assert '__DMB()' in ws_start and 'WS2812_PIPELINE_SLOTS' in ws
+    assert ws_start.index('ws2812PinMode(2U)') < ws_start.index('HAL_TIM_PWM_Start_DMA')
+    stop = function(ws, 'ws2812StopOutput')
+    assert stop.index('ws2812PinIdle()') < stop.index('HAL_TIM_PWM_Stop_DMA')
+    assert 'delay(' not in ws_start and 'delay(' not in ws_service
+    assert '&led[' not in function(rgb, 'rgblight_indicator_apply_overlay')
+    assert 'memcpy(rgblight_frame, led' in render
+    for port_path in (root/'src/ap/modules/qmk/keyboards/era').glob('**/port/indicator_port.c'):
+        port = port_path.read_text(encoding='utf-8')
+        refresh = function(port, 'led_update_ports')
+        assert 'rgblight_indicator_request_host_refresh()' in refresh
+        assert 'rgblight_indicator_post_host_event' not in refresh
+    out_ws=root/'tools/firmware_regression_tests/test_ws2812_transport.c'
 
     # V260913R1: 채도 복원 규칙은 목적지 효과로 판정한다. Solid Color 출발 한정이 되살아나면 실패한다.
     carries=function(rgb,'rgblight_mode_carries_hue')

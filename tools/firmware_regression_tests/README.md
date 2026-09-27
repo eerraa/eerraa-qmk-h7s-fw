@@ -77,6 +77,46 @@ Caps/letter sequences, later same-usage snapshots, failed arms, overflow, Suspen
 reset, and clock wrap under FS/HS and boot/report protocol. Existing zero-interval
 FIFO tests cover ordinary input. No host Caps-activation filter is emulated.
 
+### RGB frame completion and receiver coverage
+
+`--only rgb` also builds `test_rgb_frames_brick60` and `test_rgb_frames_brick65`.
+`rgb_frame_cases.py` extracts unedited production Pulse/config/mailbox/composition
+functions and connects the real board USB-LED entrypoints, board pixel adapter,
+and the complete `src/hw/driver/ws2812.c`. The BRICK65 case executes its actual
+physical indicator callback. Each board runs 168 deterministic host-response
+phase combinations (three pulse durations, eight holds, seven response offsets).
+Further cases cover a Pulse queued behind a busy frame, release before the first
+RGB task, minimum 5 ms wire dwell, all four modes, input retrigger, same-mode HSV
+commits, overlay cancellation/restoration, static RGB/RGB OFF without an animation
+timer, microsecond/millisecond wrap, mailbox IRQ interleaving and PRIMASK restore.
+BRICK65 also covers two-slot union coverage and blanking both physical indicators
+under Sleep. Production base pixels must remain independent of the overlay.
+
+`--only guards` builds the full production driver against `ws2812_include` for
+19, 27, 30 and 32 LEDs. The HAL adapter retains the DMA pointer and checks every
+read against the start snapshot. A two-stage CCR/preload model feeds the actual
+GRB-encoded symbols to a digital first-N-pixels receiver with a RESET boundary.
+Tests assert the reset suffix, completion generation, latest-frame coalescing,
+start failures, DMA errors, missing IRQ polling, asynchronous abort ownership,
+idle LOW and generation/clock wrap. A preempted-start case lets the DMA finish
+before its start call returns; the AF pin must already be connected, with a zero
+compare applied before DMA starts. Only completed data plus RESET may advance a
+completion token. Accepted requests and successful wire completion are distinct.
+
+The colour converter, EEPROM, non-Pulse animation timer, physical input and USB
+arrival times remain explicit adapters in the frame fixture. The separate
+physical-input fixture above continues to exercise actual QMK LT/TD decisions.
+Neither fixture measures analogue signalling, actual Windows scheduling, LED
+internal PWM or physical light output. No device sends a WS2812 reception ACK.
+
+Run `python -X utf8 tools/firmware_regression_tests/rgb_frame_selftest.py` after
+changing the frame generator, assertions or HAL adapter. It first checks the
+positive baseline, then injects five negative controls only into ignored build
+copies: dropped Pulse presentation fence, mailbox read/clear IRQ race, stale
+layer repost, shortened RESET rejected by the production static assertion, and
+the same short RESET rejected by the receiver when that static check is omitted.
+Production files are never mutated by this selftest.
+
 ## What a pass does not establish
 
 Mocks do not reproduce electrical timing, the Cortex-M memory system, GPDMA hardware,

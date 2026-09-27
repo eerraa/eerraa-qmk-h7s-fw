@@ -19,4 +19,7 @@ void ws2812_setleds(rgb_led_t *ledarray, uint16_t leds)
 
 const rgblight_driver_t rgblight_driver = {
   .setleds = ws2812_setleds,
+  .get_generation = ws2812GetRequestedGeneration,
+  .is_complete = ws2812IsFrameComplete,
+  .time_us = ws2812TimeUs,
 };

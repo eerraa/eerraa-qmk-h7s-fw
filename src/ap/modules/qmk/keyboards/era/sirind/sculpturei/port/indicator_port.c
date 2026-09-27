@@ -151,7 +151,8 @@ void led_init_ports(void)
 
 void led_update_ports(led_t led_state)
 {
-  rgblight_indicator_post_host_event(led_state);  // V260701R1: SCULPTUREI에서 host LED 이벤트는 큐로만 전달
+  (void)led_state;
+  rgblight_indicator_request_host_refresh();
 }
 
 void indicator_port_via_command(uint8_t *data, uint8_t length)

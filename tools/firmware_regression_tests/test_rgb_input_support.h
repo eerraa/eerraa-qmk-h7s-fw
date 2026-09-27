@@ -63,6 +63,12 @@ static bool rgblight_indicator_supported = true;
 static bool is_rgblight_initialized = true;
 static bool output_suspended, indicator_on, background_on, physical_dispatch;
 static bool accept_keypress = true, accept_record = true;
+static struct { uint32_t (*get_generation)(void); bool (*is_complete)(uint32_t); uint32_t (*time_us)(void); } rgblight_driver;
+static bool rgblight_pulse_output_visible(void) { return !output_suspended && !indicator_on && rgblight_config.enable; }
+static uint32_t irq_mask;
+static uint32_t __get_PRIMASK(void) { return irq_mask; }
+static void __disable_irq(void) { irq_mask=1; }
+static void __set_PRIMASK(uint32_t mask) { irq_mask=mask; }
 static uint8_t host_led_raw, mods, weak_mods;
 static uint8_t typing_speed;
 static uint32_t now_ms, pending_matrix_activity_time, caps_press_time, caps_release_time;
