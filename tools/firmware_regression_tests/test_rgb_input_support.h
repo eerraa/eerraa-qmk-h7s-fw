@@ -26,6 +26,7 @@
 #define TD(i) (QK_TAP_DANCE | (i))
 #define QK_TAP_DANCE_GET_INDEX(kc) ((kc) & 0xFF)
 #define TIMER_DIFF_16(a, b) ((uint16_t)((a) - (b)))
+#define TIMER_DIFF_32(a, b) ((uint32_t)((a) - (b)))
 #define ac_dprintf(...) ((void)0)
 #define debug_event(...) ((void)0)
 #define debug_record(...) ((void)0)
@@ -85,6 +86,7 @@ static int visible_frame; // 0: OFF, 1: 기본 RGB, 2: Caps 인디케이터
 static matrix_row_t matrix_rows[MATRIX_ROWS];
 static bool scan_changed;
 static uint16_t mapped_keycode = TD(0);
+static uint16_t other_keycode = KC_A;
 static layer_state_t layer_state, default_layer_state;
 
 void process_record(keyrecord_t *record);
@@ -101,6 +103,8 @@ void rgblight_indicator_post_host_event(led_t value);
 static uint16_t timer_read(void) { return (uint16_t)now_ms; }
 static uint16_t timer_elapsed(uint16_t time) { return (uint16_t)(now_ms - time); }
 static uint32_t sync_timer_read32(void) { return now_ms; }
+static uint32_t timer_read32(void) { return now_ms; }
+static uint32_t timer_elapsed32(uint32_t time) { return (uint32_t)(now_ms - time); }
 static bool timer_expired32(uint32_t now, uint32_t due) { return (int32_t)(now - due) >= 0; }
 void wait_ms(uint32_t ms);
 static void delay(uint32_t ms)
@@ -159,7 +163,7 @@ static void led_set(uint8_t value) { rgblight_indicator_post_host_event((led_t){
 uint16_t get_record_keycode(keyrecord_t *record, bool cache)
 {
   (void)cache;
-  return record->event.key.col == 0 ? mapped_keycode : KC_A;
+  return record->event.key.col == 0 ? mapped_keycode : other_keycode;
 }
 static action_t action_for_keycode(uint16_t code)
 {
@@ -171,7 +175,7 @@ static action_t action_for_keycode(uint16_t code)
 }
 static action_t layer_switch_get_action(keypos_t key)
 {
-  return action_for_keycode(key.col == 0 ? mapped_keycode : KC_A);
+  return action_for_keycode(key.col == 0 ? mapped_keycode : other_keycode);
 }
 static action_t store_or_get_action(bool pressed, keypos_t key)
 {
@@ -181,6 +185,8 @@ static action_t store_or_get_action(bool pressed, keypos_t key)
 static bool pre_process_record_kb(uint16_t code, keyrecord_t *record) { (void)code; (void)record; return accept_record; }
 static bool process_record_kb(uint16_t code, keyrecord_t *record) { (void)code; (void)record; return true; }
 static void post_process_record_kb(uint16_t code, keyrecord_t *record) { (void)code; (void)record; }
+// The fixture injects the dynamic term directly; DT_* adjustment keycodes are outside this harness.
+static bool process_dynamic_tapping_term(uint16_t code, keyrecord_t *record) { (void)code; (void)record; return true; }
 static bool process_rgb(uint16_t code, keyrecord_t *record) { (void)code; (void)record; return true; }
 static bool process_action_kb(keyrecord_t *record) { (void)record; return true; }
 static void eeconfig_init(void) {}

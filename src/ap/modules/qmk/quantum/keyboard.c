@@ -601,10 +601,10 @@ void switch_events(uint8_t row, uint8_t col, bool pressed) {
  */
 static inline void generate_tick_event(void)
 {
-  static uint16_t last_tick = 0;
-  const uint16_t  now       = timer_read();
+  static uint32_t last_tick = 0;
+  const uint32_t  now       = timer_read32();
 
-  if (TIMER_DIFF_16(now, last_tick) != 0)
+  if (TIMER_DIFF_32(now, last_tick) != 0)
   {
     const keyevent_t tick_event = {
       .key = {.row = 0, .col = 0},
@@ -665,7 +665,6 @@ static bool matrix_task(void) {
     bool       event_initialized   = false;
     bool       new_ghost_pending   = false;
     uint32_t   event_time_32       = 0;    // V251001R3: 키 이벤트와 활동 타임스탬프를 공유해 타이머 접근을 1회로 축소
-    uint16_t   event_time_16       = 0;
     keyevent_t event;
 
     for (uint8_t row = 0; row < MATRIX_ROWS; row++) {
@@ -679,7 +678,6 @@ static bool matrix_task(void) {
         if (!event_time_32)
         {
           event_time_32 = sync_timer_read32();        // V251001R3: 첫 변화 시점의 32비트 타임스탬프를 확보해 이후 재사용
-          event_time_16 = (uint16_t)event_time_32;
         }
 
         if (has_ghost_in_row(row, current_row)) {
@@ -695,7 +693,7 @@ static bool matrix_task(void) {
             if (process_keypress) {
                 event = (keyevent_t){
                     .key = {.row = 0, .col = 0},
-                    .time = event_time_16,   // V250928R5: 스캔 단위로 타임스탬프를 공유해 timer_read() 호출을 1회로 축소 (V250928R4 확장) / V251001R3: 32비트 활동 타임스탬프와 동기화
+                    .time = event_time_32, // Keep the captured scan time through tapping-buffer replay.
                     .type = KEY_EVENT,
                     .pressed = false,
                 };

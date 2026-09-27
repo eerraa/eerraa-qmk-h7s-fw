@@ -43,11 +43,11 @@ Exact Custom Value SET/GET uses the existing `id_custom_set_value` (`0x07`) / `i
 
 ### TAPPING and Tap Dance exact milliseconds
 
-H7S exact-ms addresses are global TAPPING channel 15 value 5 and Tap Dance channel 16 values 41..48. SET accepts 100..500 ms inclusive. Fewer than two value bytes (`length < 5`) or an out-of-range value is refused and leaves storage unchanged. Exact GET returns the stored uint16 without snapping.
+H7S exact-ms addresses are global TAPPING channel 15 value 5 and Tap Dance channel 16 values 41..48. SET accepts 1..65535 ms inclusive. Zero is invalid. Fewer than two value bytes (`length < 5`) or an out-of-range value is refused and leaves storage unchanged. Exact GET returns the stored uint16 without snapping.
 
-Official `*-VIA.JSON` definitions keep the legacy one-byte ×10 ms controls. Legacy SET snaps onto the 100..500 / 20 ms grid; legacy GET projects the exact stored value onto that grid without writing storage. An official-VIA read therefore must not destroy a custom-app value such as 137 ms. Tap Dance slot terms remain independent of global `TAPPING_TERM`.
+Official `*-VIA.JSON` definitions keep the legacy one-byte ×10 ms controls. Legacy SET snaps onto the 100..500 / 20 ms grid; legacy GET projects the exact stored value onto that grid without writing storage. An official-VIA read therefore must not destroy a custom-app value such as 137 or 65535 ms. Tap Dance slot terms remain independent of global `TAPPING_TERM`.
 
-`src/ap/modules/qmk/port/tapping_term.c` and `src/ap/modules/qmk/port/tapdance.c` own firmware conversion/range handling. App encoding and definition bounds are owned by `the-via-eerraa/docs/adr/0001-state-sync-protocol.md`.
+`src/ap/modules/qmk/port/tapping_term_policy.h` owns the shared exact validity and legacy projection; `tapping_term.c` and `tapdance.c` own the handlers. Wire and EEPROM terms remain uint16 with unchanged IDs, offsets, signatures and versions. Runtime key events retain a 32-bit captured timestamp through the tapping queue; elapsed comparisons and Tap Dance deadlines must represent intervals greater than the maximum term. Legacy GET is read-only even for values outside its display range; only explicit Legacy SET normalizes the stored value. SAVE/reload must preserve every valid exact value. App encoding and definition bounds are owned by `the-via-eerraa/docs/adr/0001-state-sync-protocol.md`.
 
 ### RGB Sleep exact seconds
 

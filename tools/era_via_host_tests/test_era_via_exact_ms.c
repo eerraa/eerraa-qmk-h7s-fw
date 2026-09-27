@@ -294,6 +294,8 @@ static void test_state_sync_invalid(void) {
     expect_true("31-byte report rejected", era_state_sync_via_command(report, 31) == false);
 }
 
+#include "test_full_term_range.h"
+
 int main(void) {
     uint8_t  report[32];
     uint32_t before;
@@ -306,10 +308,11 @@ int main(void) {
     expect_eq_u16("exact GET 137", tapping_exact_get(), 137);
     expect_eq_u8("legacy GET 137 -> 12 (120ms floor-20)", tapping_legacy_get(), 12);
 
-    expect_true("reject exact SET 99", tapping_exact_set(99) == false);
-    expect_eq_u16("store unchanged after 99", tapping_exact_get(), 137);
-    expect_true("reject exact SET 501", tapping_exact_set(501) == false);
-    expect_eq_u16("store unchanged after 501", tapping_exact_get(), 137);
+    expect_true("reject exact SET 0", tapping_exact_set(0) == false);
+    expect_eq_u16("store unchanged after 0", tapping_exact_get(), 137);
+    expect_true("accept exact SET 501", tapping_exact_set(501));
+    expect_eq_u16("store accepts 501", tapping_exact_get(), 501);
+    tapping_exact_set(137);
 
     zero_report(report);
     report[0] = id_custom_set_value;
@@ -375,8 +378,8 @@ int main(void) {
     tapdance_handle_via_command(report, 32);
     expect_eq_u8("td1 legacy GET 137 -> 12", report[3], 12);
 
-    expect_true("td reject 99", tapdance_exact_set(0, 99) == false);
-    expect_eq_u16("td0 unchanged after 99", tapdance_exact_get(0), 101);
+    expect_true("td reject 0", tapdance_exact_set(0, 0) == false);
+    expect_eq_u16("td0 unchanged after 0", tapdance_exact_get(0), 101);
 
     {
         uint32_t pre = era_state_sync_config_revision();
@@ -409,6 +412,7 @@ int main(void) {
 
     test_state_sync_invalid();
     test_mousekey();
+    test_full_term_range();
 
     zero_report(report);
     report[0] = id_get_keyboard_value;

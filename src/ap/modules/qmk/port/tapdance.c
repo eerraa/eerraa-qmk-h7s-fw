@@ -1,4 +1,5 @@
 #include "tapdance.h"
+#include "tapping_term_policy.h"
 
 
 #ifdef TAPDANCE_ENABLE
@@ -14,11 +15,6 @@
 
 #define TAPDANCE_SIGNATURE        (0x4E414454UL)   // "TDAN" // V251124R8: Tap Dance EEPROM 시그니처
 #define TAPDANCE_VERSION          (1U)
-#define TAPDANCE_TERM_MIN_MS      (100U)
-#define TAPDANCE_TERM_MAX_MS      (500U)
-#define TAPDANCE_TERM_UNIT_MS     (10U)
-#define TAPDANCE_TERM_STEP_MS     (20U)
-#define TAPDANCE_TERM_DEFAULT_MS  (200U)
 #define TAPDANCE_VALUE_STRIDE     (5U)
 #define TAPDANCE_VALUE_MAX_ID     (TAPDANCE_SLOT_COUNT * TAPDANCE_VALUE_STRIDE)
 #define TAPDANCE_FIELD_TERM       (4U)
@@ -172,6 +168,13 @@ bool tapdance_handle_via_command(uint8_t *data, uint8_t length)
   uint8_t *value_data = &(data[3]);
   bool     handled    = false;
 
+  if ((*command_id == id_custom_set_value || *command_id == id_custom_get_value) &&
+      tapdance_is_exact_term_id(*value_id) && length < 5U)
+  {
+    *command_id = id_unhandled;
+    return false;
+  }
+
   switch (*command_id)
   {
     case id_custom_set_value:
@@ -222,13 +225,13 @@ uint16_t tapdance_get_term_ms(uint16_t keycode)
 
   if (slot_index >= TAPDANCE_SLOT_COUNT)
   {
-    return TAPDANCE_TERM_DEFAULT_MS;
+    return ERA_TERM_DEFAULT_MS;
   }
 
   term_ms = tapdance_state[slot_index].term_ms;
-  if (term_ms < TAPDANCE_TERM_MIN_MS || term_ms > TAPDANCE_TERM_MAX_MS)
+  if (!era_term_exact_valid(term_ms))
   {
-    term_ms = TAPDANCE_TERM_DEFAULT_MS;                       // V251124R8: 비정상 값 방어
+    term_ms = ERA_TERM_DEFAULT_MS;                       // V251124R8: 비정상 값 방어
   }
   return term_ms;
 }
@@ -245,7 +248,7 @@ static void tapdance_register_keycode(uint16_t keycode, bool is_tap)
   record.event.key.row = 0;
   record.event.key.col = 0;
   record.event.pressed = true;
-  record.event.time = timer_read();
+  record.event.time = timer_read32();
 #ifndef NO_ACTION_TAPPING
   record.tap.count = is_tap ? 1U : 0U;
 #endif
@@ -268,7 +271,7 @@ static void tapdance_unregister_keycode(uint16_t keycode, bool is_tap)
   record.event.key.row = 0;
   record.event.key.col = 0;
   record.event.pressed = false;
-  record.event.time = timer_read();
+  record.event.time = timer_read32();
 #ifndef NO_ACTION_TAPPING
   record.tap.count = is_tap ? 1U : 0U;
 #endif
@@ -513,7 +516,7 @@ static bool tapdance_is_storage_valid(const tapdance_storage_t *storage)
 
   for (uint8_t i = 0; i < TAPDANCE_SLOT_COUNT; i++)
   {
-    if (storage->slots[i].term_ms < TAPDANCE_TERM_MIN_MS || storage->slots[i].term_ms > TAPDANCE_TERM_MAX_MS)
+    if (!era_term_exact_valid(storage->slots[i].term_ms))
     {
       return false;
     }
@@ -523,30 +526,12 @@ static bool tapdance_is_storage_valid(const tapdance_storage_t *storage)
 
 static uint16_t tapdance_normalize_term(uint16_t term_ms)
 {
-  if (term_ms < TAPDANCE_TERM_MIN_MS)
-  {
-    term_ms = TAPDANCE_TERM_MIN_MS;
-  }
-  if (term_ms > TAPDANCE_TERM_MAX_MS)
-  {
-    term_ms = TAPDANCE_TERM_MAX_MS;
-  }
-
-  uint16_t offset     = term_ms - TAPDANCE_TERM_MIN_MS;
-  uint16_t step_count = offset / TAPDANCE_TERM_STEP_MS;
-  uint16_t normalized = TAPDANCE_TERM_MIN_MS + (step_count * TAPDANCE_TERM_STEP_MS);
-
-  if (normalized > TAPDANCE_TERM_MAX_MS)
-  {
-    normalized = TAPDANCE_TERM_MAX_MS;
-  }
-
-  return normalized;
+  return era_term_legacy_normalize(term_ms);
 }
 
 static uint16_t tapdance_legacy_units(uint16_t term_ms)
 {
-  return tapdance_normalize_term(term_ms) / TAPDANCE_TERM_UNIT_MS;  // V260821R1: exact 저장값을 20ms 격자로 내림해 legacy GET
+  return era_term_legacy_units(term_ms);
 }
 
 static void tapdance_apply_defaults_locked(void)
@@ -557,7 +542,7 @@ static void tapdance_apply_defaults_locked(void)
     {
       tapdance_storage.slots[i].actions[a] = KC_NO;
     }
-    tapdance_storage.slots[i].term_ms = TAPDANCE_TERM_DEFAULT_MS;
+    tapdance_storage.slots[i].term_ms = ERA_TERM_DEFAULT_MS;
   }
 
   tapdance_storage.version   = TAPDANCE_VERSION;
@@ -645,7 +630,7 @@ static bool tapdance_set_value(uint8_t value_id, uint8_t *value_data, uint8_t le
     }
     slot_index = tapdance_slot_index(value_id);
     term_ms    = ((uint16_t)value_data[0] << 8) | (uint16_t)value_data[1];
-    if (term_ms < TAPDANCE_TERM_MIN_MS || term_ms > TAPDANCE_TERM_MAX_MS)
+    if (!era_term_exact_valid(term_ms))
     {
       return false;
     }
@@ -671,7 +656,7 @@ static bool tapdance_set_value(uint8_t value_id, uint8_t *value_data, uint8_t le
   }
   else if (field_index == TAPDANCE_FIELD_TERM)
   {
-    term_ms = tapdance_normalize_term((uint16_t)value_data[0] * TAPDANCE_TERM_UNIT_MS);
+    term_ms = tapdance_normalize_term((uint16_t)value_data[0] * ERA_TERM_LEGACY_UNIT_MS);
     changed = (tapdance_storage.slots[slot_index].term_ms != term_ms);
     tapdance_storage.slots[slot_index].term_ms = term_ms;
   }

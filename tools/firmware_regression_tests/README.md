@@ -77,6 +77,16 @@ Caps/letter sequences, later same-usage snapshots, failed arms, overflow, Suspen
 reset, and clock wrap under FS/HS and boot/report protocol. Existing zero-interval
 FIFO tests cover ordinary input. No host Caps-activation filter is emulated.
 
+### Full-range tapping time
+
+The physical-input fixture also selects the production dynamic uint16 tapping-term
+input and drives LT/MT and all eight TD slots with 1..65535 ms boundary values.
+It checks the original scan timestamp in queued records, delayed replay, skipped
+16-bit expiry windows and 32-bit wrap. VIA host tests separately execute the
+production exact setters, storage validators, SAVE/reload and read-only legacy
+projection for every nonzero uint16 value. DT_* adjustment keycodes are not part
+of this fixture. Neither fixture is physical hardware.
+
 ### RGB frame completion and receiver coverage
 
 `--only rgb` also builds `test_rgb_frames_brick60` and `test_rgb_frames_brick65`.

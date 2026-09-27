@@ -34,6 +34,8 @@ static void reset_fixture(uint16_t keycode, uint8_t mode, uint32_t time)
   for (unsigned i = 0; i < TAPDANCE_SLOT_COUNT; i++) tap_dance_actions[i].state = (tap_dance_state_t){0};
   tapdance_state[0] = (tapdance_slot_state_t){{KC_CAPS, MO(1), KC_NO, KC_NO}, 200};
   mapped_keycode = keycode;
+  other_keycode = KC_A;
+  g_tapping_term = 200;
   layer_state = 0;
   output_suspended = indicator_on = false;
   rgblight_host_led_pending = false;
@@ -277,6 +279,7 @@ static void check_config_commit_renders_committed_value(void)
 }
 
 #include "test_tapdance_timing.h"
+#include "test_full_term_timing.h"
 
 int main(int argc, char **argv)
 {
@@ -316,6 +319,7 @@ int main(int argc, char **argv)
 
   check_slot_decision_boundaries();
   check_finished_release_preserves_other_dance();
+  check_full_term_timing();
   puts("PASS: actual matrix/QMK TD/LT/RGB + wait port: 80ms Caps interval requested without blocking; pulse, holds, replay, overlay, sleep and wrap; slot terms and overlapping dances");
   return 0;
 }

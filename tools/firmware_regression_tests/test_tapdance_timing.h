@@ -4,7 +4,7 @@ static void dance_event(uint8_t slot, bool pressed, uint32_t time)
   now_ms = time;
   keyrecord_t record = {0};
   record.event.pressed = pressed;
-  record.event.time = (uint16_t)time;
+  record.event.time = time;
   preprocess_tap_dance(TD(slot), &record);
   process_tap_dance(TD(slot), &record);
 }

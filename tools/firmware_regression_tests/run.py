@@ -63,7 +63,7 @@ def main() -> None:
         source = generate_rgb(ROOT, BUILD)
         # V260911R1: MinGW의 MS bitfield 대신 ARM GCC와 같은 QMK action_t 배치를 사용한다.
         layout = ["-mno-ms-bitfields"] if os.name == "nt" else []
-        execute("test_rgb_physical_input", [source], [f"-I{HERE}", f"-I{QMK/'quantum'}", *layout,
+        execute("test_rgb_physical_input", [source], [f"-I{HERE}", f"-I{QMK/'quantum'}", f"-I{QMK/'port'}", *layout,
                 "-Wno-unused-parameter", "-Wno-unused-function", "-Wno-unused-variable"])
         from rgb_frame_cases import generate as generate_frames
         for board in ("brick60", "brick65"):

@@ -31,11 +31,11 @@ def generate(root: Path, build: Path, source_root: Path | None = None) -> Path:
     td_header = read(qmk / 'quantum/process_keycode/process_tap_dance.h')
     chunks = [
         '#include <assert.h>\n#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <string.h>\n',
-        '#define NO_ACTION_ONESHOT\n#define NO_RESET\n#define NO_DEBUG\n',
+        '#define NO_ACTION_ONESHOT\n#define NO_RESET\n#define NO_DEBUG\n#define DYNAMIC_TAPPING_TERM_ENABLE\n',
         '#include "keycodes.h"\n#include "action_code.h"\n',
         event_header[event_header.index('/* key matrix position */'):event_header.index('/* Common keypos_t object factory */')],
         action_header[action_header.index('#ifndef TAP_CODE_DELAY'):action_header.index('/* Execute action per keyevent */')],
-        '#include "action_tapping.h"\n',
+        '#include "action_tapping.h"\n#include "tapping_term_policy.h"\n',
         td_header[td_header.index('typedef struct'):td_header.index('#define ACTION_TAP_DANCE_DOUBLE')],
         '#include "test_rgb_input_support.h"\n',
         function(wait_port, 'wait_ms'),

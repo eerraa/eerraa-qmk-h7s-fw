@@ -26,7 +26,8 @@
 #endif
 
 static uint16_t active_td;
-static uint16_t last_tap_time;
+/* The elapsed interval must be able to exceed UINT16_MAX milliseconds. */
+static uint32_t last_tap_time;
 
 void tap_dance_pair_on_each_tap(tap_dance_state_t *state, void *user_data) {
     tap_dance_pair_t *pair = (tap_dance_pair_t *)user_data;
@@ -176,7 +177,7 @@ bool process_tap_dance(uint16_t keycode, keyrecord_t *record) {
 
                 action->state.pressed = record->event.pressed;
                 if (record->event.pressed) {
-                    last_tap_time = timer_read();
+                    last_tap_time = timer_read32();
                     process_tap_dance_action_on_each_tap(action);
                     active_td = action->state.finished ? 0 : keycode;
                 } else {
@@ -201,7 +202,7 @@ bool process_tap_dance(uint16_t keycode, keyrecord_t *record) {
 
             action->state.pressed = record->event.pressed;
             if (record->event.pressed) {
-                last_tap_time = timer_read();
+                last_tap_time = timer_read32();
                 process_tap_dance_action_on_each_tap(action);
                 active_td = action->state.finished ? 0 : keycode;
             } else {
@@ -235,13 +236,13 @@ void tap_dance_task(void) {
         return;                                               // V251124R8: 정의되지 않은 Tap Dance 슬롯 무시
     }
 
-    if (timer_elapsed(last_tap_time) <= tapdance_get_term_ms(active_td)) {
+    if (timer_elapsed32(last_tap_time) <= tapdance_get_term_ms(active_td)) {
         return;
     }
 
     action = &tap_dance_actions[slot_index];
 #else
-    if (!active_td || timer_elapsed(last_tap_time) <= GET_TAPPING_TERM(active_td, &(keyrecord_t){})) return;
+    if (!active_td || timer_elapsed32(last_tap_time) <= GET_TAPPING_TERM(active_td, &(keyrecord_t){})) return;
 
     action = &tap_dance_actions[QK_TAP_DANCE_GET_INDEX(active_td)];
 #endif

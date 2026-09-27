@@ -20,8 +20,10 @@
 #    else
 #        define IS_TAPPING_RECORD(r) (KEYEQ(tapping_key.event.key, (r->event.key)) && tapping_key.keycode == r->keycode)
 #    endif
-#    define WITHIN_TAPPING_TERM(e) (TIMER_DIFF_16(e.time, tapping_key.event.time) < GET_TAPPING_TERM(get_record_keycode(&tapping_key, false), &tapping_key))
-#    define WITHIN_QUICK_TAP_TERM(e) (TIMER_DIFF_16(e.time, tapping_key.event.time) < GET_QUICK_TAP_TERM(get_record_keycode(&tapping_key, false), &tapping_key))
+/* Events and queued records retain a 32-bit clock; casting a truncated
+ * timestamp here cannot recover a missed 16-bit wrap. */
+#    define WITHIN_TAPPING_TERM(e) (TIMER_DIFF_32(e.time, tapping_key.event.time) < GET_TAPPING_TERM(get_record_keycode(&tapping_key, false), &tapping_key))
+#    define WITHIN_QUICK_TAP_TERM(e) (TIMER_DIFF_32(e.time, tapping_key.event.time) < GET_QUICK_TAP_TERM(get_record_keycode(&tapping_key, false), &tapping_key))
 
 #    ifdef DYNAMIC_TAPPING_TERM_ENABLE
 uint16_t g_tapping_term = TAPPING_TERM;
@@ -129,7 +131,7 @@ void action_tapping_process(keyrecord_t record) {
  *     to RETRO_SHIFT if RETRO_SHIFT is set
  * for possibly retro shifted keys.
  */
-#        define MAYBE_RETRO_SHIFTING(ev, keyp) (get_auto_shifted_key(tapping_keycode, keyp) && TAP_GET_RETRO_TAPPING(keyp) && ((RETRO_SHIFT + 0) == 0 || TIMER_DIFF_16((ev).time, tapping_key.event.time) < (RETRO_SHIFT + 0)))
+#        define MAYBE_RETRO_SHIFTING(ev, keyp) (get_auto_shifted_key(tapping_keycode, keyp) && TAP_GET_RETRO_TAPPING(keyp) && ((RETRO_SHIFT + 0) == 0 || TIMER_DIFF_32((ev).time, tapping_key.event.time) < (RETRO_SHIFT + 0)))
 #        define TAP_IS_LT IS_QK_LAYER_TAP(tapping_keycode)
 #        define TAP_IS_MT IS_QK_MOD_TAP(tapping_keycode)
 #        define TAP_IS_RETRO IS_RETRO(tapping_keycode)

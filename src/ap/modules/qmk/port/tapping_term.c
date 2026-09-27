@@ -1,4 +1,5 @@
 #include "tapping_term.h"
+#include "tapping_term_policy.h"
 
 #ifdef G_TERM_ENABLE
 
@@ -9,10 +10,6 @@
 
 #define TAPPING_TERM_SIGNATURE      (0x50415447UL)   // "GTAP"
 #define TAPPING_TERM_VERSION        (1U)
-#define TAPPING_TERM_MIN_MS         (100U)
-#define TAPPING_TERM_MAX_MS         (500U)
-#define TAPPING_TERM_STEP_MS        (20U)            // V251123R4: VIA dropdown 스텝
-#define TAPPING_TERM_DEFAULT_MS     (200U)           // V251123R4: G_TERM_ENABLE 기본 tapping term
 
 
 typedef struct
@@ -40,7 +37,7 @@ typedef struct
 static tapping_term_storage_t tapping_term_storage = {0};
 static tapping_term_state_t   tapping_term_state =
 {
-  .tapping_term_ms         = TAPPING_TERM_DEFAULT_MS,
+  .tapping_term_ms         = ERA_TERM_DEFAULT_MS,
   .permissive_hold         = false,
   .hold_on_other_key_press = false,
   .retro_tapping           = false,
@@ -84,6 +81,13 @@ bool tapping_term_handle_via_command(uint8_t *data, uint8_t length)
   uint8_t *value_id   = &(data[2]);
   uint8_t *value_data = &(data[3]);
   bool     handled    = false;
+
+  if ((*command_id == id_custom_set_value || *command_id == id_custom_get_value) &&
+      *value_id == id_qmk_tapping_global_term_exact && length < 5U)
+  {
+    *command_id = id_unhandled;
+    return false;
+  }
 
   switch (*command_id)
   {
@@ -162,30 +166,12 @@ bool get_retro_tapping(uint16_t keycode, keyrecord_t *record)
 
 static uint16_t tapping_term_normalize(uint16_t term_ms)
 {
-  if (term_ms < TAPPING_TERM_MIN_MS)
-  {
-    term_ms = TAPPING_TERM_MIN_MS;
-  }
-  if (term_ms > TAPPING_TERM_MAX_MS)
-  {
-    term_ms = TAPPING_TERM_MAX_MS;
-  }
-
-  uint16_t offset     = term_ms - TAPPING_TERM_MIN_MS;
-  uint16_t step_count = offset / TAPPING_TERM_STEP_MS;
-  uint16_t normalized = TAPPING_TERM_MIN_MS + (step_count * TAPPING_TERM_STEP_MS);
-
-  if (normalized > TAPPING_TERM_MAX_MS)
-  {
-    normalized = TAPPING_TERM_MAX_MS;
-  }
-
-  return normalized;
+  return era_term_legacy_normalize(term_ms);
 }
 
 static uint16_t tapping_term_legacy_units(uint16_t term_ms)
 {
-  return tapping_term_normalize(term_ms) / 10U;  // V260821R1: exact 저장값을 20ms 격자로 내림해 legacy GET. 저장값은 바꾸지 않는다.
+  return era_term_legacy_units(term_ms);
 }
 
 static bool tapping_term_is_storage_valid(const tapping_term_storage_t *storage)
@@ -198,7 +184,7 @@ static bool tapping_term_is_storage_valid(const tapping_term_storage_t *storage)
   {
     return false;
   }
-  if (storage->tapping_term_ms < TAPPING_TERM_MIN_MS || storage->tapping_term_ms > TAPPING_TERM_MAX_MS)
+  if (!era_term_exact_valid(storage->tapping_term_ms))
   {
     return false;
   }
@@ -211,7 +197,7 @@ static bool tapping_term_is_storage_valid(const tapping_term_storage_t *storage)
 
 static void tapping_term_apply_defaults_locked(void)
 {
-  tapping_term_storage.tapping_term_ms         = TAPPING_TERM_DEFAULT_MS;
+  tapping_term_storage.tapping_term_ms         = ERA_TERM_DEFAULT_MS;
   tapping_term_storage.permissive_hold         = 0U;
   tapping_term_storage.hold_on_other_key_press = 0U;
   tapping_term_storage.retro_tapping           = 0U;
@@ -286,14 +272,14 @@ static bool tapping_term_set_value(uint8_t id, uint8_t *value_data, uint8_t leng
       break;
     }
 
-    case id_qmk_tapping_global_term_exact:  // V260821R1: 2-byte BE, 100–500만 허용, 격자 없음
+    case id_qmk_tapping_global_term_exact:  // Exact BE16 milliseconds; no legacy-grid conversion.
     {
       if (length < 5U)
       {
         return false;
       }
       term_ms = ((uint16_t)value_data[0] << 8) | (uint16_t)value_data[1];
-      if (term_ms < TAPPING_TERM_MIN_MS || term_ms > TAPPING_TERM_MAX_MS)
+      if (!era_term_exact_valid(term_ms))
       {
         return false;
       }

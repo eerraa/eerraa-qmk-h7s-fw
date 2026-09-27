@@ -51,6 +51,7 @@ def prepare_sandbox() -> None:
     for name in (
         "tapping_term.c",
         "tapping_term.h",
+        "tapping_term_policy.h",
         "tapdance.c",
         "tapdance.h",
         "era_state_sync.c",
