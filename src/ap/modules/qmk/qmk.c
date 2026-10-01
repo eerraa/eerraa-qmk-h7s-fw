@@ -79,9 +79,7 @@ void keyboard_post_init_user(void)
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record)
 {
-#ifdef KILL_SWITCH_ENABLE
-  kill_switch_process(keycode, record);
-#endif
+  // Kill switch has no record step: it resolves on the outgoing report (port/kill_switch.c).
 #ifdef KKUK_ENABLE
   kkuk_process(keycode, record);
 #endif

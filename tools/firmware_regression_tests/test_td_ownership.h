@@ -1,7 +1,7 @@
 /* Production TD/port/action path. Clock, matrix and output sinks are adapters. */
 static void check_td_ownership(const char *name)
 {
-  reset_fixture(TD(0), 46, 999);
+  reset_fixture(TD(0), RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, 999);
   tick(999); /* Re-establish the production tick epoch after the test clock reset. */
   tapdance_state[0] = (tapdance_slot_state_t){{KC_CAPS, MO(1), KC_NO, KC_NO}, 200};
   if (strcmp(name, "same_slot") == 0) {
@@ -22,7 +22,7 @@ static void check_td_ownership(const char *name)
     const uint16_t outputs[] = {KC_X, KC_LSFT, MO(2)};
     for (unsigned i = 0; i < 3; ++i) {
       const uint32_t t = 1000U + 1000U * i;
-      reset_fixture(TD(0), 46, t - 1U); tick(t - 1U);
+      reset_fixture(TD(0), RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, t - 1U); tick(t - 1U);
       tapdance_state[0] = (tapdance_slot_state_t){{KC_CAPS, MO(1), KC_NO, KC_NO}, 200};
       other_keycode = outputs[i];
       scan(t, 0, true); tick(t + 201U); scan(t + 210U, 1, true);

@@ -2,6 +2,8 @@
 import re
 from pathlib import Path
 
+from rgb_modes import check_fixture_numbers
+
 def function(source, name):
     m=re.search(rf"(?:static\s+)?(?:void|bool|uint\d+_t)\s+{name}\([^;]*?\)\s*\{{",source)  # V260913R1: uint8_t 반환 함수(채도 복원 규칙)도 추출한다
     assert m, name
@@ -204,6 +206,11 @@ int main(void) {
         assert 'rgblight_indicator_post_host_event' not in refresh
     out_ws=root/'tools/firmware_regression_tests/test_ws2812_transport.c'
 
+    # Kill switch는 호스트가 받는 report에서 판정한다: 6KRO 송신은 사본을 filter에 통과시킨 뒤 중복을 거르고 보낸다.
+    sender=function((root/'src/ap/modules/qmk/quantum/action_util.c').read_text(encoding='utf-8'),'send_6kro_report')
+    assert sender.index('keyboard_report_filter(&report);') < sender.index('memcmp(&report, &last_report')
+    assert 'host_keyboard_send(&report);' in sender and 'host_keyboard_send(keyboard_report)' not in sender
+    assert 'kill_switch_process' not in qmk
     # V260913R1: 채도 복원 규칙은 목적지 효과로 판정한다. Solid Color 출발 한정이 되살아나면 실패한다.
     carries=function(rgb,'rgblight_mode_carries_hue')
     transition=function(rgb,'rgblight_mode_transition_sat')
@@ -226,8 +233,8 @@ int main(void) {
 enum { RGBLIGHT_MODE_STATIC_LIGHT = 1, RGBLIGHT_MODE_BREATHING = 2, RGBLIGHT_MODE_RAINBOW_MOOD = 6, RGBLIGHT_MODE_RAINBOW_SWIRL = 9,
        RGBLIGHT_MODE_SNAKE = 15, RGBLIGHT_MODE_KNIGHT = 21, RGBLIGHT_MODE_CHRISTMAS = 24, RGBLIGHT_MODE_STATIC_GRADIENT = 25,
        RGBLIGHT_MODE_RGB_TEST = 35, RGBLIGHT_MODE_ALTERNATING = 36, RGBLIGHT_MODE_TWINKLE = 37,
-       RGBLIGHT_MODE_PULSE_ON_PRESS = 43, RGBLIGHT_MODE_PULSE_OFF_PRESS = 44, RGBLIGHT_MODE_PULSE_ON_PRESS_HOLD = 45,
-       RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD = 46 };
+       RGBLIGHT_MODE_PULSE_OFF_PRESS = 43, RGBLIGHT_MODE_PULSE_ON_PRESS = 44, RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD = 45,
+       RGBLIGHT_MODE_PULSE_ON_PRESS_HOLD = 46 };
 /* Board layout with every effect enabled: each variant maps onto its base mode exactly as rgblight_modes.h expands. */
 static const uint8_t mode_base_table[47] = {0, 1, 2, 2, 2, 2, 6, 6, 6, 9, 9, 9, 9, 9, 9, 15, 15, 15, 15, 15, 15, 21, 21, 21, 24,
   25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 35, 36, 37, 37, 37, 37, 37, 37, 43, 44, 45, 46};
@@ -255,4 +262,5 @@ int main(void) {
   return 0;
 }
 ''',encoding='utf-8')
+    check_fixture_numbers(root/'src/ap/modules/qmk', out_sat.read_text(encoding='utf-8'), out_sat.name)
     return out, out_reset, out_rgb, out_ws, out_sat

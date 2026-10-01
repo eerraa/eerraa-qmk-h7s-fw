@@ -33,7 +33,7 @@ static void test_host_phases(void) {
     const unsigned holds[]={1,4,5,6,20,40,260,280};
     const unsigned offsets[]={0,1,100,500,1000,1600,2000};
     for(unsigned s=0;s<3;++s)for(unsigned h=0;h<8;++h)for(unsigned d=0;d<7;++d) {
-        setup(46,speeds[s]); key(true); run_us(holds[h]*1000); key(false);
+        setup(RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,speeds[s]); key(true); run_us(holds[h]*1000); key(false);
         run_us(offsets[d]); unsigned frames=mock_wire_count; host(2); run_us(5000);
         assert(mock_wire_count>frames); pixels(0,200,0);
         assert(rgblight_indicator_state[0].active);
@@ -41,11 +41,11 @@ static void test_host_phases(void) {
     }
 }
 static void test_minimum_and_busy(void) {
-    for(unsigned mode=43;mode<=46;++mode) {
+    for(unsigned mode=RGBLIGHT_MODE_PULSE_OFF_PRESS;mode<=RGBLIGHT_MODE_PULSE_ON_PRESS_HOLD;++mode) {
         setup(mode,0);
         rgblight_sethsv_eeprom_helper(0,0,91,false); loop_once();
         unsigned before=mock_wire_count; key(true); run_us(100); key(false); run_us(30000);
-        bool default_on=mode==44||mode==46;
+        bool default_on=mode==RGBLIGHT_MODE_PULSE_OFF_PRESS||mode==RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD;
         int start=-1,end=-1;
         for(unsigned i=before;i<mock_wire_count;++i) {
             bool on=mock_wire[i][HW_WS2812_RGB*3]!=0;
@@ -56,18 +56,18 @@ static void test_minimum_and_busy(void) {
         assert(mock_wire_ns[end]-mock_wire_ns[start]>=5000000U);
         assert(!rgblight_pulse_effect_state.latched);
     }
-    setup(46,0); mock_fail_starts=10;
+    setup(RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,0); mock_fail_starts=10;
     unsigned before=mock_wire_count; key(true); run_us(100);key(false);run_us(30000);
     assert(mock_wire_count>=before+2); pixels(76,76,76);
 }
 static void test_preemption_config_and_base(void) {
-    setup(46,0); key(true); run_us(100); host(2); run_us(4000); pixels(0,200,0);
+    setup(RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,0); key(true); run_us(100); host(2); run_us(4000); pixels(0,200,0);
     assert(!rgblight_pulse_effect_state.present_pending);
     for(unsigned i=0;i<RGBLIGHT_LED_COUNT;++i)assert(led[i].r==0 && led[i].g==0 && led[i].b==0);
     key(false); run_us(10000); host(0);run_us(5000);pixels(76,76,76);
-    setup(46,15); key(true);run_us(40000);
+    setup(RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,15); key(true);run_us(40000);
     rgblight_sethsv_eeprom_helper(0,0,123,false);loop_once();run_us(5000);pixels(0,0,0);
-    assert(rgblight_pulse_effect_state.key_tracking_valid);
+    assert(rgblight_pulse_effect_state.pressed_count == 1);
     key(false);run_us(5000);pixels(123,123,123);
     host(2);run_us(5000);pixels(0,200,0);
     rgblight_sethsv_eeprom_helper(0,0,45,false);loop_once();run_us(5000);pixels(0,200,0);
@@ -76,12 +76,12 @@ static void test_preemption_config_and_base(void) {
     rgblight_indicator_set_ranges(ranges,4);host(2);run_us(5000);
     assert(led[2].r==45 && led[2].g==45);
     host(0);run_us(5000);pixels(45,45,45);
-    setup(46,0);key(true);run_us(100);rgblight_set_output_suspend_state(true);loop_once();run_us(5000);pixels(0,0,0);
+    setup(RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,0);key(true);run_us(100);rgblight_set_output_suspend_state(true);loop_once();run_us(5000);pixels(0,0,0);
     key(false);run_us(10000);rgblight_set_output_suspend_state(false);loop_once();run_us(5000);pixels(76,76,76);
 }
 static void inject_caps(void) { usbHidSetStatusLed(2); }
 static void test_mailbox(void) {
-    setup(46,0); usbHidSetStatusLed(0);
+    setup(RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,0); usbHidSetStatusLed(0);
     mock_before_mask=inject_caps; rgblight_consume_host_led_queue();
     assert(rgblight_indicator_state[0].active);
     host(0); usbHidSetStatusLed(0); mock_after_restore=inject_caps;
@@ -93,14 +93,14 @@ static void test_mailbox(void) {
     run_us(5000);pixels(76,76,76);
 }
 static void test_wrap_and_retrigger(void) {
-    setup(46,0);mock_now_ns=(uint64_t)(UINT32_MAX-2000)*1000U;key(true);run_us(100);key(false);run_us(30000);pixels(76,76,76);
-    setup(46,0);key(true);run_us(2000);
+    setup(RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,0);mock_now_ns=(uint64_t)(UINT32_MAX-2000)*1000U;key(true);run_us(100);key(false);run_us(30000);pixels(76,76,76);
+    setup(RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,0);key(true);run_us(2000);
     rgblight_handle_physical_key(true,0,1,sync_timer_read32());loop_once();key(false);run_us(10000);pixels(0,0,0);
     rgblight_handle_physical_key(false,0,1,sync_timer_read32());loop_once();run_us(5000);pixels(76,76,76);
 }
 static void test_external_indicators(void) {
 #if HW_WS2812_RGB == 2
-    setup(46,0);
+    setup(RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,0);
     rgblight_indicator_range_t ranges[4]={{0}};
     rgblight_indicator_set_ranges_at(0,ranges,4);
     rgblight_indicator_set_ranges_at(1,ranges,4);
@@ -115,7 +115,7 @@ static void test_external_indicators(void) {
 #endif
 }
 static void test_static_off_and_delayed_task(void) {
-    setup(46,0);
+    setup(RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,0);
     for(unsigned speed=0;speed<=255;++speed) { rgblight_config.speed=speed; assert(rgblight_effect_pulse_duration_ms()==5+speed); }
     rgblight_config.mode=RGBLIGHT_MODE_STATIC_LIGHT;
     rgblight_sethsv_eeprom_helper(0,0,61,false);loop_once();run_us(5000);
@@ -124,7 +124,7 @@ static void test_static_off_and_delayed_task(void) {
     rgblight_config.enable=false;rgblight_request_render();loop_once();run_us(5000);pixels(0,0,0);
     host(2);run_us(5000);pixels(0,200,0);host(0);run_us(5000);pixels(0,0,0);
 
-    setup(46,0); unsigned before=mock_wire_count;
+    setup(RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,0); unsigned before=mock_wire_count;
     rgblight_handle_physical_key(true,0,0,sync_timer_read32());
     mock_advance_us(8000); // No RGB task before the physical deadline.
     rgblight_handle_physical_key(false,0,0,sync_timer_read32());loop_once();run_us(30000);
@@ -132,16 +132,16 @@ static void test_static_off_and_delayed_task(void) {
     assert(mock_wire[mock_wire_count-2][HW_WS2812_RGB*3]==0);
     assert(mock_wire_ns[mock_wire_count-1]-mock_wire_ns[mock_wire_count-2]>=5000000U);
 
-    setup(46,0);mock_fail_starts=3;key(true);
-    rgblight_config.mode=43;rgblight_sethsv_eeprom_helper(0,0,91,false);loop_once();
+    setup(RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,0);mock_fail_starts=3;key(true);
+    rgblight_config.mode=RGBLIGHT_MODE_PULSE_ON_PRESS;rgblight_sethsv_eeprom_helper(0,0,91,false);loop_once();
     run_us(30000);pixels(0,0,0);assert(!rgblight_pulse_effect_state.latched);
-    setup(46,0);mock_now_ns=(uint64_t)(UINT32_MAX-2)*1000000U;
+    setup(RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,0);mock_now_ns=(uint64_t)(UINT32_MAX-2)*1000000U;
     key(true);run_us(100);key(false);run_us(30000);pixels(76,76,76);
 }
 
 static void test_overlay_union(void) {
 #if RGBLIGHT_INDICATOR_SLOT_COUNT >= 2
-    setup(46,0);
+    setup(RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,0);
     rgblight_indicator_range_t left[4]={{0,0},{0,15},{0,0},{0,0}};
     rgblight_indicator_range_t right[4]={{0,0},{0,0},{15,15},{0,0}};
     rgblight_indicator_set_ranges_at(0,left,4);rgblight_indicator_set_ranges_at(1,right,4);

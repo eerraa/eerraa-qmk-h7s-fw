@@ -7,7 +7,7 @@ static bool hid_output_down(uint16_t code) {
 /* Product TD, LT/MT queue, action resources and report constructors.
  * Clock/matrix, EEPROM and physical USB/LED completion are adapters. */
 static void check_td_lifetime(const char *name) {
-  reset_fixture(TD(0), 46, 999); tick(999);
+  reset_fixture(TD(0), RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, 999); tick(999);
   automatic_caps_feedback = false;
   if (!strcmp(name, "capture") || !strcmp(name, "partial") || !strcmp(name, "partial_reverse")) {
     tapdance_state[0].actions[1] = !strcmp(name, "capture") ? KC_LCTL : ((MOD_LCTL << 8) | KC_LSFT);
@@ -94,7 +94,7 @@ static void check_td_lifetime(const char *name) {
   } else if (!strcmp(name,"caps_feedback")) {
     const unsigned speeds[]={0,15,255};
     for(unsigned dance=0;dance<2;++dance)for(unsigned speed=0;speed<3;++speed)for(unsigned phase=0;phase<4;++phase) {
-      reset_fixture(dance ? TD(0) : LT(1,KC_CAPS),46,50000); tick(50000);
+      reset_fixture(dance ? TD(0) : LT(1,KC_CAPS),RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,50000); tick(50000);
       automatic_caps_feedback=false; rgblight_config.speed=speeds[speed];
       scan(50010,0,true); if(phase&1) task();
       if(phase>=2) {scan(50020,0,false); if(phase&1) task();}
@@ -144,7 +144,7 @@ static void check_td_lifetime(const char *name) {
     scan(1000,0,true); tick(1201); assert(layer_state==2);
     rgblight_config.enable=false;
     rgblight_sethsv_eeprom_helper(0,0,120,false); task(); assert(layer_state==2);
-    rgblight_config.enable=true; rgblight_config.mode=43;
+    rgblight_config.enable=true; rgblight_config.mode=RGBLIGHT_MODE_PULSE_ON_PRESS;
     rgblight_sethsv_eeprom_helper(0,0,120,false); task(); assert(layer_state==2);
     rgblight_set_output_suspend_state(true); task(); assert(layer_state==2);
     rgblight_set_output_suspend_state(false); task(); assert(layer_state==2);
@@ -190,7 +190,7 @@ static void check_td_lifetime(const char *name) {
     const uint16_t outputs[]={KC_MS_BTN1,KC_MS_UP,KC_AUDIO_VOL_UP,KC_SYSTEM_SLEEP};
     for(unsigned i=0;i<8;++i) {
       const uint16_t out=outputs[i/2]; const bool td_release_first=i&1; const uint32_t t=2000U+1000U*i;
-      reset_fixture(TD(0),46,t-1U); tick(t-1U); automatic_caps_feedback=false;
+      reset_fixture(TD(0),RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,t-1U); tick(t-1U); automatic_caps_feedback=false;
       tapdance_state[0].actions[1]=out; other_keycode=out;
       scan(t,0,true); tick(t+201U); scan(t+210U,1,true); assert(hid_output_down(out));
       scan(t+220U,td_release_first ? 0 : 1,false); task(); assert(hid_output_down(out));
@@ -200,7 +200,7 @@ static void check_td_lifetime(const char *name) {
     /* A one-usage report: an earlier input's up must not clear a later input's usage. */
     for(unsigned td_first=0;td_first<2;++td_first) {
       const uint32_t t=2000U+1000U*td_first;
-      reset_fixture(TD(0),46,t-1U); tick(t-1U); automatic_caps_feedback=false;
+      reset_fixture(TD(0),RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,t-1U); tick(t-1U); automatic_caps_feedback=false;
       tapdance_state[0].actions[1]=td_first ? KC_AUDIO_VOL_UP : KC_AUDIO_VOL_DOWN;
       other_keycode=td_first ? KC_AUDIO_VOL_DOWN : KC_AUDIO_VOL_UP;
       if(td_first) {scan(t,0,true); tick(t+201U); scan(t+210U,1,true);}
@@ -210,7 +210,7 @@ static void check_td_lifetime(const char *name) {
       scan(t+230U,td_first ? 1 : 0,false); task(); assert(last_consumer==0);
     }
     /* Ordinary keys alone keep QMK's single-slot release. */
-    reset_fixture(TD(0),46,4999); tick(4999);
+    reset_fixture(TD(0),RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,4999); tick(4999);
     other_keycode=KC_AUDIO_VOL_UP; third_keycode=KC_AUDIO_VOL_DOWN;
     scan(5000,1,true); scan(5010,2,true); assert(last_consumer==KEYCODE2CONSUMER(KC_AUDIO_VOL_DOWN));
     scan(5020,1,false); assert(last_consumer==0); scan(5030,2,false);

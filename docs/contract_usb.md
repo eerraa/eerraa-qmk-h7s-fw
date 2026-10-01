@@ -282,12 +282,17 @@ Configuration producers must commit `rgblight_config` before requesting pulse
 reevaluation. Do not compute/render pulse output inside
 `rgblight_sethsv_eeprom_helper()` or another pre-commit setter; doing so can
 render the previous request's values. Colour-only changes preserve the current
-physical latch/key; a base-mode change may reset it. The host Caps indicator is
+physical latch and held keys; a base-mode change may reset them. The host Caps indicator is
 an independent overlay and its release must restore the committed base output.
 
-Hold variants follow the most recently pressed physical key; releasing an older
-key must not clear the newer hold. Pulse expiry is owned by the RGB task's
-periodic gate rather than animation-interval quantization. The integrated
+Hold variants last while any physical key pressed in that mode is still down,
+tracked per matrix position; the release of a key pressed before a mode change
+or reset must not end a newer hold. Selecting a mode (including the same mode
+again, and RGB being re-enabled), RGB OFF, and output Sleep entry or exit each
+retire the latch and tracked keys, and a press while output is suspended is not
+admitted. EERRAA draws the same boundaries, so the two products pulse alike.
+Pulse expiry is owned by the RGB task's periodic gate rather than
+animation-interval quantization. The integrated
 physical-RGB fixture under `tools/firmware_regression_tests/` owns the
 executable TD/LT, commit-order, hold, overlay and wrap regression cases. This
 physical-input rule does not collapse TD/LT logical semantics. Host LED timing

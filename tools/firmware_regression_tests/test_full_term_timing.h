@@ -14,7 +14,7 @@ static void check_full_term_timing(void)
       for (unsigned modtap = 0; modtap < 2; modtap++)
       {
         uint16_t code = modtap ? MT(MOD_LCTL, KC_CAPS) : LT(1, KC_CAPS);
-        reset_fixture(code, 46, start - 10U);
+        reset_fixture(code, RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, start - 10U);
         g_tapping_term = term;
         scan(start, 0, true);
         assert(tapping_key.event.time == start);
@@ -26,7 +26,7 @@ static void check_full_term_timing(void)
         assert(layer_state == 0 && get_mods() == 0 && caps_press_count == 0);
         if (term > 1)
         {
-          reset_fixture(code, 46, start - 10U);
+          reset_fixture(code, RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, start - 10U);
           g_tapping_term = term;
           scan(start, 0, true);
           scan(start + term - 1U, 0, false);
@@ -35,7 +35,7 @@ static void check_full_term_timing(void)
       }
       for (uint8_t slot = 0; slot < TAPDANCE_SLOT_COUNT; slot++)
       {
-        reset_fixture(TD(slot), 46, start - 10U);
+        reset_fixture(TD(slot), RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, start - 10U);
         tapdance_user_data_t user = {.slot_index = slot};
         tap_dance_actions[slot] = (tap_dance_action_t){
           .fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, NULL},
@@ -55,7 +55,7 @@ static void check_full_term_timing(void)
     // Skip the entire old 16-bit expiry window; never re-enter the tap window.
     for (uint16_t term = 65534; ; term++)
     {
-      reset_fixture(LT(1, KC_CAPS), 46, start - 10U);
+      reset_fixture(LT(1, KC_CAPS), RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, start - 10U);
       g_tapping_term = term;
       scan(start, 0, true);
       tick(start + 65533U);
@@ -68,7 +68,7 @@ static void check_full_term_timing(void)
     }
     // Both events of the second LT wait behind the first LT. The short second
     // tap stays a tap when replay happens long after its physical release.
-    reset_fixture(LT(1, KC_CAPS), 46, start - 10U);
+    reset_fixture(LT(1, KC_CAPS), RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, start - 10U);
     g_tapping_term = UINT16_MAX;
     other_keycode = LT(1, KC_CAPS);
     scan(start, 0, true);

@@ -32,6 +32,14 @@ extern report_nkro_t *nkro_report;
 
 void send_keyboard_report(void);
 
+/* Last stop before the host: a filter may remove usages from the copy that is
+   sent, never add one, so the built report and its owners stay as they are.
+   The weak defaults send the report unchanged. */
+void keyboard_report_filter(report_keyboard_t *report);
+#ifdef NKRO_ENABLE
+void nkro_report_filter(report_nkro_t *report);
+#endif
+
 #ifdef TAPDANCE_ENABLE
 #    define TAP_DANCE_OWNED_ACTIONS
 /* A bounded TD contribution is separate from ordinary QMK bit state. */

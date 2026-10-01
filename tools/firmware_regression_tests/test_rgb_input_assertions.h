@@ -107,12 +107,12 @@ static void check_hold(bool dance)
   assert(layer_state == 0 && caps_press_count == 0 && visible_frame == 1);
 }
 
-static void check_modes_and_last_key(void)
+static void check_modes_and_held_keys(void)
 {
-  for (uint8_t mode = 43; mode <= 46; mode++)
+  for (uint8_t mode = RGBLIGHT_MODE_PULSE_OFF_PRESS; mode <= RGBLIGHT_MODE_PULSE_ON_PRESS_HOLD; mode++)
   {
-    bool normal_on = mode == 44 || mode == 46;
-    bool hold = mode >= 45;
+    bool normal_on = mode == RGBLIGHT_MODE_PULSE_OFF_PRESS || mode == RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD;
+    bool hold = mode == RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD || mode == RGBLIGHT_MODE_PULSE_ON_PRESS_HOLD;
     reset_fixture(KC_A, mode, 3000);
     assert(visible_frame == normal_on);
     scan(3000, 0, true); task();
@@ -120,7 +120,7 @@ static void check_modes_and_last_key(void)
     tick(3051);
     assert(visible_frame == (hold ? !normal_on : normal_on));
     scan(3060, 1, true); task();
-    scan(3070, 0, false); task(); // 이전 키의 release는 최근 키 hold를 해제하지 않는다.
+    scan(3070, 0, false); task(); // 다른 키가 눌려 있으면 먼저 누른 키를 떼도 hold가 이어진다.
     tick(3120);
     assert(visible_frame == (hold ? !normal_on : normal_on));
     scan(3130, 1, false); task();
@@ -130,28 +130,30 @@ static void check_modes_and_last_key(void)
 
 static void check_filter_and_replay(void)
 {
-  reset_fixture(LT(1, KC_CAPS), 46, 4000);
+  reset_fixture(LT(1, KC_CAPS), RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, 4000);
   scan(4000, 0, true); task();
   scan(4010, 1, true); task(); // LT 판정 버퍼가 다른 키를 잡아도 물리 추적은 즉시 바뀐다.
-  assert(rgblight_pulse_effect_state.key_col == 1);
+  assert(rgblight_pulse_effect_state.pressed_count == 2);
   scan(4020, 1, false); task();
   tick(4061);
-  assert(visible_frame == 1); // last-pressed-key 의미를 보존한다.
+  assert(visible_frame == 0); // 먼저 누른 키가 아직 눌려 있어 Hold가 이어진다.
   scan(4070, 0, false); task();
+  // 마지막 키를 떼면 Hold가 끝나고, 탭으로 확정된 Caps 표시가 pulse 대신 보인다.
+  assert(rgblight_pulse_effect_state.pressed_count == 0 && !rgblight_pulse_effect_state.latched && visible_frame == 2);
   assert(rgblight_pulse_effect_state.deadline_ms == 0); // 지연 재생이 pulse를 다시 시작하지 않는다.
 
-  reset_fixture(KC_A, 46, 5000);
+  reset_fixture(KC_A, RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, 5000);
   accept_record = false;
   scan(5000, 0, true); task();
   assert(visible_frame == 0);
   accept_keypress = false;
   scan(5060, 0, false); task();
-  assert(visible_frame == 1 && !rgblight_pulse_effect_state.key_tracking_valid);
+  assert(visible_frame == 1 && rgblight_pulse_effect_state.pressed_count == 0);
 }
 
 static void check_indicators_sleep_wrap(void)
 {
-  reset_fixture(KC_A, 46, 6000);
+  reset_fixture(KC_A, RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, 6000);
   rgblight_indicator_post_host_event((led_t){2}); task();
   scan(6001, 0, true); task();
   assert(visible_frame == 2); // Caps ON은 pulse보다 우선한다.
@@ -161,16 +163,26 @@ static void check_indicators_sleep_wrap(void)
   scan(6061, 0, false); task();
   assert(visible_frame == 1);
 
-  output_suspended = true;
-  rgblight_request_render(); task();
+  // 절전 경계(EERRAA와 같음): 들어가면 래치·추적 키를 버리고, 절전 중 press는 받지 않으며,
+  // 풀리면 기본 출력이다. 절전 전에 누른 키의 release는 절전 뒤의 새 hold를 끝내지 못한다.
   scan(6100, 0, true); task();
-  assert(visible_frame == 0);
-  scan(6160, 0, false); task();
-  output_suspended = false;
-  rgblight_request_render(); task();
-  assert(visible_frame == 1);
+  assert(visible_frame == 0 && rgblight_pulse_effect_state.pressed_count == 1);
+  rgblight_set_output_suspend_state(true); task();
+  assert(visible_frame == 0 && !rgblight_pulse_effect_state.latched && rgblight_pulse_effect_state.pressed_count == 0);
+  scan(6110, 1, true); task();
+  assert(visible_frame == 0 && !rgblight_pulse_effect_state.latched && rgblight_pulse_effect_state.pressed_count == 0);
+  scan(6120, 1, false); task();
+  rgblight_set_output_suspend_state(false); task();
+  assert(visible_frame == 1 && !rgblight_pulse_effect_state.latched && rgblight_pulse_effect_state.pressed_count == 0);
+  scan(6130, 1, true); task();
+  tick(6200);
+  assert(visible_frame == 0 && rgblight_pulse_effect_state.pressed_count == 1);
+  scan(6210, 0, false); task();
+  assert(visible_frame == 0 && rgblight_pulse_effect_state.pressed_count == 1);
+  scan(6220, 1, false); task();
+  assert(visible_frame == 1 && rgblight_pulse_effect_state.pressed_count == 0);
 
-  reset_fixture(KC_A, 46, UINT32_MAX - 20);
+  reset_fixture(KC_A, RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, UINT32_MAX - 20);
   scan(UINT32_MAX - 20, 0, true); task();
   scan(UINT32_MAX - 10, 0, false); task();
   tick(28); assert(visible_frame == 0);
@@ -187,7 +199,7 @@ static void check_distinct_tapping_semantics(void)
 {
   for (unsigned dance = 0; dance < 2; dance++)
   {
-    reset_fixture(dance ? TD(0) : LT(1, KC_CAPS), 46, 7000);
+    reset_fixture(dance ? TD(0) : LT(1, KC_CAPS), RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, 7000);
     scan(7000, 0, true); task();
     scan(7030, 1, true); task();
     assert(caps_press_count == dance); // TD interruption은 tap, LT 기본 정책은 판정을 보류한다.
@@ -195,7 +207,7 @@ static void check_distinct_tapping_semantics(void)
     scan(7050, 0, false); task();
     assert(caps_press_count == 1 && caps_release_count == 1 && layer_state == 0);
 
-    reset_fixture(dance ? TD(0) : LT(1, KC_CAPS), 46, 8000);
+    reset_fixture(dance ? TD(0) : LT(1, KC_CAPS), RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, 8000);
     scan(8000, 0, true); task();
     scan(8040, 0, false); task();
     scan(8150, 0, true); task();
@@ -206,7 +218,7 @@ static void check_distinct_tapping_semantics(void)
     assert(layer_state == 0 && caps_release_count == caps_press_count);
   }
 
-  reset_fixture(TD(0), 46, 9000);
+  reset_fixture(TD(0), RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, 9000);
   tapdance_state[0].actions[2] = KC_B;
   scan(9000, 0, true); task();
   assert(visible_frame == 0);
@@ -218,7 +230,7 @@ static void check_distinct_tapping_semantics(void)
 
 static void check_velocikey_physical_presses(void)
 {
-  reset_fixture(LT(1, KC_CAPS), 46, 10000);
+  reset_fixture(LT(1, KC_CAPS), RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, 10000);
   rgblight_config.velocikey = true;
   scan(10000, 0, true);
   assert(typing_speed == 4);
@@ -232,13 +244,13 @@ static void check_velocikey_physical_presses(void)
 
 static void check_mod_tap_and_following_caps(void)
 {
-  reset_fixture(MT(MOD_LCTL, KC_CAPS), 46, 11000);
+  reset_fixture(MT(MOD_LCTL, KC_CAPS), RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, 11000);
   scan(11000, 0, true); task();
   scan(11040, 0, false); task();
   assert(now_ms == 11040 && caps_press_time == 11040 && caps_release_time == 11040);
   assert(caps_press_count == 1 && caps_release_count == 1 && get_mods() == 0);
 
-  reset_fixture(TD(0), 46, 12000);
+  reset_fixture(TD(0), RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, 12000);
   scan(12000, 0, true); task();
   scan(12040, 0, false); task();
   mapped_keycode = KC_CAPS;
@@ -300,7 +312,7 @@ static void check_config_commit_renders_committed_value(void)
   scan(13100, 0, true); task();
   assert(visible_frame == 0);
   rgblight_sethsv_eeprom_helper(0, 0, 120, false); task();
-  assert(visible_frame == 0 && rgblight_pulse_effect_state.latched && rgblight_pulse_effect_state.key_tracking_valid); // 색 커밋은 물리 hold를 끊지 않는다.
+  assert(visible_frame == 0 && rgblight_pulse_effect_state.latched && rgblight_pulse_effect_state.pressed_count == 1); // 색 커밋은 물리 hold를 끊지 않는다.
   scan(13200, 0, false); task();
   assert(visible_frame == 1 && visible_val == 120);
 
@@ -315,6 +327,19 @@ static void check_config_commit_renders_committed_value(void)
   rgblight_config.mode = RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD;
   rgblight_sethsv_eeprom_helper(0, 0, 90, false); task();
   assert(visible_frame == 1 && visible_val == 90);
+
+  // 모드 전환 전에 눌린 키의 release는 새 모드에서 누른 키의 Hold를 끝내지 못한다.
+  scan(13500, 0, true); task();
+  rgblight_config.mode = RGBLIGHT_MODE_PULSE_ON_PRESS_HOLD;
+  rgblight_sethsv_eeprom_helper(0, 0, 90, false); task();
+  assert(visible_frame == 0 && rgblight_pulse_effect_state.pressed_count == 0);
+  scan(13510, 1, true); task();
+  scan(13520, 0, false); task();
+  assert(rgblight_pulse_effect_state.pressed_count == 1);
+  tick(13600);
+  assert(visible_frame == 1);
+  scan(13610, 1, false); task();
+  assert(visible_frame == 0 && rgblight_pulse_effect_state.pressed_count == 0);
 }
 
 #include "test_tapdance_timing.h"
@@ -336,7 +361,7 @@ int main(int argc, char **argv)
   assert(physical_color_writes == 0);
   check_hold(true);
   check_hold(false);
-  check_modes_and_last_key();
+  check_modes_and_held_keys();
   check_filter_and_replay();
   check_indicators_sleep_wrap();
   check_config_commit_renders_committed_value();

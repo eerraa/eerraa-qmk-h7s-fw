@@ -15,7 +15,7 @@ static void check_slot_decision_boundaries(void)
 {
   for (uint8_t slot = 0; slot < TAPDANCE_SLOT_COUNT; slot++)
   {
-    reset_fixture(TD(slot), 46, 65000);
+    reset_fixture(TD(slot), RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, 65000);
     tapdance_user_data_t user = {.slot_index = slot};
     tap_dance_actions[slot] = (tap_dance_action_t){
       .fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, NULL},
@@ -44,7 +44,7 @@ static void check_slot_decision_boundaries(void)
 
 static void check_finished_release_preserves_other_dance(void)
 {
-  reset_fixture(TD(0), 46, 70000);
+  reset_fixture(TD(0), RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD, 70000);
   tapdance_user_data_t users[2] = {{.slot_index = 0}, {.slot_index = 1}};
   for (uint8_t slot = 0; slot < 2; slot++)
   {

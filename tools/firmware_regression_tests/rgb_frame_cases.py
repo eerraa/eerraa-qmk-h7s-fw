@@ -2,6 +2,8 @@
 from pathlib import Path
 import re
 
+from rgb_modes import pulse_defines
+
 
 def function(source: str, name: str) -> str:
     pattern = rf'^(?:(?:static|inline)\s+)*(?:void|bool|uint\d+_t|rgb_led_t|rgblight_indicator_range_t)\s+{name}\([^;]*?\)\s*\{{'
@@ -25,7 +27,7 @@ def generate(root: Path, build: Path, board: str = 'brick60', source_root: Path 
     config = read(qmk/f'keyboards/era/sirind/{board}/config.h')
     port = read(qmk/f'keyboards/era/sirind/{board}/port/indicator_port.c')
     driver = read(qmk/f'keyboards/era/sirind/{board}/port/driver/rgblight_drivers.c')
-    macros = '\n'.join(re.findall(r'^#define\s+(?:HW_WS2812_\w+|RGBLIGHT_INDICATOR_SLOT_COUNT)\s+[^\n]+', config, re.M))
+    macros = '\n'.join(re.findall(r'^#define\s+(?:HW_WS2812_\w+|RGBLIGHT_INDICATOR_SLOT_COUNT|MATRIX_ROWS|MATRIX_COLS)\s+[^\n]+', config, re.M))
     pre = '''#include <assert.h>\n#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <string.h>
 #define PACKED __attribute__((packed))
 #define RGBLIGHT_ENABLE
@@ -38,12 +40,8 @@ def generate(root: Path, build: Path, board: str = 'brick60', source_root: Path 
 #define RGBLIGHT_EFFECT_PULSE_OFF_PRESS
 #define RGBLIGHT_EFFECT_PULSE_ON_PRESS_HOLD
 #define RGBLIGHT_EFFECT_PULSE_OFF_PRESS_HOLD
-#define RGBLIGHT_MODE_PULSE_ON_PRESS 43
-#define RGBLIGHT_MODE_PULSE_OFF_PRESS 44
-#define RGBLIGHT_MODE_PULSE_ON_PRESS_HOLD 45
-#define RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD 46
 #define dprintf(...) ((void)0)
-'''
+''' + pulse_defines(qmk)
     constants = rh[rh.index('#ifndef RGBLIGHT_EFFECT_PULSE_DURATION_MIN_MS'):rh.index('#ifndef RGBLIGHT_SAT_STEP')]
     indicator_types = rh[rh.index('enum rgblight_indicator_target'):rh.index('#ifdef RGBLIGHT_LAYERS', rh.index('enum rgblight_indicator_target'))]
     runtime_types = rh[rh.index('typedef union {\n    uint64_t raw;'):rh.index('/* === Utility Functions ===*/')]

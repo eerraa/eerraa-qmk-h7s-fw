@@ -16,8 +16,11 @@
 
 #define KC_NO 0x00U
 #define KC_A 0x04U
+#define KC_B 0x05U
+#define KC_C 0x06U
 #define KC_D 0x07U
 #define KC_F 0x09U
+#define KC_S 0x16U
 #define KC_W 0x1AU
 #define KC_EXSEL 0xA4U
 #define KC_LEFT_CTRL 0xE0U
@@ -26,9 +29,18 @@
 #define IS_MODIFIER_KEYCODE(code) ((uint16_t)(code) >= KC_LEFT_CTRL && (uint16_t)(code) <= 0xE7U)
 #define MOD_BIT(code) ((uint8_t)(1U << ((uint8_t)(code) & 0x07U)))
 
+#define MATRIX_ROWS 16U
+#define MATRIX_COLS 16U
+
+typedef struct {
+    uint8_t col;
+    uint8_t row;
+} keypos_t;
+
 typedef struct {
     struct {
-        bool pressed;
+        keypos_t key;
+        bool     pressed;
     } event;
 } keyrecord_t;
 
@@ -49,6 +61,7 @@ void del_mods(uint8_t mods);
 void logPrintf(const char *fmt, ...);
 void era_state_sync_bump_config(void);
 bool kill_switch_is_use(uint16_t keycode);
+void keyboard_report_filter(report_keyboard_t *report);
 
 #define EECONFIG_DEBOUNCE_HELPER(name, offset, config) \
     static inline void eeconfig_init_##name(void) { (void)(offset); (void)sizeof(config); } \

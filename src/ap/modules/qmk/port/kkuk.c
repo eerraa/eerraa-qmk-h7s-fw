@@ -55,6 +55,8 @@ static uint32_t pre_time;
 static uint32_t pre_time_delay;
 static uint8_t key_cnt = 0;
 static uint8_t pre_cnt = 0;
+// 셈에 넣은 매트릭스 위치. 누르는 동안 SOCD나 키맵이 바뀌어도 release는 자기 press가 한 일만 되돌린다.
+static uint8_t kkuk_counted[(MATRIX_ROWS * MATRIX_COLS + 7U) / 8U];
 static report_keyboard_t last_report;
 
 
@@ -80,6 +82,7 @@ static void kkuk_reset_runtime(void)
   pre_time_delay = now;
   key_cnt       = 0U;
   pre_cnt       = 0U;
+  memset(kkuk_counted, 0, sizeof(kkuk_counted));
 }
 
 
@@ -149,6 +152,16 @@ void kkuk_idle(void)
 
   memcpy(&last_report, keyboard_report, sizeof(report_keyboard_t));
   clear_keys();
+#ifdef KILL_SWITCH_ENABLE
+  // SOCD가 맡은 usage는 반복하지 않는다. winner 판정 전의 눌림 상태를 유지한다.
+  for (uint8_t i = 0U; i < sizeof(last_report.keys); i++)
+  {
+    if (kill_switch_is_use(last_report.keys[i]))
+    {
+      keyboard_report->keys[i] = last_report.keys[i];
+    }
+  }
+#endif
   send_keyboard_report();
   memcpy(keyboard_report, &last_report, sizeof(report_keyboard_t));
   send_keyboard_report();
@@ -156,33 +169,44 @@ void kkuk_idle(void)
 
 bool kkuk_process(uint16_t keycode, keyrecord_t *record)
 {
-  if (record == NULL || !kkuk_config.enable)
+  if (record == NULL || record->event.key.row >= MATRIX_ROWS || record->event.key.col >= MATRIX_COLS)
   {
     return true;
   }
 
+  uint16_t index = (uint16_t)((uint16_t)record->event.key.row * MATRIX_COLS + record->event.key.col);
+  uint8_t *slot  = &kkuk_counted[index >> 3];
+  uint8_t  bit   = (uint8_t)(1U << (index & 7U));
+
+  if (record->event.pressed)
+  {
+    bool counted = kkuk_config.enable && IS_BASIC_KEYCODE(keycode) && (*slot & bit) == 0U;
 #ifdef KILL_SWITCH_ENABLE
-  if (kill_switch_is_use(keycode))
-  {
-    return true;
-  }
+    counted = counted && !kill_switch_is_use(keycode);
 #endif
-
-  if (IS_BASIC_KEYCODE(keycode))
-  {
-    if (record->event.pressed)
+    if (!counted)
     {
-      if (key_cnt < UINT8_MAX)
-      {
-        key_cnt++;
-      }
+      return true;
     }
-    else if (key_cnt > 0U)
+    *slot |= bit;
+    if (key_cnt < UINT8_MAX)
+    {
+      key_cnt++;
+    }
+  }
+  else
+  {
+    if ((*slot & bit) == 0U)
+    {
+      return true;
+    }
+    *slot &= (uint8_t)~bit;
+    if (key_cnt > 0U)
     {
       key_cnt--;
     }
-    pre_time_delay = millis();
   }
+  pre_time_delay = millis();
   return true;
 }
 

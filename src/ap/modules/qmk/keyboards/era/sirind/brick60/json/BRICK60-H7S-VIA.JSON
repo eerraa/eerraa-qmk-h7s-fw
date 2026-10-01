@@ -19,7 +19,7 @@
       "label": "Lighting",
       "content": [
         {
-          "label": "RGB ROW",
+          "label": "RGB Row",
           "content": [
             {
               "label": "Brightness",
@@ -33,17 +33,16 @@
               "type": "dropdown",
               "content": ["id_qmk_rgblight_effect", 2, 2],
               "options": [
-                ["All Off", 0], ["Pulse On Press", 43], ["Pulse Off Press", 44], ["Pulse On Press (Hold)", 45],
-                ["Pulse Off Press (Hold)", 46], ["Solid Color", 1], ["Breathing 1", 2], ["Breathing 2", 3],
-                ["Breathing 3", 4], ["Breathing 4", 5], ["Rainbow Mood 1", 6], ["Rainbow Mood 2", 7],
-                ["Rainbow Mood 3", 8], ["Rainbow Swirl 1", 9], ["Rainbow Swirl 2", 10], ["Rainbow Swirl 3", 11],
-                ["Rainbow Swirl 4", 12], ["Rainbow Swirl 5", 13], ["Rainbow Swirl 6", 14], ["Snake 1", 15],
-                ["Snake 2", 16], ["Snake 3", 17], ["Snake 4", 18], ["Snake 5", 19], ["Snake 6", 20], ["Knight 1", 21],
-                ["Knight 2", 22], ["Knight 3", 23], ["Christmas", 24], ["Gradient 1", 25], ["Gradient 2", 26],
-                ["Gradient 3", 27], ["Gradient 4", 28], ["Gradient 5", 29], ["Gradient 6", 30], ["Gradient 7", 31],
-                ["Gradient 8", 32], ["Gradient 9", 33], ["Gradient 10", 34], ["RGB Test", 35], ["Alternating", 36],
-                ["Twinkle 1", 37], ["Twinkle 2", 38], ["Twinkle 3", 39], ["Twinkle 4", 40], ["Twinkle 5", 41],
-                ["Twinkle 6", 42]
+                ["All Off", 0], ["Solid Color", 1], ["Breathing 1", 2], ["Breathing 2", 3], ["Breathing 3", 4],
+                ["Breathing 4", 5], ["Rainbow Mood 1", 6], ["Rainbow Mood 2", 7], ["Rainbow Mood 3", 8],
+                ["Rainbow Swirl 1", 9], ["Rainbow Swirl 2", 10], ["Rainbow Swirl 3", 11], ["Rainbow Swirl 4", 12],
+                ["Rainbow Swirl 5", 13], ["Rainbow Swirl 6", 14], ["Snake 1", 15], ["Snake 2", 16], ["Snake 3", 17],
+                ["Snake 4", 18], ["Snake 5", 19], ["Snake 6", 20], ["Knight 1", 21], ["Knight 2", 22], ["Knight 3", 23],
+                ["Christmas", 24], ["Gradient 1", 25], ["Gradient 2", 26], ["Gradient 3", 27], ["Gradient 4", 28],
+                ["Gradient 5", 29], ["Gradient 6", 30], ["Gradient 7", 31], ["Gradient 8", 32], ["Gradient 9", 33],
+                ["Gradient 10", 34], ["RGB Test", 35], ["Alternating", 36], ["Twinkle 1", 37], ["Twinkle 2", 38],
+                ["Twinkle 3", 39], ["Twinkle 4", 40], ["Twinkle 5", 41], ["Twinkle 6", 42], ["Pulse Off Press", 43],
+                ["Pulse On Press", 44], ["Pulse Off Press (Hold)", 45], ["Pulse On Press (Hold)", 46]
               ]
             },
             {
@@ -68,14 +67,14 @@
           ]
         },
         {
-          "label": "INDICATOR",
+          "label": "Indicators",
           "content": [
             {
-              "label": "Indicator Select",
+              "label": "Indicator",
               "type": "dropdown",
               "content": ["id_qmk_custom_ind_selec", 0, 1],
               "options": [
-                ["Off", 0], ["Caps Lock", 1], ["Scroll Lock", 2], ["Num Lock", 3]
+                ["RGB Effect", 0], ["Caps Lock", 1], ["Scroll Lock", 2], ["Num Lock", 3]
               ]
             },
             {
@@ -108,6 +107,13 @@
             },
             {
               "showIf": "{id_qmk_kill_switch_enable_lr} == 1",
+              "label": "Left/Right Mode",
+              "type": "dropdown",
+              "content": ["id_qmk_kill_switch_mode_lr", 10, 4],
+              "options": [["Last Input", 1], ["Neutral", 2], ["First Input", 3], ["Left Priority", 4], ["Right Priority", 5]]
+            },
+            {
+              "showIf": "{id_qmk_kill_switch_enable_lr} == 1",
               "label": "Left Key",
               "type": "keycode",
               "content": ["id_qmk_kill_switch_left", 10, 2]
@@ -122,6 +128,13 @@
               "label": "Up/Down Enable",
               "type": "toggle",
               "content": ["id_qmk_kill_switch_enable_ud", 11, 1]
+            },
+            {
+              "showIf": "{id_qmk_kill_switch_enable_ud} == 1",
+              "label": "Up/Down Mode",
+              "type": "dropdown",
+              "content": ["id_qmk_kill_switch_mode_ud", 11, 4],
+              "options": [["Last Input", 1], ["Neutral", 2], ["First Input", 3], ["Up Priority", 4], ["Down Priority", 5]]
             },
             {
               "showIf": "{id_qmk_kill_switch_enable_ud} == 1",
@@ -245,6 +258,7 @@
               ]
             },
             {
+              "showIf": "{id_qmk_tapping_hold_on_other_key_press} == 0",
               "label": "Permissive Hold",
               "type": "toggle",
               "content": ["id_qmk_tapping_permissive_hold", 15, 2]

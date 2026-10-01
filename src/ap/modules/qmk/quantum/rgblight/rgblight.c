@@ -168,11 +168,12 @@ typedef struct {
     bool     latched;
     bool     initialized;
     bool     output_on;
-    bool     key_tracking_valid;
     bool     evaluate_pending;  // V260911R1: 입력은 상태만 기록하고 RGB task가 출력을 계산한다. / V260913R1: 물리 전이·설정 커밋·오버레이 해제가 모두 이 요청 하나로 RGB task 평가를 부른다
-    uint8_t  key_row;
-    uint8_t  key_col;
     uint32_t deadline_ms;
+    // Hold는 이 모드에서 누른 키가 하나라도 눌려 있는 동안 유지된다(EERRAA와 같은 규칙).
+    // 매트릭스 위치별 비트로 모드·절전 이전에 눌린 키의 release가 새 hold를 끝내지 못하게 한다.
+    uint16_t pressed_count;
+    uint8_t  pressed_keys[(MATRIX_ROWS * MATRIX_COLS + 7U) / 8U];
     bool     present_pending;
     bool     present_submitted;
     bool     presented;
@@ -184,9 +185,6 @@ static rgblight_pulse_effect_state_t rgblight_pulse_effect_state = {
     .latched = false,
     .initialized = false,
     .output_on = false,
-    .key_tracking_valid = false,
-    .key_row = 0,
-    .key_col = 0,
     .deadline_ms = 0,
 };
 
@@ -311,6 +309,12 @@ static bool rgblight_effect_pulse_expiry_pending(void)
   return rgblight_pulse_effect_state.latched;  // V260913R1: 마감 대기 중이면 RGB task 1 ms 게이트마다 만료를 판정한다
 }
 
+static void rgblight_effect_pulse_forget_keys(void)
+{
+    rgblight_pulse_effect_state.pressed_count = 0;
+    memset(rgblight_pulse_effect_state.pressed_keys, 0, sizeof(rgblight_pulse_effect_state.pressed_keys));
+}
+
 static void rgblight_effect_pulse_reset_state(void)
 {
     rgblight_effect_pulse_cancel_presentation();
@@ -318,10 +322,8 @@ static void rgblight_effect_pulse_reset_state(void)
     rgblight_pulse_effect_state.latched            = false;
     rgblight_pulse_effect_state.initialized        = false;
     rgblight_pulse_effect_state.output_on          = false;
-    rgblight_pulse_effect_state.key_tracking_valid = false;
-    rgblight_pulse_effect_state.key_row            = 0;
-    rgblight_pulse_effect_state.key_col            = 0;
     rgblight_pulse_effect_state.deadline_ms        = 0;
+    rgblight_effect_pulse_forget_keys();
 }
 
 static void rgblight_effect_pulse_apply_output(bool on)
@@ -353,7 +355,7 @@ static void rgblight_effect_pulse_evaluate_output(void)
         uint32_t now     = sync_timer_read32();
         bool     expired = (int32_t)(now - rgblight_pulse_effect_state.deadline_ms) >= 0;
         if (rgblight_effect_pulse_presentation_pending()) expired = false;
-        if (expired && !(rgblight_effect_pulse_hold_mode_active() && rgblight_pulse_effect_state.key_tracking_valid)) {
+        if (expired && !(rgblight_effect_pulse_hold_mode_active() && rgblight_pulse_effect_state.pressed_count != 0)) {
             rgblight_pulse_effect_state.latched     = false;
             rgblight_pulse_effect_state.deadline_ms = 0;
         }
@@ -368,6 +370,7 @@ static void rgblight_effect_pulse_evaluate_output(void)
 }
 
 // V260913R1: 베이스 모드가 바뀌었다. 래치·추적 키를 버리고 새 모드의 기본 출력은 RGB task에 맡긴다.
+// 모드를 다시 고를 때, RGB를 끌 때, 조명 절전이 풀릴 때도 같은 경계다(EERRAA와 같은 규칙).
 static void rgblight_effect_pulse_on_base_mode_update(void)
 {
     rgblight_effect_pulse_cancel_presentation();
@@ -378,7 +381,7 @@ static void rgblight_effect_pulse_on_base_mode_update(void)
 
     rgblight_pulse_effect_state.latched            = false;
     rgblight_pulse_effect_state.deadline_ms        = 0;
-    rgblight_pulse_effect_state.key_tracking_valid = false;
+    rgblight_effect_pulse_forget_keys();
     rgblight_effect_pulse_invalidate_output();  // V260913R1: 여기서 그리지 않는다. 설정 함수 안에서 그리면 커밋 전 값이 보인다
 }
 
@@ -392,39 +395,49 @@ static void rgblight_effect_pulse_on_hsv_update(void)
     rgblight_effect_pulse_invalidate_output();
 }
 
+// 조명 절전은 출력만 가리는 게이트지만 Pulse에는 모드 경계다. 들어가면 래치·추적 키·표시 예약을 모두 버리고
+// 절전 중 press는 받지 않으며, 풀리면 새 모드처럼 기본 출력부터 다시 그린다.
+static void rgblight_effect_pulse_on_output_suspend(bool suspended)
+{
+    if (suspended) {
+        rgblight_effect_pulse_reset_state();
+    } else {
+        rgblight_effect_pulse_on_base_mode_update();
+    }
+}
+
 static void rgblight_effect_pulse_handle_keyevent(bool pressed, uint8_t row, uint8_t col, uint32_t now)
 {
-    if (!rgblight_effect_pulse_mode_active() || !rgblight_config.enable) {
-        if (!pressed) {
-            rgblight_pulse_effect_state.key_tracking_valid = false;
+    bool     on_matrix = row < MATRIX_ROWS && col < MATRIX_COLS;
+    uint16_t key       = on_matrix ? (uint16_t)((uint16_t)row * MATRIX_COLS + col) : 0U;
+    uint8_t  mask      = (uint8_t)(1U << (key & 7U));
+    bool     held      = on_matrix && (rgblight_pulse_effect_state.pressed_keys[key >> 3] & mask) != 0U;
+
+    if (!pressed) {
+        if (held) {
+            rgblight_pulse_effect_state.pressed_keys[key >> 3] &= (uint8_t)~mask;
+            rgblight_pulse_effect_state.pressed_count--;
+            rgblight_effect_pulse_request_evaluate();  // 만료/복구 계산은 RGB task에 맡긴다
         }
         return;
     }
 
-    if (pressed) {
-        if (!rgblight_pulse_effect_state.latched)
-        {
-            rgblight_effect_pulse_cancel_presentation();
-            rgblight_pulse_effect_state.present_pending = true;
-        }
-        rgblight_pulse_effect_state.latched       = true;
-        rgblight_pulse_effect_state.deadline_ms   = now + rgblight_effect_pulse_duration_ms();
-        rgblight_pulse_effect_state.key_row       = row;
-        rgblight_pulse_effect_state.key_col       = col;
-        rgblight_pulse_effect_state.key_tracking_valid = true;
-        rgblight_effect_pulse_request_evaluate();
+    if (output_suspended || !rgblight_effect_pulse_mode_active() || !rgblight_config.enable) {
         return;
     }
 
-    bool matches_tracked_key = rgblight_pulse_effect_state.key_tracking_valid &&
-                               rgblight_pulse_effect_state.key_row == row &&
-                               rgblight_pulse_effect_state.key_col == col;
-
-    if (matches_tracked_key) {
-        rgblight_pulse_effect_state.key_tracking_valid = false;
-
-        rgblight_effect_pulse_request_evaluate();  // V260911R1: 만료/복구 계산도 RGB task에 위임
+    if (!rgblight_pulse_effect_state.latched)
+    {
+        rgblight_effect_pulse_cancel_presentation();
+        rgblight_pulse_effect_state.present_pending = true;
     }
+    rgblight_pulse_effect_state.latched     = true;
+    rgblight_pulse_effect_state.deadline_ms = now + rgblight_effect_pulse_duration_ms();
+    if (on_matrix && !held) {
+        rgblight_pulse_effect_state.pressed_keys[key >> 3] |= mask;
+        rgblight_pulse_effect_state.pressed_count++;
+    }
+    rgblight_effect_pulse_request_evaluate();
 }
 
 static void rgblight_effect_pulse_on_press(animation_status_t *anim)
@@ -455,6 +468,7 @@ static inline void rgblight_effect_pulse_cancel_presentation(void) {}
 static inline void rgblight_effect_pulse_frame_submitted(void) {}
 static inline void rgblight_effect_pulse_on_base_mode_update(void) {}
 static inline void rgblight_effect_pulse_on_hsv_update(void) {}
+static inline void rgblight_effect_pulse_on_output_suspend(bool suspended) { (void)suspended; }
 static inline bool rgblight_effect_pulse_evaluate_pending(void) { return false; }
 static inline bool rgblight_effect_pulse_expiry_pending(void) { return false; }
 static inline void rgblight_effect_pulse_handle_keyevent(bool pressed, uint8_t row, uint8_t col, uint32_t now)
@@ -1194,6 +1208,8 @@ void rgblight_mode_eeprom_helper(uint8_t mode, bool write_to_eeprom) {
 #endif
     next_sat = rgblight_mode_transition_sat(prev_mode, rgblight_config.mode, rgblight_config.sat);
     rgblight_sethsv_eeprom_helper(rgblight_config.hue, next_sat, rgblight_config.val, write_to_eeprom);
+    // 같은 모드를 다시 골라도, RGB를 다시 켜도 모드 선택이다. 진행 중인 Pulse 래치와 추적 키를 버린다(EERRAA와 같음).
+    rgblight_effect_pulse_on_base_mode_update();
 }
 
 void rgblight_mode(uint8_t mode) {
@@ -1237,6 +1253,7 @@ void rgblight_enable_noeeprom(void) {
 }
 
 void rgblight_disable(void) {
+    rgblight_effect_pulse_on_base_mode_update();  // RGB OFF는 Pulse 경계다. 켤 때 이전 래치가 되살아나지 않는다(EERRAA와 같음).
     rgblight_config.enable = 0;
     eeconfig_update_rgblight(rgblight_config.raw);
     dprintf("rgblight disable [EEPROM]: rgblight_config.enable = %u\n", rgblight_config.enable);
@@ -1246,6 +1263,7 @@ void rgblight_disable(void) {
 }
 
 void rgblight_disable_noeeprom(void) {
+    rgblight_effect_pulse_on_base_mode_update();
     rgblight_config.enable = 0;
     dprintf("rgblight disable [NOEEPROM]: rgblight_config.enable = %u\n", rgblight_config.enable);
     rgblight_timer_disable();
@@ -1745,7 +1763,7 @@ void rgblight_set_output_suspend_state(bool suspended) {
     }
 
     output_suspended = suspended;
-    if (suspended) rgblight_effect_pulse_cancel_presentation();
+    rgblight_effect_pulse_on_output_suspend(suspended);
     rgblight_request_render();
 }
 

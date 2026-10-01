@@ -58,7 +58,7 @@ The actual algorithm and state-machine implementations are not replaced by model
 `--only rgb` connects the unedited production matrix dispatch, QMK tapping buffer,
 TD callbacks, action execution, pulse state machine and RGB task in one host
 fixture. It checks TD/LT Caps taps and holds, delayed replay, filtered releases,
-all four pulse modes, last-pressed-key tracking, host indicator precedence,
+all four pulse modes, any-held-key Hold tracking, host indicator precedence,
 output sleep, RGB OFF, Velocikey and 32-bit wrap. It also drives the actual
 `rgblight_sethsv_eeprom_helper()` commit: a brightness commit in a Pulse effect
 renders the committed value on the next task pass, a commit during a physical
@@ -143,7 +143,7 @@ listed in `docs/state_open.md`.
 
 ### Input-feature and long-idle scheduler coverage
 
-`test_input_features.c` compiles the production `kkuk.c` and `kill_switch.c` against a deterministic report/timer stub. It covers KKUK activation/repeat timing, live value normalization, fresh-epoch reconfiguration and count saturation; SOCD basic/modifier report ownership, invalid 16-bit keycode inertness and live-remap stale-state release.
+`test_input_features.c` compiles the production `kkuk.c` and `kill_switch.c` against a deterministic report/timer stub. It covers KKUK activation/repeat timing, live value normalization, fresh-epoch reconfiguration, count saturation and a count that survives a SOCD change while a key is held; SOCD modes on the report the stub sends through the production filter, restore on release, live changes reaching the host without input, invalid 16-bit keycode inertness, overlapping pairs and modifier pairs. The `guards` group checks that the production 6KRO sender filters a copy before its duplicate check and send.
 
 The generated `test_rgb_task_gate.c` compiles the exact production `rgblight_task_periodic_due()` helper and checks inactivity disarm, resume after more than the 16-bit half-range, urgent-event rearm and 32-bit wrap.
 

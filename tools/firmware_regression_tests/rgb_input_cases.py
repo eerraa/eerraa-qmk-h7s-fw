@@ -2,6 +2,8 @@
 import re
 from pathlib import Path
 
+from rgb_modes import check_fixture_numbers
+
 
 def function(source, name):
     match = re.search(rf'^(?:__attribute__\(\(weak\)\)\s+)?(?:static\s+)?(?:inline\s+)?(?:void|bool|layer_state_t|uint\d+_t)\s+{name}\([^;]*?\)\s*\{{', source, re.M)
@@ -41,6 +43,11 @@ def generate(root: Path, build: Path, source_root: Path | None = None) -> Path:
     capacity = re.search(r'^#define HW_KEYS_PRESS_MAX[^\n]*', read((source_root or root) / 'src/hw/hw_caps_keys.h'), re.M).group(0)
     layer_part = layers[layers.index('layer_state_t layer_state ='):layers.index('/** \\brief Layer debug printing')]
     # Matrix/USB/EEPROM are adapters. Resource ownership and report construction are not.
+
+    # 모드 선택(같은 모드 포함)과 RGB OFF는 Pulse 래치·추적 키를 버린다(EERRAA와 같은 경계).
+    # 이 세 함수는 fixture에 링크되지 않으므로 호출 배선을 소스에서 확인한다. 절전 경계는 fixture가 실행한다.
+    for name in ('rgblight_mode_eeprom_helper', 'rgblight_disable', 'rgblight_disable_noeeprom'):
+        assert 'rgblight_effect_pulse_on_base_mode_update();' in function(rgb, name), f'{name} must retire the Pulse latch'
 
     rgb_header = read(selected / 'quantum/rgblight/rgblight.h')
     led_header = read(selected / 'quantum/led.h')
@@ -144,6 +151,8 @@ def generate(root: Path, build: Path, source_root: Path | None = None) -> Path:
         'suspend_wakeup_key_event', 'keypress_is_wakeup_key', 'wakeup_matrix_handle_key_event')]
     chunks += [function(keyboard, name) for name in ('switch_events', 'generate_tick_event', 'matrix_task')]
     chunks += ['#include "test_rgb_input_assertions.h"\n']
+    support = Path(__file__).with_name('test_rgb_input_support.h')
+    check_fixture_numbers(selected, read(support), support.name)
     output = build / 'test_rgb_physical_input.c'
     output.write_bytes('\n'.join(chunks).encode('utf-8'))
     return output

@@ -1,15 +1,15 @@
 # Open items
 
 Genre: state
-Canonical for: unresolved decisions, unmeasured hardware or external checks,
-and next entry conditions
+Canonical for: unresolved decisions, decided but unimplemented changes,
+unmeasured hardware or external checks, and next entry conditions
 
 Only current unknowns live here. Delete an item when it closes. Persistent
 product, wire, storage, safety requirements and prohibitions stay in their
 owning contracts; verification commands and proof limits stay in
 `docs/manual_verify.md`.
 
-## 1. Pending decisions
+## 1. Decisions and decided work not yet implemented
 
 ### D-4. Exposing per-path transport loss on the wire
 
@@ -22,14 +22,37 @@ active, queued and coalesced event semantics and adds cross-repository wire
 fixtures. Until then, do not reinterpret the existing aggregate fields or
 consume reserved bytes on only one side.
 
-### D-6. Tap Dance output that kill switch overrides
+### D-7. Boot protocol report
 
-A kill-switch (SOCD) key that a TD hold also outputs stays reported while the
-opposing key is held, because suppression removes only the ordinary bit. The
-EERRAA tree behaves the same way.
+Boot Protocol still sends the 22-byte, 20-slot report (`docs/contract_usb.md`
+§3): a host that reads the boot layout sees the first six slots only if it
+accepts the longer packet, and `docs/usevia.txt` calls this a six-key report.
+The owner chose an automatic model with no toggle: 20 keys in Report protocol
+and a conformant 8-byte report carrying the first six held keys in Boot
+protocol. EERRAA keeps QMK's 6KRO default and NKRO toggle.
 
-**Start condition**: a report-level suppression rule for kill switch that every
-owner respects, applied in both trees.
+**Start condition**: a USB capture of the target BIOS/KVM (whether it sends
+SET_PROTOCOL and accepts 22-byte packets), then the Boot formatter in
+`src/hw/driver/usb/usb_hid/usbd_hid.c` with a resync on protocol change, the §3
+amendment, and cases in `tools/firmware_regression_tests/test_usb_transport.c`.
+The report descriptor stays as it is.
+
+### D-9. Smaller cross-product differences
+
+- Default indicator colour: H7S green on overlay boards and red on dedicated-LED
+  boards; EERRAA white. A new default reaches devices only through a reset.
+- Dynamic macro inter-key delay: H7S 10 ms (`DYNAMIC_KEYMAP_MACRO_DELAY`),
+  EERRAA 0 ms.
+- Bootmagic: H7S has none although board `info.json` lists it; EERRAA erases
+  storage and enters the bootloader.
+- RGBLight Brightness / Color / Velocikey visibility (`showIf`) differs between
+  the two products' official JSON; H7S has no Indicator-Only option.
+- App side (peer owner, `docs/MAP.md` §7): the usekb.cc diagnostics panel shows
+  the firmware version with a `V` prefix, and the app definitions do not share
+  the official JSON's Permissive Hold visibility rule.
+
+**Start condition**: a product decision per line; app-side lines start in the
+app repository.
 
 ## 2. Hardware or external verification still open
 
@@ -47,4 +70,7 @@ owner respects, applied in both trees.
 | Mode↔negotiated-speed mismatch warning | Verify the positive warning path with an FS-only port or hub; the positive path remains unmeasured. |
 | Internal-flash EEPROM emulation | No current board exercises `src/hw/driver/eeprom/emul.c`. Enter when a board/config or dedicated hardware fixture uses that backend; verify write/error cleanup. Any Unlock/Lock minimization must redesign cleanup state and rollback together. |
 | Pulse 5 ms minimum | On each real WS2812B-2020 chain, verify speed 0 preserves at least 5 ms of unoccluded output, OFF/ON frames remain distinct, and fast repeated presses never leave the strip inverted. Capture DIN data/RESET and optical PWM separately; source/receiver-model passes do not close this hardware item. |
-| VIA RGB apply in Pulse effects | On hardware, verify brightness/colour SET is visible without a key press, leaving Pulse for a hue-driven effect does not inherit stale white output, a brightness change during Pulse Off Press (Hold) preserves the hold latch, and Caps overlay release restores the committed base output. Include first LT/TD Caps activation at speed 0/15/255, near-simultaneous base/host frames, and Sleep of BRICK65/MAY65/SCULPTUREI physical indicators. |
+| SOCD modes | With a key tester on each board: every mode while both keys of a pair are held, a Tap Dance hold or tap of one key against the opposing physical key, and a live mode change while held. |
+| Wakeup-key rule | On FS and HS hosts that allow remote wake: a letter or Enter that wakes a sleeping host is not typed and the next press is; a key held at power-on or cable insertion (BIOS key) still reaches the host; a key held into Suspend and released there does not stick. |
+| Mouse buttons 6–8, Magic, Space Cadet | Buttons 6–8 register on Windows and macOS; Magic GUI lock and Space Cadet keys work from the keymap and from TD actions; overlapping mouse-key directions keep their speed. |
+| VIA RGB apply in Pulse effects | On hardware, verify brightness/colour SET is visible without a key press, leaving Pulse for a hue-driven effect does not inherit stale white output, a brightness change during Pulse Off Press (Hold) preserves the hold latch, RGB Sleep entered while a Hold key is down wakes to the base output and the waking key itself does not pulse, and Caps overlay release restores the committed base output. Include first LT/TD Caps activation at speed 0/15/255, near-simultaneous base/host frames, and Sleep of BRICK65/MAY65/SCULPTUREI physical indicators. |
