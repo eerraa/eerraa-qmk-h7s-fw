@@ -17,6 +17,12 @@
 #define TAPDANCE_VERSION          (1U)
 #define TAPDANCE_VALUE_STRIDE     (5U)
 #define TAPDANCE_VALUE_MAX_ID     (TAPDANCE_SLOT_COUNT * TAPDANCE_VALUE_STRIDE)
+#define TAPDANCE_MODE_ID_BASE    (49U)
+#define TAPDANCE_MODE_TAG        (0xD2U)
+#define TAPDANCE_HOLD_TERM_ID_BASE (57U)
+#define TAPDANCE_HOLD_OTHER_ID_BASE (65U)
+#define TAPDANCE_TIMING_TAG (0xD3U)
+#define TAPDANCE_TIMING_SIGNATURE (0x4D544454UL)
 #define TAPDANCE_FIELD_TERM       (4U)
 #define TAPDANCE_EXACT_TERM_ID_BASE (41U)                 // V260821R1: TD0 exact = 41 … TD7 exact = 48
 #define TAPDANCE_EXACT_TERM_ID_MAX  (TAPDANCE_EXACT_TERM_ID_BASE + TAPDANCE_SLOT_COUNT - 1U)
@@ -46,6 +52,19 @@ typedef struct PACKED
   uint32_t                signature;
 } tapdance_storage_t;
 
+typedef struct PACKED
+{
+  uint16_t hold_ms[TAPDANCE_SLOT_COUNT];
+  uint8_t hold_on_other;
+  uint8_t version;
+  uint16_t reserved;
+  uint32_t signature;
+} tapdance_timing_storage_t;
+
+_Static_assert(sizeof(tapdance_timing_storage_t) == 24, "Tap Dance timing storage size changed.");
+
+static tapdance_timing_storage_t tapdance_timing;
+
 typedef struct
 {
   uint16_t actions[TAPDANCE_ACTION_COUNT];
@@ -72,7 +91,13 @@ typedef struct
   uint16_t               active_keycode;
   action_t               active_qmk_action;
   bool                   active_is_tap;                   // V251127R1: tap/hold 경로 구분
+  bool                   direct;
+  uint8_t                mode;
+  uint16_t               actions[TAPDANCE_ACTION_COUNT];
   uint8_t                first_tap_mods;
+  uint16_t               term_ms;
+  uint16_t               hold_ms;
+  bool                   hold_on_other;
 } tapdance_runtime_state_t;
 
 typedef struct
@@ -84,6 +109,7 @@ typedef struct
   uint16_t term_ms;
 } tapdance_entry_t;
 
+static void tapdance_on_each_release(tap_dance_state_t *state, void *user_data);
 static void tapdance_on_each_tap(tap_dance_state_t *state, void *user_data);
 static void tapdance_on_dance_finished(tap_dance_state_t *state, void *user_data);
 static void tapdance_on_reset(tap_dance_state_t *state, void *user_data);
@@ -105,14 +131,14 @@ static tapdance_user_data_t     tapdance_user_data[TAPDANCE_SLOT_COUNT] =
 
 tap_dance_action_t tap_dance_actions[TAPDANCE_SLOT_COUNT] =
 {
-  { .fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, NULL}, .user_data = &tapdance_user_data[0] },
-  { .fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, NULL}, .user_data = &tapdance_user_data[1] },
-  { .fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, NULL}, .user_data = &tapdance_user_data[2] },
-  { .fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, NULL}, .user_data = &tapdance_user_data[3] },
-  { .fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, NULL}, .user_data = &tapdance_user_data[4] },
-  { .fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, NULL}, .user_data = &tapdance_user_data[5] },
-  { .fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, NULL}, .user_data = &tapdance_user_data[6] },
-  { .fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, NULL}, .user_data = &tapdance_user_data[7] },
+  { .fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, tapdance_on_each_release}, .user_data = &tapdance_user_data[0] },
+  { .fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, tapdance_on_each_release}, .user_data = &tapdance_user_data[1] },
+  { .fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, tapdance_on_each_release}, .user_data = &tapdance_user_data[2] },
+  { .fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, tapdance_on_each_release}, .user_data = &tapdance_user_data[3] },
+  { .fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, tapdance_on_each_release}, .user_data = &tapdance_user_data[4] },
+  { .fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, tapdance_on_each_release}, .user_data = &tapdance_user_data[5] },
+  { .fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, tapdance_on_each_release}, .user_data = &tapdance_user_data[6] },
+  { .fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, tapdance_on_each_release}, .user_data = &tapdance_user_data[7] },
 };
 
 _Static_assert(sizeof(tapdance_slot_storage_t) == 10, "EECONFIG out of spec.");  // V251124R8: 슬롯 크기 고정
@@ -120,6 +146,16 @@ _Static_assert(sizeof(tapdance_storage_t) == 88, "EECONFIG out of spec.");      
 
 
 EECONFIG_DEBOUNCE_HELPER(tapdance, EECONFIG_USER_TAPDANCE, tapdance_storage);
+EECONFIG_DEBOUNCE_HELPER(tapdance_timing, EECONFIG_USER_TAPDANCE_TIMING, tapdance_timing);
+
+static void tapdance_timing_defaults(void)
+{
+  memset(&tapdance_timing, 0, sizeof(tapdance_timing));
+  tapdance_timing.version = 1;
+  tapdance_timing.signature = TAPDANCE_TIMING_SIGNATURE;
+  eeconfig_flag_tapdance_timing(true);
+}
+
 
 
 static uint8_t               tapdance_slot_index(uint8_t value_id);
@@ -150,6 +186,12 @@ void tapdance_init(void)
   tap_dance_cancel_all();
   memset(tapdance_runtime, 0, sizeof(tapdance_runtime));
   eeconfig_init_tapdance();
+  eeconfig_init_tapdance_timing();
+  if (tapdance_timing.signature != TAPDANCE_TIMING_SIGNATURE || tapdance_timing.version != 1 || tapdance_timing.reserved != 0)
+  {
+    tapdance_timing_defaults();
+    eeconfig_flush_tapdance_timing(true);
+  }
 
   if (tapdance_is_storage_valid(&tapdance_storage) == false)
   {
@@ -173,7 +215,7 @@ bool tapdance_handle_via_command(uint8_t *data, uint8_t length)
   bool     handled    = false;
 
   if ((*command_id == id_custom_set_value || *command_id == id_custom_get_value) &&
-      tapdance_is_exact_term_id(*value_id) && length < 5U)
+      (tapdance_is_exact_term_id(*value_id) || (*value_id >= TAPDANCE_HOLD_TERM_ID_BASE && *value_id < TAPDANCE_HOLD_OTHER_ID_BASE)) && length < 5U)
   {
     *command_id = id_unhandled;
     return false;
@@ -217,12 +259,14 @@ void tapdance_storage_apply_defaults(void)
   tap_dance_cancel_all();
   memset(tapdance_runtime, 0, sizeof(tapdance_runtime));
   tapdance_apply_defaults_locked();                        // V251124R8: USER 초기화 시 기본값 기록
+  tapdance_timing_defaults();
   tapdance_sync_state_from_storage();
 }
 
 void tapdance_storage_flush(bool force)
 {
   eeconfig_flush_tapdance(force);
+  eeconfig_flush_tapdance_timing(force);
 }
 
 uint16_t tapdance_get_term_ms(uint16_t keycode)
@@ -321,6 +365,60 @@ static void tapdance_set_runtime(const tap_dance_state_t *state, tapdance_action
   tapdance_runtime[state->runtime_index].active_is_tap  = is_tap;    // V251127R1: release 경로 보존
 }
 
+/* The tag keeps untouched records in their original fallback semantics. */
+static uint8_t tapdance_mode(uint8_t slot)
+{
+  if (slot >= TAPDANCE_SLOT_COUNT || tapdance_storage.reserved[1] != TAPDANCE_MODE_TAG) return 0;
+  return (tapdance_storage.reserved[slot < 4U ? 0 : 2] >> ((slot % 4U) * 2U)) & 3U;
+}
+
+static void tapdance_store_mode(uint8_t slot, uint8_t mode)
+{
+  if (tapdance_storage.reserved[1] != TAPDANCE_MODE_TAG) memset(tapdance_storage.reserved, 0, sizeof(tapdance_storage.reserved));
+  tapdance_storage.reserved[1] = TAPDANCE_MODE_TAG;
+  uint8_t *bits = &tapdance_storage.reserved[slot < 4U ? 0 : 2];
+  uint8_t shift = (slot % 4U) * 2U;
+  *bits = (*bits & ~(3U << shift)) | (mode << shift);
+}
+
+static bool tapdance_has_override(const tapdance_runtime_state_t *runtime, uint8_t action)
+{
+  return runtime->actions[action] != KC_TRANSPARENT;
+}
+
+uint16_t tapdance_decision_term(uint8_t slot, uint8_t runtime_index, bool pressed)
+{
+  if (runtime_index < TAP_DANCE_MAX_SIMULTANEOUS && tapdance_runtime[runtime_index].mode != 0U)
+  {
+    const tapdance_runtime_state_t *runtime = &tapdance_runtime[runtime_index];
+    return pressed ? runtime->hold_ms : runtime->term_ms;
+  }
+  return tapdance_get_term_ms(TD(slot));
+}
+
+bool tapdance_hold_on_interrupt(uint8_t runtime_index, uint8_t count, bool pressed)
+{
+  if (!pressed || runtime_index >= TAP_DANCE_MAX_SIMULTANEOUS) return false;
+  const tapdance_runtime_state_t *runtime = &tapdance_runtime[runtime_index];
+  if (runtime->mode == 0U || !runtime->hold_on_other) return false;
+  if (count == 1U) return !runtime->direct && tapdance_has_override(runtime, 1);
+  return count == 2U && (tapdance_has_override(runtime, 3) || tapdance_has_override(runtime, 1));
+}
+
+/* Release an already-sent physical edge without synthesizing a tap width. */
+static void tapdance_on_each_release(tap_dance_state_t *state, void *user_data)
+{
+  (void)user_data;
+  tapdance_runtime_state_t *runtime = &tapdance_runtime[state->runtime_index];
+  if (!runtime->direct || state->finished) return;
+  if (state->count == 1U && tapdance_keycode_is_valid(runtime->active_keycode))
+  {
+    tapdance_run_action(state, runtime->active_keycode, runtime->active_qmk_action, false, true);
+    runtime->active_keycode = KC_NO;
+    runtime->active_action = TAPDANCE_ACTION_NONE;
+  }
+}
+
 static void tapdance_on_each_tap(tap_dance_state_t *state, void *user_data)
 {
   tapdance_user_data_t *user = (tapdance_user_data_t *)user_data;
@@ -337,6 +435,36 @@ static void tapdance_on_each_tap(tap_dance_state_t *state, void *user_data)
     tapdance_runtime[state->runtime_index].first_tap_mods = state->weak_mods;
   }
   tapdance_load_entry(user->slot_index, &entry);
+  tapdance_runtime_state_t *runtime = &tapdance_runtime[state->runtime_index];
+  if (state->count == 1U)
+  {
+    runtime->mode = tapdance_mode(user->slot_index);
+    runtime->term_ms = entry.term_ms;
+    runtime->hold_ms = tapdance_timing.hold_ms[user->slot_index] ? tapdance_timing.hold_ms[user->slot_index] : entry.term_ms;
+    runtime->hold_on_other = (tapdance_timing.hold_on_other >> user->slot_index) & 1U;
+    memcpy(runtime->actions, tapdance_state[user->slot_index].actions, sizeof(runtime->actions));
+    runtime->direct = runtime->mode == 2U || (runtime->mode == 1U &&
+        !tapdance_has_override(runtime, 1) && !tapdance_has_override(runtime, 2) && !tapdance_has_override(runtime, 3));
+  }
+  if (runtime->direct)
+  {
+    if (state->count == 1U && tapdance_keycode_is_valid(entry.on_tap))
+    {
+      tapdance_set_runtime(state, TAPDANCE_ACTION_TAP, entry.on_tap, true);
+      tapdance_register_keycode(state, entry.on_tap, true);
+    }
+    if (state->count == 1U)
+    {
+      if (!tapdance_has_override(runtime, 2) && !tapdance_has_override(runtime, 3)) state->finished = true;
+      /* This edge already consumed its modifiers; finishing the first press
+       * must not replay them after their physical owner has released. */
+      state->weak_mods = 0;
+#ifndef NO_ACTION_ONESHOT
+      state->oneshot_mods = 0;
+#endif
+    }
+    return;
+  }
   if (!tapdance_keycode_is_valid(entry.on_tap))
   {
     return;
@@ -376,6 +504,43 @@ static void tapdance_on_dance_finished(tap_dance_state_t *state, void *user_data
   tapdance_load_entry(slot_index, &entry);
   step = tapdance_step(state);
   runtime = &tapdance_runtime[state->runtime_index];
+
+  if (runtime->mode != 0U)
+  {
+    /* Immediate mode has already emitted the first physical press. All
+     * other decisions use the captured actions, including explicit KC_NO. */
+    if (runtime->direct && state->count == 1U) return;
+    bool hold = state->pressed && !state->interrupted;
+    uint16_t keycode = runtime->actions[0];
+    bool prefix_tap = false;
+    if (state->count == 1U)
+    {
+      if (hold && tapdance_has_override(runtime, 1)) keycode = runtime->actions[1];
+    }
+    else if (state->count == 2U)
+    {
+      uint8_t role = hold ? 3 : 2;
+      if (!state->interrupted && tapdance_has_override(runtime, role)) keycode = runtime->actions[role];
+      else
+      {
+        prefix_tap = !runtime->direct;
+        if (hold && tapdance_has_override(runtime, 1)) keycode = runtime->actions[1];
+      }
+    }
+    else return;
+    if (prefix_tap)
+    {
+      uint8_t mods = runtime->first_tap_mods | state->weak_mods;
+      add_weak_mods(mods);
+      tapdance_tap_keycode(state, runtime->actions[0], true);
+      del_weak_mods(mods);
+      if (!hold) add_weak_mods(state->weak_mods);
+      send_keyboard_report();
+    }
+    tapdance_set_runtime(state, hold ? TAPDANCE_ACTION_HOLD : TAPDANCE_ACTION_TAP, keycode, !hold);
+    tapdance_register_keycode(state, keycode, !hold);
+    return;
+  }
 
   runtime->active_action  = TAPDANCE_ACTION_NONE;
   runtime->active_keycode = KC_NO;
@@ -485,7 +650,7 @@ static void tapdance_on_reset(tap_dance_state_t *state, void *user_data)
   {
     // V260911R5: 판정이 등록한 탭은 합성 폭만큼 유지를 요청한다. 물리 홀드의 해제는 스위치가 이미 폭을 준 것이라 요청하지 않는다.
     // V260911R3: 논리 해제는 지금 완료한다. 예약된 USB 리포트가 이후 입력의 키 상태를 건드리지 않는다.
-    if (runtime->active_is_tap)
+    if (runtime->active_is_tap && !(runtime->direct && state->count == 1U))
     {
       tap_code_wait(runtime->active_keycode, tapdance_tap_width_ms(runtime->active_keycode));
     }
@@ -496,6 +661,8 @@ static void tapdance_on_reset(tap_dance_state_t *state, void *user_data)
   runtime->active_action  = TAPDANCE_ACTION_NONE;
   runtime->active_keycode = KC_NO;
   runtime->active_is_tap  = false;
+  runtime->direct = false;
+  runtime->mode = 0;
 }
 
 static bool tapdance_is_exact_term_id(uint8_t value_id)
@@ -539,6 +706,16 @@ static bool tapdance_is_storage_valid(const tapdance_storage_t *storage)
       return false;
     }
   }
+  if (storage->reserved[1] != TAPDANCE_MODE_TAG &&
+      (storage->reserved[0] != 0U || storage->reserved[1] != 0U || storage->reserved[2] != 0U)) return false;
+  if (storage->reserved[1] == TAPDANCE_MODE_TAG)
+  {
+    for (uint8_t slot = 0; slot < TAPDANCE_SLOT_COUNT; ++slot)
+    {
+      uint8_t mode = (storage->reserved[slot < 4U ? 0 : 2] >> ((slot % 4U) * 2U)) & 3U;
+      if (mode == 3U || (mode == 2U && storage->slots[slot].actions[1] != KC_TRANSPARENT)) return false;
+    }
+  }
   return true;
 }
 
@@ -563,6 +740,7 @@ static void tapdance_apply_defaults_locked(void)
     tapdance_storage.slots[i].term_ms = ERA_TERM_DEFAULT_MS;
   }
 
+  memset(tapdance_storage.reserved, 0, sizeof(tapdance_storage.reserved));
   tapdance_storage.version   = TAPDANCE_VERSION;
   tapdance_storage.signature = TAPDANCE_SIGNATURE;
   eeconfig_flag_tapdance(true);
@@ -602,11 +780,17 @@ static bool tapdance_keycode_is_valid(uint16_t keycode)
   return true;
 }
 
-bool tapdance_should_finish_immediate(uint8_t slot_index, uint8_t tap_count)
+bool tapdance_should_finish_immediate(uint8_t slot_index, uint8_t tap_count, uint8_t runtime_index)
 {
   if (slot_index >= TAPDANCE_SLOT_COUNT)
   {
     return false;
+  }
+
+  if (runtime_index < TAP_DANCE_MAX_SIMULTANEOUS && tapdance_runtime[runtime_index].mode != 0U)
+  {
+    const tapdance_runtime_state_t *runtime = &tapdance_runtime[runtime_index];
+    return tap_count == 2U || (tap_count == 1U && !tapdance_has_override(runtime, 2) && !tapdance_has_override(runtime, 3));
   }
 
   tapdance_slot_state_t *slot_state = &tapdance_state[slot_index];
@@ -643,6 +827,38 @@ static bool tapdance_set_value(uint8_t value_id, uint8_t *value_data, uint8_t le
     return false;                                               // V251124R8: VIA 패킷 최소 길이 확인
   }
 
+  if (value_id >= TAPDANCE_HOLD_TERM_ID_BASE && value_id < TAPDANCE_HOLD_OTHER_ID_BASE + TAPDANCE_SLOT_COUNT)
+  {
+    if (value_id < TAPDANCE_HOLD_OTHER_ID_BASE)
+    {
+      if (length < 5U) return false;
+      slot_index = value_id - TAPDANCE_HOLD_TERM_ID_BASE;
+      term_ms = ((uint16_t)value_data[0] << 8) | value_data[1];
+      changed = tapdance_timing.hold_ms[slot_index] != term_ms;
+      tapdance_timing.hold_ms[slot_index] = term_ms;
+    }
+    else
+    {
+      if (value_data[0] > 1U) return false;
+      uint8_t mask = 1U << (value_id - TAPDANCE_HOLD_OTHER_ID_BASE);
+      uint8_t next = value_data[0] ? tapdance_timing.hold_on_other | mask : tapdance_timing.hold_on_other & ~mask;
+      changed = next != tapdance_timing.hold_on_other;
+      tapdance_timing.hold_on_other = next;
+    }
+    if (changed) { eeconfig_flag_tapdance_timing(true); era_state_sync_bump_config(); }
+    return true;
+  }
+
+  if (value_id >= TAPDANCE_MODE_ID_BASE && value_id < TAPDANCE_MODE_ID_BASE + TAPDANCE_SLOT_COUNT)
+  {
+    slot_index = value_id - TAPDANCE_MODE_ID_BASE;
+    if (value_data[0] > 2U || (value_data[0] == 2U && tapdance_storage.slots[slot_index].actions[1] != KC_TRANSPARENT)) return false;
+    changed = tapdance_mode(slot_index) != value_data[0];
+    tapdance_store_mode(slot_index, value_data[0]);
+    tapdance_commit(changed);
+    return true;
+  }
+
   if (tapdance_is_exact_term_id(value_id))
   {
     if (length < 5U)
@@ -672,6 +888,7 @@ static bool tapdance_set_value(uint8_t value_id, uint8_t *value_data, uint8_t le
   if (field_index < TAPDANCE_ACTION_COUNT)
   {
     keycode = ((uint16_t)value_data[0] << 8) | (uint16_t)value_data[1];
+    if (field_index == 1U && tapdance_mode(slot_index) == 2U && keycode != KC_TRANSPARENT) return false;
     changed = (tapdance_storage.slots[slot_index].actions[field_index] != keycode);
     tapdance_storage.slots[slot_index].actions[field_index] = keycode;
   }
@@ -698,6 +915,29 @@ static void tapdance_get_value(uint8_t value_id, uint8_t *value_data, uint8_t le
   if (value_data == NULL || length < 4U)
   {
     return;                                                    // V251124R8: VIA 응답 버퍼 최소 길이 확인
+  }
+
+  if (value_id >= TAPDANCE_HOLD_TERM_ID_BASE && value_id < TAPDANCE_HOLD_OTHER_ID_BASE)
+  {
+    if (length < 5U) return;
+    uint16_t value = tapdance_timing.hold_ms[value_id - TAPDANCE_HOLD_TERM_ID_BASE];
+    value_data[0] = value >> 8;
+    value_data[1] = value & 0xff;
+    if (length >= 6U) value_data[2] = TAPDANCE_TIMING_TAG;
+    return;
+  }
+  if (value_id >= TAPDANCE_HOLD_OTHER_ID_BASE && value_id < TAPDANCE_HOLD_OTHER_ID_BASE + TAPDANCE_SLOT_COUNT)
+  {
+    value_data[0] = (tapdance_timing.hold_on_other >> (value_id - TAPDANCE_HOLD_OTHER_ID_BASE)) & 1U;
+    if (length >= 5U) value_data[1] = TAPDANCE_TIMING_TAG;
+    return;
+  }
+  if (value_id >= TAPDANCE_MODE_ID_BASE && value_id < TAPDANCE_MODE_ID_BASE + TAPDANCE_SLOT_COUNT)
+  {
+    value_data[0] = tapdance_mode(value_id - TAPDANCE_MODE_ID_BASE);
+    if (length >= 5U) value_data[1] = TAPDANCE_MODE_TAG;
+    if (length >= 6U) value_data[2] = TAPDANCE_TIMING_TAG;
+    return;
   }
 
   if (tapdance_is_exact_term_id(value_id))

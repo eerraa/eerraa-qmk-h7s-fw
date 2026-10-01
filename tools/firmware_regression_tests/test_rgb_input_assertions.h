@@ -34,9 +34,10 @@ static void reset_fixture(uint16_t keycode, uint8_t mode, uint32_t time)
   memset(tap_dance_states, 0, sizeof(tap_dance_states));
   memset(tapdance_runtime, 0, sizeof(tapdance_runtime));
   memset(tapdance_state, 0, sizeof(tapdance_state));
+  memset(tapdance_storage.reserved, 0, sizeof(tapdance_storage.reserved));
   for (unsigned i = 0; i < TAPDANCE_SLOT_COUNT; i++) {
     tapdance_user_data[i].slot_index = i;
-    tap_dance_actions[i] = (tap_dance_action_t){.fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, NULL}, .user_data = &tapdance_user_data[i]};
+    tap_dance_actions[i] = (tap_dance_action_t){.fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, tapdance_on_each_release}, .user_data = &tapdance_user_data[i]};
   }
   tapdance_state[0] = (tapdance_slot_state_t){{KC_CAPS, MO(1), KC_NO, KC_NO}, 200};
   mapped_keycode = keycode;
@@ -346,6 +347,7 @@ static void check_config_commit_renders_committed_value(void)
 #include "test_full_term_timing.h"
 #include "test_td_ownership.h"
 #include "test_td_lifetime.h"
+#include "test_td_direct.h"
 
 int main(int argc, char **argv)
 {
@@ -353,6 +355,7 @@ int main(int argc, char **argv)
   if (argc > 2 && strcmp(argv[1], "--lifetime") == 0) { check_td_lifetime(argv[2]); return 0; }
   bool trace_only = argc > 1 && strcmp(argv[1], "--trace") == 0;
   _Static_assert(TAP_HOLD_CAPS_DELAY == 80 && TAP_CODE_DELAY == 0, "QMK Caps compatibility default must remain 80 ms");
+  check_td_direct();
   check_tap(true, trace_only);
   check_tap(false, trace_only);
   if (trace_only) return 0;

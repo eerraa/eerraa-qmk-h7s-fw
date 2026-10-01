@@ -27,3 +27,5 @@
 #define EECONFIG_USER_TAPDANCE            ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 64))  // 88B  // V251124R8: VIA TAPDANCE 슬롯
 #define EECONFIG_USER_MOUSEKEY            ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 152)) // 16B  // V260823R1: VIA MOUSE 튜닝 슬롯
 #define EECONFIG_USER_RGB_SLEEP           ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 168)) // 4B   // V260901R1: VIA RGB SLEEP 초 단위 타임아웃 슬롯
+
+#define EECONFIG_USER_TAPDANCE_TIMING      ((void *)((uint32_t)EECONFIG_USER_DATABLOCK + 172)) // 24B

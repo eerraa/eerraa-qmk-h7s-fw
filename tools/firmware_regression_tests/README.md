@@ -16,6 +16,13 @@ with `--only queue`, `debounce`, `eeprom`, `usb`, `qbuffer`, `input`, `rgb` or `
 All test binaries compile with warnings as errors. Stubs are test-only and are
 not included in firmware builds.
 
+The RGB/input fixture also includes `test_td_direct.h` and `test_td_modes.h`: immediate first TD edges,
+second-press tap/hold, interruption, settings snapshots, shared key ownership,
+cancellation, all eight slots and uint16-term/32-bit-wrap boundaries. Host VIA
+fixtures cover all eight gesture combinations, explicit silence/inheritance,
+the mode byte/support marker, unchanged legacy storage and
+SAVE/reload. These prove logical transitions, not game/USB latency.
+
 ## What is executed
 
 - The production HID FIFO runs 100000 deterministic operations against an independent
@@ -351,3 +358,7 @@ After changing those assertions or their generator, run
 control mutates only an ignored generated copy and counts only when it compiles
 and its named runtime assertion then fails. Source files are never mutated, and
 none of this measures hardware.
+
+The Tap Dance input fixture also covers independent hold deadlines versus the
+consecutive-press window, captured timing, early hold before layer lookup,
+first-press immediacy and cached release after the layer turns off.

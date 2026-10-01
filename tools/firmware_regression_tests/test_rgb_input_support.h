@@ -108,6 +108,9 @@ static keymap_config_t keymap_config = {.oneshot_enable = true};
 static void eeconfig_update_keymap(uint16_t value) { (void)value; }
 static bool command_proc(uint8_t code) { (void)code; return false; }
 static void eeconfig_init_tapdance(void) {}
+static void eeconfig_init_tapdance_timing(void) {}
+static void eeconfig_flush_tapdance_timing(bool force) { (void)force; }
+static void eeconfig_flag_tapdance_timing(bool dirty) { (void)dirty; }
 static void eeconfig_flush_tapdance(bool force) { (void)force; }
 static void eeconfig_flag_tapdance(bool dirty) { (void)dirty; }
 void rgblight_indicator_post_host_event(led_t value);
@@ -218,15 +221,14 @@ static uint8_t fixture_layer(keypos_t key)
   return key.col != 0 && (layer_state & 2U) && layered_other_keycode != KC_NO ? 1 : 0;
 }
 static uint16_t fixture_keycode(keypos_t key) { return fixture_layer_keycode(fixture_layer(key), key); }
-/* Presses record their source layer as the production cache does; lookups
- * otherwise keep reading the live layer. */
+/* Match the production press-source cache, including release after layer-off. */
 static uint8_t fixture_source_layer[MATRIX_COLS];
 uint16_t keymap_key_to_keycode(uint8_t layer, keypos_t key) { return fixture_layer_keycode(layer, key); }
 uint8_t read_source_layers_cache(keypos_t key) { return fixture_source_layer[key.col % MATRIX_COLS]; }
 uint16_t get_event_keycode(keyevent_t event, bool cache)
 {
   if (event.pressed && cache) fixture_source_layer[event.key.col % MATRIX_COLS] = fixture_layer(event.key);
-  return fixture_keycode(event.key);
+  return fixture_layer_keycode(fixture_source_layer[event.key.col % MATRIX_COLS], event.key);
 }
 /* Product retro tapping is a VIA option; the fixture toggles it per case. */
 bool retro_tap_primed; uint16_t retro_tap_curr_key; uint8_t retro_tap_curr_mods, retro_tap_next_mods;
@@ -258,8 +260,8 @@ static action_t layer_switch_get_action(keypos_t key)
 }
 static action_t store_or_get_action(bool pressed, keypos_t key)
 {
-  (void)pressed;
-  return layer_switch_get_action(key);
+  if (pressed) fixture_source_layer[key.col % MATRIX_COLS] = fixture_layer(key);
+  return action_for_keycode(fixture_layer_keycode(fixture_source_layer[key.col % MATRIX_COLS], key));
 }
 static bool pre_process_record_kb(uint16_t code, keyrecord_t *record) {
   return accept_record && (!fixture_pre_process_record || fixture_pre_process_record(code, record));

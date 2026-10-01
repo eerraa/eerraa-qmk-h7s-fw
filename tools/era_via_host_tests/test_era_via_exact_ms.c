@@ -6,6 +6,7 @@
 #include "via.h"
 #include "tapping_term.h"
 #include "tapdance.h"
+#include "port.h"
 #include "era_state_sync.h"
 #include "mousekey_config.h"
 #include "mousekey.h"
@@ -296,6 +297,110 @@ static void test_state_sync_invalid(void) {
 
 #include "test_full_term_range.h"
 
+static uint8_t direct_command(uint8_t command, uint8_t slot, uint8_t value, uint8_t length) {
+    uint8_t data[32] = {command, id_qmk_tapdance, (uint8_t)(49U + slot), value};
+    bool ok = tapdance_handle_via_command(data, length);
+    if (command == id_custom_get_value) {
+        expect_true("direct GET handled", ok);
+        expect_eq_u8("direct support marker", data[4], 0xD2);
+        return data[3];
+    }
+    return ok;
+}
+
+static void test_direct_mode(void) {
+    uint8_t saved[88], after[88];
+    tapdance_storage_apply_defaults();
+    tapdance_storage_flush(true);
+    eeprom_read_block(saved, EECONFIG_USER_TAPDANCE, sizeof(saved));
+    for (uint8_t slot = 0; slot < 8; ++slot) {
+        expect_eq_u8("legacy slot stays ordinary", direct_command(id_custom_get_value, slot, 0, 32), 0);
+        uint32_t before = era_state_sync_config_revision();
+        expect_true("direct SET invalid refused", !direct_command(id_custom_set_value, slot, 2, 32));
+        expect_true("direct SET short refused", !direct_command(id_custom_set_value, slot, 1, 3));
+        expect_true("invalid direct does not bump", before == era_state_sync_config_revision());
+        expect_true("direct SET on", direct_command(id_custom_set_value, slot, 1, 32));
+        expect_true("direct mutation bumps", before != era_state_sync_config_revision());
+        before = era_state_sync_config_revision();
+        expect_true("direct SET same", direct_command(id_custom_set_value, slot, 1, 32));
+        expect_true("direct unchanged no bump", before == era_state_sync_config_revision());
+    }
+    tapdance_init();
+    expect_eq_u8("unsaved direct rolls back", direct_command(id_custom_get_value, 7, 0, 32), 0);
+    for (uint8_t slot = 0; slot < 8; ++slot) direct_command(id_custom_set_value, slot, 1, 32);
+    direct_command(id_custom_save, 0, 0, 32);
+    tapdance_init();
+    for (uint8_t slot = 0; slot < 8; ++slot)
+        expect_eq_u8("saved direct reloads", direct_command(id_custom_get_value, slot, 0, 32), 1);
+    eeprom_read_block(after, EECONFIG_USER_TAPDANCE, sizeof(after));
+    for (size_t i = 0; i < sizeof(after); ++i)
+        if (i != 81 && i != 82 && i != 83) expect_eq_u8("shipped storage unchanged", after[i], saved[i]);
+    expect_eq_u8("mode bits stored", after[81], 0x55);
+    expect_eq_u8("mode tag stored", after[82], 0xd2);
+    expect_eq_u8("upper mode bits stored", after[83], 0x55);
+    direct_command(id_custom_set_value, 3, 0, 32);
+    expect_eq_u8("disable one slot", direct_command(id_custom_get_value, 3, 0, 32), 0);
+    expect_eq_u8("neighbor preserved", direct_command(id_custom_get_value, 4, 0, 32), 1);
+    tapdance_storage_apply_defaults();
+    for (uint8_t slot = 0; slot < 8; ++slot)
+        expect_eq_u8("factory reset disables direct", direct_command(id_custom_get_value, slot, 0, 32), 0);
+    for (uint8_t slot = 0; slot < 8; ++slot) {
+        uint8_t action[32] = {id_custom_set_value, id_qmk_tapdance, (uint8_t)(slot * 5U + 2U), 0, 1};
+        expect_true("inherit hold SET", tapdance_handle_via_command(action, 32));
+        expect_true("immediate mode SET", direct_command(id_custom_set_value, slot, 2, 32));
+        expect_eq_u8("immediate mode GET", direct_command(id_custom_get_value, slot, 0, 32), 2);
+        action[4] = 0;
+        expect_true("immediate explicit first-hold silence refused", !tapdance_handle_via_command(action, 32));
+        expect_true("unknown mode refused", !direct_command(id_custom_set_value, slot, 3, 32));
+    }
+    direct_command(id_custom_save, 0, 0, 32);
+    tapdance_init();
+    for (uint8_t slot = 0; slot < 8; ++slot)
+        expect_eq_u8("immediate mode reload", direct_command(id_custom_get_value, slot, 0, 32), 2);
+    tapdance_storage_apply_defaults();
+
+}
+
+
+static void test_advanced_timing(void) {
+    uint8_t report[32];
+    tapdance_storage_apply_defaults(); tapdance_storage_flush(true);
+    for (uint8_t slot = 0; slot < 8; ++slot) {
+        zero_report(report); report[0] = id_custom_get_value; report[1] = id_qmk_tapdance; report[2] = 49 + slot;
+        expect_true("mode capability GET", tapdance_handle_via_command(report, 32));
+        expect_eq_u8("timing capability marker", report[5], 0xd3);
+        report[0] = id_custom_set_value; report[2] = 57 + slot; report[3] = 0xff; report[4] = 0xff;
+        expect_true("hold time short refused", !tapdance_handle_via_command(report, 4));
+        report[0] = id_custom_set_value;
+        expect_true("hold time maximum", tapdance_handle_via_command(report, 32));
+        report[0] = id_custom_get_value;
+        expect_true("hold time GET", tapdance_handle_via_command(report, 32));
+        expect_eq_u16("hold time exact", be16(report[3], report[4]), 65535);
+        expect_eq_u8("hold time marker", report[5], 0xd3);
+        report[0] = id_custom_set_value; report[2] = 65 + slot; report[3] = 2;
+        expect_true("invalid hold flag refused", !tapdance_handle_via_command(report, 32));
+        report[0] = id_custom_set_value; report[3] = 1;
+        expect_true("hold flag short refused", !tapdance_handle_via_command(report, 3));
+        expect_true("hold flag SET", tapdance_handle_via_command(report, 32));
+    }
+    tapdance_init();
+    report[0] = id_custom_get_value; report[2] = 64;
+    tapdance_handle_via_command(report, 32);
+    expect_eq_u16("unsaved advanced rolls back", be16(report[3], report[4]), 0);
+    report[0] = id_custom_set_value; report[3] = 0; report[4] = 180;
+    tapdance_handle_via_command(report, 32);
+    report[2] = 72; report[3] = 1; tapdance_handle_via_command(report, 32);
+    report[0] = id_custom_save; tapdance_handle_via_command(report, 32); tapdance_init();
+    report[0] = id_custom_get_value; report[2] = 64; tapdance_handle_via_command(report, 32);
+    expect_eq_u16("saved hold time reloads", be16(report[3], report[4]), 180);
+    report[2] = 72; tapdance_handle_via_command(report, 32);
+    expect_eq_u8("saved hold flag reloads", report[3], 1);
+    expect_eq_u8("hold flag marker", report[4], 0xd3);
+    report[0] = id_custom_set_value; report[2] = 64; report[3] = 0; report[4] = 0;
+    expect_true("hold time zero follows shared term", tapdance_handle_via_command(report, 32));
+    tapdance_storage_apply_defaults(); tapdance_storage_flush(true);
+}
+
 int main(void) {
     uint8_t  report[32];
     uint32_t before;
@@ -413,6 +518,8 @@ int main(void) {
     test_state_sync_invalid();
     test_mousekey();
     test_full_term_range();
+    test_direct_mode();
+    test_advanced_timing();
 
     zero_report(report);
     report[0] = id_get_keyboard_value;

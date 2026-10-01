@@ -1,6 +1,6 @@
 {
   "reset_key": "0x48375301",
-  "reason": "INTIGRITY80 폴더를 COMMON 메이커 위치(keyboards/era/comm/intigrity80)로 옮겨 board 묶음 이름과 slots 행의 파일 경로만 바뀌었다. 보드 저장 정의와 슬롯 쓰기 내용은 이동 전과 같으므로 키를 유지한다. 키 0x48375301은 Pulse 43~46 번호를 EERRAA 순서(Off, On, Off Hold, On Hold)로 바꾼 결정 그대로이며, 아직 출시 전이라 main에서 올라오는 모든 장치가 같은 첫 부팅 전체 초기화를 거친다.",
+  "reason": "기존 USER 주소와 88바이트 탭댄스 형식을 유지하며 미사용 USER 172..195에 독립된 24바이트 시간 레코드를 추가한다. 서명·버전이 유효하지 않으면 해당 레코드만 기본값으로 초기화하므로 전체 초기화 키는 유지한다.",
   "groups": {
     "board src/ap/modules/qmk/keyboards/era/comm/intigrity80/config.h": "0249ead8a27d8278",
     "board src/ap/modules/qmk/keyboards/era/keynetix/may65/config.h": "aac2456ae6e7b787",
@@ -9,9 +9,9 @@
     "board src/ap/modules/qmk/keyboards/era/sirind/sculpturei/config.h": "0249ead8a27d8278",
     "define src/ap/modules/qmk/port/debounce_profile.c": "d6476aa8a5542f2e",
     "define src/ap/modules/qmk/port/mousekey_config.c": "4ec82e9951c6bcaa",
-    "define src/ap/modules/qmk/port/port.h": "90bc544f6ce920b4",
+    "define src/ap/modules/qmk/port/port.h": "85611de6511b0edf",
     "define src/ap/modules/qmk/port/rgb_sleep.c": "cf6d0f504092e03a",
-    "define src/ap/modules/qmk/port/tapdance.c": "b513d07997b09e27",
+    "define src/ap/modules/qmk/port/tapdance.c": "224edc84f67b6489",
     "define src/ap/modules/qmk/port/tapdance.h": "09787f5f338e1b05",
     "define src/ap/modules/qmk/port/tapping_term.c": "e236f6bb8f17fdcb",
     "define src/ap/modules/qmk/port/version.h": "82c0976ffd26ff44",
@@ -21,7 +21,7 @@
     "define src/hw/hw_def.h": "3f7372b66a895715",
     "file src/ap/modules/qmk/quantum/keycodes.h": "9da72a9c3ee3e8e4",
     "file src/ap/modules/qmk/quantum/rgblight/rgblight_modes.h": "98e4266d1f662ebb",
-    "slots": "33259ce34dc5ad7d",
+    "slots": "47bdba72ab242fe8",
     "type UsbBootMode_t": "e688e1777b465d38",
     "type debounce_profile_storage_t": "a74bf04c0cd7078b",
     "type debug_config_t": "6ae5cb6cb6f177d2",

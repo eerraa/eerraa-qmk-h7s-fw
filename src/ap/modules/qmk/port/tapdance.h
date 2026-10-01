@@ -19,6 +19,8 @@ bool     tapdance_handle_via_command(uint8_t *data, uint8_t length);
 void     tapdance_storage_apply_defaults(void);
 void     tapdance_storage_flush(bool force);
 uint16_t tapdance_get_term_ms(uint16_t keycode);
-bool     tapdance_should_finish_immediate(uint8_t slot_index, uint8_t tap_count);  // V251125R1: Vial 호환 조기 완료 조건 노출
+uint16_t tapdance_decision_term(uint8_t slot, uint8_t runtime_index, bool pressed);
+bool tapdance_hold_on_interrupt(uint8_t runtime_index, uint8_t count, bool pressed);
+bool     tapdance_should_finish_immediate(uint8_t slot_index, uint8_t tap_count, uint8_t runtime_index);  // V251125R1: Vial 호환 조기 완료 조건 노출
 
 #endif

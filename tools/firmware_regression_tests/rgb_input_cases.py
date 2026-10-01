@@ -133,15 +133,15 @@ def generate(root: Path, build: Path, source_root: Path | None = None) -> Path:
         'rgblight_consume_host_led_queue', 'rgblight_flush_render_queue')]
     chunks += [rgb[rgb.index('static uint32_t rgblight_task_next_run;'):rgb.index('#ifdef VELOCIKEY_ENABLE\n#    define TYPING_SPEED_MAX_VALUE')]]
     chunks += [
-        td[td.index('#define TAPDANCE_SIGNATURE'):td.index('_Static_assert')],
+        td[td.index('#define TAPDANCE_SIGNATURE'):td.index('EECONFIG_DEBOUNCE_HELPER(')],
         'static bool tapdance_keycode_is_valid(uint16_t keycode);\n',
         'static void tapdance_load_entry(uint8_t slot_index, tapdance_entry_t *entry);\n',
         'static uint8_t tapdance_step(const tap_dance_state_t *state);\n',
     ]
     chunks += [function(td, name) for name in (
-        'tapdance_get_term_ms', 'tapdance_keycode_is_valid', 'tapdance_load_entry', 'tapdance_step',
-        'tapdance_should_finish_immediate', 'tapdance_run_action', 'tapdance_register_keycode', 'tapdance_unregister_keycode',
-        'tapdance_tap_width_ms', 'tapdance_tap_keycode', 'tapdance_set_runtime', 'tapdance_on_each_tap',
+        'tapdance_timing_defaults', 'tapdance_get_term_ms', 'tapdance_keycode_is_valid', 'tapdance_load_entry', 'tapdance_step',
+        'tapdance_mode', 'tapdance_store_mode', 'tapdance_has_override', 'tapdance_should_finish_immediate', 'tapdance_decision_term', 'tapdance_hold_on_interrupt', 'tapdance_run_action', 'tapdance_register_keycode', 'tapdance_unregister_keycode',
+        'tapdance_tap_width_ms', 'tapdance_tap_keycode', 'tapdance_set_runtime', 'tapdance_on_each_release', 'tapdance_on_each_tap',
         'tapdance_on_dance_finished', *(('tapdance_other_holds_action',) if 'static bool tapdance_other_holds_action(' in td else ()), 'tapdance_on_reset', 'tapdance_is_storage_valid', 'tapdance_apply_defaults_locked', 'tapdance_sync_state_from_storage', 'tapdance_init',
         'tapdance_storage_apply_defaults')]
     # The product links quantum.c's strong VIA-alias remap, not the core's weak identity.

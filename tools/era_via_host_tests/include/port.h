@@ -9,3 +9,5 @@
 #define EECONFIG_USER_TAPDANCE     ((void *)((uintptr_t)64))
 #define EECONFIG_USER_MOUSEKEY     ((void *)((uintptr_t)152))
 #define EECONFIG_USER_RGB_SLEEP    ((void *)((uintptr_t)168))
+
+#define EECONFIG_USER_TAPDANCE_TIMING ((void *)((uintptr_t)172))

@@ -94,6 +94,26 @@ finish a stale sequence. All three bits inside the window call
 `eeprom_req_clean()`, which uses `eepromResetGuardInvalidate()` to clear the
 guard and reboot, so the next boot runs the same `eepromResetGuardCheck()` path.
 
+Tap Dance retains the 88-byte version-1 record, slot addresses, signature and
+all action/term offsets. Reserved byte 1 tags the input-mode extension with
+`0xD2`; bytes 0 and 2 hold two bits per TD0..TD3 and TD4..TD7 respectively,
+lowest slot first. Values 0/1/2 mean legacy, after-decision and on-press.
+All-zero reserved bytes remain valid mode 0 of the same format. An unknown
+tag, nonzero untagged bits, mode 3, or on-press with a non-transparent first
+hold is invalid. No old-layout converter or reset-key change is needed.
+Defaults clear the reserved bytes. SAVE persists modes with the existing
+actions; SET alone does not promise durability. Older firmware ignores these
+mode bits and therefore cannot reproduce the new explicit-silence semantics.
+
+Tap Dance advanced timing appends a separate 24-byte record at USER offset 172
+(`EECONFIG_USER_TAPDANCE_TIMING`). Existing USER owners, the 88-byte Tap Dance
+record and keymap/macro addresses do not move, so the reset key stays unchanged.
+The packed record contains eight uint16 LE hold times, one bit-mask byte for
+hold-on-other-key, version 1, a zero uint16 reserved field and signature
+`0x4D544454`. Invalid/uninitialized records default independently to all-zero
+hold times and flags. A zero hold time follows the slot term. Defaults and
+SAVE cover both records, through the existing EEPROM persistence owner.
+
 ## 3. One RAM image, asynchronous persistence, explicit durability
 
 The runtime writer is `src/ap/modules/qmk/port/platforms/eeprom.c`. One RAM image

@@ -53,13 +53,52 @@ Official `*-VIA.JSON` definitions keep the legacy one-byte ×10 ms controls. Leg
 
 `src/ap/modules/qmk/port/tapping_term_policy.h` owns the shared exact validity and legacy projection; `tapping_term.c` and `tapdance.c` own the handlers. Wire and EEPROM terms remain uint16 with unchanged IDs, offsets, signatures and versions. Runtime key events retain a 32-bit captured timestamp through the tapping queue; elapsed comparisons and Tap Dance deadlines must represent intervals greater than the maximum term. Legacy GET is read-only even for values outside its display range; only explicit Legacy SET normalizes the stored value. SAVE/reload must preserve every valid exact value. App encoding and definition bounds are owned by `the-via-eerraa/docs/adr/0001-state-sync-protocol.md`.
 
-### RGB Sleep exact seconds
+### Tap Dance input modes
 
-Channel 18 value 2 uses the same BE16 Custom Value encoding and accepts 1..65535 seconds inclusive. Zero or `length < 5` is unhandled and leaves storage unchanged. Value 1 remains the official 1/3/5/10/30/60-minute preset; its GET projects exact seconds onto that list without rewriting exact storage. Both setters target the same timeout. Value 3 is the one-byte master; OFF preserves timeout.
+H7S channel 16 values 49..56 select the input mode for TD0..TD7 through
+Custom Value GET/SET/SAVE. Payload byte 0 is 0 legacy, 1 after-decision, or
+2 on-press. Missing payloads and other values are refused without mutation.
+GET/SET echo appends `0xD2` in byte 1 when the buffer has room. A definition
+alone is not support evidence: older firmware's unmarked zero reply must keep
+the old editor. The four action and term IDs keep their encodings. Official
+V3 TAPDANCE menus expose the same byte as an Input start dropdown.
 
-The persisted master flag is encoded in the existing storage-version byte so previously shipped version-1 slots migrate as enabled without changing the four-byte slot layout. `src/ap/modules/qmk/port/rgb_sleep.c` owns the implementation; `the-via-eerraa/docs/MAP.md` §3 points to the app exact-sec owner.
+Mode 0 keeps the existing Tap Dance rules, including empty-action fallback.
+In modes 1/2, On Tap is the base key. `KC_TRNS` in an additional action means
+inherit; `KC_NO` means explicitly send nothing. Hold inherits the base key;
+Double Tap inherits two base taps; Tap+Hold inherits a base tap followed by
+Hold (or the base key). Each completed pair starts a fresh gesture.
 
-`tools/era_via_host_tests/test_era_via_exact_ms.c` and `tools/era_via_host_tests/test_rgb_sleep.c` cover exact bounds, short packets, projection/no-write behavior, persistence/migration, and unknown ids.
+Mode 1 waits only while a different gesture is possible. Without any additional
+action it behaves as a normal physical base key. Mode 2 immediately emits and
+releases the first base key, including a long first hold. Only the second press
+waits: short release chooses Double Tap or one more base tap; expiration while
+held chooses Tap+Hold or the base key until release. The initial base input
+cannot be suppressed by a later action. Mode 2 requires Hold = `KC_TRNS`;
+conflicting mode/action SETs are refused without mutation. Other-key interruption
+chooses the base tap path. The existing strict `elapsed > term` boundary and
+current per-slot term policy remain. Actions and mode are captured on the first
+press so a settings edit cannot change the gesture's output or release owner.
+
+### Tap Dance independent timing
+
+Channel 16 values 57..64 hold TD0..TD7's separate hold time, BE16 0..65535;
+zero follows the original term. Values 65..72 enable hold-on-other-key, byte
+0/1 only. Hold-time GET/SET echo has marker `0xD3` in value byte 2; the flag
+has `0xD3` in byte 1. Mode GET/SET echo retains byte 1 `0xD2` and advertises
+these extra controls with byte 2 `0xD3`. Old firmware is never probed for the
+new values without that capability. Official VIA definitions expose the same
+range and dropdown controls. Invalid and short SETs never mutate settings.
+
+Modes 1/2 capture both thresholds and the flag with the first press. Released
+dances use the existing term, measured from the preceding press; held dances
+use the separate hold time (or the captured original term when zero). With
+hold-on-other enabled, an assigned first hold in mode 1 or second hold in
+modes 1/2 resolves before the other key's source-layer lookup. Explicit silence
+counts as assigned. Mode 2's first press remains the physical base input.
+Default flag 0 retains interruption-as-tap. Mode 0 ignores these extra settings.
+A first hold already resolved by its deadline ends that consecutive-press gesture.
+The second physical press never adds a speculative base input before a hold.
 
 ## 4. State Sync revision meaning
 

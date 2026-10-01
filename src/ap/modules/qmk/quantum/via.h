@@ -238,6 +238,32 @@ enum via_qmk_tapdance_value {
     id_qmk_tapdance_6_term_exact = 46,
     id_qmk_tapdance_7_term_exact = 47,
     id_qmk_tapdance_8_term_exact = 48,
+    id_qmk_tapdance_1_mode = 49,
+    id_qmk_tapdance_2_mode = 50,
+    id_qmk_tapdance_3_mode = 51,
+    id_qmk_tapdance_4_mode = 52,
+    id_qmk_tapdance_5_mode = 53,
+    id_qmk_tapdance_6_mode = 54,
+    id_qmk_tapdance_7_mode = 55,
+    id_qmk_tapdance_8_mode = 56,
+    id_qmk_tapdance_1_hold_term = 57,
+    id_qmk_tapdance_2_hold_term = 58,
+    id_qmk_tapdance_3_hold_term = 59,
+    id_qmk_tapdance_4_hold_term = 60,
+    id_qmk_tapdance_5_hold_term = 61,
+    id_qmk_tapdance_6_hold_term = 62,
+    id_qmk_tapdance_7_hold_term = 63,
+    id_qmk_tapdance_8_hold_term = 64,
+    id_qmk_tapdance_1_hold_other = 65,
+    id_qmk_tapdance_2_hold_other = 66,
+    id_qmk_tapdance_3_hold_other = 67,
+    id_qmk_tapdance_4_hold_other = 68,
+    id_qmk_tapdance_5_hold_other = 69,
+    id_qmk_tapdance_6_hold_other = 70,
+    id_qmk_tapdance_7_hold_other = 71,
+    id_qmk_tapdance_8_hold_other = 72,
+
+
 };
 
 // V260823R1: VIA MOUSE 제어 값 ID (참조 QMK era_mousekey_via.c와 동일한 1..6 배치)

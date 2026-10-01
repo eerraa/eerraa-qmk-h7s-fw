@@ -49,9 +49,27 @@ CONFIGURE -> TAPDANCE에서 TD0~TD7을 설정한 뒤 KEYMAP에서 같은 TD 번�
 - Tap+Hold: 한 번 탭한 뒤 이어서 길게 눌렀을 때의 keycode
 - Term: 어느 동작인지 판단하기까지 기다리는 시간(ms)
 
-On Double Tap과 Tap+Hold를 비워 둔 슬롯은 키를 떼는 순간 탭이 입력되고,
+일반 모드에서 On Double Tap과 Tap+Hold를 비워 둔 슬롯은 키를 떼는 순간 탭이 입력되고,
 Term은 홀드 판정에만 쓰입니다. On Double Tap을 설정하면 두 번째 탭을 떼는
 순간 입력됩니다.
+
+Input start의 Legacy는 기존 판정 방식을 유지합니다. After decision에서는
+판정 후 해당 동작만 입력하고, On press에서는 첫 기본 키를 누름과 해제에 맞춰
+즉시 입력합니다. 두 번째 누름만 판정을 기다리며 이미 보낸 첫 입력은 남습니다.
+새 방식에서 On Hold / On Double Tap / Tap+Hold에 KC_TRNS를 넣으면 기본 동작을
+사용하고, KC_NO를 넣으면 해당 판정의 입력을 막습니다. On press에서는 On Hold가
+KC_TRNS여야 합니다. 홀드를 따로 지정하려면 먼저 After decision으로 바꾸십시오.
+게임 상태창 예: On Tap = KC_TAB, On Hold = KC_TRNS, On Double Tap = KC_TRNS,
+Tap+Hold = MO(1), Input start = On press. 두 번째 짧은 누름을 떼면 TAB을 한 번
+더 입력하고, 길게 누르면 추가 TAB 없이 MO(1)을 키를 뗄 때까지 유지합니다.
+이 설정이 없는 펌웨어는 업데이트가 필요합니다.
+
+Hold time (0 = shared)는 0이면 Term을 함께 사용하며, 1~65535ms로 지정하면
+홀드 판정만 별도로 설정합니다. 예를 들어 Term 2000ms, Hold time 180ms이면
+첫 누름으로부터 2000ms 안에 이어 누를 수 있고, 두 번째 누름은 180ms를 넘어
+유지하면 Tap+Hold가 됩니다. Hold on other key를 켜면 다른 키를 누를 때
+홀드를 먼저 확정하므로 그 키부터 바뀐 레이어를 사용합니다. On press의 첫
+누름은 이 옵션과 무관하게 기본 키입니다. 두 설정은 Legacy에서 사용하지 않습니다.
 
 ■ SOCD
 
@@ -217,9 +235,27 @@ that TD key is actually placed somewhere you can press it.
 - Tap+Hold: keycode for a tap followed by a hold
 - Term: how long the keyboard waits before deciding the action, in milliseconds
 
-A slot with On Double Tap and Tap+Hold left empty sends the tap the moment
+In ordinary mode, a slot with On Double Tap and Tap+Hold left empty sends the tap the moment
 the key is released, and Term then decides only the hold. With On Double
 Tap set, the second tap is sent the moment it is released.
+
+Input start = Legacy retains the original decision rules. After decision sends
+only the selected action. On press follows the first base key's physical press
+and release immediately; only the second press waits, and the first input remains.
+In the new modes, KC_TRNS in On Hold / On Double Tap / Tap+Hold inherits the
+base behavior, while KC_NO suppresses that gesture. On press requires On Hold
+= KC_TRNS; select After decision before assigning a separate first-hold action.
+Game scoreboard example: On Tap = KC_TAB, On Hold = KC_TRNS, On Double Tap
+= KC_TRNS, Tap+Hold = MO(1), Input start = On press. A short second release
+sends one more TAB; holding sends MO(1) until release without an extra TAB.
+Update firmware if these settings are unavailable.
+
+Hold time (0 = shared) follows Term at zero, or uses a separate 1..65535 ms
+hold deadline. Term 2000 with Hold time 180 allows the next press within
+2000 ms of the preceding press and resolves its hold after 180 ms. Hold on
+other key resolves the pending hold before processing the other key, including
+its new layer mapping. On press's first press always remains the base key.
+Both settings are ignored in Legacy mode.
 
 ■ SOCD
 
