@@ -8,7 +8,7 @@ H7S Firmware Guide
 
 ■ 펌웨어 업데이트
 
-V260916R1 및 그 이전 배포본에서 V260929R1로 처음 업데이트하면 저장 형식
+V260916R1 및 그 이전 배포본에서 V261001R2로 처음 업데이트하면 저장 형식
 변경으로 키맵·매크로·설정이 초기화됩니다. 먼저 SAVE + LOAD로 백업하고,
 백업 파일에 포함되지 않는 설정과 탭댄스는 따로 기록하십시오.
 이 릴리스부터 메이커별 USB 식별자를 사용합니다. 메이커와 보드 이름이 모두
@@ -49,7 +49,7 @@ English
 
 ■ Firmware Update
 
-The first upgrade from V260916R1 or an earlier release to V260929R1 resets
+The first upgrade from V260916R1 or an earlier release to V261001R2 resets
 keymaps, macros and settings because the stored format changed. Back up with
 SAVE + LOAD first, and separately record settings and Tap Dance actions that
 the backup file does not include.
