@@ -22,16 +22,14 @@ active, queued and coalesced event semantics and adds cross-repository wire
 fixtures. Until then, do not reinterpret the existing aggregate fields or
 consume reserved bytes on only one side.
 
-### D-5. Tap Dance synthetic-key ownership
+### D-6. Tap Dance output that kill switch overrides
 
-QMK's shared HID usage state does not distinguish a Tap Dance-generated usage
-from a separately held physical key with the same usage. Ownership for that
-overlap remains undefined.
+A kill-switch (SOCD) key that a TD hold also outputs stays reported while the
+opposing key is held, because suppression removes only the ordinary bit. The
+EERRAA tree behaves the same way.
 
-**Start condition**: define synthetic-versus-physical usage ownership and add a
-host-visible "synthetic down + physical same-usage down/up" fixture. Any later
-logical key-up scheduling must also define reconfiguration, cancellation, and
-same-usage overlap behavior.
+**Start condition**: a report-level suppression rule for kill switch that every
+owner respects, applied in both trees.
 
 ## 2. Hardware or external verification still open
 

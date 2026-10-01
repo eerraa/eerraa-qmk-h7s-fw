@@ -70,7 +70,9 @@ typedef struct
 {
   tapdance_action_type_t active_action;
   uint16_t               active_keycode;
+  action_t               active_qmk_action;
   bool                   active_is_tap;                   // V251127R1: tap/hold 경로 구분
+  uint8_t                first_tap_mods;
 } tapdance_runtime_state_t;
 
 typedef struct
@@ -88,8 +90,7 @@ static void tapdance_on_reset(tap_dance_state_t *state, void *user_data);
 
 static tapdance_storage_t       tapdance_storage = {0};
 static tapdance_slot_state_t    tapdance_state[TAPDANCE_SLOT_COUNT];
-static tapdance_runtime_state_t tapdance_runtime[TAPDANCE_SLOT_COUNT];
-static uint8_t                  tapdance_dance_state[TAPDANCE_SLOT_COUNT] = {0};
+static tapdance_runtime_state_t tapdance_runtime[TAP_DANCE_MAX_SIMULTANEOUS];
 static tapdance_user_data_t     tapdance_user_data[TAPDANCE_SLOT_COUNT] =
 {
   { .slot_index = 0 },
@@ -135,15 +136,18 @@ static bool                  tapdance_set_value(uint8_t value_id, uint8_t *value
 static void                  tapdance_get_value(uint8_t value_id, uint8_t *value_data, uint8_t length);
 static void                  tapdance_load_entry(uint8_t slot_index, tapdance_entry_t *entry);
 static uint8_t               tapdance_step(const tap_dance_state_t *state);
-static void                  tapdance_register_keycode(uint16_t keycode, bool is_tap);
-static void                  tapdance_unregister_keycode(uint16_t keycode, bool is_tap);
-static void                  tapdance_tap_keycode(uint16_t keycode, bool is_tap);
-static void                  tapdance_set_runtime(uint8_t slot_index, tapdance_action_type_t action, uint16_t keycode, bool is_tap);
+static void                  tapdance_run_action(const tap_dance_state_t *state, uint16_t keycode, action_t action, bool pressed, bool is_tap);
+static void                  tapdance_register_keycode(const tap_dance_state_t *state, uint16_t keycode, bool is_tap);
+static void                  tapdance_unregister_keycode(const tap_dance_state_t *state, uint16_t keycode, bool is_tap);
+static void                  tapdance_tap_keycode(const tap_dance_state_t *state, uint16_t keycode, bool is_tap);
+static void                  tapdance_set_runtime(const tap_dance_state_t *state, tapdance_action_type_t action, uint16_t keycode, bool is_tap);
 static uint16_t              tapdance_tap_width_ms(uint16_t keycode);                                  // V260911R5: 합성 탭 폭 규칙
 
 
 void tapdance_init(void)
 {
+  /* Release executed actions before resetting the runtime metadata. */
+  tap_dance_cancel_all();
   memset(tapdance_runtime, 0, sizeof(tapdance_runtime));
   eeconfig_init_tapdance();
 
@@ -209,6 +213,9 @@ bool tapdance_handle_via_command(uint8_t *data, uint8_t length)
 
 void tapdance_storage_apply_defaults(void)
 {
+  /* A reset retires held dances while their executed actions still exist. */
+  tap_dance_cancel_all();
+  memset(tapdance_runtime, 0, sizeof(tapdance_runtime));
   tapdance_apply_defaults_locked();                        // V251124R8: USER 초기화 시 기본값 기록
   tapdance_sync_state_from_storage();
 }
@@ -236,18 +243,16 @@ uint16_t tapdance_get_term_ms(uint16_t keycode)
   return term_ms;
 }
 
-static void tapdance_register_keycode(uint16_t keycode, bool is_tap)
+/* One edge of an executed action. The record carries the dance's own position
+ * as a tick event: position-keyed QMK state such as retro tapping sees this
+ * input, never whatever sits at (0,0), and no dance takes it for an input. A
+ * keycode without a QMK action runs through the quantum handlers. */
+static void tapdance_run_action(const tap_dance_state_t *state, uint16_t keycode, action_t action, bool pressed, bool is_tap)
 {
-  if (tapdance_keycode_is_valid(keycode) == false)
-  {
-    return;
-  }
-
   keyrecord_t record = {0};
 
-  record.event.key.row = 0;
-  record.event.key.col = 0;
-  record.event.pressed = true;
+  record.event.key = state->key;
+  record.event.pressed = pressed;
   record.event.time = timer_read32();
 #ifndef NO_ACTION_TAPPING
   record.tap.count = is_tap ? 1U : 0U;
@@ -256,44 +261,44 @@ static void tapdance_register_keycode(uint16_t keycode, bool is_tap)
   record.keycode = keycode;
 #endif
 
-  process_action(&record, action_for_keycode(keycode));    // V251127R1: 레이어/모드 키코드를 정상 처리
+  if (action.code == ACTION_NO)
+  {
+    tap_dance_run_quantum_keycode(&record, keycode);
+  }
+  else
+  {
+    process_action(&record, action);
+  }
 }
 
-static void tapdance_unregister_keycode(uint16_t keycode, bool is_tap)
+static void tapdance_register_keycode(const tap_dance_state_t *state, uint16_t keycode, bool is_tap)
+{
+  if (tapdance_keycode_is_valid(keycode))
+  {
+    tapdance_run_action(state, keycode, action_for_keycode(keycode), true, is_tap);
+  }
+}
+
+static void tapdance_unregister_keycode(const tap_dance_state_t *state, uint16_t keycode, bool is_tap)
+{
+  if (tapdance_keycode_is_valid(keycode))
+  {
+    tapdance_run_action(state, keycode, action_for_keycode(keycode), false, is_tap);
+  }
+}
+
+static void tapdance_tap_keycode(const tap_dance_state_t *state, uint16_t keycode, bool is_tap)
 {
   if (tapdance_keycode_is_valid(keycode) == false)
   {
     return;
   }
 
-  keyrecord_t record = {0};
-
-  record.event.key.row = 0;
-  record.event.key.col = 0;
-  record.event.pressed = false;
-  record.event.time = timer_read32();
-#ifndef NO_ACTION_TAPPING
-  record.tap.count = is_tap ? 1U : 0U;
-#endif
-#if defined(COMBO_ENABLE) || defined(REPEAT_KEY_ENABLE)
-  record.keycode = keycode;
-#endif
-
-  process_action(&record, action_for_keycode(keycode));    // V251127R1: 레이어/모드 키코드를 정상 처리
-}
-
-static void tapdance_tap_keycode(uint16_t keycode, bool is_tap)
-{
-  if (tapdance_keycode_is_valid(keycode) == false)
-  {
-    return;
-  }
-
-  tapdance_register_keycode(keycode, is_tap);
+  tapdance_register_keycode(state, keycode, is_tap);
   // V260911R5: 합성 탭의 폭은 어느 경로가 만들었든 QMK 규칙 하나다(tapdance_tap_width_ms).
   // V260911R3: TD와 LT의 호스트 유지 시간을 같은 전송 계층에 맡긴다.
   tap_code_wait(keycode, tapdance_tap_width_ms(keycode));
-  tapdance_unregister_keycode(keycode, is_tap);
+  tapdance_unregister_keycode(state, keycode, is_tap);
 }
 
 // V260911R5: 합성 탭의 최소 유지 시간. QMK의 tap_code()와 LT/MT가 쓰는 규칙 그대로라 같은 keycode가
@@ -303,16 +308,17 @@ static uint16_t tapdance_tap_width_ms(uint16_t keycode)
   return (keycode == KC_CAPS_LOCK) ? TAP_HOLD_CAPS_DELAY : TAP_CODE_DELAY;
 }
 
-static void tapdance_set_runtime(uint8_t slot_index, tapdance_action_type_t action, uint16_t keycode, bool is_tap)
+static void tapdance_set_runtime(const tap_dance_state_t *state, tapdance_action_type_t action, uint16_t keycode, bool is_tap)
 {
-  if (slot_index >= TAPDANCE_SLOT_COUNT)
+  if (state->runtime_index >= TAP_DANCE_MAX_SIMULTANEOUS)
   {
     return;
   }
 
-  tapdance_runtime[slot_index].active_action  = action;
-  tapdance_runtime[slot_index].active_keycode = keycode;
-  tapdance_runtime[slot_index].active_is_tap  = is_tap;    // V251127R1: release 경로 보존
+  tapdance_runtime[state->runtime_index].active_action  = action;
+  tapdance_runtime[state->runtime_index].active_keycode = keycode;
+  tapdance_runtime[state->runtime_index].active_qmk_action = action_for_keycode(keycode);
+  tapdance_runtime[state->runtime_index].active_is_tap  = is_tap;    // V251127R1: release 경로 보존
 }
 
 static void tapdance_on_each_tap(tap_dance_state_t *state, void *user_data)
@@ -325,6 +331,11 @@ static void tapdance_on_each_tap(tap_dance_state_t *state, void *user_data)
     return;
   }
 
+  if (state->count == 1U && state->runtime_index < TAP_DANCE_MAX_SIMULTANEOUS)
+  {
+    /* A Double Hold's embedded tap stands for this first press. */
+    tapdance_runtime[state->runtime_index].first_tap_mods = state->weak_mods;
+  }
   tapdance_load_entry(user->slot_index, &entry);
   if (!tapdance_keycode_is_valid(entry.on_tap))
   {
@@ -333,13 +344,13 @@ static void tapdance_on_each_tap(tap_dance_state_t *state, void *user_data)
 
   if (state->count == 3U)
   {
-    tapdance_tap_keycode(entry.on_tap, true);
-    tapdance_tap_keycode(entry.on_tap, true);
-    tapdance_tap_keycode(entry.on_tap, true);
+    tapdance_tap_keycode(state, entry.on_tap, true);
+    tapdance_tap_keycode(state, entry.on_tap, true);
+    tapdance_tap_keycode(state, entry.on_tap, true);
   }
   else if (state->count > 3U)
   {
-    tapdance_tap_keycode(entry.on_tap, true);
+    tapdance_tap_keycode(state, entry.on_tap, true);
   }
 }
 
@@ -364,8 +375,7 @@ static void tapdance_on_dance_finished(tap_dance_state_t *state, void *user_data
 
   tapdance_load_entry(slot_index, &entry);
   step = tapdance_step(state);
-  tapdance_dance_state[slot_index] = step;
-  runtime = &tapdance_runtime[slot_index];
+  runtime = &tapdance_runtime[state->runtime_index];
 
   runtime->active_action  = TAPDANCE_ACTION_NONE;
   runtime->active_keycode = KC_NO;
@@ -376,60 +386,68 @@ static void tapdance_on_dance_finished(tap_dance_state_t *state, void *user_data
     case SINGLE_TAP:
       if (tapdance_keycode_is_valid(entry.on_tap))
       {
-        tapdance_register_keycode(entry.on_tap, true);
-        tapdance_set_runtime(slot_index, TAPDANCE_ACTION_TAP, entry.on_tap, true);
+        tapdance_register_keycode(state, entry.on_tap, true);
+        tapdance_set_runtime(state, TAPDANCE_ACTION_TAP, entry.on_tap, true);
       }
       break;
 
     case SINGLE_HOLD:
       if (tapdance_keycode_is_valid(entry.on_hold))
       {
-        tapdance_register_keycode(entry.on_hold, false);
-        tapdance_set_runtime(slot_index, TAPDANCE_ACTION_HOLD, entry.on_hold, false);
+        tapdance_register_keycode(state, entry.on_hold, false);
+        tapdance_set_runtime(state, TAPDANCE_ACTION_HOLD, entry.on_hold, false);
       }
       else if (tapdance_keycode_is_valid(entry.on_tap))
       {
-        tapdance_register_keycode(entry.on_tap, false);
-        tapdance_set_runtime(slot_index, TAPDANCE_ACTION_HOLD, entry.on_tap, false);
+        tapdance_register_keycode(state, entry.on_tap, false);
+        tapdance_set_runtime(state, TAPDANCE_ACTION_HOLD, entry.on_tap, false);
       }
       break;
 
     case DOUBLE_TAP:
       if (tapdance_keycode_is_valid(entry.on_double_tap))
       {
-        tapdance_register_keycode(entry.on_double_tap, true);
-        tapdance_set_runtime(slot_index, TAPDANCE_ACTION_DOUBLE_TAP, entry.on_double_tap, true);
+        tapdance_register_keycode(state, entry.on_double_tap, true);
+        tapdance_set_runtime(state, TAPDANCE_ACTION_DOUBLE_TAP, entry.on_double_tap, true);
       }
       else if (tapdance_keycode_is_valid(entry.on_tap))
       {
-        tapdance_tap_keycode(entry.on_tap, true);
-        tapdance_register_keycode(entry.on_tap, true);               // V251127R1: Vial 폴백 유지 + tap 경로 적용
-        tapdance_set_runtime(slot_index, TAPDANCE_ACTION_DOUBLE_TAP, entry.on_tap, true);
+        tapdance_tap_keycode(state, entry.on_tap, true);
+        tapdance_register_keycode(state, entry.on_tap, true);               // V251127R1: Vial 폴백 유지 + tap 경로 적용
+        tapdance_set_runtime(state, TAPDANCE_ACTION_DOUBLE_TAP, entry.on_tap, true);
       }
       break;
 
     case DOUBLE_HOLD:
       if (tapdance_keycode_is_valid(entry.on_tap_hold))
       {
-        tapdance_register_keycode(entry.on_tap_hold, false);
-        tapdance_set_runtime(slot_index, TAPDANCE_ACTION_TAP_HOLD, entry.on_tap_hold, false);
+        tapdance_register_keycode(state, entry.on_tap_hold, false);
+        tapdance_set_runtime(state, TAPDANCE_ACTION_TAP_HOLD, entry.on_tap_hold, false);
       }
       else
       {
         if (tapdance_keycode_is_valid(entry.on_tap))
         {
-          tapdance_tap_keycode(entry.on_tap, true);
+          /* The embedded tap stands for the first press and, like any tap,
+           * carries the modifiers held at either press. The hold that follows
+           * keeps only live owners. */
+          const uint8_t mods = runtime->first_tap_mods | state->weak_mods;
+
+          add_weak_mods(mods);
+          tapdance_tap_keycode(state, entry.on_tap, true);
+          del_weak_mods(mods);
+          send_keyboard_report();
         }
 
         if (tapdance_keycode_is_valid(entry.on_hold))
         {
-          tapdance_register_keycode(entry.on_hold, false);
-          tapdance_set_runtime(slot_index, TAPDANCE_ACTION_TAP_HOLD, entry.on_hold, false);
+          tapdance_register_keycode(state, entry.on_hold, false);
+          tapdance_set_runtime(state, TAPDANCE_ACTION_TAP_HOLD, entry.on_hold, false);
         }
         else if (tapdance_keycode_is_valid(entry.on_tap))
         {
-          tapdance_register_keycode(entry.on_tap, false);
-          tapdance_set_runtime(slot_index, TAPDANCE_ACTION_TAP_HOLD, entry.on_tap, false);
+          tapdance_register_keycode(state, entry.on_tap, false);
+          tapdance_set_runtime(state, TAPDANCE_ACTION_TAP_HOLD, entry.on_tap, false);
         }
       }
       break;
@@ -437,9 +455,9 @@ static void tapdance_on_dance_finished(tap_dance_state_t *state, void *user_data
     case DOUBLE_SINGLE_TAP:
       if (tapdance_keycode_is_valid(entry.on_tap))
       {
-        tapdance_tap_keycode(entry.on_tap, true);
-        tapdance_register_keycode(entry.on_tap, true);
-        tapdance_set_runtime(slot_index, TAPDANCE_ACTION_DOUBLE_TAP, entry.on_tap, true);
+        tapdance_tap_keycode(state, entry.on_tap, true);
+        tapdance_register_keycode(state, entry.on_tap, true);
+        tapdance_set_runtime(state, TAPDANCE_ACTION_DOUBLE_TAP, entry.on_tap, true);
       }
       break;
 
@@ -461,7 +479,7 @@ static void tapdance_on_reset(tap_dance_state_t *state, void *user_data)
     return;
   }
 
-  runtime = &tapdance_runtime[user->slot_index];
+  runtime = &tapdance_runtime[state->runtime_index];
 
   if (tapdance_keycode_is_valid(runtime->active_keycode))
   {
@@ -471,13 +489,13 @@ static void tapdance_on_reset(tap_dance_state_t *state, void *user_data)
     {
       tap_code_wait(runtime->active_keycode, tapdance_tap_width_ms(runtime->active_keycode));
     }
-    tapdance_unregister_keycode(runtime->active_keycode, runtime->active_is_tap);  // V251127R1: 등록된 tap/hold 경로에 맞춰 해제
+    /* Each execution receives its own up; resource ownership preserves peers. */
+    tapdance_run_action(state, runtime->active_keycode, runtime->active_qmk_action, false, runtime->active_is_tap);
   }
 
   runtime->active_action  = TAPDANCE_ACTION_NONE;
   runtime->active_keycode = KC_NO;
   runtime->active_is_tap  = false;
-  tapdance_dance_state[user->slot_index] = 0;
 }
 
 static bool tapdance_is_exact_term_id(uint8_t value_id)
@@ -592,18 +610,21 @@ bool tapdance_should_finish_immediate(uint8_t slot_index, uint8_t tap_count)
   }
 
   tapdance_slot_state_t *slot_state = &tapdance_state[slot_index];
-  bool has_tap      = tapdance_keycode_is_valid(slot_state->actions[0]);
-  bool has_hold     = tapdance_keycode_is_valid(slot_state->actions[1]);
   bool has_double   = tapdance_keycode_is_valid(slot_state->actions[2]);
   bool has_tap_hold = tapdance_keycode_is_valid(slot_state->actions[3]);
 
-  if (tap_count == 1U && has_tap && has_hold && has_double == false && has_tap_hold == false)
+  /* A release decides a dance as soon as no later press could change the
+   * outcome: without On Double Tap and On Tap-Hold the first release is a
+   * single tap, and with On Double Tap the second release is a double tap.
+   * Vial waits for Term in both cases; deciding at the release removes only
+   * that delay. Term still decides every hold. */
+  if (tap_count == 1U && has_double == false && has_tap_hold == false)
   {
-    return true;                                                 // V251125R1: tap/hold 단순 조합은 즉시 완료
+    return true;
   }
   if (tap_count == 2U && has_double)
   {
-    return true;                                                 // V251125R1: 더블 탭 지정 시 즉시 완료
+    return true;
   }
 
   return false;

@@ -723,13 +723,14 @@ static bool matrix_task(void) {
             rgblight_handle_physical_key(key_pressed, row, col, event_time_32);
 #endif
 
-            if (process_keypress) {
+            if (process_keypress && !keypress_is_wakeup_key(row, col)) {
                 event.key.col = col;
                 event.pressed = key_pressed;
                 action_exec(event);
             }
 
             switch_events(row, col, key_pressed);
+            wakeup_matrix_handle_key_event(row, col, key_pressed);
         }
 
         matrix_previous[row] = current_row;

@@ -222,10 +222,27 @@ static inline uint16_t translate_kb_to_tap_dance(uint16_t keycode)
   }
   return keycode;
 }
+
+/* A raw keymap entry names its dance through the same VIA alias. */
+uint16_t tap_dance_remap_keycode(uint16_t keycode)
+{
+  return translate_kb_to_tap_dance(keycode);
+}
 #endif
 
 /* Convert record into usable keycode via the contained event. */
 uint16_t get_record_keycode(keyrecord_t *record, bool update_layer_cache) {
+#ifdef TAPDANCE_ENABLE
+    if (record->tap_dance_injected) {
+        return record->tap_dance_keycode;
+    }
+#endif
+#ifdef TAP_DANCE_ENABLE
+    const uint16_t owned = tap_dance_owned_keycode(record);
+    if (owned != KC_NO) {
+        return owned;
+    }
+#endif
 #if defined(COMBO_ENABLE) || defined(REPEAT_KEY_ENABLE)
     if (record->keycode) {
         return record->keycode;
@@ -266,6 +283,9 @@ uint16_t get_event_keycode(keyevent_t event, bool update_layer_cache) {
 /* Get keycode, and then process pre tapping functionality */
 bool pre_process_record_quantum(keyrecord_t *record) {
     uint16_t keycode = get_record_keycode(record, true);
+#ifdef TAPDANCE_ENABLE
+    record->tap_dance_keycode = IS_QK_TAP_DANCE(keycode) ? keycode : KC_NO;
+#endif
     return pre_process_record_kb(keycode, record) &&
 #ifdef COMBO_ENABLE
            process_combo(keycode, record) &&

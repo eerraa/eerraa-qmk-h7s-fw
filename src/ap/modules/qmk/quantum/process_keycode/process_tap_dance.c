@@ -21,13 +21,127 @@
 #include "action_util.h"
 #include "timer.h"
 #include "wait.h"
+#include "tapdance.h"
+
+/* Only an undecided dance owns the interruption cursor. Finished actions
+ * remain in the bounded pool until their own input is released. */
+static tap_dance_state_t *active_td;
+static tap_dance_state_t tap_dance_states[TAP_DANCE_MAX_SIMULTANEOUS];
+_Static_assert(TAP_DANCE_MAX_SIMULTANEOUS > 0 && TAP_DANCE_MAX_SIMULTANEOUS <= UINT8_MAX,
+               "Tap Dance owner indices must fit in uint8_t");
 #ifdef TAPDANCE_ENABLE
-#    include "tapdance.h"
+#    define TD_AUX_START TAP_DANCE_MATRIX_STATES
+#else
+#    define TD_AUX_START 0
+#endif
+#ifdef TAPDANCE_ENABLE
+static uint32_t input_epoch;
+uint32_t tap_dance_input_epoch(void) { return input_epoch; }
+/* The dance whose callback is running. Its own output can clear the
+ * keyboard (a quantum keycode): every other dance retires at once, and this
+ * one keeps running, as in Vial, so no state is reset under its callback. */
+static tap_dance_state_t *callback_state;
 #endif
 
-static uint16_t active_td;
-/* The elapsed interval must be able to exceed UINT16_MAX milliseconds. */
-static uint32_t last_tap_time;
+static bool tap_dance_owns_event(const tap_dance_state_t *state, const keyrecord_t *record) {
+    return state->in_use && state->type == record->event.type && KEYEQ(state->key, record->event.key);
+}
+
+static tap_dance_state_t *tap_dance_find_owner(const keyrecord_t *record) {
+#ifdef TAPDANCE_ENABLE
+    if (IS_KEYEVENT(record->event)) {
+        if (record->event.key.row >= MATRIX_ROWS || record->event.key.col >= MATRIX_COLS) return NULL;
+        const uint16_t i = record->event.key.row * MATRIX_COLS + record->event.key.col;
+        if (i >= TAP_DANCE_MAX_SIMULTANEOUS) return NULL;
+        return tap_dance_owns_event(&tap_dance_states[i], record) ? &tap_dance_states[i] : NULL;
+    }
+#endif
+    for (uint8_t i = TD_AUX_START; i < TAP_DANCE_MAX_SIMULTANEOUS; ++i) {
+        if (tap_dance_owns_event(&tap_dance_states[i], record)) return &tap_dance_states[i];
+    }
+    return NULL;
+}
+
+static uint32_t tap_dance_event_time(const keyrecord_t *record) {
+    return record->event.time;
+}
+
+static uint16_t tap_dance_count(void) { return TAPDANCE_SLOT_COUNT; }
+static tap_dance_action_t *tap_dance_get(uint8_t index) {
+    return index < TAPDANCE_SLOT_COUNT ? &tap_dance_actions[index] : NULL;
+}
+
+uint16_t tap_dance_owned_keycode(const keyrecord_t *record) {
+    if (record->event.pressed || !IS_EVENT(record->event)) return KC_NO;
+    const tap_dance_state_t *state = tap_dance_find_owner(record);
+    if (state && state->pressed
+#ifdef TAPDANCE_ENABLE
+        && (state->cancelled || !record->tap_dance_epoch_valid || (int32_t)(record->tap_dance_epoch - state->input_epoch) >= 0)
+#endif
+    ) return TD(state->index);
+    return KC_NO;
+}
+
+bool tap_dance_owns_press(const keyrecord_t *record) {
+    if (!record->event.pressed || !IS_EVENT(record->event)) return false;
+    const tap_dance_state_t *state = tap_dance_find_owner(record);
+    return state && state->pressed && !state->cancelled;
+}
+
+__attribute__((weak)) uint16_t tap_dance_remap_keycode(uint16_t keycode) {
+    return keycode;
+}
+
+uint16_t tap_dance_get_tapping_term(uint16_t keycode, keyrecord_t *record) {
+    (void)record;
+    return tapdance_get_term_ms(keycode);
+}
+
+bool tap_dance_finish_on_release(const tap_dance_action_t *action, const tap_dance_state_t *state) {
+    (void)action;
+    return tapdance_should_finish_immediate(state->index, state->count);
+}
+
+static tap_dance_state_t *tap_dance_get_or_allocate_state(uint8_t tap_dance_idx, const keyrecord_t *record, bool allocate) {
+    if (tap_dance_idx >= tap_dance_count()) return NULL;
+    tap_dance_state_t *state = tap_dance_find_owner(record);
+    if (state) return state->index == tap_dance_idx ? state : NULL;
+    if (!allocate) return NULL;
+
+    uint16_t i = TD_AUX_START;
+#ifdef TAPDANCE_ENABLE
+    if (IS_KEYEVENT(record->event)) {
+        if (record->event.key.row >= MATRIX_ROWS || record->event.key.col >= MATRIX_COLS) return NULL;
+        i = record->event.key.row * MATRIX_COLS + record->event.key.col;
+    } else
+#endif
+    {
+        while (i < TAP_DANCE_MAX_SIMULTANEOUS && tap_dance_states[i].in_use) ++i;
+    }
+    if (i >= TAP_DANCE_MAX_SIMULTANEOUS || tap_dance_states[i].in_use) return NULL;
+    state = &tap_dance_states[i];
+    state->index = tap_dance_idx;
+    state->key = record->event.key;
+    state->type = record->event.type;
+    state->runtime_index = (uint8_t)i;
+    state->in_use = true;
+#ifdef TAPDANCE_ENABLE
+    state->input_epoch = record->tap_dance_epoch_valid ? record->tap_dance_epoch : input_epoch;
+#endif
+    return state;
+}
+
+tap_dance_state_t *tap_dance_get_state(uint8_t tap_dance_idx) {
+    if (active_td && active_td->index == tap_dance_idx) {
+        return active_td;
+    }
+    for (uint8_t i = 0; i < TAP_DANCE_MAX_SIMULTANEOUS; ++i) {
+        if (tap_dance_states[i].in_use && tap_dance_states[i].index == tap_dance_idx) {
+            return &tap_dance_states[i];
+        }
+    }
+    return NULL;
+}
 
 void tap_dance_pair_on_each_tap(tap_dance_state_t *state, void *user_data) {
     tap_dance_pair_t *pair = (tap_dance_pair_t *)user_data;
@@ -85,71 +199,125 @@ void tap_dance_dual_role_reset(tap_dance_state_t *state, void *user_data) {
 
 static inline void _process_tap_dance_action_fn(tap_dance_state_t *state, void *user_data, tap_dance_user_fn_t fn) {
     if (fn) {
+#ifdef TAP_DANCE_OWNED_ACTIONS
+        uint8_t previous = tap_dance_action_set_owner(state->runtime_index);
+#endif
+#ifdef TAPDANCE_ENABLE
+        tap_dance_state_t *outer = callback_state;
+        callback_state          = state;
+#endif
         fn(state, user_data);
+#ifdef TAPDANCE_ENABLE
+        callback_state = outer;
+#endif
+#ifdef TAP_DANCE_OWNED_ACTIONS
+        tap_dance_action_set_owner(previous);
+#endif
     }
 }
 
-static inline void process_tap_dance_action_on_each_tap(tap_dance_action_t *action) {
-    action->state.count++;
-    action->state.weak_mods = get_mods();
-    action->state.weak_mods |= get_weak_mods();
+static inline void process_tap_dance_action_on_each_tap(tap_dance_action_t *action, tap_dance_state_t *state) {
+    state->count++;
+    state->weak_mods = get_mods();
+    state->weak_mods |= get_weak_mods();
 #ifndef NO_ACTION_ONESHOT
-    action->state.oneshot_mods = get_oneshot_mods();
+    state->oneshot_mods = get_oneshot_mods();
 #endif
-    _process_tap_dance_action_fn(&action->state, action->user_data, action->fn.on_each_tap);
+    _process_tap_dance_action_fn(state, action->user_data, action->fn.on_each_tap);
 }
 
-static inline void process_tap_dance_action_on_each_release(tap_dance_action_t *action) {
-    _process_tap_dance_action_fn(&action->state, action->user_data, action->fn.on_each_release);
+static inline void process_tap_dance_action_on_each_release(tap_dance_action_t *action, tap_dance_state_t *state) {
+    _process_tap_dance_action_fn(state, action->user_data, action->fn.on_each_release);
 }
 
-static inline void process_tap_dance_action_on_reset(tap_dance_action_t *action) {
-    _process_tap_dance_action_fn(&action->state, action->user_data, action->fn.on_reset);
-    del_weak_mods(action->state.weak_mods);
+static inline void process_tap_dance_action_on_reset(tap_dance_action_t *action, tap_dance_state_t *state) {
+#ifdef TAP_DANCE_OWNED_ACTIONS
+    uint8_t previous = tap_dance_action_set_owner(state->runtime_index);
+#endif
+    _process_tap_dance_action_fn(state, action->user_data, action->fn.on_reset);
+    del_weak_mods(state->weak_mods);
 #ifndef NO_ACTION_ONESHOT
-    del_mods(action->state.oneshot_mods);
+    del_mods(state->oneshot_mods);
+#endif
+#ifdef TAP_DANCE_OWNED_ACTIONS
+    tap_dance_clear_owner_mods(state->runtime_index);
+    tap_dance_clear_owner_keys(state->runtime_index);
+    tap_dance_clear_owner_hid(state->runtime_index);
+#ifndef NO_ACTION_LAYER
+    tap_dance_clear_owner_layers(state->runtime_index);
+#endif
+    tap_dance_action_set_owner(previous);
 #endif
     send_keyboard_report();
-    action->state = (const tap_dance_state_t){0};
+    // Clear the tap dance state and mark it as unused
+    memset(state, 0, sizeof(tap_dance_state_t));
 }
 
-static inline void process_tap_dance_action_on_dance_finished(tap_dance_action_t *action) {
-    if (!action->state.finished) {
-        action->state.finished = true;
-        add_weak_mods(action->state.weak_mods);
+static inline void process_tap_dance_action_on_dance_finished(tap_dance_action_t *action, tap_dance_state_t *state) {
+    if (!state->finished) {
+        state->finished = true;
+#ifdef TAP_DANCE_OWNED_ACTIONS
+        uint8_t previous = tap_dance_action_set_owner(state->runtime_index);
+#endif
+#ifdef TAP_DANCE_OWNED_ACTIONS
+        /* Tap-time modifiers are replayed for a tap, as in QMK. A hold keeps
+         * only live owners, so a released modifier cannot linger on it. */
+        if (!state->pressed || state->interrupted)
+#endif
+            add_weak_mods(state->weak_mods);
 #ifndef NO_ACTION_ONESHOT
-        add_mods(action->state.oneshot_mods);
+        add_mods(state->oneshot_mods);
 #endif
         send_keyboard_report();
-        _process_tap_dance_action_fn(&action->state, action->user_data, action->fn.on_dance_finished);
+        _process_tap_dance_action_fn(state, action->user_data, action->fn.on_dance_finished);
+#ifdef TAP_DANCE_OWNED_ACTIONS
+        tap_dance_action_set_owner(previous);
+#endif
     }
-    active_td = 0;
-    if (!action->state.pressed) {
+    if (active_td == state) {
+        active_td = NULL;
+    }
+    if (!state->pressed) {
         // There will not be a key release event, so reset now.
-        process_tap_dance_action_on_reset(action);
+        process_tap_dance_action_on_reset(action, state);
     }
+}
+
+static bool tap_dance_expired(const tap_dance_state_t *state, uint32_t now) {
+    const uint32_t elapsed = now - state->last_tap_time;
+    keyrecord_t record = {.event = {.key = state->key, .type = state->type, .pressed = state->pressed}};
+    /* A replayed older event cannot advance a newer dance. The supported
+     * uint16_t term is far shorter than the unambiguous 32-bit half-range. */
+    return elapsed < 0x80000000UL && elapsed > tap_dance_get_tapping_term(TD(state->index), &record);
 }
 
 bool preprocess_tap_dance(uint16_t keycode, keyrecord_t *record) {
     tap_dance_action_t *action;
-
-    if (!record->event.pressed) return false;
-
-    if (!active_td || keycode == active_td) return false;
+    tap_dance_state_t  *state;
 
 #ifdef TAPDANCE_ENABLE
-    uint8_t slot_index = QK_TAP_DANCE_GET_INDEX(active_td);
-    if (slot_index >= TAPDANCE_SLOT_COUNT) {
-        active_td = 0;
-        return false;                                        // V251124R8: 정의된 슬롯만 처리
-    }
-    action = &tap_dance_actions[slot_index];
-#else
-    action                             = &tap_dance_actions[QK_TAP_DANCE_GET_INDEX(active_td)];
+    /* A dance's own output neither advances nor interrupts a dance. */
+    if (record->tap_dance_injected) return false;
 #endif
-    action->state.interrupted          = true;
-    action->state.interrupting_keycode = keycode;
-    process_tap_dance_action_on_dance_finished(action);
+    /* Process the event's deadline before turning its held state into up.
+     * A scan gap must not turn an already-expired hold into a release tap.
+     * Queued short taps still use their original event times, not dispatch. */
+    if (active_td && tap_dance_expired(active_td, tap_dance_event_time(record))) {
+        process_tap_dance_action_on_dance_finished(tap_dance_get(active_td->index), active_td);
+        return record->event.pressed;
+    }
+    if (!record->event.pressed) return false;
+
+    if (!active_td || (keycode == TD(active_td->index) && tap_dance_owns_event(active_td, record))) return false;
+
+    state  = active_td;
+    action = tap_dance_get(state->index);
+    if (state == NULL) {
+        return false;
+    }
+    state->interrupted          = true;
+    state->interrupting_keycode = keycode;
+    process_tap_dance_action_on_dance_finished(action, state);
 
     // Tap dance actions can leave some weak mods active (e.g., if the tap dance is mapped to a keycode with
     // modifiers), but these weak mods should not affect the keypress which interrupted the tap dance.
@@ -163,58 +331,47 @@ bool preprocess_tap_dance(uint16_t keycode, keyrecord_t *record) {
 }
 
 bool process_tap_dance(uint16_t keycode, keyrecord_t *record) {
+    uint8_t             td_index;
     tap_dance_action_t *action;
+    tap_dance_state_t  *state;
 
     switch (keycode) {
         case QK_TAP_DANCE ... QK_TAP_DANCE_MAX:
-#ifdef TAPDANCE_ENABLE
-            {
-                uint8_t slot_index = QK_TAP_DANCE_GET_INDEX(keycode);
-                if (slot_index >= TAPDANCE_SLOT_COUNT) {
-                    break;                                    // V251124R8: 지원 슬롯 밖 Tap Dance 무시
-                }
-                action = &tap_dance_actions[slot_index];
-
-                action->state.pressed = record->event.pressed;
-                if (record->event.pressed) {
-                    last_tap_time = timer_read32();
-                    process_tap_dance_action_on_each_tap(action);
-                    active_td = action->state.finished ? 0 : keycode;
-                } else {
-                    // V260911R4: 완료된 dance의 release는 reset만 한다. 다른 슬롯의 active_td를 지우지 않는다.
-                    if (!action->state.finished && tapdance_should_finish_immediate(slot_index, action->state.count)) {
-                        action->state.pressed = false;
-                        process_tap_dance_action_on_dance_finished(action);  // V251125R1: Vial 호환 즉시 종료
-                        break;
-                    }
-
-                    process_tap_dance_action_on_each_release(action);
-                    if (action->state.finished) {
-                        process_tap_dance_action_on_reset(action);
-                        if (active_td == keycode) {
-                            active_td = 0;
-                        }
-                    }
-                }
+            td_index = QK_TAP_DANCE_GET_INDEX(keycode);
+            if (td_index >= tap_dance_count()) {
+                return false;
             }
-#else
-            action = &tap_dance_actions[QK_TAP_DANCE_GET_INDEX(keycode)];
-
-            action->state.pressed = record->event.pressed;
+            action = tap_dance_get(td_index);
+            state  = tap_dance_get_or_allocate_state(td_index, record, record->event.pressed);
+            if (state == NULL) {
+                return false;
+            }
+            /* A repeated down is not an additional tap and an unmatched up
+             * cannot reset another physical owner of the same configuration. */
+            if (state->pressed == record->event.pressed) {
+                return false;
+            }
+            if (state->cancelled) {
+                if (!record->event.pressed) memset(state, 0, sizeof(*state));
+                return false;
+            }
+            state->pressed = record->event.pressed;
             if (record->event.pressed) {
-                last_tap_time = timer_read32();
-                process_tap_dance_action_on_each_tap(action);
-                active_td = action->state.finished ? 0 : keycode;
+                state->last_tap_time = tap_dance_event_time(record);
+                process_tap_dance_action_on_each_tap(action, state);
+                active_td = state->finished || !state->in_use ? NULL : state;
             } else {
-                process_tap_dance_action_on_each_release(action);
-                if (action->state.finished) {
-                    process_tap_dance_action_on_reset(action);
-                    if (active_td == keycode) {
-                        active_td = 0;
+                if (!state->finished && tap_dance_finish_on_release(action, state)) {
+                    process_tap_dance_action_on_dance_finished(action, state);
+                }
+                process_tap_dance_action_on_each_release(action, state);
+                if (state->finished) {
+                    if (active_td == state) {
+                        active_td = NULL;
                     }
+                    process_tap_dance_action_on_reset(action, state);
                 }
             }
-#endif
 
             break;
     }
@@ -224,34 +381,107 @@ bool process_tap_dance(uint16_t keycode, keyrecord_t *record) {
 
 void tap_dance_task(void) {
     tap_dance_action_t *action;
+    tap_dance_state_t  *state;
 
-#ifdef TAPDANCE_ENABLE
-    if (!active_td) {
-        return;
-    }
+    if (!active_td || !tap_dance_expired(active_td, timer_read32())) return;
 
-    uint8_t slot_index = QK_TAP_DANCE_GET_INDEX(active_td);
-    if (slot_index >= TAPDANCE_SLOT_COUNT) {
-        active_td = 0;
-        return;                                               // V251124R8: 정의되지 않은 Tap Dance 슬롯 무시
-    }
-
-    if (timer_elapsed32(last_tap_time) <= tapdance_get_term_ms(active_td)) {
-        return;
-    }
-
-    action = &tap_dance_actions[slot_index];
-#else
-    if (!active_td || timer_elapsed32(last_tap_time) <= GET_TAPPING_TERM(active_td, &(keyrecord_t){})) return;
-
-    action = &tap_dance_actions[QK_TAP_DANCE_GET_INDEX(active_td)];
-#endif
-    if (!action->state.interrupted) {
-        process_tap_dance_action_on_dance_finished(action);
+    state  = active_td;
+    action = tap_dance_get(state->index);
+    if (state != NULL && !state->interrupted) {
+        process_tap_dance_action_on_dance_finished(action, state);
     }
 }
 
 void reset_tap_dance(tap_dance_state_t *state) {
-    active_td = 0;
-    process_tap_dance_action_on_reset((tap_dance_action_t *)state);
+    if (!state || !state->in_use) return;
+    if (active_td == state) {
+        active_td = NULL;
+    }
+    process_tap_dance_action_on_reset(tap_dance_get(state->index), state);
 }
+
+#ifdef TAPDANCE_ENABLE
+bool tap_dance_discard_retired_record(keyrecord_t *record) {
+    if (!record->tap_dance_epoch_valid) return false;
+    tap_dance_state_t *owner = tap_dance_find_owner(record);
+    if (record->event.pressed && owner && owner->cancelled) {
+        /* A new physical press supersedes a cancelled position, including
+         * one whose up was lost with an overflowed waiting buffer. */
+        memset(owner, 0, sizeof(*owner));
+        owner = NULL;
+    }
+    if (record->tap_dance_epoch == input_epoch) return false;
+
+    /* Do not flush the LT/MT queue. Only the TD input that predates the
+     * boundary is retired, and its up must not leak into a changed keymap. */
+    if (!record->event.pressed) {
+        /* An up is a TD up only if its down left a dance here; queue order
+         * makes that dance the one this boundary cancelled. */
+        if (!owner) return false;
+        if (owner->cancelled) {
+            memset(owner, 0, sizeof(*owner));
+            return true;
+        }
+        /* An up older than the dance at its position belongs to an
+         * earlier press. One that is not (a dance started after the
+         * boundary inside the same dispatch) is that dance's own. */
+        return (int32_t)(record->tap_dance_epoch - owner->input_epoch) < 0;
+    }
+
+    uint16_t keycode = record->tap_dance_keycode;
+#    if !defined(NO_ACTION_LAYER) && !defined(STRICT_LAYER_RELEASE)
+    /* The ingress identity only outlives a VIA rewrite of the entry it read.
+     * An unchanged entry resolves on the current layer, like any queued key. */
+    if (IS_QK_TAP_DANCE(keycode) && tap_dance_remap_keycode(keymap_key_to_keycode(read_source_layers_cache(record->event.key), record->event.key)) == keycode)
+        keycode = KC_NO;
+#    endif
+    if (!IS_QK_TAP_DANCE(keycode)) keycode = tap_dance_remap_keycode(get_record_keycode(record, true));
+    if (!IS_QK_TAP_DANCE(keycode)) return false;
+    if (owner) return true; /* A newer owner at this position is never modified. */
+    tap_dance_state_t *state = tap_dance_get_or_allocate_state(TD_INDEX(keycode), record, true);
+    if (state) state->pressed = state->cancelled = true;
+    return true;
+}
+#endif
+void tap_dance_cancel_all(void) {
+#ifdef TAPDANCE_ENABLE
+    tap_dance_state_t *const exempt      = callback_state;
+    tap_dance_state_t *const keep_active = exempt && active_td == exempt ? active_td : NULL;
+    ++input_epoch;
+#endif
+    active_td = NULL;
+    for (uint8_t i = 0; i < TAP_DANCE_MAX_SIMULTANEOUS; ++i) {
+        tap_dance_state_t *state = &tap_dance_states[i];
+        if (!state->in_use || state->cancelled) continue;
+#ifdef TAPDANCE_ENABLE
+        if (state == exempt) continue;
+#endif
+        tap_dance_state_t owner = *state;
+        reset_tap_dance(state);
+        if (owner.pressed) {
+            state->key = owner.key;
+            state->type = owner.type;
+            state->index = owner.index;
+            state->runtime_index = i;
+#ifdef TAPDANCE_ENABLE
+            state->input_epoch = owner.input_epoch;
+#endif
+            state->in_use = state->pressed = state->cancelled = true;
+        }
+    }
+#ifdef TAPDANCE_ENABLE
+    if (keep_active && keep_active->in_use) active_td = keep_active;
+#endif
+}
+
+#ifdef TAPDANCE_ENABLE
+/* A keycode without a QMK action -- a VIA macro, a lighting or other quantum
+ * keycode -- runs through the quantum handlers as the dance's own record, as
+ * Vial runs it. A dance never starts another dance from its output. */
+void tap_dance_run_quantum_keycode(keyrecord_t *record, uint16_t keycode) {
+    if (IS_QK_TAP_DANCE(tap_dance_remap_keycode(keycode))) return;
+    record->tap_dance_keycode  = keycode;
+    record->tap_dance_injected = true;
+    process_record_quantum(record);
+}
+#endif

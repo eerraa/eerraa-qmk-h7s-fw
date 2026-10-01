@@ -106,6 +106,16 @@ filtering, so layer-only or consumed keys can wake the host. Each new physical
 press may retry while the same transport generation remains suspended. Report
 submission itself is not a wake request.
 
+A key pressed while the host sleeps — a host that had configured the device
+suspended it (`usbHidHostSleeping()`), or the press requested Remote Wake — wakes
+it but is not typed, as in QMK: `keypress_is_wakeup_key()`
+(`src/ap/modules/qmk/port/platforms/suspend.c`) drops that key's press and its
+release, so a lock screen or text field never receives the key that woke it. The
+key types again on its next press. Bus Suspend seen before enumeration is not a
+sleeping host, so a key held at power-on still reaches the host once it
+configures the device. Retained reports are those accepted before Suspend, such
+as the release of a key held into it.
+
 Remote Wake must remain fail-closed around real bus state: revalidate software
 Suspend, host permission, the current transport/suspend epoch and hardware
 `DSTS.SUSPSTS`; wait at least 5 ms after Suspend; isolate only

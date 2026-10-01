@@ -7,6 +7,8 @@ void suspend_power_down(void);
 bool suspend_wakeup_condition(void);
 void suspend_wakeup_init(void);
 void suspend_wakeup_key_event(uint8_t row, uint8_t col, bool pressed);
+bool keypress_is_wakeup_key(uint8_t row, uint8_t col);
+void wakeup_matrix_handle_key_event(uint8_t row, uint8_t col, bool pressed);
 
 void suspend_wakeup_init_user(void);
 void suspend_wakeup_init_kb(void);

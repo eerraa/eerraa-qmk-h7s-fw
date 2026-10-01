@@ -58,7 +58,7 @@ extern "C" {
 
 #define HID_KEYBOARD_REPORT_DESC_SIZE                   64U
 #define HID_KEYBOARD_VIA_REPORT_DESC_SIZE               34U
-#define HID_EXK_REPORT_DESC_SIZE                        129U  // V260823R1: SYSTEM/CONSUMER(50) + MOUSE(79)
+#define HID_EXK_REPORT_DESC_SIZE                        123U  // SYSTEM/CONSUMER(50) + MOUSE(73)
 
 #define HID_DESCRIPTOR_TYPE                             0x21U
 #define HID_REPORT_DESC                                 0x22U
@@ -170,6 +170,7 @@ bool usbHidReadViaRequest(uint8_t *data, uint32_t *generation);
 bool usbHidEnqueueViaResponse(const uint8_t *data, uint8_t length, uint32_t generation);
 bool usbHidViaResponsesPending(void);
 void usbHidOnSuspend(void);
+bool usbHidHostSleeping(void);
 bool usbHidRequestRemoteWakeFromInput(void);
 void usbHidOnResume(void);
 bool usbHidConsumeWakeSof(void);

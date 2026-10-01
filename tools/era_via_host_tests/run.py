@@ -87,6 +87,7 @@ def main() -> int:
         f"-I{INC}",
         f"-I{QMK / 'quantum'}",
         f"-I{QMK / 'quantum' / 'keymap_extras'}",
+        f"-I{QMK / 'quantum' / 'sequencer'}",
         f"-I{QMK / 'quantum' / 'process_keycode'}",
     ]
     compile_and_run(

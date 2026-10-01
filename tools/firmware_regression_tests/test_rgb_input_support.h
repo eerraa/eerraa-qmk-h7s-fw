@@ -40,7 +40,6 @@ _Static_assert(sizeof(action_t) == 2, "QMK action requires GCC packed bitfield l
 typedef uint16_t matrix_row_t;
 typedef uint32_t layer_state_t;
 typedef int animation_status_t;
-typedef struct { uint8_t raw; } led_t;
 static struct { bool enable, velocikey; uint8_t mode, speed, hue, sat, val; uint64_t raw; } rgblight_config;
 static struct { uint8_t base_mode; bool timer_enabled; } rgblight_status;
 // V260913R1: 실제 rgblight_sethsv_eeprom_helper()를 커밋 경로로 연결한다. 색 계산과 EEPROM만 대역이다.
@@ -48,7 +47,6 @@ static struct { uint8_t base_mode; bool timer_enabled; } rgblight_status;
 #ifndef dprintf
 #define dprintf(...) ((void)0)
 #endif
-typedef struct { uint8_t r, g, b; } rgb_led_t;
 static uint8_t mode_base_table[RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD + 1] = {
   [RGBLIGHT_MODE_STATIC_LIGHT] = RGBLIGHT_MODE_STATIC_LIGHT,
   [RGBLIGHT_MODE_PULSE_ON_PRESS] = RGBLIGHT_MODE_PULSE_ON_PRESS,
@@ -62,7 +60,7 @@ static void eeconfig_update_rgblight(uint64_t raw) { (void)raw; }
 static struct { bool matrix; } debug_config;
 static bool rgblight_indicator_supported = true;
 static bool is_rgblight_initialized = true;
-static bool output_suspended, indicator_on, background_on, physical_dispatch;
+static bool output_suspended, background_on, physical_dispatch;
 static bool accept_keypress = true, accept_record = true;
 static struct { uint32_t (*get_generation)(void); bool (*is_complete)(uint32_t); uint32_t (*time_us)(void); } rgblight_driver;
 static bool rgblight_pulse_output_visible(void) { return !output_suspended && !indicator_on && rgblight_config.enable; }
@@ -70,7 +68,7 @@ static uint32_t irq_mask;
 static uint32_t __get_PRIMASK(void) { return irq_mask; }
 static void __disable_irq(void) { irq_mask=1; }
 static void __set_PRIMASK(uint32_t mask) { irq_mask=mask; }
-static uint8_t host_led_raw, mods, weak_mods;
+static uint8_t host_led_raw;
 static uint8_t typing_speed;
 static uint32_t now_ms, pending_matrix_activity_time, caps_press_time, caps_release_time;
 static uint32_t caps_press_count, caps_release_count, color_writes, physical_color_writes, frame_count;
@@ -87,7 +85,49 @@ static matrix_row_t matrix_rows[MATRIX_ROWS];
 static bool scan_changed;
 static uint16_t mapped_keycode = TD(0);
 static uint16_t other_keycode = KC_A;
-static layer_state_t layer_state, default_layer_state;
+static uint16_t layered_other_keycode, third_keycode;
+extern layer_state_t layer_state, default_layer_state;
+void layer_state_set(layer_state_t); void layer_on(uint8_t); void layer_off(uint8_t);
+void layer_clear(void); void layer_move(uint8_t); void layer_invert(uint8_t);
+bool layer_state_cmp(layer_state_t, uint8_t);
+void clear_keyboard(void); void clear_keyboard_but_mods(void); void clear_keyboard_but_mods_and_keys(void);
+void register_code(uint8_t); void unregister_code(uint8_t); void register_code16(uint16_t); void unregister_code16(uint16_t);
+void register_mods(uint8_t); void unregister_mods(uint8_t); void register_weak_mods(uint8_t); void unregister_weak_mods(uint8_t);
+void reset_tap_dance(tap_dance_state_t *); void tap_dance_cancel_all(void);
+#ifdef TAPDANCE_ENABLE
+uint32_t tap_dance_input_epoch(void); bool tap_dance_discard_retired_record(keyrecord_t *);
+void tap_dance_run_quantum_keycode(keyrecord_t *record, uint16_t keycode);
+void tapdance_storage_apply_defaults(void);
+#endif
+static uint8_t bitpop(uint8_t value) { return (uint8_t)__builtin_popcount(value); }
+static keymap_config_t keymap_config = {.oneshot_enable = true};
+static void eeconfig_update_keymap(uint16_t value) { (void)value; }
+static bool command_proc(uint8_t code) { (void)code; return false; }
+static void eeconfig_init_tapdance(void) {}
+static void eeconfig_flush_tapdance(bool force) { (void)force; }
+static void eeconfig_flag_tapdance(bool dirty) { (void)dirty; }
+void rgblight_indicator_post_host_event(led_t value);
+static bool automatic_caps_feedback = true;
+static bool report_had_caps, require_shared_a, forbid_a;
+static unsigned forbidden_a_reports, a_reports;
+static unsigned shared_a_gaps;
+static uint8_t last_a_mods;
+static bool report_has_key(const report_keyboard_t *report, uint8_t code) {
+  for (unsigned i = 0; i < KEYBOARD_REPORT_KEYS; ++i) if (report->keys[i] == code) return true;
+  return false;
+}
+static void host_keyboard_send(report_keyboard_t *report) {
+  if (report_has_key(report, KC_A)) { last_a_mods = report->mods; ++a_reports; }
+  if (forbid_a && report_has_key(report, KC_A)) ++forbidden_a_reports;
+  if (require_shared_a && !report_has_key(report, KC_A)) ++shared_a_gaps;
+  bool caps = report_has_key(report, KC_CAPS);
+  if (caps && !report_had_caps) {
+    caps_press_time = now_ms; ++caps_press_count;
+    if (automatic_caps_feedback) { host_led_raw ^= 2; rgblight_indicator_post_host_event((led_t){host_led_raw}); }
+  }
+  if (!caps && report_had_caps) { caps_release_time = now_ms; ++caps_release_count; }
+  report_had_caps = caps;
+}
 
 void process_record(keyrecord_t *record);
 void process_record_handler(keyrecord_t *record);
@@ -112,70 +152,72 @@ static void delay(uint32_t ms)
   blocking_delay_calls++;
   now_ms += ms + 1U; // V260911R2: HAL은 0ms에도 tick을 더한다. 실제 wait 포트의 차단 여부를 검증한다.
 }
-static void clear_keyboard(void) { assert(!"unexpected tapping-buffer overflow"); }
-static uint8_t get_mods(void) { return mods; }
-static uint8_t get_weak_mods(void) { return weak_mods; }
-static void clear_weak_mods(void) { weak_mods = 0; }
-static void add_weak_mods(uint8_t value) { weak_mods |= value; }
-static void del_weak_mods(uint8_t value) { weak_mods &= ~value; }
-static void add_mods(uint8_t value) { mods |= value; }
-static void del_mods(uint8_t value) { mods &= ~value; }
-static void register_mods(uint8_t value) { add_mods(value); }
-static void unregister_mods(uint8_t value) { del_mods(value); }
-static void send_keyboard_report(void) {}
-static void register_code(uint8_t code)
-{
-  if (code == KC_CAPS_LOCK)
-  {
-    caps_press_time = now_ms;
-    caps_press_count++;
-    host_led_raw ^= 2;
-    rgblight_indicator_post_host_event((led_t){host_led_raw});
-  }
-}
-static void unregister_code(uint8_t code)
-{
-  if (code == KC_CAPS_LOCK)
-  {
-    caps_release_time = now_ms;
-    caps_release_count++;
-  }
-}
-static void register_code16(uint16_t code) { register_code((uint8_t)code); }
-static void unregister_code16(uint16_t code) { unregister_code((uint8_t)code); }
-static void layer_on(uint8_t layer) { layer_state |= 1U << layer; }
-static void layer_off(uint8_t layer) { layer_state &= ~(1U << layer); }
-static void layer_invert(uint8_t layer) { layer_state ^= 1U << layer; }
-static void layer_move(uint8_t layer) { layer_state = 1U << layer; }
-static void layer_clear(void) { layer_state = 0; }
-static void layer_and(layer_state_t value) { layer_state &= value; }
-static void layer_or(layer_state_t value) { layer_state |= value; }
-static void layer_xor(layer_state_t value) { layer_state ^= value; }
-static void layer_state_set(layer_state_t value) { layer_state = value; }
-static void default_layer_and(layer_state_t value) { default_layer_state &= value; }
-static void default_layer_or(layer_state_t value) { default_layer_state |= value; }
-static void default_layer_xor(layer_state_t value) { default_layer_state ^= value; }
-static void default_layer_set(layer_state_t value) { default_layer_state = value; }
-static void register_mouse(uint8_t code, bool pressed) { (void)code; (void)pressed; }
+/* Mouse engine and extra-report transport are adapters; register_mouse(),
+ * usage routing and ownership are the production functions. */
+static uint32_t mouse_codes_down;
+static uint16_t last_system, last_consumer;
+static void mousekey_on(uint8_t code) { mouse_codes_down |= 1UL << (code - KC_MS_UP); }
+static void mousekey_off(uint8_t code) { mouse_codes_down &= ~(1UL << (code - KC_MS_UP)); }
+static void mousekey_send(void) {}
+static void mousekey_clear(void) { mouse_codes_down = 0; }
+static void host_system_send(uint16_t usage) { last_system = usage; }
+static void host_consumer_send(uint16_t usage) { last_consumer = usage; }
+static uint16_t host_last_system_usage(void) { return last_system; }
+static uint16_t host_last_consumer_usage(void) { return last_consumer; }
+void register_mouse(uint8_t mouse_keycode, bool pressed);
 static uint8_t host_keyboard_leds(void) { return host_led_raw; }
 static void led_set(uint8_t value) { rgblight_indicator_post_host_event((led_t){value}); }
 
-uint16_t get_record_keycode(keyrecord_t *record, bool cache)
+/* Keymap is an adapter; the production core must request it again after
+ * a TD interruption changes the effective layer. */
+static uint16_t fixture_layer_keycode(uint8_t layer, keypos_t key)
 {
-  (void)cache;
-  return record->event.key.col == 0 ? mapped_keycode : other_keycode;
+  if (key.col == 2 && third_keycode != KC_NO) return third_keycode;
+  if (key.col != 0 && layer == 1 && layered_other_keycode != KC_NO) return layered_other_keycode;
+  return key.col == 0 ? mapped_keycode : other_keycode;
 }
+static uint8_t fixture_layer(keypos_t key)
+{
+  return key.col != 0 && (layer_state & 2U) && layered_other_keycode != KC_NO ? 1 : 0;
+}
+static uint16_t fixture_keycode(keypos_t key) { return fixture_layer_keycode(fixture_layer(key), key); }
+/* Presses record their source layer as the production cache does; lookups
+ * otherwise keep reading the live layer. */
+static uint8_t fixture_source_layer[MATRIX_COLS];
+uint16_t keymap_key_to_keycode(uint8_t layer, keypos_t key) { return fixture_layer_keycode(layer, key); }
+uint8_t read_source_layers_cache(keypos_t key) { return fixture_source_layer[key.col % MATRIX_COLS]; }
+uint16_t get_event_keycode(keyevent_t event, bool cache)
+{
+  if (event.pressed && cache) fixture_source_layer[event.key.col % MATRIX_COLS] = fixture_layer(event.key);
+  return fixture_keycode(event.key);
+}
+/* Product retro tapping is a VIA option; the fixture toggles it per case. */
+bool retro_tap_primed; uint16_t retro_tap_curr_key; uint8_t retro_tap_curr_mods, retro_tap_next_mods;
+static bool fixture_retro;
+bool get_retro_tapping(uint16_t keycode, keyrecord_t *record) { (void)keycode; (void)record; return fixture_retro; }
+#define IS_KB_KEYCODE(code) ((code) >= QK_KB_0 && (code) <= QK_KB_31)
+uint16_t get_record_keycode(keyrecord_t *record, bool cache);
+uint16_t tap_dance_owned_keycode(const keyrecord_t *record);
 static action_t action_for_keycode(uint16_t code)
 {
-  if (code == LT(1, KC_CAPS)) return (action_t){.code = ACTION_LAYER_TAP_KEY(1, KC_CAPS)};
-  if (code == MO(1)) return (action_t){.code = ACTION_LAYER_MOMENTARY(1)};
-  if (code == MT(MOD_LCTL, KC_CAPS)) return (action_t){.code = ACTION_MODS_TAP_KEY(MOD_LCTL, KC_CAPS)};
+  if (code >= QK_LAYER_TAP && code <= QK_LAYER_TAP_MAX) return (action_t){.code = ACTION_LAYER_TAP_KEY((code >> 8) & 15, code & 255)};
+  if (code >= QK_MOMENTARY && code <= QK_MOMENTARY_MAX) return (action_t){.code = ACTION_LAYER_MOMENTARY(code & 31)};
+  if (code >= QK_MOD_TAP && code <= QK_MOD_TAP_MAX) return (action_t){.code = ACTION_MODS_TAP_KEY((code >> 8) & 31, code & 255)};
+  if (code >= QK_ONE_SHOT_MOD && code <= QK_ONE_SHOT_MOD_MAX) return (action_t){.code = ACTION_MODS_ONESHOT(code & 31)};
+  if (code >= QK_ONE_SHOT_LAYER && code <= QK_ONE_SHOT_LAYER_MAX) return (action_t){.code = ACTION_LAYER_ONESHOT(code & 31)};
+  if (code >= QK_TOGGLE_LAYER && code <= QK_TOGGLE_LAYER_MAX) return (action_t){.code = ACTION_LAYER_TOGGLE(code & 31)};
   if (code >= QK_TAP_DANCE && code <= QK_TAP_DANCE_MAX) return (action_t){0};
-  return (action_t){.code = code};
+  if (IS_SYSTEM_KEYCODE(code)) return (action_t){.code = ACTION_USAGE_SYSTEM(KEYCODE2SYSTEM(code))};
+  if (IS_CONSUMER_KEYCODE(code)) return (action_t){.code = ACTION_USAGE_CONSUMER(KEYCODE2CONSUMER(code))};
+  if (IS_MOUSE_KEYCODE(code)) return (action_t){.code = ACTION_MOUSEKEY(code)};
+  if (code >= QK_LAYER_TAP_TOGGLE && code <= QK_LAYER_TAP_TOGGLE_MAX) return (action_t){.code = ACTION_LAYER_TAP_TOGGLE(code & 31)};
+  /* As in the product, a keycode past the basic/modded range without an
+   * action of its own (lighting, macro, custom) is ACTION_NO. */
+  return (action_t){.code = code <= QK_MODS_MAX ? code : ACTION_NO};
 }
 static action_t layer_switch_get_action(keypos_t key)
 {
-  return action_for_keycode(key.col == 0 ? mapped_keycode : other_keycode);
+  return action_for_keycode(fixture_keycode(key));
 }
 static action_t store_or_get_action(bool pressed, keypos_t key)
 {
@@ -183,7 +225,16 @@ static action_t store_or_get_action(bool pressed, keypos_t key)
   return layer_switch_get_action(key);
 }
 static bool pre_process_record_kb(uint16_t code, keyrecord_t *record) { (void)code; (void)record; return accept_record; }
-static bool process_record_kb(uint16_t code, keyrecord_t *record) { (void)code; (void)record; return true; }
+/* Quantum handlers are adapters: the log shows which dance-output edges
+ * reach them, and QK_USER_0 stands for a keycode whose handler clears the
+ * keyboard (a magic keycode in the product's QMK). */
+static uint16_t quantum_log[8]; static bool quantum_log_down[8]; static unsigned quantum_log_len;
+static bool process_record_kb(uint16_t code, keyrecord_t *record)
+{
+  if (record->tap_dance_injected && quantum_log_len < 8) { quantum_log[quantum_log_len] = code; quantum_log_down[quantum_log_len++] = record->event.pressed; }
+  if (code == QK_USER_0 && record->event.pressed) clear_keyboard();
+  return true;
+}
 static void post_process_record_kb(uint16_t code, keyrecord_t *record) { (void)code; (void)record; }
 // The fixture injects the dynamic term directly; DT_* adjustment keycodes are outside this harness.
 static bool process_dynamic_tapping_term(uint16_t code, keyrecord_t *record) { (void)code; (void)record; return true; }
@@ -198,7 +249,9 @@ static bool should_process_keypress(void) { return accept_keypress; }
 static bool has_ghost_in_row(uint8_t row, matrix_row_t value) { (void)row; (void)value; return false; }
 static void matrix_scan_perf_task(void) {}
 static void matrix_print(void) {}
-static void suspend_wakeup_key_event(uint8_t row, uint8_t col, bool pressed) { (void)row; (void)col; (void)pressed; }
+static bool host_suspended; static unsigned wake_requests;
+static bool usbHidHostSleeping(void) { return host_suspended; }
+static bool usbHidRequestRemoteWakeFromInput(void) { ++wake_requests; return host_suspended; }
 
 static void rgblight_setrgb(uint8_t r, uint8_t g, uint8_t b)
 {
@@ -212,14 +265,6 @@ static void rgblight_sethsv_noeeprom_old(uint8_t h, uint8_t s, uint8_t v)
 {
   (void)h; (void)s;
   rgblight_setrgb(v, v, v);
-}
-static void rgblight_indicator_apply_host_led(led_t state)
-{
-  bool active = (state.raw & 2) != 0;
-  if (active == indicator_on) return;
-  indicator_on = active;
-  if (!active) rgblight_indicator_restore_pulse_effect();
-  rgblight_request_render();
 }
 static void rgblight_render_frame(void)
 {

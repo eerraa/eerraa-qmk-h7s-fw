@@ -28,18 +28,33 @@ static void reset_fixture(uint16_t keycode, uint8_t mode, uint32_t time)
   memset(&tapping_key, 0, sizeof(tapping_key));
   memset(waiting_buffer, 0, sizeof(waiting_buffer));
   waiting_buffer_head = waiting_buffer_tail = 0;
-  active_td = last_tap_time = 0;
+  clear_keyboard();
+  clear_oneshot_mods(); clear_oneshot_locked_mods(); reset_oneshot_layer();
+  active_td = NULL;
+  memset(tap_dance_states, 0, sizeof(tap_dance_states));
   memset(tapdance_runtime, 0, sizeof(tapdance_runtime));
   memset(tapdance_state, 0, sizeof(tapdance_state));
-  for (unsigned i = 0; i < TAPDANCE_SLOT_COUNT; i++) tap_dance_actions[i].state = (tap_dance_state_t){0};
+  for (unsigned i = 0; i < TAPDANCE_SLOT_COUNT; i++) {
+    tapdance_user_data[i].slot_index = i;
+    tap_dance_actions[i] = (tap_dance_action_t){.fn = {tapdance_on_each_tap, tapdance_on_dance_finished, tapdance_on_reset, NULL}, .user_data = &tapdance_user_data[i]};
+  }
   tapdance_state[0] = (tapdance_slot_state_t){{KC_CAPS, MO(1), KC_NO, KC_NO}, 200};
   mapped_keycode = keycode;
   other_keycode = KC_A;
+  layered_other_keycode = third_keycode = KC_NO;
+  quantum_log_len = 0;
+  fixture_retro = false; retro_tap_primed = false; retro_tap_curr_key = 0; retro_tap_curr_mods = retro_tap_next_mods = 0;
+  memset(fixture_source_layer, 0, sizeof(fixture_source_layer));
   g_tapping_term = 200;
-  layer_state = 0;
-  output_suspended = indicator_on = false;
+  layer_clear();
+  output_suspended = false;
+  host_suspended = false;
+  memset(rgblight_indicator_state, 0, sizeof(rgblight_indicator_state));
+  rgblight_indicator_state[0].config.target = RGBLIGHT_INDICATOR_TARGET_CAPS;
+  rgblight_indicator_state[0].config.val = 200;
   rgblight_host_led_pending = false;
-  host_led_raw = mods = weak_mods = 0;
+  host_led_raw = 0; clear_mods(); clear_weak_mods();
+  automatic_caps_feedback = true; require_shared_a = forbid_a = false; shared_a_gaps = forbidden_a_reports = 0;
   caps_press_count = caps_release_count = 0;
   caps_press_time = caps_release_time = 0;
   keyboard_delay_calls = last_keyboard_delay = 0;
@@ -221,7 +236,7 @@ static void check_mod_tap_and_following_caps(void)
   scan(11000, 0, true); task();
   scan(11040, 0, false); task();
   assert(now_ms == 11040 && caps_press_time == 11040 && caps_release_time == 11040);
-  assert(caps_press_count == 1 && caps_release_count == 1 && mods == 0);
+  assert(caps_press_count == 1 && caps_release_count == 1 && get_mods() == 0);
 
   reset_fixture(TD(0), 46, 12000);
   scan(12000, 0, true); task();
@@ -244,6 +259,30 @@ static void check_plain_tap_requests_no_interval(void)
   scan(3040, 0, false);
   task();
   assert(keyboard_delay_calls == 0U && blocking_delay_calls == 0U && layer_state == 0);
+}
+
+// QMK's wakeup-key rule: a key pressed while the host sleeps wakes it but is not typed, not
+// even on release after the host is back; the next press types normally.
+static void check_wakeup_key_is_not_typed(void)
+{
+  reset_fixture(KC_B, RGBLIGHT_MODE_STATIC_LIGHT, 21000);
+  forbid_a = true; forbidden_a_reports = 0; wake_requests = 0;
+  host_suspended = true;
+  scan(21010, 1, true); task();
+  assert(wake_requests == 1U);
+  host_suspended = false;
+  tick(21020);
+  scan(21030, 1, false); task();
+  assert(forbidden_a_reports == 0U);
+  host_suspended = true;
+  scan(21040, 1, true); scan(21050, 1, false);
+  host_suspended = false;
+  tick(21060);
+  assert(forbidden_a_reports == 0U);
+  forbid_a = false; a_reports = 0;
+  scan(21070, 1, true); task();
+  scan(21080, 1, false); task();
+  assert(a_reports == 1U && wake_requests == 3U);
 }
 
 static void check_config_commit_renders_committed_value(void)
@@ -280,15 +319,20 @@ static void check_config_commit_renders_committed_value(void)
 
 #include "test_tapdance_timing.h"
 #include "test_full_term_timing.h"
+#include "test_td_ownership.h"
+#include "test_td_lifetime.h"
 
 int main(int argc, char **argv)
 {
+  if (argc > 2 && strcmp(argv[1], "--ownership") == 0) { check_td_ownership(argv[2]); return 0; }
+  if (argc > 2 && strcmp(argv[1], "--lifetime") == 0) { check_td_lifetime(argv[2]); return 0; }
   bool trace_only = argc > 1 && strcmp(argv[1], "--trace") == 0;
   _Static_assert(TAP_HOLD_CAPS_DELAY == 80 && TAP_CODE_DELAY == 0, "QMK Caps compatibility default must remain 80 ms");
   check_tap(true, trace_only);
   check_tap(false, trace_only);
   if (trace_only) return 0;
   check_plain_tap_requests_no_interval();
+  check_wakeup_key_is_not_typed();
   assert(physical_color_writes == 0);
   check_hold(true);
   check_hold(false);
@@ -320,6 +364,22 @@ int main(int argc, char **argv)
   check_slot_decision_boundaries();
   check_finished_release_preserves_other_dance();
   check_full_term_timing();
+  const char *ownership_cases[] = {"same_slot", "remap", "remap_shared", "queued", "scan_gap", "shared"};
+  for (unsigned i = 0; i < sizeof(ownership_cases) / sizeof(ownership_cases[0]); ++i) check_td_ownership(ownership_cases[i]);
+  const char *lifetime_cases[] = {"capture", "partial", "ordinary_layer", "modtap",
+      "usage_00", "usage_01", "usage_10", "usage_11", "clear_pending", "clear_queue",
+      "clear_queue_pair", "init", "capacity", "toggle", "report_only", "oneshot",
+      "oneshot_layer", "old_epoch", "caps_feedback", "oneshot_mod_consumed", "oneshot_layer_consumed",
+      "partial_reverse", "ordinary_layer_reverse", "modtap_reverse", "interrupt_relookup",
+      "cancel_keeps_waiting", "lighting_boundary", "term_reconfigure", "layer_override", "layer_clear", "tri_no_leak", "tri_shared", "tri_active",
+      "hid_shared", "extra_current", "osl_hold", "tap_edge", "osl_double_hold", "rolling_edge", "tap_code_edge",
+      "queued_layer", "queued_remap", "retro_release", "retro_hold_lt", "double_cancel",
+      "mod_replay", "mod_rolloff", "retro_swallow", "stale_tombstone",
+      "retro_td_position", "retro_td_col0", "retro_td_lt", "retro_td_other", "retro_td_off",
+      "retro_held_mods", "retro_key_roll", "osl_layer_key", "fallback_mods", "fallback_mods_second",
+      "quantum_tap", "quantum_hold", "quantum_nested", "quantum_clear", "quantum_clear_hold",
+      "tap_only_release", "storage_reset", "own_clear_hold", "dispatch_epoch", "own_clear_chord"};
+  for (unsigned i = 0; i < sizeof(lifetime_cases) / sizeof(lifetime_cases[0]); ++i) check_td_lifetime(lifetime_cases[i]);
   puts("PASS: actual matrix/QMK TD/LT/RGB + wait port: 80ms Caps interval requested without blocking; pulse, holds, replay, overlay, sleep and wrap; slot terms and overlapping dances");
   return 0;
 }

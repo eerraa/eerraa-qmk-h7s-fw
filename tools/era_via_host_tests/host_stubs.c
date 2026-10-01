@@ -99,3 +99,14 @@ uint8_t mk_wheel_time_to_max = 0;
 uint8_t mk_move_delta        = 0;
 uint8_t mk_wheel_delta       = 0;
 
+
+/* This suite executes configuration and wire commands without a TD engine.
+ * Runtime cancellation is exercised by firmware_regression_tests instead. */
+void tap_dance_cancel_all(void) {}
+void tap_dance_run_quantum_keycode(keyrecord_t *record, uint16_t keycode) {
+    (void)record;
+    (void)keycode;
+}
+void add_weak_mods(uint8_t mods) { (void)mods; }
+void del_weak_mods(uint8_t mods) { (void)mods; }
+void send_keyboard_report(void) {}

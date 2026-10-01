@@ -3,6 +3,8 @@ static void dance_event(uint8_t slot, bool pressed, uint32_t time)
 {
   now_ms = time;
   keyrecord_t record = {0};
+  record.event.key.col = slot;
+  record.event.type = KEY_EVENT;
   record.event.pressed = pressed;
   record.event.time = time;
   preprocess_tap_dance(TD(slot), &record);
@@ -58,7 +60,7 @@ static void check_finished_release_preserves_other_dance(void)
   dance_event(1, true, 70200);
   dance_event(0, false, 70210);
   assert(layer_state == 0);
-  assert(active_td == TD(1));
+  assert(active_td && active_td->index == 1);
   tick(70337);
   assert(layer_state == 0);
   tick(70338);

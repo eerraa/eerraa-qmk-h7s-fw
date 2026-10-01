@@ -402,9 +402,10 @@ void mousekey_on(uint8_t code) {
     }
 #    endif
 
-#    ifndef MOUSEKEY_INERTIA
+#    if defined(MOUSEKEY_OVERLAP_RESET) && !defined(MOUSEKEY_INERTIA)
     // If mouse report is not zero, the current mousekey press is overlapping
     // with another. Restart acceleration for smoother directional transition.
+    // Opt-in as in QMK 0.32: by default a second key keeps the current speed.
     if (mouse_report.x || mouse_report.y || mouse_report.h || mouse_report.v) {
 #        ifdef MK_KINETIC_SPEED
         mouse_timer = timer_read() - (MOUSEKEY_INTERVAL << 2);
@@ -413,7 +414,7 @@ void mousekey_on(uint8_t code) {
         mousekey_wheel_repeat = MOUSEKEY_WHEEL_DELTA;
 #        endif
     }
-#    endif // ifndef MOUSEKEY_INERTIA
+#    endif // defined(MOUSEKEY_OVERLAP_RESET) && !defined(MOUSEKEY_INERTIA)
 
 #    ifdef MOUSEKEY_INERTIA
 

@@ -393,7 +393,7 @@ __ALIGN_BEGIN static uint8_t HID_VIA_ReportDesc[HID_KEYBOARD_VIA_REPORT_DESC_SIZ
   0xC0              // End Collection
 };
 
-__ALIGN_BEGIN static uint8_t HID_EXK_ReportDesc[HID_EXK_REPORT_DESC_SIZE] __ALIGN_END =
+__ALIGN_BEGIN static uint8_t HID_EXK_ReportDesc[] __ALIGN_END =
 {
   //
   0x05, 0x01,               // Usage Page (Generic Desktop)
@@ -431,15 +431,12 @@ __ALIGN_BEGIN static uint8_t HID_EXK_ReportDesc[HID_EXK_REPORT_DESC_SIZE] __ALIG
   0xA1, 0x00,               //   Collection (Physical)
   0x05, 0x09,               //     Usage Page (Button)
   0x19, 0x01,               //     Usage Minimum (Button 1)
-  0x29, 0x05,               //     Usage Maximum (Button 5)
+  0x29, 0x08,               //     Usage Maximum (Button 8)
   0x15, 0x00,               //     Logical Minimum (0)
   0x25, 0x01,               //     Logical Maximum (1)
-  0x95, 0x05,               //     Report Count (5)
+  0x95, 0x08,               //     Report Count (8)
   0x75, 0x01,               //     Report Size (1)
   0x81, 0x02,               //     Input (Data, Variable, Absolute)
-  0x95, 0x01,               //     Report Count (1)
-  0x75, 0x03,               //     Report Size (3)
-  0x81, 0x03,               //     Input (Constant)
   0x05, 0x01,               //     Usage Page (Generic Desktop)
   0x09, 0x30,               //     Usage (X)
   0x09, 0x31,               //     Usage (Y)
@@ -467,6 +464,8 @@ __ALIGN_BEGIN static uint8_t HID_EXK_ReportDesc[HID_EXK_REPORT_DESC_SIZE] __ALIG
 
 // V260823R1: 리포트 디스크립터가 선언한 크기와 QMK 구조체 크기는 반드시 같아야 한다.
 //            어긋나면 호스트가 리포트를 잘못 해석하므로 링크가 아니라 컴파일에서 막는다.
+// 배열 크기를 상수로 고정하면 짧은 초기화가 0으로 채워져 호스트에 그대로 보고된다.
+_Static_assert(sizeof(HID_EXK_ReportDesc) == HID_EXK_REPORT_DESC_SIZE, "EXK 리포트 디스크립터 길이와 선언 크기가 다르다.");
 #ifdef MOUSE_SHARED_EP
 _Static_assert(sizeof(report_mouse_t) == 6U, "MOUSE 리포트 디스크립터(6B)와 report_mouse_t 크기가 다르다.");
 _Static_assert(sizeof(report_mouse_t) <= HID_EXK_EP_SIZE, "MOUSE 리포트가 EXK 엔드포인트 크기를 넘는다.");
@@ -1154,6 +1153,13 @@ static bool usbHidRemoteWakeSuspended(void)
   }
   usbHidUnlock(irq);
   return true;
+}
+
+// Suspend entered by a host that had configured this device. Bus idle before enumeration also
+// raises Suspend, but no host is asleep then and a key held at power-on must still reach it.
+bool usbHidHostSleeping(void)
+{
+  return USBD_Device.dev_state == USBD_STATE_SUSPENDED && USBD_Device.dev_old_state == USBD_STATE_CONFIGURED;
 }
 
 bool usbHidRequestRemoteWakeFromInput(void)

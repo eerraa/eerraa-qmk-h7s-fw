@@ -47,7 +47,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 int tp_buttons;
 
 #if defined(RETRO_TAPPING) || defined(RETRO_TAPPING_PER_KEY) || (defined(AUTO_SHIFT_ENABLE) && defined(RETRO_SHIFT))
-int retro_tapping_counter = 0;
+bool     retro_tap_primed   = false;
+uint16_t retro_tap_curr_key = 0;
+#    if !(defined(AUTO_SHIFT_ENABLE) && defined(RETRO_SHIFT))
+uint8_t retro_tap_curr_mods = 0;
+uint8_t retro_tap_next_mods = 0;
+#    endif
 #endif
 
 #if defined(AUTO_SHIFT_ENABLE) && defined(RETRO_SHIFT) && !defined(NO_ACTION_TAPPING)
@@ -77,7 +82,13 @@ void action_exec(keyevent_t event) {
         debug_event(event);
         ac_dprintf("\n");
 #if defined(RETRO_TAPPING) || defined(RETRO_TAPPING_PER_KEY) || (defined(AUTO_SHIFT_ENABLE) && defined(RETRO_SHIFT))
-        retro_tapping_counter++;
+        uint16_t event_keycode = get_event_keycode(event, false);
+        if (event.pressed) {
+            retro_tap_primed   = false;
+            retro_tap_curr_key = event_keycode;
+        } else if (retro_tap_curr_key == event_keycode) {
+            retro_tap_primed = true;
+        }
 #endif
     }
 
@@ -94,6 +105,12 @@ void action_exec(keyevent_t event) {
 #endif
 
     keyrecord_t record = {.event = event};
+#ifdef TAPDANCE_ENABLE
+    if (IS_EVENT(event)) {
+        record.tap_dance_epoch = tap_dance_input_epoch();
+        record.tap_dance_epoch_valid = true;
+    }
+#endif
 
 #ifndef NO_ACTION_ONESHOT
     if (keymap_config.oneshot_enable) {
@@ -267,9 +284,17 @@ void process_record_tap_hint(keyrecord_t *record) {
  * FIXME: Needs documentation.
  */
 void process_record(keyrecord_t *record) {
+#ifdef TAPDANCE_ENABLE
+    if (IS_EVENT(record->event) && tap_dance_discard_retired_record(record)) return;
+#endif
     if (IS_NOEVENT(record->event)) {
         return;
     }
+#ifdef TAPDANCE_ENABLE
+    /* The dance releases its executed action. The up still passes QMK's
+     * action path, but a live remap of this position must not supply it. */
+    const bool td_owned_release = tap_dance_owned_keycode(record) != KC_NO;
+#endif
 
     if (!process_record_quantum(record)) {
 #ifndef NO_ACTION_ONESHOT
@@ -280,7 +305,12 @@ void process_record(keyrecord_t *record) {
         return;
     }
 
-    process_record_handler(record);
+#ifdef TAPDANCE_ENABLE
+    if (td_owned_release)
+        process_action(record, (action_t){.code = ACTION_NO});
+    else
+#endif
+        process_record_handler(record);
     post_process_record_quantum(record);
 }
 
@@ -319,6 +349,10 @@ void process_record_handler(keyrecord_t *record) {
  */
 
 void register_mouse(uint8_t mouse_keycode, bool pressed) {
+#ifdef TAP_DANCE_OWNED_ACTIONS
+    /* Another input still holding this mouse code keeps it down. */
+    if (!tap_dance_mouse_update(mouse_keycode, pressed)) return;
+#endif
 #ifdef MOUSEKEY_ENABLE
     // if mousekeys is enabled, let it do the brunt of the work
     if (pressed) {
@@ -358,11 +392,38 @@ void register_mouse(uint8_t mouse_keycode, bool pressed) {
 #endif
 }
 
+#ifdef EXTRAKEY_ENABLE
+/* Each extra report holds one usage; ownership decides whether an up may clear it. */
+static void send_system_usage(uint16_t usage, bool pressed) {
+#    ifdef TAP_DANCE_OWNED_ACTIONS
+    if (!tap_dance_usage_update(TD_USAGE_SYSTEM, usage, host_last_system_usage(), pressed)) return;
+#    endif
+    host_system_send(pressed ? usage : 0);
+}
+
+static void send_consumer_usage(uint16_t usage, bool pressed) {
+#    ifdef TAP_DANCE_OWNED_ACTIONS
+    if (!tap_dance_usage_update(TD_USAGE_CONSUMER, usage, host_last_consumer_usage(), pressed)) return;
+#    endif
+    host_consumer_send(pressed ? usage : 0);
+}
+#endif
+
 /** \brief Take an action and processes it.
  *
  * FIXME: Needs documentation.
  */
 void process_action(keyrecord_t *record, action_t action) {
+#ifdef TAP_DANCE_OWNED_ACTIONS
+    uint8_t td_previous_owner = tap_dance_action_get_owner();
+    bool td_momentary = action.kind.id == ACT_LMODS || action.kind.id == ACT_RMODS || action.kind.id == ACT_LAYER_MODS;
+    if (action.kind.id == ACT_LAYER_TAP || action.kind.id == ACT_LAYER_TAP_EXT)
+        td_momentary = action.layer_tap.code == OP_ON_OFF || action.layer_tap.code < OP_TAP_TOGGLE;
+    if (action.kind.id == ACT_LMODS_TAP || action.kind.id == ACT_RMODS_TAP)
+        td_momentary = action.layer_tap.code != MODS_TAP_TOGGLE;
+    if (action.kind.id == ACT_USAGE || action.kind.id == ACT_MOUSEKEY) td_momentary = true;
+    if (!td_momentary) tap_dance_action_set_owner(UINT8_MAX);
+#endif
     keyevent_t event = record->event;
 #ifndef NO_ACTION_TAPPING
     uint8_t tap_count = record->tap.count;
@@ -521,9 +582,9 @@ void process_action(keyrecord_t *record, action_t action) {
                         if (tap_count > 0) {
                             ac_dprintf("MODS_TAP: Tap: unregister_code\n");
                             if (action.layer_tap.code == KC_CAPS_LOCK) {
-                                tap_code_wait(action.layer_tap.code, TAP_HOLD_CAPS_DELAY);
+                                tap_code_wait(action.key.code, TAP_HOLD_CAPS_DELAY);
                             } else {
-                                tap_code_wait(action.layer_tap.code, TAP_CODE_DELAY);
+                                tap_code_wait(action.key.code, TAP_CODE_DELAY);
                             }
                             unregister_code(action.key.code);
                         } else {
@@ -531,7 +592,8 @@ void process_action(keyrecord_t *record, action_t action) {
 #    if defined(RETRO_TAPPING) && defined(DUMMY_MOD_NEUTRALIZER_KEYCODE)
                             // Send a dummy keycode to neutralize flashing modifiers
                             // if the key was held and then released with no interruptions.
-                            if (retro_tapping_counter == 2) {
+                            uint16_t ev_kc = get_event_keycode(event, false);
+                            if (retro_tap_primed && retro_tap_curr_key == ev_kc) {
                                 neutralize_flashing_modifiers(get_mods());
                             }
 #    endif
@@ -547,10 +609,10 @@ void process_action(keyrecord_t *record, action_t action) {
         case ACT_USAGE:
             switch (action.usage.page) {
                 case PAGE_SYSTEM:
-                    host_system_send(event.pressed ? action.usage.code : 0);
+                    send_system_usage(action.usage.code, event.pressed);
                     break;
                 case PAGE_CONSUMER:
-                    host_consumer_send(event.pressed ? action.usage.code : 0);
+                    send_consumer_usage(action.usage.code, event.pressed);
                     break;
             }
             break;
@@ -658,7 +720,6 @@ void process_action(keyrecord_t *record, action_t action) {
                                 layer_off(action.layer_tap.val);
                                 break;
                             } else if (tap_count < ONESHOT_TAP_TOGGLE) {
-                                layer_on(action.layer_tap.val);
                                 set_oneshot_layer(action.layer_tap.val, ONESHOT_START);
                             }
                         } else {
@@ -671,7 +732,6 @@ void process_action(keyrecord_t *record, action_t action) {
                         }
 #        else
                         if (event.pressed) {
-                            layer_on(action.layer_tap.val);
                             set_oneshot_layer(action.layer_tap.val, ONESHOT_START);
                         } else {
                             clear_oneshot_layer_state(ONESHOT_PRESSED);
@@ -819,6 +879,10 @@ void process_action(keyrecord_t *record, action_t action) {
         case ACT_LAYER_TAP_EXT:
 #    endif
             led_set(host_keyboard_leds());
+#    ifndef NO_ACTION_ONESHOT
+            // don't release the key
+            do_release_oneshot = false;
+#    endif
             break;
         default:
             break;
@@ -827,30 +891,47 @@ void process_action(keyrecord_t *record, action_t action) {
 
 #ifndef NO_ACTION_TAPPING
 #    if defined(RETRO_TAPPING) || defined(RETRO_TAPPING_PER_KEY) || (defined(AUTO_SHIFT_ENABLE) && defined(RETRO_SHIFT))
-    if (!is_tap_action(action)) {
-        retro_tapping_counter = 0;
-    } else {
+    if (is_tap_action(action)) {
         if (event.pressed) {
             if (tap_count > 0) {
-                retro_tapping_counter = 0;
+                retro_tap_primed = false;
+            } else {
+#        if !(defined(AUTO_SHIFT_ENABLE) && defined(RETRO_SHIFT))
+                retro_tap_curr_mods = retro_tap_next_mods;
+                retro_tap_next_mods = get_mods();
+#        endif
             }
         } else {
+            uint16_t event_keycode = get_event_keycode(event, false);
+#        if !(defined(AUTO_SHIFT_ENABLE) && defined(RETRO_SHIFT))
+            uint8_t curr_mods = get_mods();
+#        endif
             if (tap_count > 0) {
-                retro_tapping_counter = 0;
-            } else {
+                retro_tap_primed = false;
+            } else if (retro_tap_curr_key == event_keycode) {
                 if (
 #        ifdef RETRO_TAPPING_PER_KEY
-                    get_retro_tapping(get_event_keycode(record->event, false), record) &&
+                    get_retro_tapping(event_keycode, record) &&
 #        endif
-                    retro_tapping_counter == 2) {
+                    retro_tap_primed) {
 #        if defined(AUTO_SHIFT_ENABLE) && defined(RETRO_SHIFT)
                     process_auto_shift(action.layer_tap.code, record);
 #        else
+                    /* ERA: add only the tap-time modifiers that are up now, so
+                     * the tap cannot release a modifier its owner still holds. */
+                    const uint8_t retro_mods = retro_tap_curr_mods & ~get_mods();
+                    register_mods(retro_mods);
+                    tap_code_wait(action.layer_tap.code, TAP_CODE_DELAY);
                     tap_code(action.layer_tap.code);
+                    tap_code_wait(action.layer_tap.code, TAP_CODE_DELAY);
+                    unregister_mods(retro_mods);
 #        endif
                 }
-                retro_tapping_counter = 0;
+                retro_tap_primed = false;
             }
+#        if !(defined(AUTO_SHIFT_ENABLE) && defined(RETRO_SHIFT))
+            retro_tap_next_mods = curr_mods;
+#        endif
         }
     }
 #    endif
@@ -868,12 +949,21 @@ void process_action(keyrecord_t *record, action_t action) {
     /* Because we switch layers after a oneshot event, we need to release the
      * key before we leave the layer or no key up event will be generated.
      */
-    if (do_release_oneshot && !(get_oneshot_layer_state() & ONESHOT_PRESSED)) {
+    if (do_release_oneshot && !(get_oneshot_layer_state() & ONESHOT_PRESSED)
+#    ifdef TAPDANCE_ENABLE
+        /* A dance owns its input until the physical up; the one-shot layer is
+         * already consumed, and an early up would turn every hold into a tap. */
+        && !tap_dance_owns_press(record)
+#    endif
+    ) {
         record->event.pressed = false;
         layer_on(get_oneshot_layer());
         process_record(record);
         layer_off(get_oneshot_layer());
     }
+#endif
+#ifdef TAP_DANCE_OWNED_ACTIONS
+    tap_dance_action_set_owner(td_previous_owner);
 #endif
 }
 
@@ -926,7 +1016,13 @@ __attribute__((weak)) void register_code(uint8_t code) {
         // without this, keys with the same keycode, but different
         // modifiers will be reported incorrectly, see issue #1708
         if (is_key_pressed(code)) {
+#ifdef TAP_DANCE_OWNED_ACTIONS
+            /* Every new down is its own keystroke, as in QMK. The up is
+             * report-only, so another input that holds the usage keeps it. */
+            del_key_from_report(code);
+#else
             del_key(code);
+#endif
             send_keyboard_report();
         }
         add_key(code);
@@ -937,9 +1033,9 @@ __attribute__((weak)) void register_code(uint8_t code) {
 
 #ifdef EXTRAKEY_ENABLE
     } else if (IS_SYSTEM_KEYCODE(code)) {
-        host_system_send(KEYCODE2SYSTEM(code));
+        send_system_usage(KEYCODE2SYSTEM(code), true);
     } else if (IS_CONSUMER_KEYCODE(code)) {
-        host_consumer_send(KEYCODE2CONSUMER(code));
+        send_consumer_usage(KEYCODE2CONSUMER(code), true);
 #endif
 
     } else if (IS_MOUSE_KEYCODE(code)) {
@@ -994,9 +1090,9 @@ __attribute__((weak)) void unregister_code(uint8_t code) {
 
 #ifdef EXTRAKEY_ENABLE
     } else if (IS_SYSTEM_KEYCODE(code)) {
-        host_system_send(0);
+        send_system_usage(KEYCODE2SYSTEM(code), false);
     } else if (IS_CONSUMER_KEYCODE(code)) {
-        host_consumer_send(0);
+        send_consumer_usage(KEYCODE2CONSUMER(code), false);
 #endif
 
     } else if (IS_MOUSE_KEYCODE(code)) {
@@ -1091,6 +1187,9 @@ __attribute__((weak)) void unregister_weak_mods(uint8_t mods) {
  * FIXME: Needs documentation.
  */
 void clear_keyboard(void) {
+#ifdef TAP_DANCE_OWNED_ACTIONS
+    tap_dance_cancel_all();
+#endif
     clear_mods();
     clear_keyboard_but_mods();
 }
@@ -1100,6 +1199,9 @@ void clear_keyboard(void) {
  * FIXME: Needs documentation.
  */
 void clear_keyboard_but_mods(void) {
+#ifdef TAP_DANCE_OWNED_ACTIONS
+    tap_dance_clear_key_ownership();
+#endif
     clear_keys();
     clear_keyboard_but_mods_and_keys();
 }
@@ -1109,6 +1211,9 @@ void clear_keyboard_but_mods(void) {
  * FIXME: Needs documentation.
  */
 void clear_keyboard_but_mods_and_keys(void) {
+#ifdef TAP_DANCE_OWNED_ACTIONS
+    tap_dance_clear_hid_ownership();
+#endif
 #ifdef EXTRAKEY_ENABLE
     host_system_send(0);
     host_consumer_send(0);

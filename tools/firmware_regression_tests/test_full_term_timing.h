@@ -19,18 +19,18 @@ static void check_full_term_timing(void)
         scan(start, 0, true);
         assert(tapping_key.event.time == start);
         tick(start + term - 1U);
-        assert(layer_state == 0 && mods == 0 && caps_press_count == 0);
+        assert(layer_state == 0 && get_mods() == 0 && caps_press_count == 0);
         tick(start + term);
-        assert(modtap ? mods == MOD_LCTL : layer_state == 2);
+        assert(modtap ? get_mods() == MOD_LCTL : layer_state == 2);
         scan(start + term + 1U, 0, false);
-        assert(layer_state == 0 && mods == 0 && caps_press_count == 0);
+        assert(layer_state == 0 && get_mods() == 0 && caps_press_count == 0);
         if (term > 1)
         {
           reset_fixture(code, 46, start - 10U);
           g_tapping_term = term;
           scan(start, 0, true);
           scan(start + term - 1U, 0, false);
-          assert(caps_press_count == 1 && caps_release_count == 1 && layer_state == 0 && mods == 0);
+          assert(caps_press_count == 1 && caps_release_count == 1 && layer_state == 0 && get_mods() == 0);
         }
       }
       for (uint8_t slot = 0; slot < TAPDANCE_SLOT_COUNT; slot++)

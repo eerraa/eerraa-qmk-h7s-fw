@@ -570,6 +570,20 @@ static void test_suspend_tap(void)
   assert(!wake_asserted && wake_start_count == wake_base);
   USBD_Device.dev_state = USBD_STATE_CONFIGURED; usbHidSendReport(up, sizeof(up)); drain();
 }
+static void test_host_sleeping(void)
+{
+  // The wakeup-key rule asks this, not the physical bus flag: Suspend before enumeration is not
+  // a sleeping host, so a key held at power-on is not swallowed.
+  USBD_Device.dev_old_state = USBD_STATE_DEFAULT; USBD_Device.dev_state = USBD_STATE_SUSPENDED;
+  assert(!usbHidHostSleeping());
+  USBD_Device.dev_old_state = USBD_STATE_ADDRESSED;
+  assert(!usbHidHostSleeping());
+  USBD_Device.dev_old_state = USBD_STATE_CONFIGURED;
+  assert(usbHidHostSleeping());
+  USBD_Device.dev_state = USBD_STATE_CONFIGURED;
+  assert(!usbHidHostSleeping());
+}
+
 static void test_descriptor_intervals(void)
 {
   uint16_t size;
@@ -598,6 +612,7 @@ int main(void)
   test_remote_wake();
   test_suspend_tap();
   test_descriptor_intervals();
+  test_host_sleeping();
   stop();
   puts("PASS: actual HID class/pool: FIFO/VIA/EP0 lifecycle plus isolated 10 ms Remote Wake, hardware-verified single Resume, stale/SUSPSTS SOF rejection, late-WKUINT idempotence, post-wake VIA");
   return 0;

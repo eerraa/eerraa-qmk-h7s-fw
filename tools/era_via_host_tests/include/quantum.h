@@ -12,3 +12,8 @@
 #include "eeconfig.h"
 
 uint32_t last_matrix_activity_elapsed(void);
+/* Report and weak-modifier entry points the TD layer calls; this suite
+ * builds no reports. */
+void add_weak_mods(uint8_t mods);
+void del_weak_mods(uint8_t mods);
+void send_keyboard_report(void);

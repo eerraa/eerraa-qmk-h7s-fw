@@ -66,7 +66,10 @@ hold keeps the latch, and only a base-mode change drops it. It also retains the 
 TD interruption/double-action and LT quick-tap behavior. Matrix input, keymap
 lookup, host LED feedback, indicator composition and LED hardware are test
 adapters; USB transport and real WS2812 frames are not measured by this fixture.
-Oneshot and optional tapping policies are outside this fixture's configuration.
+Optional tapping policies beyond the selected fixture configuration remain outside its proof scope.
+The production wakeup-key rule (`port/platforms/suspend.c`) runs in the same
+dispatch: a key pressed while the host is suspended requests Remote Wake but
+neither its press nor its release reaches QMK, and its next press types.
 MinGW uses GCC bitfield layout, checked against the production two-byte action.
 The fixture also includes the actual QMK wait/host ports and generic tap helpers.
 It requires the upstream 80 ms Caps interval request with zero calls to the delay
@@ -145,3 +148,18 @@ listed in `docs/state_open.md`.
 The generated `test_rgb_task_gate.c` compiles the exact production `rgblight_task_periodic_due()` helper and checks inactivity disarm, resume after more than the 16-bit half-range, urgent-event rearm and 32-bit wrap.
 
 The generated `test_rgb_mode_transition.c` compiles the exact production saturation-restore rule (`rgblight_mode_transition_sat()`) and checks that it keys on the destination effect (Rainbow Mood/Swirl, Gradient, Christmas) from any different base mode rather than on leaving Solid Color. The same generator asserts that `rgblight_sethsv_eeprom_helper()` commits before it asks for a pulse evaluation and never evaluates pulse output itself.
+
+### Tap Dance ownership and lifetime
+
+`--only rgb` also runs `test_td_ownership.h` and `test_td_lifetime.h` against
+production TD, LT/MT, modifier/layer/usage ownership, report construction and
+indicator selection: per-input ownership of one slot, outputs shared with other
+inputs, and dance lifetime across keymap, layer and one-shot changes. The
+assertions in those headers own the exact behaviour. Matrix/keymap, clocks,
+EEPROM, RGB colour conversion and physical output remain adapters.
+
+After changing those assertions or their generator, run
+`python -X utf8 tools/firmware_regression_tests/td_ownership_selftest.py`. Each
+control mutates only an ignored generated copy and counts only when it compiles
+and its named runtime assertion then fails. Source files are never mutated, and
+none of this measures hardware.
