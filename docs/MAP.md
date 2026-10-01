@@ -13,7 +13,7 @@ constraints live in `docs/contract_via.md`, `docs/contract_usb.md`, and
 
 | Concern | Requirement / decision owner | First implementation owner | Verify |
 | --- | --- | --- | --- |
-| Firmware version and reset coupling | `docs/contract_eeprom.md` §2 | `_DEF_FIRMWARE_VERSION` in `src/hw/hw_def.h` | document/version checks plus affected firmware tests |
+| EEPROM reset key (firmware version is identity only) | `docs/contract_eeprom.md` §2 | `ERA_EEPROM_RESET_KEY` in `src/hw/hw_def.h`, `tools/eeprom_reset_key.json` | `storage` check in `tools/era_doc_refs.py` plus affected firmware tests |
 | VIA wire/value compatibility | `docs/contract_via.md` | `src/ap/modules/qmk/quantum/via.h`, `<board>/port/via_port.c`, official JSON | local document/menu checks and VIA host tests |
 | EEPROM USER compatibility | `docs/contract_eeprom.md` | `src/ap/modules/qmk/port/port.h`, board `config.h` | affected storage/firmware tests |
 | USB host/boot behavior | `docs/contract_usb.md` | `src/hw/driver/usb/`, `src/ap/modules/qmk/port/` | affected host/build checks |
@@ -30,7 +30,7 @@ conflict to resolve, not permission to weaken the contract.
 | --- | --- | --- |
 | [contract_via.md](contract_via.md) | contract | VIA/app wire contract. Channel addresses, exact-ms/exact-sec, `0x06`/`0x07` envelopes, single TX producer, MOUSE unit conversion |
 | [contract_usb.md](contract_usb.md) | contract | USB host contract. Interface/report layout, boot-protocol deviation, polling-mode ownership, retired automatic recovery, report ownership and lifecycle |
-| [contract_eeprom.md](contract_eeprom.md) | contract | Persistent-state contract. USER slot ownership, version cookie and factory reset, asynchronous persistence and durability |
+| [contract_eeprom.md](contract_eeprom.md) | contract | Persistent-state contract. USER slot ownership, EEPROM reset key and factory reset, asynchronous persistence and durability |
 | [manual_verify.md](manual_verify.md) | manual | Change-to-check routing, toolchain premises, and proof limits |
 | [state_open.md](state_open.md) | state | Unresolved decisions, unmeasured external/hardware checks, and next entry conditions |
 | [readme.txt](readme.txt) | (user document) | Short ZIP-root flash and configuration guide. Exception to the agent-doc spec — §8 |
@@ -58,7 +58,7 @@ JSON. Contract-owned wire value ids remain in `docs/contract_via.md`.
 
 Current offsets/sizes are owned by `src/ap/modules/qmk/port/port.h`; board USER
 block sizing is in each board `config.h`. `docs/contract_eeprom.md` owns shipped
-slot immutability and version-cookie reset policy. This map does not copy the
+slot immutability and the reset-key policy. This map does not copy the
 current layout.
 
 ## 6. Structure questions are answered by source

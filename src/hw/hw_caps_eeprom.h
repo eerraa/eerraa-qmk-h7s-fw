@@ -4,8 +4,8 @@
 
 // ---------------------------------------------------------------------------
 // [Caps Dependencies] V251114R3
-//   - 사용처: src/hw/driver/eeprom/*.c, src/ap/modules/qmk/keyboards/*/config.h 자동 초기화 토글
-//   - 비고  : AUTO_FACTORY_RESET_ENABLE/AUTO_FACTORY_RESET_COOKIE와 같은 빌드 가드와 짝지어 사용
+//   - 사용처: src/hw/driver/eeprom/*.c
+//   - 비고  : 부팅 reset guard(src/hw/driver/eeprom_reset_guard.c)가 항상 이 저장소를 쓴다
 // ---------------------------------------------------------------------------
 #ifndef _USE_HW_EEPROM
 #define _USE_HW_EEPROM

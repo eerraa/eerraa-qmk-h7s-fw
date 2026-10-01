@@ -91,7 +91,7 @@ void via_qmk_ver_get_value(uint8_t *data)
       }
     case id_qmk_ver_ascii:
       {
-        // Drop the H7S cookie's leading V and include the NUL terminator.
+        // Drop the version string's leading V and include the NUL terminator.
         memcpy(value_data, &ver_str[1], sizeof(ver_str) - 1U);
         break;
       }

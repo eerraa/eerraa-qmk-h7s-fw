@@ -9,14 +9,14 @@ Run only the checks whose inputs or asserted behavior the change can affect.
 
 | Change | Required check | Evidence boundary |
 | --- | --- | --- |
-| `docs/` only, checker unchanged | `python -X utf8 tools/era_doc_refs.py` | Local paths, pointers, reachability, menu exposure, retired-USB guard, and distribution version consistency; not sentence meaning, peer state, or hardware. |
+| `docs/` only, checker unchanged | `python -X utf8 tools/era_doc_refs.py` | Local paths, pointers, reachability, menu exposure, retired-USB guard, distribution version consistency, and the storage-format record; not sentence meaning, peer state, or hardware. |
 | Official `*-VIA.JSON` | `python -X utf8 tools/era_doc_refs.py` | The `menu` check proves firmware-routed channels are reachable in local official JSON only. |
 | `tools/era_doc_refs.py` or `tools/era_doc_refs_selftest.py` | checker plus `python -X utf8 tools/era_doc_refs_selftest.py` | Positive baseline plus planted negative fixtures for the document checker; not product behavior. |
 | `hooks/pre-commit`, `.gitattributes`, or `hooks/test_pre_commit.py` | checker plus `python hooks/test_pre_commit.py` | Hook wiring, staged-snapshot execution, interpreter fallback, and fail-closed launcher behavior. |
 | `tools/era_via_host_tests/` or firmware source covered by those fixtures | `pwsh -NoProfile -File tools/era_via_host_tests/run.ps1`; when host `gcc` is already on PATH, `python tools/era_via_host_tests/run.py` is the equivalent entry | Compiled host fixtures and source guards only; no ARM target or physical USB device. |
 | `tools/firmware_regression_tests/` or firmware source covered by a regression group | `python tools/firmware_regression_tests/run.py`, or an affected `--only` group from its README | Deterministic host/source-region regression coverage; no electrical, silicon, or real-host timing proof. |
 | Other firmware `src/` changes | document checker, affected host/regression checks, and an ARM build for each affected board configuration | Compile/link/static assertions and the selected executable fixtures. Add hardware only when the requirement is hardware-only. |
-| Firmware version or release/distribution preparation | Read `docs/contract_eeprom.md` §2 before changing `_DEF_FIRMWARE_VERSION`; run the document checker and the checks implied by changed firmware/source | A successful build or document check is not permission to flash, install, publish, or deploy. |
+| Stored format, `ERA_EEPROM_RESET_KEY`, or release/distribution preparation | Read `docs/contract_eeprom.md` §2; the document checker's `storage` check must pass against `tools/eeprom_reset_key.json`; run the checks implied by changed firmware/source | The record proves a reset decision was written down, not that old stored bytes read correctly. A successful build or document check is not permission to flash, install, publish, or deploy. |
 
 A documentation-only change does not owe an ARM build or HIL. A skipped,
 unknown, not-run, or hardware-unmeasured item remains unverified.

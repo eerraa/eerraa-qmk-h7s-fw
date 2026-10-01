@@ -30,32 +30,14 @@
 
 
 // ---------------------------------------------------------------------------
-// 자동 팩토리 리셋 및 버전 쿠키
+// EEPROM reset guard (EERRAA와 같은 이름. 끄는 옵션 없이 항상 동작한다)
 // ---------------------------------------------------------------------------
-#ifndef AUTO_FACTORY_RESET_ENABLE
-#define AUTO_FACTORY_RESET_ENABLE   0             // V251112R3: 자동 팩토리 리셋 빌드 가드 기본 비활성화
-#endif
+#define ERA_EEPROM_RESET_GUARD_MAGIC  0x56434C52U  // "VCLR": guard가 유효하다는 표식
+#define ERA_EEPROM_RESET_GUARD_CLEAR  0x00000000U  // 표식을 지운 값. 다음 부팅이 전체 초기화한다
 
-#define AUTO_FACTORY_RESET_FLAG_MAGIC   0x56434C52U  // V251112R3: "VCLR"
-#define AUTO_FACTORY_RESET_FLAG_RESET   0x00000000U  // V251112R3: 플래그 초기값
-
-#define __EE_BCD_BYTE(a, b) \
-  ((uint32_t)((((a) - '0') & 0x0F) << 4) | (((b) - '0') & 0x0F))
-
-#define __EE_VERSION_LEN        (sizeof(_DEF_FIRMWARE_VERSION) - 1)
-#define __EE_SAFE_CHAR(idx)     (((idx) < __EE_VERSION_LEN) ? _DEF_FIRMWARE_VERSION[idx] : '0')
-#define __EE_REV_HIGH_CHAR()    ((__EE_VERSION_LEN > 9) ? _DEF_FIRMWARE_VERSION[8] : '0')
-#define __EE_REV_LOW_CHAR()     ((__EE_VERSION_LEN > 9) ? _DEF_FIRMWARE_VERSION[9] : (__EE_VERSION_LEN > 8 ? _DEF_FIRMWARE_VERSION[8] : '0'))
-
-#define AUTO_FACTORY_RESET_COOKIE_DEFAULT                                      \
-  ( (__EE_BCD_BYTE(__EE_SAFE_CHAR(1), __EE_SAFE_CHAR(2)) << 24) | \
-    (__EE_BCD_BYTE(__EE_SAFE_CHAR(3), __EE_SAFE_CHAR(4)) << 16) | \
-    (__EE_BCD_BYTE(__EE_SAFE_CHAR(5), __EE_SAFE_CHAR(6)) << 8)  | \
-    (__EE_BCD_BYTE(__EE_REV_HIGH_CHAR(), __EE_REV_LOW_CHAR()) << 0) )
-
-#ifndef AUTO_FACTORY_RESET_COOKIE
-#define AUTO_FACTORY_RESET_COOKIE   AUTO_FACTORY_RESET_COOKIE_DEFAULT  // V251112R3: 펌웨어 버전 기반 기본 쿠키
-#endif
+// 저장 형식이 바뀐 릴리스만 올린다. 펌웨어 버전과 무관하며, 올리면 첫 부팅에서
+// 전체 EEPROM을 초기화한다 (docs/contract_eeprom.md §2). "H7S" + 리비전.
+#define ERA_EEPROM_RESET_KEY          0x48375301U
 
 
 // ---------------------------------------------------------------------------

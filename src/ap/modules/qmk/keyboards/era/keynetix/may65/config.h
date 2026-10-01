@@ -17,7 +17,6 @@
 #define     HW_WS2812_CAPS          0     // V260428R1: 물리 0번 LED를 단일 인디케이터로 사용
 #define     HW_WS2812_RGB           1
 #define     HW_WS2812_RGB_CNT       26    // V260428R1: rgblight 드라이버는 물리 1번부터 underglow 26개만 제어
-#define AUTO_FACTORY_RESET_ENABLE   1 
 
 
 // ---------------------------------------------------------------------------

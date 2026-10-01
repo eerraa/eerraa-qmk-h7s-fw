@@ -33,9 +33,9 @@ void eeconfig_init_user_datablock(void)
   rgb_sleep_storage_apply_defaults();                          // V260901R1: VIA RGB SLEEP 기본 10분
   rgb_sleep_storage_flush(true);
 #endif
-#if defined(AUTO_FACTORY_RESET_FLAG_MAGIC) && defined(AUTO_FACTORY_RESET_COOKIE)
-  eeprom_update_dword((uint32_t *)EECONFIG_USER_EEPROM_CLEAR_FLAG, AUTO_FACTORY_RESET_FLAG_MAGIC);
-  eeprom_update_dword((uint32_t *)EECONFIG_USER_EEPROM_CLEAR_COOKIE, AUTO_FACTORY_RESET_COOKIE);
+#ifdef VIA_ENABLE
+  eeprom_update_dword((uint32_t *)EECONFIG_USER_RESET_GUARD_MAGIC, ERA_EEPROM_RESET_GUARD_MAGIC);
+  eeprom_update_dword((uint32_t *)EECONFIG_USER_RESET_GUARD_KEY, ERA_EEPROM_RESET_KEY);
 #endif
 }
 #endif

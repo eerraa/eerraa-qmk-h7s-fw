@@ -13,8 +13,8 @@ volatile const firm_ver_t firm_ver __attribute__((section(".version"))) =
   .firm_addr    = (uint32_t)&_fw_flash_begin
 };
 
-// V251124R6: AUTO_FACTORY_RESET 실패 알림용 LED 점멸 시퀀스
-static void hwBlinkFactoryResetFailure(void)
+// reset guard 실패 알림용 LED 점멸 시퀀스
+static void hwBlinkResetGuardFailure(void)
 {
   const uint32_t blink_count  = 3;
   const uint32_t blink_on_ms  = 120U;
@@ -29,26 +29,26 @@ static void hwBlinkFactoryResetFailure(void)
   }
 }
 
-// V251124R6: AUTO_FACTORY_RESET 재시도 및 실패 기록 헬퍼
-static bool hwRunFactoryResetWithRetry(void)
+// reset guard 재시도 및 실패 기록 헬퍼
+static bool hwRunResetGuardWithRetry(void)
 {
   const uint32_t retry_limit = 3;
 
   for (uint32_t attempt = 0; attempt < retry_limit; attempt++)
   {
-    if (eepromAutoFactoryResetCheck() == true)
+    if (eepromResetGuardCheck() == true)
     {
       return true;
     }
 
-    logPrintf("[!] EEPROM auto factory reset : retry %lu/%lu\n",
+    logPrintf("[!] EEPROM reset guard : retry %lu/%lu\n",
               (unsigned long)(attempt + 1U),
               (unsigned long)retry_limit);                          // V251124R6: 실패 시 재시도 및 원인 표시
-    hwBlinkFactoryResetFailure();
+    hwBlinkResetGuardFailure();
     eeprom_init();                                                 // V251124R6: 재시도 전에 QMK EEPROM 미러 재동기화
   }
 
-  logPrintf("[!] EEPROM auto factory reset : failed after %lu attempts\n",
+  logPrintf("[!] EEPROM reset guard : failed after %lu attempts\n",
             (unsigned long)retry_limit);                            // V251124R6: 반복 실패 시 치명적 오류로 처리
   return false;
 }
@@ -105,16 +105,16 @@ bool hwInit(void)
   bootmode_init();                                            // V251112R6: BootMode 기본값 초기화
 #endif
   // V260823R2: USB 진단은 RAM 전용이므로 부팅 EEPROM 초기화/로드 단계가 없다.
-  bool factory_reset_ok = hwRunFactoryResetWithRetry();        // V251124R6: AUTO_FACTORY_RESET 실패 시 LED 표시 후 재시도
+  bool reset_guard_ok = hwRunResetGuardWithRetry();            // 실패 시 LED 표시 후 재시도
 #ifdef BOOTMODE_ENABLE
-  if (factory_reset_ok && usbBootModeLoad() != true)           // V250923R1 Apply stored USB boot mode preference
+  if (reset_guard_ok && usbBootModeLoad() != true)           // V250923R1 Apply stored USB boot mode preference
   {
     logPrintf("[!] usbBootModeLoad Fail\n");
   }
 #endif
-  if (factory_reset_ok != true)
+  if (reset_guard_ok != true)
   {
-    hw_ok = false;                                             // V251124R6: 팩토리 리셋 실패 시 치명적 상태 표시
+    hw_ok = false;                                             // reset guard 실패는 치명적 상태
   }
   #ifdef _USE_HW_QSPI
   qspiInit();

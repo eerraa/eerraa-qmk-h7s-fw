@@ -18,7 +18,6 @@
 #define HW_WS2812_MAX_CH            30
 #define HW_WS2812_RGB               0
 #define HW_WS2812_RGB_CNT           30
-#define AUTO_FACTORY_RESET_ENABLE   1            // V251112R3: Brick60 기본 빌드에서 EEPROM 자동 초기화 활성화 테스트
 
 
 // ---------------------------------------------------------------------------

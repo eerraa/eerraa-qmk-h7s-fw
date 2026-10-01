@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CHECKER = ROOT / "tools/era_doc_refs.py"
 MAP_DOC = "docs/MAP.md"
 JSON_DOC = "src/ap/modules/qmk/keyboards/era/keynetix/may65/json/MAY65-H7S-VIA.JSON"
+HW_DEF = "src/hw/hw_def.h"
 
 
 def current_firmware_version() -> bytes:
@@ -77,6 +78,15 @@ PROBES = (
      lambda b: b.replace(b", 17,", b", 99,"), False),
     ("version", "릴리스 파일명이", "docs/readme.txt",
      plant_readme_release_filename, False),
+    ("storage", "[storage]", "src/ap/modules/qmk/port/port.h",
+     lambda b: b.replace(b"EECONFIG_USER_DATABLOCK + 152", b"EECONFIG_USER_DATABLOCK + 156", 1), False),
+    ("storage-key", "[storage]", HW_DEF,
+     lambda b: re.sub(rb"(ERA_EEPROM_RESET_KEY\s+0x[0-9A-Fa-f]{7})([0-9A-Fa-f])",
+                      lambda m: m.group(1) + (b"1" if m.group(2) == b"0" else b"0"), b, count=1), False),
+    ("storage-slot", "[storage]", "src/ap/modules/qmk/keyboards/era/sirind/brick65/port/indicator_port.c",
+     lambda b: b.replace(b"EECONFIG_USER_INDICATOR + 4)", b"EECONFIG_USER_INDICATOR + 5)", 1), False),
+    ("storage-ver", "[storage]", "src/hw/driver/eeprom_reset_guard.c",
+     lambda b: b.replace(b"== ERA_EEPROM_RESET_KEY)", b"== (ERA_EEPROM_RESET_KEY ^ _DEF_FIRMWARE_VERSION[1]))", 1), False),
 )
 
 

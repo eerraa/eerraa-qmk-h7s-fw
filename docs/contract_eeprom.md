@@ -2,7 +2,7 @@
 
 Genre: contract
 Canonical for: shipped USER-slot address compatibility and per-slot validity,
-SAVE-not-SET persistence, the version-cookie factory-reset blast radius, and
+SAVE-not-SET persistence, the EEPROM reset key and its factory-reset blast radius, and
 RAM-image/asynchronous durability and partial-failure semantics
 
 The current USER layout (offsets, sizes, symbols) is source-owned by
@@ -19,10 +19,10 @@ append after the last occupied slot. Current offsets and sizes stay in
 
 > **REFUSED:** moving USER slot offsets after a layout has shipped.
 > **WHY:** compacting a hole shifts every later field on devices that already
-> hold that layout, and cookie-stable releases exist, so those devices would
-> not be factory-reset.
-> **REOPENS:** a cookie bump that accepts a full EEPROM blast, with the new
-> field appended rather than inserted.
+> hold that layout, and releases keep the reset key unless the stored format
+> changes, so those devices would not be factory-reset.
+> **REOPENS:** an `ERA_EEPROM_RESET_KEY` bump that accepts a full EEPROM wipe,
+> with the new field appended rather than inserted.
 
 Validity is per slot, and that split is intentional. TAPPING and TAPDANCE treat
 a bad signature, version, or out-of-range field as a ruined slot and restore
@@ -43,29 +43,41 @@ the last stored value — VIA's contract, not a defect. BootMode is the
 exception: `id_custom_save` on that channel is a no-op; persist is Apply
 (`docs/contract_usb.md` §5).
 
-## 2. Raising the version cookie factory-resets every device
+## 2. Only the reset key wipes storage, and only for a format change
 
-`AUTO_FACTORY_RESET_COOKIE` defaults from `_DEF_FIRMWARE_VERSION` in
-`src/hw/hw_def.h`. The boot entry point is `eepromAutoFactoryResetCheck()` in
-`src/hw/driver/eeprom_auto_factory_reset.c`: matching sentinel magic and cookie
-preserve storage; any other pairing runs the full format/default path, including
-dynamic keymap, macros, and VIA settings.
+`ERA_EEPROM_RESET_KEY` (`src/hw/hw_def.h`) is the storage identity, with
+EERRAA's name and meaning; `_DEF_FIRMWARE_VERSION` is identity only, so a
+release that keeps the stored format keeps every device's keymap, macros, and
+VIA settings. The boot reset guard `eepromResetGuardCheck()`
+(`src/hw/driver/eeprom_reset_guard.c`) has no off switch: a matching guard
+magic and key preserve storage, anything else runs the full format/default
+path, and the guard is written after the defaults, so a reset cut short by
+power loss runs again.
 
-A version-string bump is therefore a decision to wipe every board that enables
-`AUTO_FACTORY_RESET_ENABLE` on first boot. Which boards enable it is owned by
-their current `config.h`, not by this contract. Stored defaults are not rewritten
-on every ordinary boot, so changing a default without a cookie bump leaves an
-already-stored value in place. The cookie is global rather than per board; each
-default-changing release must decide whether that global reset blast is intended.
+Raise the key when a stored byte would mean something else in the new build: a
+moved or resized USER slot; a changed persisted type, signature, or slot
+version; a changed QMK eeconfig, VIA, or dynamic-keymap address or geometry; or
+a renumbered RGB mode. The key is global, so raising it wipes every board on
+first boot. A release that changes no stored format — JSON, code, or a default
+— keeps the key, and an already-stored value then stays over the new default.
 
-A JSON-only release (channel map, value ids, EEPROM layout, and firmware code
-unchanged) must not bump the cookie.
+`QMK_BUILDDATE` (`src/ap/modules/qmk/port/version.h`) seeds VIA's own magic. It
+is pinned, equal to EERRAA's, and left alone: changing it resets keymaps and
+macros whatever the key says.
 
-> **REFUSED:** raising `_DEF_FIRMWARE_VERSION` without accepting a full EEPROM
-> factory reset on every `AUTO_FACTORY_RESET_ENABLE` board.
-> **WHY:** cookie mismatch formats the whole chip — keymap, macros, and VIA
-> settings included.
-> **REOPENS:** a per-board cookie or a narrower sentinel. Neither exists.
+The `storage` check in `tools/era_doc_refs.py`, also run by the pre-commit
+hook, fingerprints those sources against `tools/eeprom_reset_key.json` and
+fails until the key is raised or the record is rewritten with the reason the
+stored bytes stay valid; the record's diff is the review evidence of that
+decision.
+
+> **REFUSED:** deriving the reset key from `_DEF_FIRMWARE_VERSION` or any
+> other per-release value, or making the boot reset guard optional per board.
+> **WHY:** every update then wipes keymaps and macros whether or not the format
+> changed, and users cannot tell a routine update from a breaking one. A board
+> without the guard would silently ignore both a raised key and EEPROM CLEAN.
+> **REOPENS:** a per-board key or a narrower guard, if one board's format change
+> must stop wiping the others. Neither exists.
 
 **Failure stops boot.** EEPROM initialization/reset failure is fail-closed:
 `hwInit()` must return false and `src/main.c` must not continue with a
@@ -79,9 +91,8 @@ SET 0 clears it. The window is `SYS_EEP_RESET_CONFIRM_WINDOW_MS` (10000)
 from the first SET 1 and is not extended by later confirms; `via_qmk_system_task()`
 and the next GET/SET expire leftover bits so a later third toggle cannot
 finish a stale sequence. All three bits inside the window call
-`eeprom_req_clean()`, which uses `eepromScheduleDeferredFactoryReset()` to
-clear the sentinel and reboot, so the next boot runs the same
-`eepromAutoFactoryResetCheck()` path.
+`eeprom_req_clean()`, which uses `eepromResetGuardInvalidate()` to clear the
+guard and reboot, so the next boot runs the same `eepromResetGuardCheck()` path.
 
 ## 3. One RAM image, asynchronous persistence, explicit durability
 

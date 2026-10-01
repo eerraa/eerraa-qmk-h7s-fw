@@ -16,8 +16,10 @@ Bootloader 진입 방법은 다음 중 하나를 사용하십시오.
 - 키보드 설정 화면의 SYSTEM -> BOOT -> Jump To BOOT
 - 키맵에 배치한 QK_BOOT
 
-다른 버전의 펌웨어를 설치하면 첫 부팅에서 키맵·매크로·VIA 설정이
-공장 초기값으로 돌아갑니다. 업데이트 전에 VIA SAVE + LOAD로 백업하십시오.
+일반 업데이트는 키맵·매크로·VIA 설정을 그대로 유지합니다. 저장 형식이 바뀐
+릴리스만 첫 부팅에서 설정을 공장 초기값으로 되돌리며, 그 사실을 릴리스 안내에
+적습니다. 업데이트나 EEPROM CLEAN 전에 VIA SAVE + LOAD로 키맵을 백업해
+두십시오.
 보드 이름과 일치하는 H7S UF2를 사용하고, 업데이트 뒤 SYSTEM -> VERSION에서
 버전을 확인하십시오.
 
@@ -46,9 +48,11 @@ Use either of these methods to enter the bootloader:
 - SYSTEM -> BOOT -> Jump To BOOT in the keyboard configuration UI
 - QK_BOOT if it is present in your keymap
 
-Installing a different firmware version resets the keymap, macros and VIA
-settings to factory defaults on first boot. Back up with VIA SAVE + LOAD before
-updating. Use the H7S UF2 matching the board name and check SYSTEM -> VERSION
+A normal update keeps the keymap, macros and VIA settings. Only a release that
+changes the stored format resets settings to factory defaults on first boot,
+and its release notes say so. Back up the keymap with VIA SAVE + LOAD before
+updating or running EEPROM CLEAN.
+Use the H7S UF2 matching the board name and check SYSTEM -> VERSION
 afterward.
 
 ■ Keyboard Configuration

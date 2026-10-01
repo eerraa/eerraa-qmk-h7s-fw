@@ -1,8 +1,8 @@
 #include "quantum.h"
 #include "usb.h"                                   // V251112R5: VIA EEPROM 클리어 시 BootMode 기본값 적용
 #include "bootloader.h"                            // V250310R6: VIA CLEAN 이후 응답 송신 보장 리셋 래퍼
-#include "eeprom_auto_factory_reset.h"             // V251112R4: AUTO_FACTORY_RESET/VIA 센티넬 공용화
-#include "qmk/quantum/eeconfig.h"                  // V251112R3: AUTO_FACTORY_RESET/VIA 공용 초기화 루틴
+#include "eeprom_reset_guard.h"
+#include "qmk/quantum/eeconfig.h"
 #include "qmk/port/port.h"
 
 
@@ -27,11 +27,11 @@ static bool eeprom_address_valid(uintptr_t addr, size_t length)
 
 bool eeprom_is_ready(void) { return image_ready; }
 
-static void eeprom_restore_auto_factory_reset_sentinel(void)
+static void eeprom_write_reset_guard(void)
 {
-#if defined(AUTO_FACTORY_RESET_FLAG_MAGIC) && defined(AUTO_FACTORY_RESET_COOKIE)
-  eeprom_write_dword((uint32_t *)EECONFIG_USER_EEPROM_CLEAR_FLAG, AUTO_FACTORY_RESET_FLAG_MAGIC);
-  eeprom_write_dword((uint32_t *)EECONFIG_USER_EEPROM_CLEAR_COOKIE, AUTO_FACTORY_RESET_COOKIE);
+#ifdef VIA_ENABLE
+  eeprom_write_dword((uint32_t *)EECONFIG_USER_RESET_GUARD_MAGIC, ERA_EEPROM_RESET_GUARD_MAGIC);
+  eeprom_write_dword((uint32_t *)EECONFIG_USER_RESET_GUARD_KEY, ERA_EEPROM_RESET_KEY);
 #endif
 }
 
@@ -131,7 +131,7 @@ bool eeprom_flush_pending(void)
   return true;
 }
 
-bool eeprom_apply_factory_defaults(bool restore_factory_reset_sentinel)
+bool eeprom_apply_factory_defaults(bool write_reset_guard)
 {
   if (eeprom_flush_pending() != true)                                      // V251112R3: 초기화 전 대기열 제거
   {
@@ -162,9 +162,9 @@ bool eeprom_apply_factory_defaults(bool restore_factory_reset_sentinel)
     return false;
   }
 
-  if (restore_factory_reset_sentinel)
+  if (write_reset_guard)
   {
-    eeprom_restore_auto_factory_reset_sentinel();              // V251112R3: 공용 초기화 루틴에서 센티넬 복구
+    eeprom_write_reset_guard();                                // 기본값이 모두 기록된 뒤 guard를 마지막에 쓴다
     if (eeprom_flush_pending() != true)
     {
       return false;
@@ -176,16 +176,16 @@ bool eeprom_apply_factory_defaults(bool restore_factory_reset_sentinel)
 
 void eeprom_task(void)
 {
-  eeprom_update();                                              // V251112R4: VIA 초기화는 부팅 시 AUTO_FACTORY_RESET 경로로 처리
+  eeprom_update();                                              // VIA CLEAN의 실제 삭제는 다음 부팅의 reset guard가 한다
 }
 
 void eeprom_req_clean(void)
 {
-#if AUTO_FACTORY_RESET_ENABLE || defined(VIA_ENABLE)
-  logPrintf("[  ] VIA EEPROM clear : scheduling deferred factory reset\n");    // V251112R4: VIA와 AUTO_FACTORY_RESET 경로 통일
-  if (eepromScheduleDeferredFactoryReset() != true)
+#ifdef VIA_ENABLE
+  logPrintf("[  ] VIA EEPROM clear : invalidating reset guard\n");
+  if (eepromResetGuardInvalidate() != true)
   {
-    logPrintf("[!] VIA EEPROM clear : sentinel write fail\n");
+    logPrintf("[!] VIA EEPROM clear : reset guard write fail\n");
     return;
   }
 
@@ -195,7 +195,7 @@ void eeprom_req_clean(void)
     mcu_reset();                                                   // V250310R6: deferred 예약 실패 시 기존 리셋 경로로 폴백
   }
 #else
-  logPrintf("[!] VIA EEPROM clear : AUTO_FACTORY_RESET support disabled\n");
+  logPrintf("[!] VIA EEPROM clear : reset guard needs VIA_ENABLE\n");
 #endif
 }
 

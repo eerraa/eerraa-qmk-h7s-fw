@@ -69,19 +69,19 @@ int main(void)
   uint8_t version[10];
 
   // V260909R1: release version is the fixture input, not a hard-coded previous release.
-  const char *cookie = _DEF_FIRMWARE_VERSION;
-  expect_true("cookie VYYMMDDRn format", strlen(cookie) == 9U && cookie[0] == 'V' && cookie[7] == 'R');
+  const char *version_id = _DEF_FIRMWARE_VERSION;
+  expect_true("version VYYMMDDRn format", strlen(version_id) == 9U && version_id[0] == 'V' && version_id[7] == 'R');
   if (g_fails) return 1;
-  uint8_t year = (uint8_t)((cookie[1] - '0') * 10 + cookie[2] - '0' - 24);
-  uint8_t month = (uint8_t)((cookie[3] - '0') * 10 + cookie[4] - '0' - 1);
-  uint8_t day = (uint8_t)((cookie[5] - '0') * 10 + cookie[6] - '0' - 1);
-  uint8_t revision = (uint8_t)(cookie[8] - '0' - 1);
+  uint8_t year = (uint8_t)((version_id[1] - '0') * 10 + version_id[2] - '0' - 24);
+  uint8_t month = (uint8_t)((version_id[3] - '0') * 10 + version_id[4] - '0' - 1);
+  uint8_t day = (uint8_t)((version_id[5] - '0') * 10 + version_id[6] - '0' - 1);
+  uint8_t revision = (uint8_t)(version_id[8] - '0' - 1);
   expect_eq_u8("GET Year offset", via_get(1), year);
   expect_eq_u8("GET Month offset", via_get(2), month);
   expect_eq_u8("GET Day offset", via_get(3), day);
   expect_eq_u8("GET Revision offset", via_get(4), revision);
   via_get_ascii(version);
-  expect_true("GET ASCII matches cookie without V plus NUL", memcmp(version, cookie + 1, 9U) == 0);
+  expect_true("GET ASCII matches version without V plus NUL", memcmp(version, version_id + 1, 9U) == 0);
   expect_eq_u8("GET ASCII preserves report tail", version[9], 0xA5);
 
   memset(buf, 0, sizeof(buf));

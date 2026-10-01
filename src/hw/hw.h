@@ -19,7 +19,7 @@ extern "C" {
 #include "keys.h"
 #include "spi.h"
 #include "eeprom.h"
-#include "eeprom_auto_factory_reset.h"
+#include "eeprom_reset_guard.h"
 #include "i2c.h"
 #include "flash.h"
 #include "rtc.h"

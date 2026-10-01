@@ -18,7 +18,6 @@
 #define     HW_WS2812_SCROLL        1
 #define     HW_WS2812_RGB           2
 #define     HW_WS2812_RGB_CNT       30    // V260310R1: rgblight 드라이버는 물리 2번부터 underglow 30개만 제어
-#define AUTO_FACTORY_RESET_ENABLE   1 
 
 
 // ---------------------------------------------------------------------------

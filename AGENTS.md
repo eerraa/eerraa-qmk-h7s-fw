@@ -39,9 +39,10 @@ QMK 포팅층 위에 VIA/Vial을 얹고 커스텀 VIA 앱(`the-via-eerraa`)과 �
 
 - 일반 코드 변경마다 `// VYYMMDDRn ...` 이력 주석을 추가하거나 펌웨어 버전을 자동 상승시키지
   않는다. 현재 버전은 `src/hw/hw_def.h`가 소유한다.
-- 릴리스/버전 변경이 실제 작업 범위일 때만 `_DEF_FIRMWARE_VERSION`을 바꾼다. 버전 문자열 상승은
-  `docs/contract_eeprom.md` §2의 전체 EEPROM factory-reset 정책과 결합되어 있으므로 그 범위를
-  수용한 변경인지 먼저 확인한다. JSON-only 변경은 그 계약에 따라 cookie를 올리지 않는다.
+- 릴리스/버전 변경이 실제 작업 범위일 때만 `_DEF_FIRMWARE_VERSION`을 바꾼다. 버전은 식별용이고
+  EEPROM 초기화와 무관하다. 저장 형식(USER 슬롯, 저장 타입, eeconfig·VIA·키맵 주소, RGB 모드
+  번호)을 바꾸면 `docs/contract_eeprom.md` §2에 따라 `ERA_EEPROM_RESET_KEY`를 올리거나(전체
+  초기화 수용) 호환 사유를 기록한다. `tools/era_doc_refs.py`의 `storage` 검사가 이를 강제한다.
 - 고위험 파일군은 변경 시 집중 리뷰한다: `src/ap/modules/qmk/port/sys_port.c`,
   `src/ap/modules/qmk/port/sys_port.h`, `src/hw/driver/`.
 - 스타일은 주변 소스를 따른다. 비자명한 이유만 주석으로 남기고 패치·버전 이력을 주석에 누적하지
@@ -71,4 +72,4 @@ python -X utf8 tools/era_doc_refs.py
 
 - instability monitor / 자동 폴링 다운그레이드 복원 — `docs/contract_usb.md` §4.
 - EEPROM USER 슬롯 오프셋 이동 — `docs/contract_eeprom.md` §1.
-- `_DEF_FIRMWARE_VERSION` 상승을 전체 EEPROM 초기화 결정과 분리 — `docs/contract_eeprom.md` §2.
+- EEPROM 초기화 키를 펌웨어 버전에서 다시 계산하거나 부팅 reset guard를 보드별로 끌 수 있게 함 — `docs/contract_eeprom.md` §2.

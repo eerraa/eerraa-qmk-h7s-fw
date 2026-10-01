@@ -19,7 +19,6 @@
 #define     HW_WS2812_SCROLL        2     // V260701R1: IND2는 물리 RGB3을 SCROLL LOCK 기본 인디케이터로 사용
 #define     HW_WS2812_RGB           3
 #define     HW_WS2812_RGB_CNT       16    // V260701R1: rgblight 드라이버는 물리 RGB4부터 underglow 16개만 제어
-#define AUTO_FACTORY_RESET_ENABLE   1
 
 
 // ---------------------------------------------------------------------------
