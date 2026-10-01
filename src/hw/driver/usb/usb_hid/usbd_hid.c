@@ -112,6 +112,9 @@ static bool via_rx_armed;
 __ALIGN_BEGIN static uint8_t via_hid_usb_rx_report[HID_VIA_EP_SIZE] __ALIGN_END;
 // V260909R1: HAL은 요청1바이트도 EP0 maxpacket 수신을 무장한다. 실제 packet을 수용한 후 길이를 거부한다.
 __ALIGN_BEGIN static uint8_t ep0_req_buf[USB_MAX_EP0_SIZE] __ALIGN_END;
+// Boot protocol에서 무장한 keyboard 보고. 다음 무장은 DataIn 완료 뒤에만 일어나므로 전송 중에는 불변이다.
+__ALIGN_BEGIN static uint8_t keyboard_boot_report[HID_BOOT_KEYBOARD_REPORT_SIZE] __ALIGN_END;
+static uint8_t hid_report_protocol = 1U;  // keyboard 외 인터페이스의 GET_PROTOCOL 응답
 _Static_assert(sizeof(ep0_req_buf) >= 64U, "EP0 receive buffer must cover a full control packet");
 static bool ep0_led_pending;
 typedef enum {
@@ -127,6 +130,7 @@ static volatile uint32_t suspend_ms;
 static void usbHidPumpLocked(USBD_HandleTypeDef *pdev);
 static void usbHidRearmViaLocked(USBD_HandleTypeDef *pdev);
 static void usbHidResetTransport(void);
+static void usbHidSetKeyboardProtocolLocked(USBD_HandleTypeDef *pdev, USBD_HID_HandleTypeDef *hhid, uint8_t protocol);
 static bool usbHidRemoteWakeSuspended(void) __attribute__((noinline));
 static uint32_t usbHidLock(void) { uint32_t p = __get_PRIMASK(); __disable_irq(); return p; }
 static void usbHidUnlock(uint32_t p) { __set_PRIMASK(p); }
@@ -598,12 +602,23 @@ static uint8_t USBD_HID_Setup(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *re
       {
         case USBD_HID_REQ_SET_PROTOCOL:
           logDebug("  USBD_HID_REQ_SET_PROTOCOL  : 0x%X, 0x%d\n", req->wValue, req->wLength);      
-          hhid->Protocol = (uint8_t)(req->wValue);
+          if (req->bmRequest != 0x21U || req->wValue > 1U || req->wLength != 0U) {
+            transport_stats.invalid_control++;
+            USBD_CtlError(pdev, req);
+            ret = USBD_FAIL;
+            break;
+          }
+          // Boot 형식은 keyboard 인터페이스(0)에만 있다. 다른 인터페이스는 요청을 받아도 Report protocol이다.
+          if (req->wIndex == 0U) {
+            uint32_t irq = usbHidLock();
+            usbHidSetKeyboardProtocolLocked(pdev, hhid, (uint8_t)req->wValue);
+            usbHidUnlock(irq);
+          }
           break;
 
         case USBD_HID_REQ_GET_PROTOCOL:
           logDebug("  USBD_HID_REQ_GET_PROTOCOL  : 0x%X, 0x%d\n", req->wValue, req->wLength);      
-          (void)USBD_CtlSendData(pdev, (uint8_t *)&hhid->Protocol, 1U);
+          (void)USBD_CtlSendData(pdev, req->wIndex == 0U ? (uint8_t *)&hhid->Protocol : (uint8_t *)&hid_report_protocol, 1U);
           break;
 
         case USBD_HID_REQ_SET_IDLE:
@@ -965,7 +980,18 @@ static uint8_t *USBD_HID_GetDeviceQualifierDesc(uint16_t *length)
 static bool usbHidArm(void *context, const hid_tx_packet_t *packet)
 {
   uint8_t ep = (uint8_t)(uintptr_t)context;
-  bool ok = USBD_LL_Transmit(&USBD_Device, ep, (uint8_t *)packet->data, packet->length) == USBD_OK;
+  uint8_t *data = (uint8_t *)packet->data;
+  uint32_t length = packet->length;
+  if (ep == HIDInEpAdd && p_hhid != NULL && p_hhid->Protocol == 0U) {
+    // Boot 호스트는 report descriptor 없이 8바이트만 읽는다. 앞에서부터 비어 있지 않은 슬롯 6개를 싣는다.
+    memset(keyboard_boot_report, 0, sizeof(keyboard_boot_report));
+    keyboard_boot_report[0] = packet->data[0];
+    for (uint32_t i = 2U, n = 2U; i < HID_KEYBOARD_REPORT_SIZE && n < sizeof(keyboard_boot_report); i++)
+      if (packet->data[i] != 0U) keyboard_boot_report[n++] = packet->data[i];
+    data = keyboard_boot_report;
+    length = sizeof(keyboard_boot_report);
+  }
+  bool ok = USBD_LL_Transmit(&USBD_Device, ep, data, length) == USBD_OK;
   if (!ok) transport_stats.arm_failures++;
   if (ok && ep == HIDInEpAdd) keyboard_active_delay_ms = packet->delay_after_ms;
   if (ok && ep == HIDInEpAdd && packet->diagnostic_session != 0U)
@@ -1002,6 +1028,20 @@ static void usbHidPumpLocked(USBD_HandleTypeDef *pdev)
   }
   hidTxKick(&extra_tx, usbHidArm, (void *)(uintptr_t)HID_EXK_EP_IN);
   hidTxKick(&via_tx, usbHidArm, (void *)(uintptr_t)HID_VIA_EP_IN);
+}
+
+// 형식은 무장할 때 정하므로 대기 중인 보고도 새 형식으로 나간다. 호스트는 protocol을 바꾸면 이전 형식의 키
+// 상태를 버리므로 현재 상태를 새 형식으로 한 번 더 보낸다.
+static void usbHidSetKeyboardProtocolLocked(USBD_HandleTypeDef *pdev, USBD_HID_HandleTypeDef *hhid, uint8_t protocol)
+{
+  if (hhid->Protocol == protocol) return;
+  hhid->Protocol = protocol;
+  hid_tx_packet_t resync = keyboard_latest;
+  resync.request_us = 0U;
+  resync.diagnostic_session = 0U;
+  resync.delay_after_ms = 0U;
+  if (keyboard_reconcile || !usbHidSessionValid(pdev) || !hidTxPush(&keyboard_tx, &resync)) keyboard_reconcile = true;
+  usbHidPumpLocked(pdev);
 }
 
 static void usbHidRearmViaLocked(USBD_HandleTypeDef *pdev)

@@ -17,6 +17,8 @@ static const uint8_t *active[16];
 static uint8_t active_image[16][32];
 static uint32_t active_length[16], rx_length[16];
 static uint8_t *rx_buffer, *control_buffer;
+static const uint8_t *sent_data;
+static uint32_t sent_length;
 static uint32_t control_length, control_arms, control_errors, led_updates;
 static uint8_t led_value, open_fail, hs_interval = 1U;
 static uint16_t clock_us_fraction;
@@ -137,7 +139,7 @@ uint32_t USBD_LL_GetRxDataSize(USBD_HandleTypeDef *d, uint8_t ep) { (void)d; ret
 USBD_StatusTypeDef USBD_CtlPrepareRx(USBD_HandleTypeDef *d, uint8_t *data, uint32_t length)
 { (void)d; control_buffer = data; control_length = length; control_arms++; return USBD_OK; }
 USBD_StatusTypeDef USBD_CtlSendData(USBD_HandleTypeDef *d, uint8_t *data, uint32_t length)
-{ (void)d; (void)data; (void)length; return USBD_OK; }
+{ (void)d; sent_data = data; sent_length = length; return USBD_OK; }
 void USBD_CtlError(USBD_HandleTypeDef *d, USBD_SetupReqTypedef *req) { (void)d; (void)req; control_errors++; }
 void *USBD_GetEpDesc(uint8_t *configuration, uint8_t address)
 {
@@ -339,6 +341,78 @@ static void test_control(void)
   USBD_HID.EP0_RxReady(&USBD_Device);
   assert(led_updates == 1U);
   assert(control_errors == 8U);
+}
+// Boot protocol keyboard 보고는 8바이트이고, 앞에서부터 비어 있지 않은 슬롯 6개를 싣는다.
+static void test_boot_protocol(void)
+{
+  stop();
+  configure(true);
+  USBD_HID_HandleTypeDef *hid = USBD_Device.pClassData;
+  delivered_count = 0U;
+  uint8_t report[HID_KEYBOARD_REPORT_SIZE] = {0};
+  report[0] = 0x02U; report[2] = 4U;
+  for (unsigned i = 0; i < 7U; i++) report[4U + i] = (uint8_t)(5U + i);  // 슬롯 1은 빈 자리
+  assert(usbHidSendReport(report, sizeof(report)));
+  drain();
+  assert(delivered_count == 1U && delivered[0].length == HID_KEYBOARD_REPORT_SIZE);
+
+  USBD_SetupReqTypedef req = {.bmRequest = 0x21U, .bRequest = USBD_HID_REQ_SET_PROTOCOL, .wValue = 0U, .wIndex = 0U, .wLength = 0U};
+  unsigned errors = control_errors;
+  assert(USBD_HID.Setup(&USBD_Device, &req) == USBD_OK && hid->Protocol == 0U);
+  assert(active[1] != NULL);  // 바뀐 형식으로 현재 상태를 다시 보낸다.
+  drain();
+  const uint8_t boot[HID_BOOT_KEYBOARD_REPORT_SIZE] = {0x02U, 0U, 4U, 5U, 6U, 7U, 8U, 9U};
+  assert(delivered_count == 2U && delivered[1].length == 8U && !memcmp(delivered[1].data, boot, 8U));
+  USBD_SetupReqTypedef get = {.bmRequest = 0xA1U, .bRequest = USBD_HID_REQ_GET_PROTOCOL, .wIndex = 0U, .wLength = 1U};
+  assert(USBD_HID.Setup(&USBD_Device, &get) == USBD_OK && sent_length == 1U && sent_data[0] == 0U);
+  get.wIndex = 2U;
+  assert(USBD_HID.Setup(&USBD_Device, &get) == USBD_OK && sent_length == 1U && sent_data[0] == 1U);
+  assert(USBD_HID.Setup(&USBD_Device, &req) == USBD_OK);
+  drain();
+  assert(delivered_count == 2U);  // 같은 protocol은 다시 보내지 않는다.
+
+  report[2] = 0U;  // 첫 키를 떼면 일곱째 키가 여섯째 자리로 들어온다.
+  assert(usbHidSendReport(report, sizeof(report)));
+  drain();
+  const uint8_t shifted[HID_BOOT_KEYBOARD_REPORT_SIZE] = {0x02U, 0U, 5U, 6U, 7U, 8U, 9U, 10U};
+  assert(delivered_count == 3U && delivered[2].length == 8U && !memcmp(delivered[2].data, shifted, 8U));
+
+  // 전송 중 전환: 무장한 Boot 보고는 완료까지 불변이고, 대기 보고와 재동기화는 Report 형식으로 나간다.
+  report[2] = 4U;
+  assert(usbHidSendReport(report, sizeof(report)));
+  const uint8_t *armed = active[1];
+  report[2] = 0U;
+  assert(usbHidSendReport(report, sizeof(report)));
+  req.wValue = 1U;
+  assert(USBD_HID.Setup(&USBD_Device, &req) == USBD_OK && hid->Protocol == 1U && active[1] == armed);
+  drain();
+  assert(delivered_count == 6U && delivered[3].length == 8U && delivered[3].data[2] == 4U);
+  for (unsigned i = 4U; i < 6U; i++)
+    assert(delivered[i].length == HID_KEYBOARD_REPORT_SIZE && !memcmp(delivered[i].data, report, sizeof(report)));
+
+  // 다른 인터페이스와 잘못된 요청은 keyboard 형식을 바꾸지 않는다.
+  req.wValue = 0U; req.wIndex = 2U;
+  assert(USBD_HID.Setup(&USBD_Device, &req) == USBD_OK && hid->Protocol == 1U);
+  req.wIndex = 0U; req.wValue = 2U;
+  assert(USBD_HID.Setup(&USBD_Device, &req) == USBD_FAIL);
+  req.wValue = 0U; req.wLength = 1U;
+  assert(USBD_HID.Setup(&USBD_Device, &req) == USBD_FAIL);
+  req.wLength = 0U; req.bmRequest = 0x22U;
+  assert(USBD_HID.Setup(&USBD_Device, &req) == USBD_FAIL);
+  assert(hid->Protocol == 1U && control_errors == errors + 3U);
+  drain();
+  assert(delivered_count == 6U);
+
+  req.bmRequest = 0x21U;
+  assert(USBD_HID.Setup(&USBD_Device, &req) == USBD_OK && hid->Protocol == 0U);
+  drain();
+  stop();
+  delivered_count = 0U;
+  configure(true);  // 재구성은 Report protocol로 돌아간다(configure가 확인한다).
+  unsigned keyboard_packets = 0U;
+  for (unsigned i = 0; i < delivered_count; i++)
+    if (delivered[i].ep == 1U) { assert(delivered[i].length == HID_KEYBOARD_REPORT_SIZE); keyboard_packets++; }
+  assert(keyboard_packets == 1U);
 }
 static void test_pool_lifecycle(void)
 {
@@ -608,12 +682,13 @@ int main(void)
   test_overflow();
   test_via_and_epoch();
   test_control();
+  test_boot_protocol();
   test_pool_lifecycle();
   test_remote_wake();
   test_suspend_tap();
   test_descriptor_intervals();
   test_host_sleeping();
   stop();
-  puts("PASS: actual HID class/pool: FIFO/VIA/EP0 lifecycle plus isolated 10 ms Remote Wake, hardware-verified single Resume, stale/SUSPSTS SOF rejection, late-WKUINT idempotence, post-wake VIA");
+  puts("PASS: actual HID class/pool: FIFO/VIA/EP0 lifecycle, 8-byte Boot protocol report plus isolated 10 ms Remote Wake, hardware-verified single Resume, stale/SUSPSTS SOF rejection, late-WKUINT idempotence, post-wake VIA");
   return 0;
 }

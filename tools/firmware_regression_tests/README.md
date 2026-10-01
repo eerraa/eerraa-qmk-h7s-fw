@@ -26,6 +26,8 @@ not included in firmware builds.
   injects arm failures and executes the actual class callbacks. Tests cover overflow,
   response credit and generations, EP0 input sizes, 2048 configurations, partial
   open failure, short taps during wake, first relative mouse input and FS/HS descriptors.
+  Boot protocol cases check the 8-byte form, the first six non-empty slots, the
+  resync and unchanged armed packet at a protocol change, and interface/request checks.
   Remote-Wake cases inject the H7RS early-WKUINT behavior, enforce the 10 ms RWUSIG
   window, reject stale/SUSPSTS SOF, de-duplicate late WKUINT and consume VIA after
   fresh-SOF logical Resume.

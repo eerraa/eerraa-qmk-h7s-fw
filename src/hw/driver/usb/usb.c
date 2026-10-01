@@ -544,8 +544,8 @@ void cliCmd(cli_args_t *args)
       pid = (p_data[11]<<8)|(p_data[10]<<0);
     }
 
-    cliPrintf("USB PID     : 0x%04X\n", vid);
-    cliPrintf("USB VID     : 0x%04X\n", pid);
+    cliPrintf("USB VID     : 0x%04X\n", vid);
+    cliPrintf("USB PID     : 0x%04X\n", pid);
 
     while(cliKeepLoop())
     {

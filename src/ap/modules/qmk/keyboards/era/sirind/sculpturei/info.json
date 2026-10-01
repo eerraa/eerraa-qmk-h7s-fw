@@ -1,5 +1,5 @@
 {
-  "manufacturer": "ERA",
+  "manufacturer": "SR Industry",
   "keyboard_name": "SCULPTUREI",
   "maintainer": "eerraa",
   "bootloader": "STM32H7S",
@@ -38,8 +38,8 @@
   "url": "",
   "usb": {
     "device_version": "1.0.0",
-    "pid": "0x0034",
-    "vid": "0x4552"
+    "pid": "0x000E",
+    "vid": "0x4501"
   },
   "layouts": {
     "LAYOUT": {

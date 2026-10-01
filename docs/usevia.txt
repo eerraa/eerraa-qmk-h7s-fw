@@ -12,6 +12,9 @@ H7S Official VIA Guide
 
 ■ 공식 VIA 시작
 
+이 릴리스와 같은 메이커·보드 ZIP에 동봉된 JSON을 사용하십시오.
+이전 USB 식별자 0x4552용 JSON은 새 메이커 식별자와 맞지 않습니다.
+
 1. https://usevia.app 에 접속합니다.
 2. SETTINGS에서 Show Design tab을 켭니다.
 3. DESIGN -> Load Draft Definition에서 이 키보드의 H7S VIA JSON을 불러옵니다.
@@ -19,6 +22,8 @@ H7S Official VIA Guide
 
 TAPDANCE 입력창에 직접 keycode를 넣을 때는 같은 폴더의 via_keycodes.txt를
 참고하십시오. 키맵을 보관하려면 VIA의 SAVE + LOAD에서 백업하십시오.
+USB 식별자(VID/PID)가 바뀐 펌웨어로 업데이트했다면 같은 배포의 VIA JSON을 다시
+불러오고 Authorize device로 키보드 연결을 다시 허용하십시오.
 
 ■ VERSION
 
@@ -110,8 +115,8 @@ Mouse Key가 없으면 입력에 영향을 주지 않습니다. 값들이 서로
 ■ ROLLOVER / NKRO
 
 H7S는 별도 NKRO 토글이 없습니다. 일반 HID 보고에서는 최대 20키 동시 입력을
-항상 지원합니다. 오래된 BIOS/KVM처럼 Boot Protocol의 기본 키보드 보고만 읽는
-환경에서는 6키 보고로 동작합니다.
+항상 지원합니다. BIOS/KVM처럼 Boot Protocol을 요청하는 환경에서는 표준
+8바이트 보고로 바뀌어 동시에 6키까지 전달합니다.
 
 ■ LIGHTING
 
@@ -159,6 +164,7 @@ USB 절전, 호스트 소실에 따른 자동 RGB 절전 전체를 비활성화�
 BOOT:
 Jump To BOOT는 켜는 즉시 부트로더로 진입합니다. 실행 후 항상 꺼진 값으로
 보이는 것이 정상입니다.
+왼쪽 위 키를 누른 채 USB를 연결해도 부트로더에 진입합니다.
 
 ■ EEPROM CLEAN
 
@@ -174,6 +180,9 @@ English
 
 ■ Starting Official VIA
 
+Use the JSON bundled with this release for the same maker and board.
+An older JSON for USB vendor ID 0x4552 does not match the new maker identity.
+
 1. Open https://usevia.app.
 2. Enable Show Design tab in SETTINGS.
 3. In DESIGN -> Load Draft Definition, load the H7S VIA JSON for this keyboard.
@@ -181,6 +190,8 @@ English
 
 See via_keycodes.txt in the same folder when entering keycodes directly into
 TAPDANCE fields. Use VIA SAVE + LOAD to back up a keymap you want to keep.
+After an update that changes the USB identity (VID/PID), load the VIA JSON from
+the same release again and use Authorize device to reconnect the keyboard.
 
 ■ VERSION
 
@@ -272,8 +283,8 @@ affect one another, so adjusting one at a time is recommended.
 ■ ROLLOVER / NKRO
 
 H7S has no separate NKRO toggle. Normal HID reporting always supports up to
-20 simultaneous keys. An old BIOS/KVM using the basic Boot Protocol report sees
-the six-key boot report instead.
+20 simultaneous keys. A BIOS/KVM that requests the Boot Protocol receives the
+standard 8-byte boot report with up to six keys instead.
 
 ■ LIGHTING
 
@@ -321,6 +332,7 @@ automatically sleeping RGB, but does not turn on RGB disabled by the user.
 BOOT:
 Jump To BOOT enters the bootloader as soon as it is switched on and normally
 reads back off after the action.
+Holding the top-left key while plugging in USB also enters the bootloader.
 
 ■ EEPROM CLEAN
 

@@ -8,6 +8,12 @@ H7S Firmware Guide
 
 ■ 펌웨어 업데이트
 
+V260916R1 및 그 이전 배포본에서 V260929R1로 처음 업데이트하면 저장 형식
+변경으로 키맵·매크로·설정이 초기화됩니다. 먼저 SAVE + LOAD로 백업하고,
+백업 파일에 포함되지 않는 설정과 탭댄스는 따로 기록하십시오.
+이 릴리스부터 메이커별 USB 식별자를 사용합니다. 메이커와 보드 이름이 모두
+일치하는 ZIP을 사용하고, 업데이트 후 브라우저에서 기기 연결을 다시 허용하십시오.
+
 1. 키보드를 Bootloader 모드로 진입시킵니다.
 2. PC에 부트로더 이동식 디스크가 나타나면 제공된 .uf2 파일을 복사합니다.
 3. 복사가 끝나면 키보드가 자동으로 재시작합니다.
@@ -15,6 +21,7 @@ H7S Firmware Guide
 Bootloader 진입 방법은 다음 중 하나를 사용하십시오.
 - 키보드 설정 화면의 SYSTEM -> BOOT -> Jump To BOOT
 - 키맵에 배치한 QK_BOOT
+- 왼쪽 위 키를 누른 채 USB 연결
 
 일반 업데이트는 키맵·매크로·VIA 설정을 그대로 유지합니다. 저장 형식이 바뀐
 릴리스만 첫 부팅에서 설정을 공장 초기값으로 되돌리며, 그 사실을 릴리스 안내에
@@ -22,6 +29,8 @@ Bootloader 진입 방법은 다음 중 하나를 사용하십시오.
 두십시오.
 보드 이름과 일치하는 H7S UF2를 사용하고, 업데이트 뒤 SYSTEM -> VERSION에서
 버전을 확인하십시오.
+USB 식별자(VID/PID)가 바뀐 펌웨어로 업데이트하면 브라우저가 키보드를 새 장치로
+보므로, 설정 화면에서 키보드 연결을 한 번 다시 허용하십시오.
 
 ■ 키보드 설정
 
@@ -40,13 +49,21 @@ English
 
 ■ Firmware Update
 
+The first upgrade from V260916R1 or an earlier release to V260929R1 resets
+keymaps, macros and settings because the stored format changed. Back up with
+SAVE + LOAD first, and separately record settings and Tap Dance actions that
+the backup file does not include.
+This release uses maker-specific USB identities. Choose the ZIP matching both
+the maker and board, then authorize the keyboard again in the browser.
+
 1. Put the keyboard into Bootloader mode.
 2. When the bootloader removable drive appears, copy the provided .uf2 file.
 3. The keyboard restarts automatically after the copy finishes.
 
-Use either of these methods to enter the bootloader:
+Use one of these methods to enter the bootloader:
 - SYSTEM -> BOOT -> Jump To BOOT in the keyboard configuration UI
 - QK_BOOT if it is present in your keymap
+- Hold the top-left key while plugging in USB
 
 A normal update keeps the keymap, macros and VIA settings. Only a release that
 changes the stored format resets settings to factory defaults on first boot,
@@ -54,6 +71,8 @@ and its release notes say so. Back up the keymap with VIA SAVE + LOAD before
 updating or running EEPROM CLEAN.
 Use the H7S UF2 matching the board name and check SYSTEM -> VERSION
 afterward.
+If an update changes the keyboard's USB identity (VID/PID), the browser treats
+it as a new device; authorize the keyboard once more in the configuration page.
 
 ■ Keyboard Configuration
 

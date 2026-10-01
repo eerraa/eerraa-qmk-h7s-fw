@@ -1,8 +1,8 @@
 # USB host contract
 
 Genre: contract
-Canonical for: host-visible HID shape, the 20-key and boot-protocol compatibility
-deviations, report/lifecycle ownership, user-owned polling mode, the retired
+Canonical for: host-visible HID shape, the 20-key report and its Boot-protocol
+form, report/lifecycle ownership, user-owned polling mode, the retired
 automatic USB recovery boundary, legacy bootloader handoff compatibility, and
 main-loop periodic/reactive RGB ownership
 
@@ -22,7 +22,7 @@ The shipped HID shape is a host-compatibility contract:
 
 | Interface | Endpoint | Maximum packet | subclass / protocol | Host-visible reports |
 | --- | --- | ---: | --- | --- |
-| 0 keyboard | IN `0x81` | 64 B | BOOT / Keyboard | 22 B keyboard IN; LED Output is a one-byte SET_REPORT on EP0 |
+| 0 keyboard | IN `0x81` | 64 B | BOOT / Keyboard | 22 B keyboard IN, 8 B in Boot protocol (§3); LED Output is a one-byte SET_REPORT on EP0 |
 | 1 VIA raw HID | IN `0x84`, OUT `0x04` | 32 B | none / none | 32 B request/reply |
 | 2 EXK | IN `0x85` | 8 B | BOOT / none | SYSTEM and CONSUMER 3 B, MOUSE 6 B |
 
@@ -42,7 +42,8 @@ the shipped HID configurations and a VCOM composite configuration.
 
 ## 2. Simultaneous keys are 20, not 6KRO or NKRO
 
-The shipped keyboard report is mods + reserved + 20 key slots: 22 bytes.
+The shipped keyboard report is mods + reserved + 20 key slots: 22 bytes, sent
+in Report protocol.
 `HW_KEYS_PRESS_MAX` in `src/hw/hw_caps_keys.h` owns the current slot count and
 the report descriptor derives from it. A host that follows the descriptor sees
 20 simultaneous key slots. When all slots are occupied, an additional key is
@@ -81,21 +82,30 @@ with a busy wait, a report-service timer ISR, or delayed synthetic key-up
 callbacks. The current Caps/tap timing cases are executable regression behavior
 under `tools/firmware_regression_tests/`. The configured Caps interval remains a
 separate host-compatibility requirement; FIFO ordering does not justify removing
-it. Keep the USB pump free of dynamic allocation and keycode scanning.
+it. Keep the USB pump free of dynamic allocation and keycode interpretation;
+its only payload work is the fixed Boot-form copy made when a packet is armed.
 
-### Boot-protocol deviations
+### Boot protocol report
 
-Interface 0 advertises BOOT/Keyboard, but the current class request state is not
-an alternate report formatter:
+Interface 0 advertises BOOT/Keyboard, and SET_PROTOCOL on it selects the report
+form with no user toggle. Report protocol, the state after every configuration,
+sends the 22-byte report of §2. Boot protocol sends the 8-byte boot report of
+HID 1.11 Appendix B.1: mods, reserved, then the first six non-empty key slots of
+the 22-byte report in slot order. A seventh held key is left out rather than
+turning the report into ErrorRollOver, and appears once one of the six is
+released. The report descriptor does not change.
 
-1. SET_PROTOCOL changes the protocol state returned by GET_PROTOCOL; it does not
-   switch the keyboard sender to a separate boot-report implementation.
-2. Consequently Boot Protocol still uses the shipped 22-byte, 20-slot keyboard
-   report rather than the conventional 8-byte, six-key boot report.
+The form is chosen when a packet is armed. Reports still queued at a protocol
+change leave in the new form, the armed packet stays unchanged until its
+completion, and the current keyboard state is queued once more in the new form
+because a host discards key state across the change. SET_PROTOCOL must be a
+class/interface request with wLength 0 and value 0 or 1; anything else stalls.
+On another interface it is acknowledged without effect and GET_PROTOCOL there
+answers Report protocol: EXK has no boot form.
 
-These deviations are intentional compatibility facts. Do not "fix" them as a
-local cleanup; a change requires explicit BIOS/UEFI and supported-host
-acceptance.
+A host that reads boot-format packets without sending SET_PROTOCOL still
+receives the 22-byte form. Changing that, or the six-key choice above, requires
+BIOS/UEFI and supported-host acceptance.
 
 ### Suspend, Remote Wake, and Resume ownership
 

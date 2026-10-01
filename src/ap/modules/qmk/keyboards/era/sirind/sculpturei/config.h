@@ -4,8 +4,9 @@
 // 보드/USB 식별
 // ---------------------------------------------------------------------------
 #define KBD_NAME                    "SCULPTUREI"  // V260701R1: SCULPTUREI 보드명 추가
-#define USB_VID                     0x4552
-#define USB_PID                     0x0034        // V260701R1: SCULPTUREI VIA JSON의 productId와 일치
+#define KBD_MANUFACTURER            "SR Industry"
+#define USB_VID                     0x4501
+#define USB_PID                     0x000E
 
 
 // ---------------------------------------------------------------------------

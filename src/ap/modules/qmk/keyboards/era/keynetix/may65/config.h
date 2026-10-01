@@ -4,8 +4,9 @@
 // 보드/USB 식별
 // ---------------------------------------------------------------------------
 #define KBD_NAME                    "MAY65"  // V260428R1: MAY65 보드명으로 변경
-#define USB_VID                     0x4552
-#define USB_PID                     0x0030   // V260428R1: MAY65 VIA JSON의 productId와 일치
+#define KBD_MANUFACTURER            "KEYNETIX"
+#define USB_VID                     0x4504
+#define USB_PID                     0x0004
 
 
 // ---------------------------------------------------------------------------

@@ -23,13 +23,19 @@
 
 #include QMK_KEYMAP_CONFIG_H
 
+// 제조사 문자열은 메이커마다 다르다. 기본값을 두면 빠뜨린 보드가 다른 메이커 이름으로
+// 열거되므로 빌드를 멈춘다.
+#ifndef KBD_MANUFACTURER
+#error "보드 config.h에 KBD_MANUFACTURER(USB 제조사 문자열)가 없다"
+#endif
+
 
 #define USBD_VID                      USB_VID
 #define USBD_PID_HS                   USB_PID
 
 
 #define USBD_LANGID_STRING            1033
-#define USBD_MANUFACTURER_STRING      "ERA"  // V251125R3: 사용자 표시용 제조사 문자열 교체
+#define USBD_MANUFACTURER_STRING      KBD_MANUFACTURER
 #define USBD_PRODUCT_STRING_HS        KBD_NAME
 #define USBD_PRODUCT_STRING_FS        KBD_NAME
 #define USBD_CONFIGURATION_STRING_HS  "HID-K Config"

@@ -5,8 +5,9 @@
 // 보드/USB 식별
 // ---------------------------------------------------------------------------
 #define KBD_NAME                    "INTIGRITY80"
-#define USB_VID                     0x4552
-#define USB_PID                     0x0028
+#define KBD_MANUFACTURER            "ERA"
+#define USB_VID                     0x4500
+#define USB_PID                     0x0005
 
 
 // ---------------------------------------------------------------------------

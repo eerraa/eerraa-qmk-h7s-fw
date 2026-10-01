@@ -4,8 +4,9 @@
 // 보드/USB 식별
 // ---------------------------------------------------------------------------
 #define KBD_NAME                    "BRICK65"
-#define USB_VID                     0x4552
-#define USB_PID                     0x0023
+#define KBD_MANUFACTURER            "SR Industry"
+#define USB_VID                     0x4501
+#define USB_PID                     0x000D
 
 
 // ---------------------------------------------------------------------------

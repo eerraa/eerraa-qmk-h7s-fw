@@ -22,21 +22,6 @@ active, queued and coalesced event semantics and adds cross-repository wire
 fixtures. Until then, do not reinterpret the existing aggregate fields or
 consume reserved bytes on only one side.
 
-### D-7. Boot protocol report
-
-Boot Protocol still sends the 22-byte, 20-slot report (`docs/contract_usb.md`
-§3): a host that reads the boot layout sees the first six slots only if it
-accepts the longer packet, and `docs/usevia.txt` calls this a six-key report.
-The owner chose an automatic model with no toggle: 20 keys in Report protocol
-and a conformant 8-byte report carrying the first six held keys in Boot
-protocol. EERRAA keeps QMK's 6KRO default and NKRO toggle.
-
-**Start condition**: a USB capture of the target BIOS/KVM (whether it sends
-SET_PROTOCOL and accepts 22-byte packets), then the Boot formatter in
-`src/hw/driver/usb/usb_hid/usbd_hid.c` with a resync on protocol change, the §3
-amendment, and cases in `tools/firmware_regression_tests/test_usb_transport.c`.
-The report descriptor stays as it is.
-
 ### D-9. Smaller cross-product differences
 
 - Default indicator colour: H7S green on overlay boards and red on dedicated-LED
@@ -70,7 +55,9 @@ app repository.
 | Mode↔negotiated-speed mismatch warning | Verify the positive warning path with an FS-only port or hub; the positive path remains unmeasured. |
 | Internal-flash EEPROM emulation | No current board exercises `src/hw/driver/eeprom/emul.c`. Enter when a board/config or dedicated hardware fixture uses that backend; verify write/error cleanup. Any Unlock/Lock minimization must redesign cleanup state and rollback together. |
 | Pulse 5 ms minimum | On each real WS2812B-2020 chain, verify speed 0 preserves at least 5 ms of unoccluded output, OFF/ON frames remain distinct, and fast repeated presses never leave the strip inverted. Capture DIN data/RESET and optical PWM separately; source/receiver-model passes do not close this hardware item. |
+| Boot protocol report | Capture enumeration on the target BIOS/UEFI setup and KVMs: whether SET_PROTOCOL(Boot) arrives before boot-format reads, and that six held keys, a seventh, modifiers and Caps LED output work there. A host that reads boot packets without SET_PROTOCOL still gets 22 bytes (`docs/contract_usb.md` §3). |
 | SOCD modes | With a key tester on each board: every mode while both keys of a pair are held, a Tap Dance hold or tap of one key against the opposing physical key, and a live mode change while held. |
 | Wakeup-key rule | On FS and HS hosts that allow remote wake: a letter or Enter that wakes a sleeping host is not typed and the next press is; a key held at power-on or cable insertion (BIOS key) still reaches the host; a key held into Suspend and released there does not stick. |
 | Mouse buttons 6–8, Magic, Space Cadet | Buttons 6–8 register on Windows and macOS; Magic GUI lock and Space Cadet keys work from the keymap and from TD actions; overlapping mouse-key directions keep their speed. |
 | VIA RGB apply in Pulse effects | On hardware, verify brightness/colour SET is visible without a key press, leaving Pulse for a hue-driven effect does not inherit stale white output, a brightness change during Pulse Off Press (Hold) preserves the hold latch, RGB Sleep entered while a Hold key is down wakes to the base output and the waking key itself does not pulse, and Caps overlay release restores the committed base output. Include first LT/TD Caps activation at speed 0/15/255, near-simultaneous base/host frames, and Sleep of BRICK65/MAY65/SCULPTUREI physical indicators. |
+| Maker USB identity | On each board, flash the current build and confirm the host enumerates the VID/PID and `KBD_MANUFACTURER` from its `<board>/config.h`; load its official JSON through `usevia.app` Design; reconnect the custom app after WebHID re-authorization and compare the identity with the app manifest (peer owner, `docs/MAP.md` §7). |

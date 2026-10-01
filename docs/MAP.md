@@ -29,7 +29,7 @@ conflict to resolve, not permission to weaken the contract.
 | Document | Genre | Owns |
 | --- | --- | --- |
 | [contract_via.md](contract_via.md) | contract | VIA/app wire contract. Channel addresses, exact-ms/exact-sec, `0x06`/`0x07` envelopes, single TX producer, MOUSE unit conversion |
-| [contract_usb.md](contract_usb.md) | contract | USB host contract. Interface/report layout, boot-protocol deviation, polling-mode ownership, retired automatic recovery, report ownership and lifecycle |
+| [contract_usb.md](contract_usb.md) | contract | USB host contract. Interface/report layout, Boot-protocol report, polling-mode ownership, retired automatic recovery, report ownership and lifecycle |
 | [contract_eeprom.md](contract_eeprom.md) | contract | Persistent-state contract. USER slot ownership, EEPROM reset key and factory reset, asynchronous persistence and durability |
 | [manual_verify.md](manual_verify.md) | manual | Change-to-check routing, toolchain premises, and proof limits |
 | [state_open.md](state_open.md) | state | Unresolved decisions, unmeasured external/hardware checks, and next entry conditions |

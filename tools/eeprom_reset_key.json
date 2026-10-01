@@ -1,8 +1,8 @@
 {
   "reset_key": "0x48375301",
-  "reason": "Pulse 43~46 번호를 EERRAA 순서(Off, On, Off Hold, On Hold)로 바꿨다. 키 0x48375301은 아직 출시 전이라 main에서 올라오는 모든 장치가 같은 첫 부팅 전체 초기화를 거친다. 이 키를 이미 기록한 시험 기기만 Pulse 효과를 다시 골라야 한다.",
+  "reason": "INTIGRITY80 폴더를 COMMON 메이커 위치(keyboards/era/comm/intigrity80)로 옮겨 board 묶음 이름과 slots 행의 파일 경로만 바뀌었다. 보드 저장 정의와 슬롯 쓰기 내용은 이동 전과 같으므로 키를 유지한다. 키 0x48375301은 Pulse 43~46 번호를 EERRAA 순서(Off, On, Off Hold, On Hold)로 바꾼 결정 그대로이며, 아직 출시 전이라 main에서 올라오는 모든 장치가 같은 첫 부팅 전체 초기화를 거친다.",
   "groups": {
-    "board src/ap/modules/qmk/keyboards/era/intigrity80/config.h": "0249ead8a27d8278",
+    "board src/ap/modules/qmk/keyboards/era/comm/intigrity80/config.h": "0249ead8a27d8278",
     "board src/ap/modules/qmk/keyboards/era/keynetix/may65/config.h": "aac2456ae6e7b787",
     "board src/ap/modules/qmk/keyboards/era/sirind/brick60/config.h": "aac2456ae6e7b787",
     "board src/ap/modules/qmk/keyboards/era/sirind/brick65/config.h": "aac2456ae6e7b787",
@@ -21,7 +21,7 @@
     "define src/hw/hw_def.h": "3f7372b66a895715",
     "file src/ap/modules/qmk/quantum/keycodes.h": "9da72a9c3ee3e8e4",
     "file src/ap/modules/qmk/quantum/rgblight/rgblight_modes.h": "98e4266d1f662ebb",
-    "slots": "4f785d161df9173e",
+    "slots": "33259ce34dc5ad7d",
     "type UsbBootMode_t": "e688e1777b465d38",
     "type debounce_profile_storage_t": "a74bf04c0cd7078b",
     "type debug_config_t": "6ae5cb6cb6f177d2",

@@ -1,7 +1,7 @@
 {
   "name": "MAY65",
-  "vendorId": "0x4552",
-  "productId": "0x0030",
+  "vendorId": "0x4504",
+  "productId": "0x0004",
   "matrix": { "rows": 5, "cols": 15 },
   "keycodes": ["qmk_lighting"],
   "customKeycodes": [
