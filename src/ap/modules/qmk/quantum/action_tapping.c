@@ -63,8 +63,21 @@ __attribute__((weak)) bool get_hold_on_other_key_press(uint16_t keycode, keyreco
 
 static keyrecord_t tapping_key                         = {};
 static keyrecord_t waiting_buffer[WAITING_BUFFER_SIZE] = {};
-static uint8_t     waiting_buffer_head                 = 0;
-static uint8_t     waiting_buffer_tail                 = 0;
+static uint16_t    waiting_buffer_head                 = 0;
+static uint16_t    waiting_buffer_tail                 = 0;
+static uint32_t    waiting_buffer_overflow_count       = 0;
+static uint16_t    waiting_buffer_high_watermark       = 0;
+
+_Static_assert(WAITING_BUFFER_SIZE > 1 && WAITING_BUFFER_SIZE <= UINT16_MAX, "Tapping ring indices must represent every slot");
+
+action_tapping_stats_t action_tapping_get_stats(void) {
+    return (action_tapping_stats_t){
+        .overflow_count = waiting_buffer_overflow_count,
+        .waiting_count = (waiting_buffer_head + WAITING_BUFFER_SIZE - waiting_buffer_tail) % WAITING_BUFFER_SIZE,
+        .high_watermark = waiting_buffer_high_watermark,
+        .capacity = WAITING_BUFFER_SIZE - 1,
+    };
+}
 
 static bool process_tapping(keyrecord_t *record);
 static bool waiting_buffer_enq(keyrecord_t record);
@@ -101,6 +114,7 @@ void action_tapping_process(keyrecord_t record) {
         ac_dprintf("---- action_exec: process waiting_buffer -----\n");
     }
     for (; waiting_buffer_tail != waiting_buffer_head; waiting_buffer_tail = (waiting_buffer_tail + 1) % WAITING_BUFFER_SIZE) {
+        waiting_buffer[waiting_buffer_tail].report_scan_token = 0;
         if (process_tapping(&waiting_buffer[waiting_buffer_tail])) {
             ac_dprintf("processed: waiting_buffer[%u] =", waiting_buffer_tail);
             debug_record(waiting_buffer[waiting_buffer_tail]);
@@ -178,6 +192,7 @@ bool process_tapping(keyrecord_t *keyp) {
             // into the "pressed" tapping key state
             ac_dprintf("Tapping: Start(Press tap key).\n");
             tapping_key = *keyp;
+            tapping_key.report_scan_token = 0;
             process_record_tap_hint(&tapping_key);
             waiting_buffer_scan_tap();
             debug_tapping_key();
@@ -299,6 +314,7 @@ bool process_tapping(keyrecord_t *keyp) {
                     keyp->tap = tapping_key.tap;
                     process_record(keyp);
                     tapping_key = *keyp;
+                    tapping_key.report_scan_token = 0;
                     debug_tapping_key();
                     return true;
                 } else if (is_tap_record(keyp) && event.pressed) {
@@ -319,6 +335,7 @@ bool process_tapping(keyrecord_t *keyp) {
                         ac_dprintf("Tapping: Start while last tap(1).\n");
                     }
                     tapping_key = *keyp;
+                    tapping_key.report_scan_token = 0;
                     waiting_buffer_scan_tap();
                     debug_tapping_key();
                     return true;
@@ -370,6 +387,7 @@ bool process_tapping(keyrecord_t *keyp) {
                         ac_dprintf("Tapping: Start while last timeout tap(1).\n");
                     }
                     tapping_key = *keyp;
+                    tapping_key.report_scan_token = 0;
                     waiting_buffer_scan_tap();
                     debug_tapping_key();
                     return true;
@@ -397,16 +415,19 @@ bool process_tapping(keyrecord_t *keyp) {
                         ac_dprintf("Tapping: Tap press(%u)\n", keyp->tap.count);
                         process_record(keyp);
                         tapping_key = *keyp;
+                        tapping_key.report_scan_token = 0;
                         debug_tapping_key();
                         return true;
                     }
                     // FIX: start new tap again
                     tapping_key = *keyp;
+                    tapping_key.report_scan_token = 0;
                     return true;
                 } else if (is_tap_record(keyp)) {
                     // Sequential tap can be interfered with other tap key.
                     ac_dprintf("Tapping: Start with interfering other tap.\n");
                     tapping_key = *keyp;
+                    tapping_key.report_scan_token = 0;
                     waiting_buffer_scan_tap();
                     debug_tapping_key();
                     return true;
@@ -444,12 +465,16 @@ bool waiting_buffer_enq(keyrecord_t record) {
     }
 
     if ((waiting_buffer_head + 1) % WAITING_BUFFER_SIZE == waiting_buffer_tail) {
+        if (waiting_buffer_overflow_count != UINT32_MAX) waiting_buffer_overflow_count++;
         ac_dprintf("waiting_buffer_enq: Over flow.\n");
         return false;
     }
 
+    record.report_scan_token = 0;
     waiting_buffer[waiting_buffer_head] = record;
     waiting_buffer_head                 = (waiting_buffer_head + 1) % WAITING_BUFFER_SIZE;
+    const uint16_t count = (waiting_buffer_head + WAITING_BUFFER_SIZE - waiting_buffer_tail) % WAITING_BUFFER_SIZE;
+    if (count > waiting_buffer_high_watermark) waiting_buffer_high_watermark = count;
 
     ac_dprintf("waiting_buffer_enq: ");
     debug_waiting_buffer();
@@ -470,7 +495,7 @@ void waiting_buffer_clear(void) {
  * FIXME: Needs docs
  */
 bool waiting_buffer_typed(keyevent_t event) {
-    for (uint8_t i = waiting_buffer_tail; i != waiting_buffer_head; i = (i + 1) % WAITING_BUFFER_SIZE) {
+    for (uint16_t i = waiting_buffer_tail; i != waiting_buffer_head; i = (i + 1) % WAITING_BUFFER_SIZE) {
         if (KEYEQ(event.key, waiting_buffer[i].event.key) && event.pressed != waiting_buffer[i].event.pressed) {
             return true;
         }
@@ -483,7 +508,7 @@ bool waiting_buffer_typed(keyevent_t event) {
  * FIXME: Needs docs
  */
 __attribute__((unused)) bool waiting_buffer_has_anykey_pressed(void) {
-    for (uint8_t i = waiting_buffer_tail; i != waiting_buffer_head; i = (i + 1) % WAITING_BUFFER_SIZE) {
+    for (uint16_t i = waiting_buffer_tail; i != waiting_buffer_head; i = (i + 1) % WAITING_BUFFER_SIZE) {
         if (waiting_buffer[i].event.pressed) return true;
     }
     return false;
@@ -504,7 +529,7 @@ void waiting_buffer_scan_tap(void) {
 #    if (defined(AUTO_SHIFT_ENABLE) && defined(RETRO_SHIFT))
     TAP_DEFINE_KEYCODE;
 #    endif
-    for (uint8_t i = waiting_buffer_tail; i != waiting_buffer_head; i = (i + 1) % WAITING_BUFFER_SIZE) {
+    for (uint16_t i = waiting_buffer_tail; i != waiting_buffer_head; i = (i + 1) % WAITING_BUFFER_SIZE) {
         keyrecord_t *candidate = &waiting_buffer[i];
         // clang-format off
         if (IS_EVENT(candidate->event) && KEYEQ(candidate->event.key, tapping_key.event.key) && !candidate->event.pressed && (
@@ -538,7 +563,7 @@ static void debug_tapping_key(void) {
  */
 static void debug_waiting_buffer(void) {
     ac_dprintf("{ ");
-    for (uint8_t i = waiting_buffer_tail; i != waiting_buffer_head; i = (i + 1) % WAITING_BUFFER_SIZE) {
+    for (uint16_t i = waiting_buffer_tail; i != waiting_buffer_head; i = (i + 1) % WAITING_BUFFER_SIZE) {
         ac_dprintf("[%u]=", i);
         debug_record(waiting_buffer[i]);
         ac_dprintf(" ");

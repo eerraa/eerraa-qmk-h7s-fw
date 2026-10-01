@@ -87,13 +87,15 @@ int main(void) {
     matrix_task=function(keyboard,'matrix_task')
     wake_event=function(suspend,'suspend_wakeup_key_event')
     assert 'suspend_wakeup_key_event(row, col, key_pressed);' in matrix_task
-    assert matrix_task.index('suspend_wakeup_key_event(row, col, key_pressed);') < matrix_task.index('action_exec(event);')
+    assert matrix_task.index('suspend_wakeup_key_event(row, col, key_pressed);') < matrix_task.index('action_exec_physical(event, report_scan_token);')
     assert 'if (pressed)' in wake_event and 'usbHidRequestRemoteWakeFromInput()' in wake_event
 
     hid=(root/'src/hw/driver/usb/usb_hid/usbd_hid.c').read_text(encoding='utf-8')
     wake_entry=function(hid,'usbHidRequestRemoteWakeFromInput')
     wake=function(hid,'usbHidRemoteWakeSuspended')
-    keyboard_send=function(hid,'usbHidSendReport')
+    keyboard_send=function(hid,'usbHidSubmitKeyboard')
+    assert 'usbHidSubmitKeyboard' in function(hid,'usbHidSendReport')
+    assert 'usbHidSubmitKeyboard' in function(hid,'usbHidSubmitKeyUpdate')
     extra_send=function(hid,'usbHidSendReportEXK')
     on_resume=function(hid,'usbHidOnResume')
     accept_sof=function(hid,'usbHidConsumeWakeSof')

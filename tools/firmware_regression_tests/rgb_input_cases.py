@@ -114,6 +114,16 @@ def generate(root: Path, build: Path, source_root: Path | None = None) -> Path:
         rgb[rgb.index('#if defined(RGBLIGHT_EFFECT_PULSE_ON_PRESS)'):rgb.index('static volatile bool    rgblight_host_led_pending')],
         rgb[rgb.index('static volatile bool    rgblight_host_led_pending'):rgb.index('static uint8_t rgblight_mode_transition_sat')],
     ]
+    host_functions = ('host_keyboard_begin_key_update', 'host_keyboard_end_key_update',
+                      'host_keyboard_end_key_scan', 'host_keyboard_key_update_count')
+    if 'static uint32_t key_update_scan_token;' in host:
+        host_state = host[host.index('static uint32_t key_update_scan_token;'):host.index('void host_set_driver(')]
+        host_parts = [host_state, *[function(host, name) for name in host_functions]]
+    else:
+        host_parts = []
+    host_parts.append(function(host, 'host_keyboard_send'))
+    support_index = chunks.index('#include "test_rgb_input_support.h"\n') + 1
+    chunks[support_index:support_index] = host_parts
     chunks += [function(rgb, name) for name in (
         'rgblight_request_render', 'rgblight_indicator_restore_pulse_effect',
         'rgblight_sethsv_eeprom_helper',  # V260913R1: 실제 설정 커밋 경로. 커밋 뒤 RGB task가 그려야 한다.
@@ -139,9 +149,16 @@ def generate(root: Path, build: Path, source_root: Path | None = None) -> Path:
     core = dance[dance.index('static tap_dance_state_t *active_td;'):]
     assert core.count(weak_remap) == 1
     chunks += [core.replace(weak_remap, function(quantum, 'tap_dance_remap_keycode'))]
-    chunks += [function(action, name) for name in (
-        'is_tap_action', 'is_tap_record', 'process_record_tap_hint', 'process_action',
-        'process_record_handler', 'process_record', 'action_exec')]
+    action_functions = ['is_tap_action', 'is_tap_record', 'process_record_tap_hint']
+    if 'static bool report_key_update_allowed(' in action:
+        action_functions.append('report_key_update_allowed')
+    action_functions += ['process_action', 'process_record_handler', 'process_record']
+    if 'static void action_exec_with_scan(' in action:
+        action_functions.append('action_exec_with_scan')
+    action_functions.append('action_exec')
+    if 'void action_exec_physical(' in action:
+        action_functions.append('action_exec_physical')
+    chunks += [function(action, name) for name in action_functions]
     chunks += [function(quantum, name) for name in (
         'pre_process_record_quantum', 'post_process_record_quantum', 'process_record_quantum')]
     chunks += [tapping[tapping.index('#ifndef NO_ACTION_TAPPING'):]]

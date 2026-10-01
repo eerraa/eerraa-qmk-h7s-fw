@@ -64,6 +64,13 @@ def main() -> None:
             execute("test_usb_irq_bridge_cb" + str(callbacks), [irq_source],
                     [f"-I{BUILD}", f"-DUSE_HAL_PCD_REGISTER_CALLBACKS={callbacks}", "-DTEST_USB_IRQ_BRIDGE",
                      "-Wno-pointer-to-int-cast", "-Wno-unused-function"])
+        from usb_fifo_ready_cases import generate as generate_fifo_ready
+        fifo_build = BUILD / "usb-fifo-ready"
+        fifo_source = generate_fifo_ready(ROOT, fifo_build)
+        for callbacks in (0, 1):
+            execute("test_usb_fifo_ready_cb" + str(callbacks), [fifo_source, HID/'hid_tx_queue.c'],
+                    [f"-I{fifo_build}", f"-I{HID}", f"-DUSE_HAL_PCD_REGISTER_CALLBACKS={callbacks}",
+                     "-Wno-pointer-to-int-cast"])
         from usb_flush_cases import generate as generate_flush
         execute("test_usb_flush", [generate_flush(ROOT, BUILD)], [f"-I{BUILD}"])
         from teardown_cases import generate as generate_teardown
@@ -110,6 +117,16 @@ def main() -> None:
     if args.only in (None, "input"):
         execute("test_input_features", [HERE/'test_input_features.c', QMK/'port/kkuk.c', QMK/'port/kill_switch.c'],
                 [f"-I{HERE/'input_include'}", f"-I{QMK/'port'}", "-DKKUK_ENABLE", "-DKILL_SWITCH_ENABLE", "-Wno-unused-parameter"])
+        from tapping_admission_cases import generate as generate_tapping
+        layout = ["-mno-ms-bitfields"] if os.name == "nt" else []
+        execute("test_tapping_admission", generate_tapping(ROOT, BUILD),
+                [f"-I{BUILD/'tapping_admission'}", f"-I{QMK/'quantum'}", *layout,
+                 "-DTAPPING_TERM_PER_KEY", "-DPERMISSIVE_HOLD_PER_KEY", "-DHOLD_ON_OTHER_KEY_PRESS_PER_KEY",
+                 "-DTAPDANCE_ENABLE", "-Wno-unused-parameter", "-Wno-unused-function"])
+        from merge_frontend_cases import generate as generate_frontend
+        execute("test_merge_frontend", [generate_frontend(ROOT, BUILD)],
+                [f"-I{HERE}", f"-I{QMK/'quantum'}", f"-I{QMK/'port'}", *layout,
+                 "-Wno-unused-parameter", "-Wno-unused-function", "-Wno-unused-variable"])
         from macro_cases import generate as generate_macro
         execute("test_dynamic_macro", [generate_macro(ROOT, BUILD)], [f"-I{BUILD}"])
     if args.only in (None, "rgb"):

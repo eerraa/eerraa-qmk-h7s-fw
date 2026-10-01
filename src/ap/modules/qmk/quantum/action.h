@@ -48,6 +48,8 @@ typedef struct {
 /* Key event container for recording */
 typedef struct {
     keyevent_t event;
+    /* Only direct matrix ingress may opt in to same-scan report construction. */
+    uint32_t report_scan_token;
 #ifdef TAPDANCE_ENABLE
     /* The event already owns its native 32-bit time; only cancellation and
      * ingress identity need extra metadata while LT/MT holds the record. */
@@ -68,6 +70,7 @@ typedef struct {
 
 /* Execute action per keyevent */
 void action_exec(keyevent_t event);
+void action_exec_physical(keyevent_t event, uint32_t scan_token);
 
 /* action for key */
 action_t action_for_key(uint8_t layer, keypos_t key);

@@ -47,6 +47,11 @@ static uint16_t       last_system_usage   = 0;
 static uint16_t       last_consumer_usage = 0;
 static volatile uint8_t host_led_state    = 0;  // V251124R7: USB HID SET_REPORT로 수신한 LED 상태 캐시
 
+static uint32_t key_update_scan_token;
+static uint8_t  key_update_usage;
+static bool     key_update_pressed;
+static uint32_t key_update_count;
+
 void host_set_driver(host_driver_t *d) {
     driver = d;
 }
@@ -97,6 +102,29 @@ void host_keyboard_delay(uint16_t delay_ms)
 }
 
 /* send report */
+void host_keyboard_begin_key_update(uint32_t scan_token, uint8_t usage, bool pressed)
+{
+  key_update_scan_token = scan_token;
+  key_update_usage = usage;
+  key_update_pressed = pressed;
+}
+
+void host_keyboard_end_key_update(void)
+{
+  key_update_scan_token = 0U;
+}
+
+void host_keyboard_end_key_scan(uint32_t scan_token)
+{
+  host_keyboard_end_key_update();
+  usbHidEndKeyScan(scan_token);
+}
+
+uint32_t host_keyboard_key_update_count(void)
+{
+  return key_update_count;
+}
+
 void host_keyboard_send(report_keyboard_t *report)
 {
 #ifdef BLUETOOTH_ENABLE
@@ -107,7 +135,13 @@ void host_keyboard_send(report_keyboard_t *report)
   }
 #endif
 
-  usbHidSendReport((uint8_t *)report, sizeof(report_keyboard_t));
+  uint32_t scan_token = key_update_scan_token;
+  key_update_scan_token = 0U;  // A native key action may opt in only its first report.
+  if (scan_token != 0U) {
+    key_update_count++;
+    usbHidSubmitKeyUpdate((uint8_t *)report, sizeof(report_keyboard_t), scan_token, key_update_usage, key_update_pressed);
+  } else
+    usbHidSendReport((uint8_t *)report, sizeof(report_keyboard_t));
 
   #ifdef DEBUG_KEY_SEND
   static uint32_t pre_time = 0;

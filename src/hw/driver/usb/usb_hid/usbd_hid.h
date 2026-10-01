@@ -177,6 +177,10 @@ void usbHidOnResume(void);
 bool usbHidConsumeWakeSof(void);
 void usbHidGetTransportStats(usb_hid_transport_stats_t *stats);
 bool usbHidSendReport(uint8_t *p_data, uint16_t length);
+// Opt-in logical updates from a single physical scan; ordinary reports stay immutable.
+bool usbHidSubmitKeyUpdate(uint8_t *data, uint16_t length, uint32_t scan_token, uint8_t usage, bool pressed);
+// token 0 is a barrier for any unfinished physical scan.
+void usbHidEndKeyScan(uint32_t scan_token);
 // V260911R3: 마지막 keyboard 스냅샷 뒤에 최소 간격을 설정한다. 호출자는 기다리지 않는다.
 void usbHidDelayKeyboardReport(uint16_t delay_ms);
 bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length);

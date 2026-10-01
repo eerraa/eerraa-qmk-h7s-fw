@@ -98,6 +98,16 @@ static hid_tx_packet_t extra_latest[3] = {
   { .length = 3U, .data = {4U} },
 };
 static bool keyboard_reconcile;
+/* Logical physical-key updates may share this candidate while the endpoint is
+ * busy. It is separate from the immutable transport queue; an idle endpoint
+ * freezes it immediately, even halfway through the producing matrix scan. */
+static struct {
+  hid_tx_packet_t packet;
+  uint32_t scan_token;
+  uint8_t touched[32];
+  bool pressed;
+  bool valid;
+} keyboard_candidate;
 // V260911R3: FIFO 스냅샷의 완료 시점과 유지 시간만 소유한다. QMK 키 상태는 만지지 않는다.
 static uint32_t keyboard_completed_us;
 static uint16_t keyboard_delay_ms;
@@ -127,6 +137,7 @@ static volatile bool wake_skip_stale_sof;
 static volatile uint32_t wake_suspend_epoch;
 static volatile uint32_t suspend_ms;
 
+static bool usbHidFreezeKeyCandidateLocked(void);
 static void usbHidPumpLocked(USBD_HandleTypeDef *pdev);
 static void usbHidRearmViaLocked(USBD_HandleTypeDef *pdev);
 static void usbHidResetTransport(void);
@@ -1040,9 +1051,19 @@ static bool usbHidSessionValid(USBD_HandleTypeDef *pdev)
       (pdev->dev_state == USBD_STATE_SUSPENDED && pdev->dev_old_state == USBD_STATE_CONFIGURED));
 }
 
+static bool usbHidFreezeKeyCandidateLocked(void)
+{
+  if (!keyboard_candidate.valid) return true;
+  if (!hidTxPush(&keyboard_tx, &keyboard_candidate.packet)) return false;
+  keyboard_candidate.valid = false;
+  return true;
+}
+
 static void usbHidPumpLocked(USBD_HandleTypeDef *pdev)
 {
   if (!usbHidSessionValid(pdev)) return;
+  // No end-of-scan, key-count or SOF gate: completion can consume even one update.
+  if (!keyboard_tx.busy && !usbHidFreezeKeyCandidateLocked()) return;
   // 정상 경로는 모든 전이를 FIFO에 유지한다. 유한 큐 overflow 뒤에만 최종 상태를 복구한다.
   if (keyboard_reconcile && keyboard_tx.count == 0U) {
     hidTxPush(&keyboard_tx, &keyboard_latest);
@@ -1070,6 +1091,7 @@ static void usbHidPumpLocked(USBD_HandleTypeDef *pdev)
 static void usbHidSetKeyboardProtocolLocked(USBD_HandleTypeDef *pdev, USBD_HID_HandleTypeDef *hhid, uint8_t protocol)
 {
   if (hhid->Protocol == protocol) return;
+  usbHidFreezeKeyCandidateLocked();
   hhid->Protocol = protocol;
   hid_tx_packet_t resync = keyboard_latest;
   resync.request_us = 0U;
@@ -1090,7 +1112,9 @@ static void usbHidRearmViaLocked(USBD_HandleTypeDef *pdev)
 
 static void usbHidResetTransport(void)
 {
-  transport_stats.session_discards += keyboard_tx.count + extra_tx.count + via_tx.count + via_rx_count;
+  transport_stats.session_discards += keyboard_tx.count + extra_tx.count + via_tx.count + via_rx_count +
+                                     (keyboard_candidate.valid ? 1U : 0U);
+  memset(&keyboard_candidate, 0, sizeof(keyboard_candidate));
   transport_generation++;
   hidTxInit(&keyboard_tx, keyboard_slots, HID_TX_DEPTH);
   hidTxInit(&extra_tx, extra_slots, HID_TX_DEPTH);
@@ -1255,7 +1279,12 @@ void usbHidDelayKeyboardReport(uint16_t delay_ms)
   if (usbHidSessionValid(&USBD_Device))
   {
     uint16_t *interval = NULL;
-    if (keyboard_tx.count != 0U)
+    usbHidFreezeKeyCandidateLocked();
+    if (keyboard_candidate.valid)
+    {
+      interval = &keyboard_candidate.packet.delay_after_ms;
+    }
+    else if (keyboard_tx.count != 0U)
     {
       uint16_t tail = (keyboard_tx.head + keyboard_tx.count - 1U) % keyboard_tx.capacity;
       interval = &keyboard_tx.slots[tail].delay_after_ms;
@@ -1276,7 +1305,28 @@ void usbHidDelayKeyboardReport(uint16_t delay_ms)
   usbHidUnlock(irq);
 }
 
-bool usbHidSendReport(uint8_t *data, uint16_t length)
+/* Validate the producer's declared single-key update against the preceding
+ * snapshot. Slot reordering, a filter changing other usages, duplicates, and
+ * modifiers all fall back to ordinary immutable reports. */
+static bool usbHidIsSingleKeyUpdate(const hid_tx_packet_t *packet, uint8_t usage, bool pressed)
+{
+  if (usage < 4U || usage >= 0xE0U || packet->data[0] != 0U || packet->data[1] != 0U ||
+      keyboard_latest.data[0] != 0U || keyboard_latest.data[1] != 0U) return false;
+  bool changed = false;
+  for (uint32_t i = 2U; i < HID_KEYBOARD_REPORT_SIZE; i++) {
+    uint8_t before = keyboard_latest.data[i], after = packet->data[i];
+    if (before == after) {
+      if (before == usage) return false;
+      continue;
+    }
+    if (changed || (pressed ? (before != 0U || after != usage) : (before != usage || after != 0U)))
+      return false;
+    changed = true;
+  }
+  return changed;
+}
+
+static bool usbHidSubmitKeyboard(uint8_t *data, uint16_t length, uint32_t scan_token, uint8_t usage, bool pressed)
 {
   if (data == NULL || length != HID_KEYBOARD_REPORT_SIZE) return false;
   hid_tx_packet_t packet = { .length = HID_KEYBOARD_REPORT_SIZE };
@@ -1286,10 +1336,36 @@ bool usbHidSendReport(uint8_t *data, uint16_t length)
     packet.diagnostic_session = usbDiagnosticsGetSessionId();
   }
   uint32_t irq = usbHidLock();
-  usbHidPumpLocked(&USBD_Device);  // V260909R1: 이전 세대의 재동기화를 새 전이보다 먼저 확정
-  keyboard_latest = packet;
+  usbHidPumpLocked(&USBD_Device);
   bool configured = usbHidSessionValid(&USBD_Device);
-  bool ok = configured && !keyboard_reconcile && hidTxPush(&keyboard_tx, &packet);
+  bool eligible = scan_token != 0U && configured && USBD_Device.dev_state == USBD_STATE_CONFIGURED &&
+                  p_hhid->Protocol == 1U && !keyboard_reconcile && keyboard_tx.busy &&
+                  keyboard_tx.count == 0U && keyboard_active_delay_ms == 0U && keyboard_delay_ms == 0U &&
+                  usbHidIsSingleKeyUpdate(&packet, usage, pressed);
+  bool merge = eligible && keyboard_candidate.valid && keyboard_candidate.scan_token == scan_token &&
+               keyboard_candidate.pressed == pressed &&
+               keyboard_candidate.packet.diagnostic_session == packet.diagnostic_session &&
+               (keyboard_candidate.touched[usage / 8U] & (1U << (usage % 8U))) == 0U;
+  bool ok = false;
+  if (merge) {
+    // Keep the first update's request time so merged latency is not understated.
+    memcpy(keyboard_candidate.packet.data, packet.data, packet.length);
+    keyboard_candidate.touched[usage / 8U] |= 1U << (usage % 8U);
+    ok = true;
+  } else if (usbHidFreezeKeyCandidateLocked()) {
+    if (eligible && keyboard_tx.count == 0U) {
+      keyboard_candidate.packet = packet;
+      keyboard_candidate.scan_token = scan_token;
+      memset(keyboard_candidate.touched, 0, sizeof(keyboard_candidate.touched));
+      keyboard_candidate.touched[usage / 8U] = 1U << (usage % 8U);
+      keyboard_candidate.pressed = pressed;
+      keyboard_candidate.valid = true;
+      ok = true;
+    } else {
+      ok = configured && !keyboard_reconcile && hidTxPush(&keyboard_tx, &packet);
+    }
+  }
+  keyboard_latest = packet;
   if (!ok) {
     if (configured) {
       transport_stats.keyboard_coalesced++;
@@ -1297,10 +1373,31 @@ bool usbHidSendReport(uint8_t *data, uint16_t length)
     }
     keyboard_reconcile = true;
   }
-  if (usbDiagnosticsIsActive()) usbDiagnosticsOnReportQueueDepth(keyboard_tx.count);
+  if (usbDiagnosticsIsActive())
+    usbDiagnosticsOnReportQueueDepth(keyboard_tx.count + (keyboard_candidate.valid ? 1U : 0U));
   usbHidPumpLocked(&USBD_Device);
   usbHidUnlock(irq);
   return ok;
+}
+
+bool usbHidSendReport(uint8_t *data, uint16_t length)
+{
+  return usbHidSubmitKeyboard(data, length, 0U, 0U, false);
+}
+
+bool usbHidSubmitKeyUpdate(uint8_t *data, uint16_t length, uint32_t scan_token, uint8_t usage, bool pressed)
+{
+  return usbHidSubmitKeyboard(data, length, scan_token, usage, pressed);
+}
+
+void usbHidEndKeyScan(uint32_t scan_token)
+{
+  uint32_t irq = usbHidLock();
+  if (keyboard_candidate.valid && (scan_token == 0U || keyboard_candidate.scan_token == scan_token)) {
+    usbHidFreezeKeyCandidateLocked();
+    usbHidPumpLocked(&USBD_Device);
+  }
+  usbHidUnlock(irq);
 }
 
 bool usbHidSendReportEXK(uint8_t *data, uint16_t length)
@@ -1310,6 +1407,7 @@ bool usbHidSendReportEXK(uint8_t *data, uint16_t length)
   hid_tx_packet_t packet = { .length = (uint8_t)length };
   memcpy(packet.data, data, length);
   uint32_t irq = usbHidLock();
+  usbHidFreezeKeyCandidateLocked();
   usbHidPumpLocked(&USBD_Device);
   uint8_t index = data[0] - 2U;
   extra_latest[index] = packet;

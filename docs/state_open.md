@@ -42,24 +42,33 @@ app repository.
 ### D-11. Debounced input loss and earliest-service follow-up
 
 The requested preservation of debounced logical key transitions is not yet
-satisfied at every buffering boundary. QMK tapping-buffer overflow discards
-waiting events before USB admission; the existing finite transport-overflow
-policy can also coalesce a complete tap. These are source/fixture-confirmed
-limits, not evidence that either caused the reported BRICK60 stalls. Normal
-plain-key submission and completion-driven rearming pass isolated tests, but
-same-scan keys still generate successive snapshots, and immediate endpoint
-arming does not establish when the non-DMA TX FIFO becomes ready.
+satisfied at every finite buffering boundary. The tapping ring has been enlarged,
+and the reproduced LT plus eight events / four short taps cases now preserve
+their events and original LT/MT decisions in host tests. Its final overflow
+recovery still clears the waiting prefix and key state: a full ring followed by
+the tap key's release can cross that boundary. This is a bounded mitigation,
+not an end-to-end lossless admission design. The transport's existing finite
+overflow can likewise coalesce a complete tap, and the 20-key/Boot report limits
+remain those of the USB contract. None establishes the cause of the observed
+BRICK60 stalls.
 
-**Next work**: define and implement tapping-overflow handling and bounded USB
-admission that preserve required transitions without silently changing LT/MT,
-Caps timing, wake-key, SOCD or report-format behavior. Compare safe same-scan
-report batching before USB admission; preserve synthetic taps and already
-accepted report order. A larger queue alone does not prove lossless operation
-under unbounded host stalls. Current report-latency diagnostics start at HID
-submission, so they do not cover debounce-to-report action delays or upstream
-drops. Keep wire meanings unchanged; establish the full timing/observation
-boundary before claiming earliest-host-service completion. Hardware timing
-verification remains in section 2 and requires separate authorization.
+Nonwaiting same-scan logical merging and opt-in keyboard first-packet FIFO fill
+are implemented. Isolated production-source tests cover immediate single-key
+arming, completion during a scan, immutable active/pending reports, short taps,
+Boot exclusion, FIFO-space fallback and lifecycle boundaries. They establish
+software behavior, not silicon readiness or actual next-host-IN delivery.
+
+**Next work**: design and implement bounded admission across the original input,
+tapping, action-side effects, report caches and transport together. Retrying a
+partly executed action or rejecting only at one downstream boundary is unsafe.
+Preserve event timestamps/TD ownership, LT/MT decisions, Caps intervals, wake-key
+and SOCD behavior; define the supported input/host-stall envelope and the exact
+overflow policy. A larger queue alone does not prove losslessness under a
+65535 ms tapping term, indefinite retro-tapping or an unbounded host stall.
+Current report-latency diagnostics still start at HID submission, and a merged
+candidate retains its earliest submission time; upstream delays/drops remain
+outside that wire metric. Hardware timing/scan-throughput verification remains
+in section 2 and requires separate authorization.
 
 ## 2. Hardware or external verification still open
 

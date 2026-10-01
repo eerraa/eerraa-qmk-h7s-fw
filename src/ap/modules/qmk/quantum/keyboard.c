@@ -632,6 +632,7 @@ static bool matrix_task(void) {
     }
 
     static matrix_row_t matrix_previous[MATRIX_ROWS];
+    static uint32_t report_scan_token;
     static bool         ghost_pending = false;  // V250924R6: 고스트 감지 시 후속 스캔에서도 행 비교 유지
 
     const bool scan_changed   = matrix_scan();
@@ -644,6 +645,8 @@ static bool matrix_task(void) {
         generate_tick_event();
         return false;
     }
+    /* Millisecond event timestamps cannot distinguish consecutive matrix scans. */
+    if (++report_scan_token == 0U) ++report_scan_token;
 
 #ifdef MATRIX_HAS_GHOST
     real_rowdata_epoch++;  // V251001R4: 스캔마다 캐시 세대를 갱신해 행별 필터링 결과를 분리
@@ -726,7 +729,7 @@ static bool matrix_task(void) {
             if (process_keypress && !keypress_is_wakeup_key(row, col)) {
                 event.key.col = col;
                 event.pressed = key_pressed;
-                action_exec(event);
+                action_exec_physical(event, report_scan_token);
             }
 
             switch_events(row, col, key_pressed);
@@ -741,6 +744,7 @@ static bool matrix_task(void) {
       pending_matrix_activity_time = event_time_32;  // V251001R3: matrix_task와 last_matrix_activity_trigger() 간 타임스탬프 공유
     }
 
+    host_keyboard_end_key_scan(report_scan_token);
     ghost_pending = new_ghost_pending;
 
     return true;

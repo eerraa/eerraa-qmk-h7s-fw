@@ -1932,6 +1932,57 @@ HAL_StatusTypeDef HAL_PCD_EP_Transmit(PCD_HandleTypeDef *hpcd, uint8_t ep_addr, 
 }
 
 /**
+  * @brief  Arm an interrupt IN packet and fill available FIFO space immediately.
+  * @note   Opt-in non-DMA, non-EP0, single-packet path. FIFO writes do not
+  *         release the caller's payload ownership before DataIn completion.
+  * @retval HAL status
+  */
+HAL_StatusTypeDef HAL_PCD_EP_TransmitReady(PCD_HandleTypeDef *hpcd, uint8_t ep_addr,
+                                          uint8_t *pBuf, uint32_t len)
+{
+  uint32_t epnum = (uint32_t)ep_addr & EP_ADDR_MSK;
+  if (hpcd == NULL || hpcd->Instance == NULL || (ep_addr & 0xF0U) != 0x80U ||
+      epnum == 0U || epnum >= hpcd->Init.dev_endpoints || pBuf == NULL || len == 0U)
+  {
+    return HAL_ERROR;
+  }
+
+  uint32_t irq = __get_PRIMASK();
+  __disable_irq();
+  PCD_EPTypeDef *ep = &hpcd->IN_ep[epnum];
+  USB_OTG_GlobalTypeDef *USBx = hpcd->Instance;
+  uint32_t USBx_BASE = (uint32_t)USBx;
+  uint32_t control = USBx_INEP(epnum)->DIEPCTL;
+  HAL_StatusTypeDef status = HAL_ERROR;
+
+  if (hpcd->Init.dma_enable == 0U && ep->is_in == 1U && ep->num == epnum &&
+      ep->type == EP_TYPE_INTR && len <= ep->maxpacket &&
+      (control & USB_OTG_DIEPCTL_USBAEP) != 0U &&
+      (control & USB_OTG_DIEPCTL_EPTYP) == ((uint32_t)EP_TYPE_INTR << 18))
+  {
+    // EPENA or an unconsumed completion/disable still owns the old packet.
+    if (hpcd->Lock == HAL_LOCKED || (control & USB_OTG_DIEPCTL_EPENA) != 0U ||
+        (USBx_INEP(epnum)->DIEPINT & (USB_OTG_DIEPINT_XFRC | USB_OTG_DIEPINT_EPDISD)) != 0U)
+    {
+      status = HAL_BUSY;
+    }
+    else
+    {
+      status = HAL_PCD_EP_Transmit(hpcd, ep_addr, pBuf, len);
+      if (status == HAL_OK)
+      {
+        // With one packet this helper writes at most once. Insufficient space
+        // leaves the normal TXFE owner armed without waiting for FIFO progress.
+        (void)PCD_WriteEmptyTxFifo(hpcd, epnum);
+      }
+    }
+  }
+
+  __set_PRIMASK(irq);
+  return status;
+}
+
+/**
   * @brief  Set a STALL condition over an endpoint
   * @param  hpcd PCD handle
   * @param  ep_addr endpoint address

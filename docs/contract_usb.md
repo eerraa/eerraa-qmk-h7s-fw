@@ -64,6 +64,34 @@ until its matching DataIn completion, and a failed transmit arm does not consume
 the pending head. Queue capacity and data structures are source-owned by
 `src/hw/driver/usb/usb_hid/hid_tx_queue.c`.
 
+Physical plain-key updates have a separate, explicit opt-in admission path.
+Within one matrix scan, compatible distinct presses or compatible distinct
+releases may share a logical candidate only while the keyboard endpoint is
+already busy and no immutable report is queued behind it. A single update on
+an idle endpoint is submitted immediately. Completion may freeze and arm even
+one candidate update in the middle of that scan; scan end, key count and SOF
+must never delay its first eligible service opportunity. A frozen report joins
+the ordinary immutable FIFO and cannot be edited or bypassed.
+
+Provenance and action eligibility belong to the physical/QMK producer. Synthetic
+or deferred tapping events, repeated usages, modifiers, locking keys, SOCD
+pairs, direction changes, a different scan, report intervals and actions that
+produce no report close the candidate. Builds with combo buffering disable this
+opt-in path until deferred combo records have explicit provenance retirement.
+Boot protocol is excluded because its
+six-slot projection can expose an otherwise hidden key between two releases.
+The transport also checks that the supplied snapshot is exactly the declared
+single-slot update before combining it. A protocol change freezes the candidate;
+Suspend keeps it in the same session and reset retires its admission with the
+rest of that session. These logical updates do not count as dropped reports.
+
+Preparing a packet must not wait for the next microframe or additional input.
+The keyboard's non-DMA single-packet path fills available TX FIFO space in the
+arming call; insufficient space keeps the existing TXFE refill path without
+polling. Filling the FIFO does not complete a report or release its payload.
+Host IN/ACK scheduling remains external to firmware; SOF alone is not a
+delivery guarantee.
+
 Finite overflow is explicit. Preserve the already accepted prefix, then converge
 keyboard/button/system/consumer state to the newest state after the prefix
 drains. Intermediate events may be coalesced. Relative mouse motion/wheel deltas
@@ -83,7 +111,9 @@ callbacks. The current Caps/tap timing cases are executable regression behavior
 under `tools/firmware_regression_tests/`. The configured Caps interval remains a
 separate host-compatibility requirement; FIFO ordering does not justify removing
 it. Keep the USB pump free of dynamic allocation and keycode interpretation;
-its only payload work is the fixed Boot-form copy made when a packet is armed.
+its payload work is bounded snapshot copying, including freezing a candidate
+and making the Boot-form copy when a packet is armed. It must not execute QMK
+actions or wait for a scan to finish.
 
 ### Boot protocol report
 

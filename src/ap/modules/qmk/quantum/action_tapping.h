@@ -32,12 +32,23 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #    define TAPPING_TOGGLE 5
 #endif
 
-#define WAITING_BUFFER_SIZE 8
+/* One empty ring slot leaves room for 256 deferred transitions. */
+#define WAITING_BUFFER_SIZE 257
 
 #ifndef NO_ACTION_TAPPING
 uint16_t get_record_keycode(keyrecord_t *record, bool update_layer_cache);
 uint16_t get_event_keycode(keyevent_t event, bool update_layer_cache);
 void     action_tapping_process(keyrecord_t record);
+
+/* Main-loop observations; these are separate from USB wire diagnostics. */
+typedef struct {
+    uint32_t overflow_count;
+    uint16_t waiting_count;
+    uint16_t high_watermark;
+    uint16_t capacity;
+} action_tapping_stats_t;
+
+action_tapping_stats_t action_tapping_get_stats(void);
 #endif
 
 uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record);

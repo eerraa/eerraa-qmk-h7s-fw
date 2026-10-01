@@ -34,6 +34,7 @@
 #define layer_debug(...) ((void)0)
 #define default_layer_debug(...) ((void)0)
 #define dprintln(...) ((void)0)
+#define dprint(...) ((void)0)
 
 _Static_assert(sizeof(action_t) == 2, "QMK action requires GCC packed bitfield layout");
 
@@ -62,6 +63,9 @@ static bool rgblight_indicator_supported = true;
 static bool is_rgblight_initialized = true;
 static bool output_suspended, background_on, physical_dispatch;
 static bool accept_keypress = true, accept_record = true;
+static bool (*fixture_pre_process_record)(uint16_t, keyrecord_t *);
+static bool (*fixture_process_record)(uint16_t, keyrecord_t *);
+static void (*fixture_post_process_record)(uint16_t, keyrecord_t *);
 static struct { uint32_t (*get_generation)(void); bool (*is_complete)(uint32_t); uint32_t (*time_us)(void); } rgblight_driver;
 static bool rgblight_pulse_output_visible(void) { return !output_suspended && !indicator_on && rgblight_config.enable; }
 static uint32_t irq_mask;
@@ -116,7 +120,7 @@ static bool report_has_key(const report_keyboard_t *report, uint8_t code) {
   for (unsigned i = 0; i < KEYBOARD_REPORT_KEYS; ++i) if (report->keys[i] == code) return true;
   return false;
 }
-static void host_keyboard_send(report_keyboard_t *report) {
+static void fixture_record_keyboard_report(report_keyboard_t *report) {
   if (report_has_key(report, KC_A)) { last_a_mods = report->mods; ++a_reports; }
   if (forbid_a && report_has_key(report, KC_A)) ++forbidden_a_reports;
   if (require_shared_a && !report_has_key(report, KC_A)) ++shared_a_gaps;
@@ -128,6 +132,39 @@ static void host_keyboard_send(report_keyboard_t *report) {
   if (!caps && report_had_caps) { caps_release_time = now_ms; ++caps_release_count; }
   report_had_caps = caps;
 }
+
+/* Report construction and host provenance are production code. USB admission
+ * is an always-accepting adapter here; the actual HID fixture owns wire order. */
+typedef struct { void (*send_keyboard)(report_keyboard_t *); } host_driver_t;
+static host_driver_t *driver;
+static bool debug_keyboard;
+static void (*fixture_keyboard_observer)(const report_keyboard_t *, uint32_t, uint8_t, bool);
+static void (*fixture_scan_end_observer)(uint32_t);
+static bool usbHidSendReport(uint8_t *data, uint16_t length)
+{
+  assert(length == sizeof(report_keyboard_t));
+  fixture_record_keyboard_report((report_keyboard_t *)data);
+  if (fixture_keyboard_observer) fixture_keyboard_observer((report_keyboard_t *)data, 0U, 0U, false);
+  return true;
+}
+static bool usbHidSubmitKeyUpdate(uint8_t *data, uint16_t length, uint32_t scan_token, uint8_t usage, bool pressed)
+{
+  assert(length == sizeof(report_keyboard_t) && scan_token != 0U);
+  fixture_record_keyboard_report((report_keyboard_t *)data);
+  if (fixture_keyboard_observer) fixture_keyboard_observer((report_keyboard_t *)data, scan_token, usage, pressed);
+  return true;
+}
+static void usbHidEndKeyScan(uint32_t scan_token)
+{
+  if (fixture_scan_end_observer) fixture_scan_end_observer(scan_token);
+}
+void host_keyboard_send(report_keyboard_t *);
+void host_keyboard_begin_key_update(uint32_t, uint8_t, bool);
+void host_keyboard_end_key_update(void);
+void host_keyboard_end_key_scan(uint32_t);
+uint32_t host_keyboard_key_update_count(void);
+void action_exec(keyevent_t);
+void action_exec_physical(keyevent_t, uint32_t);
 
 void process_record(keyrecord_t *record);
 void process_record_handler(keyrecord_t *record);
@@ -224,18 +261,23 @@ static action_t store_or_get_action(bool pressed, keypos_t key)
   (void)pressed;
   return layer_switch_get_action(key);
 }
-static bool pre_process_record_kb(uint16_t code, keyrecord_t *record) { (void)code; (void)record; return accept_record; }
+static bool pre_process_record_kb(uint16_t code, keyrecord_t *record) {
+  return accept_record && (!fixture_pre_process_record || fixture_pre_process_record(code, record));
+}
 /* Quantum handlers are adapters: the log shows which dance-output edges
  * reach them, and QK_USER_0 stands for a keycode whose handler clears the
  * keyboard (a magic keycode in the product's QMK). */
 static uint16_t quantum_log[8]; static bool quantum_log_down[8]; static unsigned quantum_log_len;
 static bool process_record_kb(uint16_t code, keyrecord_t *record)
 {
+  if (fixture_process_record && !fixture_process_record(code, record)) return false;
   if (record->tap_dance_injected && quantum_log_len < 8) { quantum_log[quantum_log_len] = code; quantum_log_down[quantum_log_len++] = record->event.pressed; }
   if (code == QK_USER_0 && record->event.pressed) clear_keyboard();
   return true;
 }
-static void post_process_record_kb(uint16_t code, keyrecord_t *record) { (void)code; (void)record; }
+static void post_process_record_kb(uint16_t code, keyrecord_t *record) {
+  if (fixture_post_process_record) fixture_post_process_record(code, record);
+}
 // The fixture injects the dynamic term directly; DT_* adjustment keycodes are outside this harness.
 static bool process_dynamic_tapping_term(uint16_t code, keyrecord_t *record) { (void)code; (void)record; return true; }
 static bool process_rgb(uint16_t code, keyrecord_t *record) { (void)code; (void)record; return true; }

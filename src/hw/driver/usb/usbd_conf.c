@@ -49,6 +49,7 @@
 #include "usbd_core.h"
 #include "usbd_cdc.h"
 #include "usbd_hid.h"
+#include "usbd_hid_internal.h"
 #include "micros.h"
 #include "usb_diagnostics.h"  // V260823R2: reset/suspend 하드 이벤트 카운터
 
@@ -803,7 +804,19 @@ USBD_StatusTypeDef USBD_LL_Transmit(USBD_HandleTypeDef *pdev, uint8_t ep_addr, u
   HAL_StatusTypeDef hal_status = HAL_OK;
   USBD_StatusTypeDef usb_status = USBD_OK;
 
-  hal_status = HAL_PCD_EP_Transmit(pdev->pData, ep_addr, pbuf, size);
+  PCD_HandleTypeDef *hpcd = pdev->pData;
+  uint32_t keyboard_ep = HID_EPIN_ADDR & EP_ADDR_MSK;
+  if (ep_addr == HID_EPIN_ADDR &&
+      (size == HID_KEYBOARD_REPORT_SIZE || size == HID_BOOT_KEYBOARD_REPORT_SIZE) &&
+      hpcd != NULL && hpcd->Init.dma_enable == 0U && keyboard_ep < hpcd->Init.dev_endpoints &&
+      hpcd->IN_ep[keyboard_ep].type == EP_TYPE_INTR && size <= hpcd->IN_ep[keyboard_ep].maxpacket)
+  {
+    hal_status = HAL_PCD_EP_TransmitReady(hpcd, ep_addr, pbuf, size);
+  }
+  else
+  {
+    hal_status = HAL_PCD_EP_Transmit(pdev->pData, ep_addr, pbuf, size);
+  }
 
   usb_status =  USBD_Get_USB_Status(hal_status);
 

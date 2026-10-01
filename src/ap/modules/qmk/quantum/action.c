@@ -75,7 +75,13 @@ __attribute__((weak)) bool get_retro_tapping(uint16_t keycode, keyrecord_t *reco
  *
  * FIXME: Needs documentation.
  */
-void action_exec(keyevent_t event) {
+static void action_exec_with_scan(keyevent_t event, uint32_t scan_token) {
+    const uint32_t updates_before = host_keyboard_key_update_count();
+    if (scan_token == 0U) host_keyboard_end_key_scan(0U);
+#ifndef NO_ACTION_LAYER
+    const layer_state_t layers_before = layer_state;
+#endif
+    const layer_state_t default_layers_before = default_layer_state;
     if (IS_EVENT(event)) {
         ac_dprintf("\n---- action_exec: start -----\n");
         ac_dprintf("EVENT: ");
@@ -104,7 +110,7 @@ void action_exec(keyevent_t event) {
     }
 #endif
 
-    keyrecord_t record = {.event = event};
+    keyrecord_t record = {.event = event, .report_scan_token = scan_token};
 #ifdef TAPDANCE_ENABLE
     if (IS_EVENT(event)) {
         record.tap_dance_epoch = tap_dance_input_epoch();
@@ -149,6 +155,19 @@ void action_exec(keyevent_t event) {
         dprintln();
     }
 #endif
+    bool barrier = host_keyboard_key_update_count() == updates_before || default_layer_state != default_layers_before;
+#ifndef NO_ACTION_LAYER
+    barrier = barrier || layer_state != layers_before;
+#endif
+    if (scan_token != 0U && barrier) host_keyboard_end_key_scan(scan_token);
+}
+
+void action_exec(keyevent_t event) {
+    action_exec_with_scan(event, 0U);
+}
+
+void action_exec_physical(keyevent_t event, uint32_t scan_token) {
+    action_exec_with_scan(event, IS_KEYEVENT(event) ? scan_token : 0U);
 }
 
 #ifdef SWAP_HANDS_ENABLE
@@ -413,6 +432,38 @@ static void send_consumer_usage(uint16_t usage, bool pressed) {
  *
  * FIXME: Needs documentation.
  */
+static bool report_key_update_allowed(const keyrecord_t *record, action_t action) {
+#ifdef COMBO_ENABLE
+    // Failed combo candidates can replay a saved KEY_EVENT with its old scan token.
+    return false;
+#endif
+    const uint8_t code = action.key.code;
+    if (record->report_scan_token == 0U || !IS_KEYEVENT(record->event) ||
+        record->event.key.row >= MATRIX_ROWS || record->event.key.col >= MATRIX_COLS ||
+        (action.kind.id != ACT_LMODS && action.kind.id != ACT_RMODS) || action.key.mods != 0U ||
+        !IS_BASIC_KEYCODE(code) || code == KC_CAPS_LOCK || code == KC_NUM_LOCK || code == KC_SCROLL_LOCK ||
+        code == KC_LOCKING_CAPS_LOCK || code == KC_LOCKING_NUM_LOCK || code == KC_LOCKING_SCROLL_LOCK)
+        return false;
+#ifndef NO_ACTION_TAPPING
+    if (record->tap.count != 0U) return false;
+#endif
+#ifdef TAPDANCE_ENABLE
+    if (record->tap_dance_injected || tap_dance_owned_keycode(record) != KC_NO) return false;
+#endif
+#ifdef TAP_DANCE_OWNED_ACTIONS
+    if (tap_dance_action_get_owner() != UINT8_MAX) return false;
+#endif
+    if (get_mods() != 0U || get_weak_mods() != 0U) return false;
+#ifndef NO_ACTION_ONESHOT
+    if (get_oneshot_mods() != 0U || get_oneshot_locked_mods() != 0U || is_oneshot_layer_active()) return false;
+#endif
+#ifdef KILL_SWITCH_ENABLE
+    if (kill_switch_is_use(code)) return false;
+#endif
+    /* register_code emits a separate up/down pair for an already held usage. */
+    return !record->event.pressed || !is_key_pressed(code);
+}
+
 void process_action(keyrecord_t *record, action_t action) {
 #ifdef TAP_DANCE_OWNED_ACTIONS
     uint8_t td_previous_owner = tap_dance_action_get_owner();
@@ -428,6 +479,8 @@ void process_action(keyrecord_t *record, action_t action) {
 #ifndef NO_ACTION_TAPPING
     uint8_t tap_count = record->tap.count;
 #endif
+    const bool key_update = report_key_update_allowed(record, action);
+    if (!key_update) host_keyboard_end_key_scan(0U);
 
 #ifndef NO_ACTION_ONESHOT
     bool do_release_oneshot = false;
@@ -464,9 +517,13 @@ void process_action(keyrecord_t *record, action_t action) {
                     }
                     send_keyboard_report();
                 }
+                if (key_update) host_keyboard_begin_key_update(record->report_scan_token, action.key.code, true);
                 register_code(action.key.code);
+                if (key_update) host_keyboard_end_key_update();
             } else {
+                if (key_update) host_keyboard_begin_key_update(record->report_scan_token, action.key.code, false);
                 unregister_code(action.key.code);
+                if (key_update) host_keyboard_end_key_update();
                 if (mods) {
                     if (IS_MODIFIER_KEYCODE(action.key.code) || action.key.code == KC_NO) {
                         del_mods(mods);

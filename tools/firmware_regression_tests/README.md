@@ -33,6 +33,22 @@ not included in firmware builds.
   Remote-Wake cases inject the H7RS early-WKUINT behavior, enforce the 10 ms RWUSIG
   window, reject stale/SUSPSTS SOF, de-duplicate late WKUINT and consume VIA after
   fresh-SOF logical Resume.
+- `test_keyboard_merge.h`, included in the actual HID transport fixture, covers
+  immediate single-key submission, completion before scan end, twenty same-scan
+  plain presses with an immutable first packet and one merged suffix, direction
+  and scan/action barriers, malformed/filtered deltas, Boot's seven-key release
+  projection, protocol/diagnostic-session changes, earliest merged request time,
+  arm failures, Caps intervals, Suspend and raw-reset retirement. A deterministic
+  3200-transition run compares externally delivered per-usage edges with input
+  edges while completions and ordinary reports interleave with scans.
+  These are logical/LL-admission tests; they do not measure host polling times.
+- `usb_fifo_ready_cases.py` joins the actual opt-in HAL helper, bridge selection,
+  LL start/write bodies, FIFO refill helper, IRQ handler and immutable TX queue.
+  Both callback configurations cover FS/HS and nested PRIMASK, 8/22-byte first
+  fill, insufficient-space TXFE fallback, completion chains, stale TXFE,
+  pending ownership and excluded EP0/ZLP/DMA/CDC/EXK/VIA paths. Host adapters
+  model register reads/W1C and FIFO stores; USB tokens, PHY, real bus reset
+  quiescence, interrupt-masked duration and target latency are unmeasured.
 - `usb_pcd_cases.py` compiles unmodified production PCD callbacks and USBD
   lifecycle/completion functions together with the real HID transport, standard
   request dispatcher and EP0 IO code. Cases check host Resume undoing STOPCLK,
@@ -222,6 +238,26 @@ at a fractional-ms boundary; EXK/VIA continue during the interval. It covers fas
 Caps/letter sequences, later same-usage snapshots, failed arms, overflow, Suspend,
 reset, and clock wrap under FS/HS and boot/report protocol. Existing zero-interval
 FIFO tests cover ordinary input. No host Caps-activation filter is emulated.
+
+### Physical input admission and report provenance
+
+The input group executes `tapping_admission_cases.py` against the actual tapping
+state machine and native event/record definitions. It reproduces the former
+small-ring loss with LT plus eight events and four taps in 48 ms, checks tap
+rather than forced-hold resolution, MT/term/wrap and selected per-key policies,
+and verifies that stored/replayed events cannot opt into physical-scan merging.
+The same group uses `merge_frontend_cases.py` to run actual matrix dispatch,
+action/report production, host scope and SOCD filtering. It covers same-scan
+provenance, different scans sharing a millisecond timestamp, duplicate-usage
+up/down, consumed/no-report and layer barriers, modifiers/locking/SOCD/TD
+exclusions, LT replay, and one-shot consumption of a scope before driver
+reentry. Its USB calls record admission intent; the actual HID/FIFO behavior is
+tested separately in the USB group.
+
+Ring saturation, index wrap, counters and the retained clear-on-overflow recovery
+are explicit tests. In particular a release arriving after a full waiting ring
+still clears queued events. Increased capacity does not establish losslessness
+for all input rates or host stalls, nor prevent downstream transport overflow.
 
 ### Dynamic macro bounds
 

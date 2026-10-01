@@ -703,6 +703,7 @@ static void test_descriptor_intervals(void)
   }
 }
 #include "test_keyboard_intervals.h"
+#include "test_keyboard_merge.h"
 
 int main(void)
 {
@@ -711,6 +712,7 @@ int main(void)
   test_first_mouse_and_order();
   test_zero_delay_caps();
   test_keyboard_intervals();
+  test_keyboard_merge();
   test_overflow();
   test_via_and_epoch();
   test_control();
