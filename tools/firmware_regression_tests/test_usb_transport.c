@@ -12,6 +12,7 @@ USBD_HandleTypeDef USBD_Device;
 test_otg_t test_otg;
 uint32_t test_pcgcctl;
 static PCD_HandleTypeDef pcd;
+static bool test_usb_reset_pending;
 static bool opened_in[16], opened_out[16];
 static const uint8_t *active[16];
 static uint8_t active_image[16][32];
@@ -22,6 +23,9 @@ static uint32_t sent_length;
 static uint32_t control_length, control_arms, control_errors, led_updates;
 static uint8_t led_value, open_fail, hs_interval = 1U;
 static uint16_t clock_us_fraction;
+static USBD_StatusTypeDef close_status[256];
+static bool close_stops_on_failure[256], receive_fail;
+static uint32_t close_calls[256], open_calls[256], receive_arms;
 static uint32_t arm_fail[16], clock_ms, wake_start_count, wake_end_count;
 static uint32_t wake_irq_services, logical_resume_count, ungate_count;
 static bool wake_asserted;
@@ -33,6 +37,7 @@ static unsigned delivered_count;
 uint32_t millis(void) { return clock_ms; }
 uint32_t micros(void) { return clock_ms * 1000U + clock_us_fraction; }
 uint8_t usbBootModeGetHsInterval(void) { return hs_interval; }
+bool usbIsResetPending(void) { return test_usb_reset_pending; }
 static void complete_logical_resume(void)
 {
   assert(USBD_Device.dev_state == USBD_STATE_SUSPENDED);
@@ -108,6 +113,7 @@ void usbHidSetStatusLed(uint8_t value) { led_value = value; led_updates++; }
 USBD_StatusTypeDef USBD_LL_OpenEP(USBD_HandleTypeDef *d, uint8_t ep, uint8_t type, uint16_t size)
 {
   assert(d == &USBD_Device && type == USBD_EP_TYPE_INTR && size <= 64U);
+  open_calls[ep]++;
   if (ep == open_fail) return USBD_FAIL;
   if (ep & 0x80U) { assert(!opened_in[ep & 15U]); opened_in[ep & 15U] = true; }
   else { assert(!opened_out[ep]); opened_out[ep] = true; }
@@ -116,9 +122,12 @@ USBD_StatusTypeDef USBD_LL_OpenEP(USBD_HandleTypeDef *d, uint8_t ep, uint8_t typ
 USBD_StatusTypeDef USBD_LL_CloseEP(USBD_HandleTypeDef *d, uint8_t ep)
 {
   assert(d == &USBD_Device);
-  if (ep & 0x80U) { assert(opened_in[ep & 15U]); opened_in[ep & 15U] = false; active[ep & 15U] = NULL; }
-  else { assert(opened_out[ep]); opened_out[ep] = false; rx_buffer = NULL; }
-  return USBD_OK;
+  close_calls[ep]++;
+  // A failed abort/close may leave the controller owning its payload and receive buffer.
+  if (close_status[ep] != USBD_OK && !close_stops_on_failure[ep]) return close_status[ep];
+  if (ep & 0x80U) { assert(opened_in[ep & 15U] || d->ep_in[ep & 15U].is_used); opened_in[ep & 15U] = false; active[ep & 15U] = NULL; }
+  else { assert(opened_out[ep] || d->ep_out[ep].is_used); opened_out[ep] = false; rx_buffer = NULL; }
+  return close_status[ep];
 }
 USBD_StatusTypeDef USBD_LL_Transmit(USBD_HandleTypeDef *d, uint8_t ep, uint8_t *data, uint32_t length)
 {
@@ -133,6 +142,8 @@ USBD_StatusTypeDef USBD_LL_Transmit(USBD_HandleTypeDef *d, uint8_t ep, uint8_t *
 USBD_StatusTypeDef USBD_LL_PrepareReceive(USBD_HandleTypeDef *d, uint8_t ep, uint8_t *data, uint32_t length)
 {
   assert(d == &USBD_Device && ep == HID_VIA_EP_OUT && opened_out[ep] && rx_buffer == NULL && length == 32U);
+  receive_arms++;
+  if (receive_fail) return USBD_FAIL;
   rx_buffer = data; return USBD_OK;
 }
 uint32_t USBD_LL_GetRxDataSize(USBD_HandleTypeDef *d, uint8_t ep) { (void)d; return rx_length[ep & 15U]; }
@@ -342,6 +353,27 @@ static void test_control(void)
   assert(led_updates == 1U);
   assert(control_errors == 8U);
 }
+static void reuse_control_stack(void) __attribute__((noinline));
+static void reuse_control_stack(void)
+{
+  volatile uint8_t scratch[1024];
+  for (unsigned i = 0U; i < sizeof(scratch); i++) scratch[i] = 0xA5U;
+}
+
+static void test_status_buffer_lifetime(void)
+{
+  USBD_SetupReqTypedef req = {.bmRequest = 0x81U, .bRequest = USB_REQ_GET_STATUS,
+                            .wValue = 0U, .wIndex = 0U, .wLength = 2U};
+  assert(USBD_Device.dev_state == USBD_STATE_CONFIGURED);
+  assert(USBD_HID.Setup(&USBD_Device, &req) == USBD_OK && sent_length == 2U);
+  const uint8_t *pending_status = sent_data;
+  /* The non-DMA HAL retains this pointer until a later TXFE interrupt. Other
+   * callbacks can reuse the stack after Setup returns, before that FIFO read. */
+  reuse_control_stack();
+  assert(pending_status[0] == 0U && pending_status[1] == 0U);
+  puts("PASS: interface GET_STATUS retains its two zero bytes after Setup stack reuse");
+}
+
 // Boot protocol keyboard 보고는 8바이트이고, 앞에서부터 비어 있지 않은 슬롯 6개를 싣는다.
 static void test_boot_protocol(void)
 {
@@ -682,6 +714,7 @@ int main(void)
   test_overflow();
   test_via_and_epoch();
   test_control();
+  test_status_buffer_lifetime();
   test_boot_protocol();
   test_pool_lifecycle();
   test_remote_wake();

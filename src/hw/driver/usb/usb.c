@@ -467,6 +467,7 @@ bool usbIsOpen(void)
 
 bool usbIsConnect(void)
 {
+  if (usbIsResetPending()) return false;
   if (USBD_Device.pClassData == NULL)
   {
     return false;
@@ -490,6 +491,11 @@ bool usbIsConnect(void)
 bool usbIsSuspended(void)
 {
   return USBD_is_suspended();
+}
+
+bool usbIsResetPending(void)
+{
+  return USBD_is_reset_pending();
 }
 
 bool usbHostSeen(void)
@@ -520,6 +526,7 @@ UsbType_t usbGetType(void)
 
 void OTG_HS_IRQHandler(void)
 {
+  usbPcdOnIrqEntry(&hpcd_USB_OTG_HS);
   HAL_PCD_IRQHandler(&hpcd_USB_OTG_HS);
 }
 

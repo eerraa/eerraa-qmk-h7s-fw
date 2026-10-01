@@ -58,6 +58,9 @@ PCD_HandleTypeDef hpcd_USB_OTG_HS;
 void Error_Handler(void);
 static bool is_connected = false;
 static volatile bool bus_suspended = false;
+static volatile bool pcd_reset_pending = false;
+static bool pcd_resume_pending = false;
+static bool pcd_resume_skip_stale_sof = false;
 static volatile uint32_t sof_count = 0;  // V260901R1: SOF 생존 카운터. 점수는 계산하지 않는다.
 static bool host_seen = false;           // V260901R1: 한 번이라도 주소를 받은 뒤에만 호스트 소실로 본다
 
@@ -104,12 +107,60 @@ uint32_t USBD_sof_count(void)
   return sof_count;  // V260901R1
 }
 
+bool USBD_is_reset_pending(void)
+{
+  return pcd_reset_pending;
+}
+
+static void usbPcdBeginReset(void)
+{
+  if (pcd_reset_pending) return;
+
+  // Raw USBRST precedes ENUMDNE's stack Reset. Retire software admission now,
+  // while leaving payload and controller ownership to the normal teardown.
+  pcd_reset_pending = true;
+  pcd_resume_pending = false;
+  pcd_resume_skip_stale_sof = false;
+  usbHidOnBusResetBegin();
+}
+
+void usbPcdOnIrqEntry(PCD_HandleTypeDef *hpcd)
+{
+  if (pcd_reset_pending || hpcd == NULL || hpcd->Instance == NULL) return;
+  uint32_t status = hpcd->Instance->GINTSTS;
+  if ((status & USB_OTG_GINTSTS_CMOD) != 0U ||
+      (status & hpcd->Instance->GINTMSK & USB_OTG_GINTSTS_USBRST) == 0U) return;
+
+  __HAL_PCD_UNGATE_PHYCLOCK(hpcd);
+  usbPcdBeginReset();
+}
+
+void HAL_PCD_ResetBeginCallback(PCD_HandleTypeDef *hpcd)
+{
+  if (pcd_reset_pending) return;
+  __HAL_PCD_UNGATE_PHYCLOCK(hpcd);
+  usbPcdBeginReset();
+}
+
 static bool usbPcdHardwareActive(PCD_HandleTypeDef *hpcd)
 {
   if (hpcd == NULL || hpcd->Instance == NULL) return false;
   USB_OTG_DeviceTypeDef *device =
       (USB_OTG_DeviceTypeDef *)((uintptr_t)hpcd->Instance + USB_OTG_DEVICE_BASE);
   return (device->DSTS & USB_OTG_DSTS_SUSPSTS) == 0U;
+}
+
+static void usbPcdResumeIfActive(PCD_HandleTypeDef *hpcd)
+{
+  USBD_HandleTypeDef *pdev = (USBD_HandleTypeDef *)hpcd->pData;
+  if (pcd_reset_pending || pdev == NULL || pdev->dev_state != USBD_STATE_SUSPENDED || !usbPcdHardwareActive(hpcd)) return;
+
+  __HAL_PCD_UNGATE_PHYCLOCK(hpcd);
+  bus_suspended = false;
+  pcd_resume_pending = false;
+  pcd_resume_skip_stale_sof = false;
+  usbHidOnResume();
+  (void)USBD_LL_Resume(pdev);
 }
 
 /*******************************************************************************
@@ -188,6 +239,11 @@ static void PCD_SetupStageCallback(PCD_HandleTypeDef *hpcd)
 void HAL_PCD_SetupStageCallback(PCD_HandleTypeDef *hpcd)
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
 {
+  usbPcdOnIrqEntry(hpcd);
+  if (pcd_reset_pending) return;
+  // HAL dispatches endpoint events before WKUINT. Restore the active bus state
+  // before the core validates SETUP or consumes a transfer completion.
+  usbPcdResumeIfActive(hpcd);
   USBD_LL_SetupStage((USBD_HandleTypeDef*)hpcd->pData, (uint8_t *)hpcd->Setup);
 }
 
@@ -203,6 +259,9 @@ static void PCD_DataOutStageCallback(PCD_HandleTypeDef *hpcd, uint8_t epnum)
 void HAL_PCD_DataOutStageCallback(PCD_HandleTypeDef *hpcd, uint8_t epnum)
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
 {
+  usbPcdOnIrqEntry(hpcd);
+  if (pcd_reset_pending) return;
+  usbPcdResumeIfActive(hpcd);
   USBD_LL_DataOutStage((USBD_HandleTypeDef*)hpcd->pData, epnum, hpcd->OUT_ep[epnum].xfer_buff);
 }
 
@@ -218,6 +277,9 @@ static void PCD_DataInStageCallback(PCD_HandleTypeDef *hpcd, uint8_t epnum)
 void HAL_PCD_DataInStageCallback(PCD_HandleTypeDef *hpcd, uint8_t epnum)
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
 {
+  usbPcdOnIrqEntry(hpcd);
+  if (pcd_reset_pending) return;
+  usbPcdResumeIfActive(hpcd);
   USBD_LL_DataInStage((USBD_HandleTypeDef*)hpcd->pData, epnum, hpcd->IN_ep[epnum].xfer_buff);
 }
 
@@ -230,9 +292,14 @@ static void usbHidLogicalSuspendedSof(PCD_HandleTypeDef *hpcd) __attribute__((no
 static void usbHidLogicalSuspendedSof(PCD_HandleTypeDef *hpcd)
 {
   USBD_HandleTypeDef *pdev = (USBD_HandleTypeDef *)hpcd->pData;
-  if (pdev != NULL && usbPcdHardwareActive(hpcd) && usbHidConsumeWakeSof()) {
-    logPrintf("[  ] USB Resume (SOF)\n");
-    (void)USBD_LL_Resume(pdev);
+  if (pcd_reset_pending) return;
+  bool stale_resume_sof = pcd_resume_skip_stale_sof;
+  pcd_resume_skip_stale_sof = false;
+  if (pdev != NULL && usbPcdHardwareActive(hpcd)) {
+    bool wake_sof = usbHidConsumeWakeSof();
+    if ((pcd_resume_pending && !stale_resume_sof) || wake_sof) {
+      usbPcdResumeIfActive(hpcd);
+    }
   }
   (void)USBD_LL_SOF(pdev);
 }
@@ -245,6 +312,8 @@ void HAL_PCD_SOFCallback(PCD_HandleTypeDef *hpcd)
 {
   USBD_HandleTypeDef *pdev = (USBD_HandleTypeDef *)hpcd->pData;
   sof_count++;  // V260901R1: RGB 판정은 메인 루프.
+  usbPcdOnIrqEntry(hpcd);
+  if (pcd_reset_pending) return;
   if (bus_suspended && usbPcdHardwareActive(hpcd)) {
     bus_suspended = false;
   }
@@ -266,6 +335,8 @@ static void PCD_ResetCallback(PCD_HandleTypeDef *hpcd)
 void HAL_PCD_ResetCallback(PCD_HandleTypeDef *hpcd)
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
 {
+  __HAL_PCD_UNGATE_PHYCLOCK(hpcd);
+  usbPcdBeginReset();
   USBD_SpeedTypeDef speed = USBD_SPEED_FULL;
 
   if ( hpcd->Init.speed == PCD_SPEED_HIGH)
@@ -289,11 +360,14 @@ void HAL_PCD_ResetCallback(PCD_HandleTypeDef *hpcd)
   // USB Reset is bus activity and starts a new USB session. It authoritatively
   // ends any cached physical-suspend state before the device stack is reset.
   bus_suspended = false;
+  pcd_resume_pending = false;
+  pcd_resume_skip_stale_sof = false;
     /* Set Speed. */
   USBD_LL_SetSpeed((USBD_HandleTypeDef*)hpcd->pData, speed);
 
   /* Reset Device. */
   USBD_LL_Reset((USBD_HandleTypeDef*)hpcd->pData);
+  pcd_reset_pending = false;
 }
 
 /**
@@ -308,8 +382,12 @@ static void PCD_SuspendCallback(PCD_HandleTypeDef *hpcd)
 void HAL_PCD_SuspendCallback(PCD_HandleTypeDef *hpcd)
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
 {
+  usbPcdOnIrqEntry(hpcd);
+  if (pcd_reset_pending) return;
   /* Inform USB library that core enters in suspend Mode. */
   USBD_LL_Suspend((USBD_HandleTypeDef*)hpcd->pData);
+  pcd_resume_pending = false;
+  pcd_resume_skip_stale_sof = false;
   usbHidOnSuspend();  // V260909R1: 비차단 wake와 현재 키 상태 보존
   __HAL_PCD_GATE_PHYCLOCK(hpcd);
   /* Enter in STOP mode. */
@@ -323,7 +401,6 @@ void HAL_PCD_SuspendCallback(PCD_HandleTypeDef *hpcd)
   is_connected = false;
   bus_suspended = true;
   usbDiagnosticsOnUsbSuspend(usbDiagnosticsIsActive() ? micros() : 0U);  // V260823R2
-  logPrintf("[  ] USB Suspend\n");
   /* USER CODE END 2 */
 }
 
@@ -341,15 +418,21 @@ void HAL_PCD_ResumeCallback(PCD_HandleTypeDef *hpcd)
 {
   /* USER CODE BEGIN 3 */
 
+  usbPcdOnIrqEntry(hpcd);
+  if (pcd_reset_pending) return;
+  // Host-driven wake must undo Suspend's STOPCLK too, before sampling DSTS.
+  __HAL_PCD_UNGATE_PHYCLOCK(hpcd);
   USBD_HandleTypeDef *pdev = (USBD_HandleTypeDef *)hpcd->pData;
   bool hardware_resumed = usbPcdHardwareActive(hpcd);
   if (hardware_resumed) {
     bus_suspended = false;
   }
-  if (pdev != NULL && hardware_resumed && pdev->dev_state == USBD_STATE_SUSPENDED) {
-    usbHidOnResume();
-    logPrintf("[  ] USB Resume\n");
-    (void)USBD_LL_Resume(pdev);
+  if (pdev != NULL && pdev->dev_state == USBD_STATE_SUSPENDED) {
+    // If WKUINT precedes the hardware-active observation, retain the indication
+    // until fresh bus activity without treating a stale SOF as Resume.
+    pcd_resume_pending = true;
+    pcd_resume_skip_stale_sof = (hpcd->Instance->GINTSTS & USB_OTG_GINTSTS_SOF) != 0U;
+    usbPcdResumeIfActive(hpcd);
   }
   /* USER CODE END 3 */
 }
@@ -366,6 +449,8 @@ static void PCD_ISOOUTIncompleteCallback(PCD_HandleTypeDef *hpcd, uint8_t epnum)
 void HAL_PCD_ISOOUTIncompleteCallback(PCD_HandleTypeDef *hpcd, uint8_t epnum)
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
 {
+  usbPcdOnIrqEntry(hpcd);
+  if (pcd_reset_pending) return;
   USBD_LL_IsoOUTIncomplete((USBD_HandleTypeDef*)hpcd->pData, epnum);
 }
 
@@ -381,6 +466,8 @@ static void PCD_ISOINIncompleteCallback(PCD_HandleTypeDef *hpcd, uint8_t epnum)
 void HAL_PCD_ISOINIncompleteCallback(PCD_HandleTypeDef *hpcd, uint8_t epnum)
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
 {
+  usbPcdOnIrqEntry(hpcd);
+  if (pcd_reset_pending) return;
   USBD_LL_IsoINIncomplete((USBD_HandleTypeDef*)hpcd->pData, epnum);
 }
 
@@ -395,6 +482,8 @@ static void PCD_ConnectCallback(PCD_HandleTypeDef *hpcd)
 void HAL_PCD_ConnectCallback(PCD_HandleTypeDef *hpcd)
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
 {
+  usbPcdOnIrqEntry(hpcd);
+  if (pcd_reset_pending) return;
   USBD_LL_DevConnected((USBD_HandleTypeDef*)hpcd->pData);
 }
 
@@ -409,6 +498,8 @@ static void PCD_DisconnectCallback(PCD_HandleTypeDef *hpcd)
 void HAL_PCD_DisconnectCallback(PCD_HandleTypeDef *hpcd)
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
 {
+  pcd_resume_pending = false;
+  pcd_resume_skip_stale_sof = false;
   USBD_LL_DevDisconnected((USBD_HandleTypeDef*)hpcd->pData);
 }
 
@@ -585,20 +676,23 @@ USBD_StatusTypeDef USBD_LL_CloseEP(USBD_HandleTypeDef *pdev, uint8_t ep_addr)
   __disable_irq();
   uint32_t USBx_BASE = (uint32_t)hpcd->Instance;
   if (ep_addr & 0x80U) USBx_DEVICE->DIEPEMPMSK &= ~(1UL << ep);
-  HAL_StatusTypeDef stopped = HAL_PCD_EP_Abort(hpcd, ep_addr);  // HAL의 유한 반복: SysTick 진행에 의존하지 않음
-  HAL_StatusTypeDef closed = HAL_PCD_EP_Close(hpcd, ep_addr);
-  if (ep_addr & 0x80U) {
-    USBx_INEP(ep)->DIEPINT = USBx_INEP(ep)->DIEPINT;
-    hpcd->IN_ep[ep].xfer_buff = NULL;
-    hpcd->IN_ep[ep].xfer_count = hpcd->IN_ep[ep].xfer_len = 0U;
-    if (stopped == HAL_OK && HAL_PCD_EP_Flush(hpcd, ep_addr) != HAL_OK) closed = HAL_ERROR;
-  } else {
-    USBx_OUTEP(ep)->DOEPINT = USBx_OUTEP(ep)->DOEPINT;
-    // RXFLVL가 이미 수신한 payload를 처리할 수 있으므로 OUT 버퍼 포인터는 유효하게 유지한다.
-    // 공유 RX FIFO를 flush하면 EP0/다른 class의 패킷까지 사라지므로 flush하지 않는다.
+  HAL_StatusTypeDef status = HAL_PCD_EP_Abort(hpcd, ep_addr);
+  // A failed stop can still own the transfer. Do not deactivate or retire it.
+  if (status == HAL_OK) status = HAL_PCD_EP_Close(hpcd, ep_addr);
+  if (status == HAL_OK && (ep_addr & 0x80U)) status = HAL_PCD_EP_Flush(hpcd, ep_addr);
+  if (status == HAL_OK) {
+    if (ep_addr & 0x80U) {
+      USBx_INEP(ep)->DIEPINT = USBx_INEP(ep)->DIEPINT;
+      hpcd->IN_ep[ep].xfer_buff = NULL;
+      hpcd->IN_ep[ep].xfer_count = hpcd->IN_ep[ep].xfer_len = 0U;
+    } else {
+      USBx_OUTEP(ep)->DOEPINT = USBx_OUTEP(ep)->DOEPINT;
+      // RXFLVL가 이미 수신한 payload를 처리할 수 있으므로 OUT 버퍼 포인터는 유효하게 유지한다.
+      // 공유 RX FIFO를 flush하면 EP0/다른 class의 패킷까지 사라지므로 flush하지 않는다.
+    }
   }
   __set_PRIMASK(irq);
-  return USBD_Get_USB_Status(stopped == HAL_OK ? closed : stopped);
+  return USBD_Get_USB_Status(status);
 }
 
 /**

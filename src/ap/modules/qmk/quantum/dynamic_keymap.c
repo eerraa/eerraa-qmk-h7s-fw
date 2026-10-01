@@ -298,9 +298,9 @@ void dynamic_keymap_macro_send(uint8_t id) {
 
     // Send the macro string by making a temporary string.
     char data[8] = {0};
-    // We already checked there was a null at the end of
-    // the buffer, so this cannot go past the end
-    while (1) {
+    // Skipping the final terminator can leave a missing macro at end.
+    // The sentinel bounds command reads only when a macro actually starts here.
+    while (p != end) {
         data[0] = eeprom_read_byte(p++);
         data[1] = 0;
         // Stop at the null terminator of this macro string

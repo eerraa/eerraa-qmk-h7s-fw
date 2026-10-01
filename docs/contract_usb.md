@@ -138,11 +138,26 @@ preserve it for normal HAL processing. Restore WUIM after the attempt.
 
 Physical bus Suspend and ST USBD logical Suspend have separate owners. The PCD
 bridge owns the cached physical bus state; Reset, a genuinely active SOF, or a
-genuine Resume clears it independently of HID Remote-Wake state. Logical
-fresh-SOF fallback is allowed only for an outstanding wake attempt after
-hardware is active, and it may complete `USBD_LL_Resume()` exactly once.
+genuine Resume clears it independently of HID Remote-Wake state. Host-driven
+Resume must undo any STOPCLK gate before checking hardware activity; an observed
+bus Reset also releases STOPCLK. Suspend clock policy alone does not establish
+that a gated controller detects every host reset. Its electrical and reset
+acceptance remain hardware checks in `docs/state_open.md`.
+The PCD bridge must reconcile hardware-active Resume before forwarding SETUP
+or IN/OUT completion: HAL may dispatch endpoint events before WKUINT, and the
+USBD core otherwise discards class completions while logically suspended.
+Logical fresh-SOF completion is allowed only for an outstanding device wake
+attempt or a deferred PCD Resume indication, after hardware is active, and it
+may complete `USBD_LL_Resume()` exactly once. Once raw bus Reset is observed,
+these Resume paths and class callbacks must not revive the retired session while
+enumeration completion has not yet delivered the stack Reset. A PCD Resume
+indication observed while `SUSPSTS` is still set must survive until fresh active
+bus activity;
+Suspend, Reset and Disconnect invalidate that indication. This completes an
+observed USB lifecycle event, without resetting transport or changing polling.
 Pre-signal/stale SOF, SOF while `SUSPSTS` remains set, and a late WKUINT after
-SOF recovery must not create a false or duplicate logical Resume.
+SOF completion must not create a false or duplicate logical Resume. Hardware-
+active SOF alone, without either wake indication, must not resume the stack.
 
 ### Generation, control, and hardware guards
 
@@ -151,8 +166,29 @@ responses and report-delay state do not cross that boundary; current stable
 key/button/usage state may be reconciled, but disconnected typing is not replayed
 as event history. Endpoint/class teardown must quiesce old ownership before
 reuse. Class storage must be bounded and reusable across repeated configurations;
-configuration churn must not consume cumulative allocation. Class teardown must
-not flush the shared RX FIFO, and control endpoint lifecycle remains core-owned.
+configuration churn must not consume cumulative allocation. A failed endpoint
+stop/close/flush does not authorize transfer-descriptor or payload reuse. Retain
+failed ownership, invalidate old software admission and wake/control epochs,
+and reject a new class configuration until a later explicit lifecycle teardown
+successfully releases it. Retain its interface callbacks as well as payloads so
+that explicit cleanup remains possible. Do not silently retry teardown from
+class Init: a SET_CONFIGURATION retry alone need not recover a retained owner.
+A successful later Reset or Disconnect teardown can release it.
+SET_CONFIGURATION must not acknowledge failed teardown as success or advertise
+a configuration whose initialization failed; Stop/DeInit must preserve errors
+without skipping their remaining teardown calls. Composite initialization must
+stop at the first failed class and roll back only earlier successful classes;
+the failed class owns its partial cleanup. Class teardown must not flush
+the shared RX FIFO, and control endpoint lifecycle remains core-owned.
+
+Raw bus Reset and enumeration completion are separate boundaries. At the first
+software observation of Reset, retire old HID admission and wake/control epochs
+without clearing controller-owned payloads or transfer descriptors. Block stack
+SETUP/completion/Resume forwarding until the normal enumeration-completion Reset
+has run. Observe Reset both before HAL dispatch and at its raw-reset branch so a
+flag consumed within the same IRQ cannot bypass this boundary. This software
+barrier does not establish hardware quiescence or authorize changing controller
+reset order. A SETUP discarded before the stack Reset is not replayed afterward.
 
 VIA OUT uses backpressure: when receive capacity is full, stop rearming so the
 host sees NAK rather than ACK-and-drop. Dispatch requires response capacity.
@@ -165,6 +201,13 @@ one-byte LED Output report. Validate request shape before arming EP0 receive, an
 do not apply an actual payload of another length. The receive buffer must still
 cover a full EP0 packet because HAL may round the physical receive size; a later
 SETUP invalidates any pending LED receive.
+
+Standard endpoint requests must reject reserved address bits and unused
+endpoint directions before indexing endpoint state or touching the controller.
+Control IN response storage must outlive SETUP handling until the controller
+has consumed it. USB lifecycle IRQ callbacks must not enter the shared,
+non-reentrant application logger. Endpoint and device-stop FIFO flush failures must
+remain visible to callers instead of being reported as success.
 
 USB FIFO allocation stays within the hardware bound enforced by source and its
 compile-time guard; optional CDC capacity remains accounted for there rather
@@ -225,6 +268,10 @@ are wire ABI under `docs/contract_via.md`.
 Selecting a mode changes only the pending user choice. Apply is a distinct
 explicit action: it persists the selected mode and schedules USB teardown/MCU
 reset after the response and pending EEPROM work are allowed to complete.
+Only replies in a live transport generation count toward response drain; buffers
+retained after that generation retires must not indefinitely block an already
+requested reset. Keep the EEPROM durability barrier and do not schedule a reset
+merely because ownership retired.
 Applying the already active mode still requests that reset. Custom SAVE on this
 control is a no-op; persistence belongs to Apply. The CLI boot-mode setter is
 also an explicit user path with the same persist-and-reset boundary.

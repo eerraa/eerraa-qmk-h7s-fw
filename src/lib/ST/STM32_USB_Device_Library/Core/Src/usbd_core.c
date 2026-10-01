@@ -151,7 +151,7 @@ USBD_StatusTypeDef USBD_DeInit(USBD_HandleTypeDef *pdev)
   USBD_StatusTypeDef ret;
 
   /* Disconnect the USB Device */
-  (void)USBD_LL_Stop(pdev);
+  ret = USBD_LL_Stop(pdev);
 
   /* Set Default State */
   pdev->dev_state = USBD_STATE_DEFAULT;
@@ -167,7 +167,10 @@ USBD_StatusTypeDef USBD_DeInit(USBD_HandleTypeDef *pdev)
       {
         pdev->classId = i;
         /* Free Class Resources */
-        pdev->pClass[i]->DeInit(pdev, (uint8_t)pdev->dev_config);
+        if (pdev->pClass[i]->DeInit(pdev, (uint8_t)pdev->dev_config) != USBD_OK)
+        {
+          ret = USBD_FAIL;
+        }
       }
     }
   }
@@ -175,10 +178,17 @@ USBD_StatusTypeDef USBD_DeInit(USBD_HandleTypeDef *pdev)
   /* Free Class Resources */
   if (pdev->pClass[0] != NULL)
   {
-    pdev->pClass[0]->DeInit(pdev, (uint8_t)pdev->dev_config);
+    if (pdev->pClass[0]->DeInit(pdev, (uint8_t)pdev->dev_config) != USBD_OK)
+    {
+      ret = USBD_FAIL;
+    }
   }
 
-  pdev->pUserData[0] = NULL;
+  /* A retained class owner still needs its interface for explicit cleanup. */
+  if (pdev->pClassDataCmsit[0] == NULL)
+  {
+    pdev->pUserData[0] = NULL;
+  }
 
 #endif /* USE_USBD_COMPOSITE */
 
@@ -187,7 +197,11 @@ USBD_StatusTypeDef USBD_DeInit(USBD_HandleTypeDef *pdev)
   pdev->pConfDesc = NULL;
 
   /* DeInitialize low level driver */
-  ret = USBD_LL_DeInit(pdev);
+  USBD_StatusTypeDef ll_ret = USBD_LL_DeInit(pdev);
+  if (ll_ret != USBD_OK)
+  {
+    ret = ll_ret;
+  }
 
   return ret;
 }
@@ -399,7 +413,7 @@ USBD_StatusTypeDef USBD_Start(USBD_HandleTypeDef *pdev)
 USBD_StatusTypeDef USBD_Stop(USBD_HandleTypeDef *pdev)
 {
   /* Disconnect USB Device */
-  (void)USBD_LL_Stop(pdev);
+  USBD_StatusTypeDef ret = USBD_LL_Stop(pdev);
 
   /* Free Class Resources */
 #ifdef USE_USBD_COMPOSITE
@@ -413,7 +427,10 @@ USBD_StatusTypeDef USBD_Stop(USBD_HandleTypeDef *pdev)
       {
         pdev->classId = i;
         /* Free Class Resources */
-        (void)pdev->pClass[i]->DeInit(pdev, (uint8_t)pdev->dev_config);
+        if (pdev->pClass[i]->DeInit(pdev, (uint8_t)pdev->dev_config) != USBD_OK)
+        {
+          ret = USBD_FAIL;
+        }
       }
     }
   }
@@ -423,11 +440,14 @@ USBD_StatusTypeDef USBD_Stop(USBD_HandleTypeDef *pdev)
 #else
   if (pdev->pClass[0] != NULL)
   {
-    (void)pdev->pClass[0]->DeInit(pdev, (uint8_t)pdev->dev_config);
+    if (pdev->pClass[0]->DeInit(pdev, (uint8_t)pdev->dev_config) != USBD_OK)
+    {
+      ret = USBD_FAIL;
+    }
   }
 #endif /* USE_USBD_COMPOSITE */
 
-  return USBD_OK;
+  return ret;
 }
 
 /**
@@ -478,7 +498,18 @@ USBD_StatusTypeDef USBD_SetClassConfig(USBD_HandleTypeDef *pdev, uint8_t cfgidx)
         /* Set configuration  and Start the Class*/
         if (pdev->pClass[i]->Init(pdev, cfgidx) != 0U)
         {
-          ret = USBD_FAIL;
+          /* The failed class owns its partial cleanup; retire only earlier successes. */
+          for (uint32_t j = 0U; j < i; j++)
+          {
+            if ((pdev->tclasslist[j].Active == 1U) && (pdev->pClass[j] != NULL) &&
+                (pdev->pClass[j]->DeInit != NULL))
+            {
+              pdev->classId = j;
+              (void)pdev->pClass[j]->DeInit(pdev, cfgidx);
+            }
+          }
+          pdev->classId = i;
+          return USBD_FAIL;
         }
       }
     }

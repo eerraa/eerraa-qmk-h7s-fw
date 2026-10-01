@@ -26,14 +26,133 @@ not included in firmware builds.
   injects arm failures and executes the actual class callbacks. Tests cover overflow,
   response credit and generations, EP0 input sizes, 2048 configurations, partial
   open failure, short taps during wake, first relative mouse input and FS/HS descriptors.
+  The interface GET_STATUS case reads the retained response after Setup has
+  returned and unrelated code has reused the stack, checking response lifetime.
   Boot protocol cases check the 8-byte form, the first six non-empty slots, the
   resync and unchanged armed packet at a protocol change, and interface/request checks.
   Remote-Wake cases inject the H7RS early-WKUINT behavior, enforce the 10 ms RWUSIG
   window, reject stale/SUSPSTS SOF, de-duplicate late WKUINT and consume VIA after
   fresh-SOF logical Resume.
+- `usb_pcd_cases.py` compiles unmodified production PCD callbacks and USBD
+  lifecycle/completion functions together with the real HID transport, standard
+  request dispatcher and EP0 IO code. Cases check host Resume undoing STOPCLK,
+  early WKUINT followed by hardware-active SOF, and independent IN, OUT and SETUP
+  callbacks arriving before WKUINT. They verify keyboard release delivery and
+  VIA request/reply progress afterward. Suspend sets STOPCLK with low power
+  disabled or enabled; Resume and observed Reset release that gate. This only
+  checks register writes, not reset detection while the physical PHY is gated.
+  Sixty-four FS Suspend/reset cycles execute actual core Reset, descriptor
+  requests, SET_ADDRESS and SET_CONFIGURATION, then restart keyboard and VIA
+  without injecting WKUINT. Device-descriptor bytes are fixture data; the HID
+  configuration descriptor is production data, checked as a 9-byte header and
+  a complete 91-byte payload split into 64+27-byte EP0 packets.
+  Thirty-six configured/Suspended reset snapshots combine raw-pending,
+  consumed-bit gap and ENUMDNE-pending states with IN/OUT/SETUP/SOF/WKUINT/Suspend.
+  They check old admission rejection, unchanged retained payload/descriptors,
+  failed teardown and later descriptor/address/configuration/input/VIA progress.
+  Completion during a real HID Remote-Wake call also preserves the 10 ms signal,
+  WUIM restoration and non-duplicated queue progress.
+  Standard endpoint requests test all 65536 wIndex values for GET_STATUS and
+  endpoint halt/clear, rejecting invalid addresses before non-control endpoint
+  access while preserving valid endpoints and class/vendor dispatch. Lifecycle
+  callbacks fail the fixture if they enter the shared application logger.
+  Pending host wake rejects an already-pending SOF and expires at Suspend, Reset
+  or Disconnect; unsolicited SOF cannot create a logical Resume. Disconnect
+  downstream stack actions remain stubbed. Controller registers, EP0 packet
+  limits/buffer advancement, endpoint operations and IRQ ordering are adapters;
+  HAL USBRST/ENUMDNE handling, real endpoint quiescence, MCU STOP/wake and silicon
+  timing are not executed. These passes do not establish the cause of a field
+  incident or that a physical device can enumerate on Windows.
+- `usb_irq_cases.py --bridge`, also in the normal USB group, joins the production
+  IRQ wrapper, HAL handler, PCD bridge and pending/connection queries. Both HAL
+  callback-registration modes and FS/HS run against explicit register adapters.
+  The boundary starts when software observes raw Reset and persists after the
+  flag clears until enumeration completion runs stack Reset. The production HID
+  Remote-Wake function body also runs across a normal completion and a reset/new
+  epoch during its 10 ms signal. USBD/HID forwarding and admission are recording
+  adapters here; the separate PCD fixture above runs the actual core/HID teardown
+  and queues. IRQ-time injection distinguishes the wrapper observation
+  from the HAL raw-reset notification. A SETUP dispatched before stack Reset is
+  discarded and is not replayed; later host SETUP is required. The barrier does
+  not stop all HAL FIFO refill/RX buffer writes or prove endpoint quiescence.
+- `usb_flush_cases.py` compiles the unmodified production endpoint FIFO flush
+  wrapper against low-level status adapters. It checks IN/OUT result propagation,
+  lock release after success/failure and the already-locked busy path. It does
+  not execute FIFO registers, polling duration or class-teardown recovery.
+- `teardown_cases.py` connects the production HID class and core teardown to
+  endpoints that can retain ownership after a failed close. It verifies immutable
+  keyboard/EXK/VIA IN and Boot payloads, a late VIA OUT write/completion, retained
+  bounded class storage, rejected new configuration and no automatic close retry.
+  Failed teardown invalidates the old control/wake epoch without clearing active
+  payloads; an interrupted Remote-Wake attempt cannot later write the new epoch's
+  signal. Core Stop/DeInit preserve failures while retaining their call order.
+  The PCD fixture additionally checks actual SET_CONFIGURATION dispatch: failed
+  teardown stalls without a success status packet, failed Init leaves configuration
+  zero, and a subsequent explicit modeled Reset can start a clean session.
+- `usb_reset_barrier_cases.py` connects the production HID queues, core teardown
+  and public user-reset scheduling/service bodies. Failed keyboard, VIA IN and
+  VIA OUT closes retain payloads and the bounded class handle, but retired replies
+  no longer block an already requested reset. Queued-only replies, late callbacks,
+  32-bit grace wrap, live/Suspended same-generation FIFO drain, EEPROM durability
+  and the absence of an unrequested reset are checked together. Separate cases
+  exercise HID's pending-query guard and session retirement during both the
+  pre-signal wait and the 10 ms Remote-Wake window, including WUIM restoration.
+  The pending query, EEPROM, endpoint ownership and MCU reset are adapters here;
+  this fixture does not execute the raw IRQ observer or reset hardware.
+- `usb_cdc_control_cases.py` executes the unedited optional CDC SETUP handler.
+  GET_STATUS and GET_INTERFACE responses are consumed after stack reuse, checking
+  storage lifetime, alignment and the unchanged response lengths. This does not
+  establish CDC data-path or composite-host acceptance.
+- `usb_cdc_lifecycle_cases.py` connects the production CDC class, actual CDC
+  interface, qbuffer and class pool in standalone and composite builds. FS/HS
+  bulk/ZLP completion, busy buffers, Init/arm/Close failures, late callbacks and
+  the actual SOF pump check that stopped owners keep their buffers and reject
+  reuse. Interface teardown runs only after endpoint closes succeed. Production
+  core DeInit/Reset retain interface callbacks while a class owner remains, then
+  permit explicit successful cleanup; normal cleanup still clears the alias.
+  Close failure, interface failure, LL errors, owner-absent cleanup and interface
+  registration checks run in both configurations. Repeated
+  configuration checks bounded class storage; application queues are reset
+  between fixture cases. Endpoint operations and composite endpoint lookup are
+  adapters. Arm errors are injected at the USBD LL boundary; the current HAL
+  transmit/receive wrappers discard `USB_EPStartXfer`'s result, so these tests do
+  not establish detection of every controller failure. CDC interface queue
+  delivery after a rejected arm, automatic progress
+  after a failed rearm/ZLP, and arbitrary main/IRQ API concurrency are not proven.
+- `usb_composite_cases.py` executes the actual core Init/Clear/Stop/DeInit/Reset and
+  SET_CONFIGURATION helper with three explicit class adapters. It checks first
+  Init failure, rollback of earlier successes only, retained failed-cleanup
+  handles, error propagation and remaining teardown calls. A fixture-only limit
+  of two configurations covers the 1-to-2 switch: one old teardown, one partial
+  cleanup/rollback, no duplicate Clear or success ACK after failure, and config
+  zero. Explicit Reset/DeInit recovery also checks that a failed class retains
+  its interface pointer without changing sibling-class aliases. The shipped
+  configuration limit remains one. Class ownership and EP0
+  ACK/STALL are adapters; this does not execute the HID/CDC classes together or
+  the complete SETUP dispatcher, nor prove composite enumeration on a host.
+- `usb_ll_cases.py` executes production H7RS FIFO flush, endpoint stop and
+  deactivate routines against scripted registers. It checks AHB-idle/flush
+  timeouts, the last successful polling boundary, FIFO selection and a stop
+  failure with EPENA still set. Deactivate's successful return alone does not
+  prove endpoint quiescence. The fixture overrides only its FIFO polling bound
+  to 64 iterations; the production bound and abort/reset sequences are unchanged.
+  Target elapsed time is not inferred from host runtime.
+- `usb_close_cases.py` connects the actual PCD bridge, HAL Abort/Close/Flush and
+  those LL routines. Abort failure, an already-locked close and FIFO timeout
+  retain transfer descriptors and skip later teardown stages; successful IN
+  close retires them. OUT close preserves its receive pointer and never flushes
+  shared RX. Both initial PRIMASK states are restored. This model records
+  endpoint interrupt-register accesses; it does not implement their W1C
+  hardware effects, delayed bus traffic or physical endpoint-disable timing.
+- `usb_stop_cases.py` executes the actual HAL Stop, LL disconnect/global-interrupt
+  disable and bridge status mapping with injected FIFO results. HAL returns the
+  FIFO status and the bridge preserves its mapping; cleanup and unlock run after
+  flush failure, and an already-locked
+  handle makes no controller calls. PHY-selection/battery-charging branches are
+  covered as register operations, without measuring electrical disconnect or time.
 - Source guards keep PCD physical bus-Suspend ownership separate from HID logical
   Resume: Reset and hardware-active SOF/Resume release the bus state independently,
-  while logical SOF fallback remains gated by ST USBD Suspend plus wake freshness.
+  while logical SOF completion requires a pending host/device wake and fresh SOF.
 - The production runtime debounce and all three per-key algorithms cover all nine
   mode transitions, unchanged-config deadlines, pending press/release reconciliation,
   timer wrap, invalid configuration and row-buffer canaries.
@@ -54,6 +173,28 @@ not included in firmware builds.
 Debounce runtime and the EEPROM image source are copied without statement edits
 solely so host headers can replace target-local matrix/timer/bootloader headers.
 The actual algorithm and state-machine implementations are not replaced by models.
+
+### Separate raw-reset IRQ audit
+
+`python -X utf8 tools/firmware_regression_tests/usb_irq_cases.py --observe`
+is a conditional HAL-only source-path reproducer, separate from the normal
+runner's bridge regression. It executes the production HAL IRQ, endpoint helpers
+and selected LL routines for FS/HS and both callback-registration configurations.
+The new Reset-begin notification uses its weak no-op default in this mode,
+without the production PCD bridge guard. The host copy
+widens register base pointers and redirects W1C, summary interrupts and RX-pop
+accesses to explicit adapters. Stack callbacks and the all-TX flush are recording
+adapters; generation labels advance at the Reset callback boundary rather than
+executing the HID class. It observes callbacks before USBRST/ENUMDNE and FIFO
+refill between raw reset and that Reset callback; these observations
+are not a stability pass or evidence that the injected combinations occurred on
+BRICK60. The model does not supply the controller's automatic bus-reset effects.
+
+The explicit `--assert-reset-boundary` mode asserts that the observed paths are
+absent and intentionally fails with the current HAL. It is not a required green
+regression check. The production software observer/guard is tested by bridge
+mode above; controller reset/abort register order and FIFO polling bounds remain
+unchanged pending the H7RS-specific evidence tracked in `docs/state_open.md`.
 
 ### Physical RGB input coverage
 
@@ -81,6 +222,15 @@ at a fractional-ms boundary; EXK/VIA continue during the interval. It covers fas
 Caps/letter sequences, later same-usage snapshots, failed arms, overflow, Suspend,
 reset, and clock wrap under FS/HS and boot/report protocol. Existing zero-interval
 FIFO tests cover ordinary input. No host Caps-activation filter is emulated.
+
+### Dynamic macro bounds
+
+`--only input` also compiles the unmodified production macro reader with
+bounded in-memory EEPROM and string-output adapters. It checks a missing
+macro after the final terminator, a full-buffer valid macro, empty macros,
+tap/down/up/delay commands, truncated commands and the interrupted-write
+sentinel. An out-of-range read fails before touching memory. This verifies
+termination and read bounds, not real EEPROM or macro timing.
 
 ### Full-range tapping time
 

@@ -261,6 +261,15 @@ USBD_StatusTypeDef USBD_StdEPReq(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef 
       break;
 
     case USB_REQ_TYPE_STANDARD:
+      /* Validate the full address before indexing; only active endpoint
+         directions may reach the low-level driver. */
+      if (((req->wIndex & 0xFF70U) != 0U) ||
+          (((ep_addr & 0x80U) != 0U) ? pdev->ep_in[ep_addr & 0x0FU].is_used :
+           pdev->ep_out[ep_addr & 0x0FU].is_used) == 0U)
+      {
+        USBD_CtlError(pdev, req);
+        return USBD_FAIL;
+      }
       switch (req->bRequest)
       {
         case USB_REQ_SET_FEATURE:
@@ -749,6 +758,7 @@ static USBD_StatusTypeDef USBD_SetConfig(USBD_HandleTypeDef *pdev, USBD_SetupReq
         {
           USBD_CtlError(pdev, req);
           pdev->dev_state = USBD_STATE_ADDRESSED;
+          pdev->dev_config = 0U;
         }
         else
         {
@@ -774,13 +784,27 @@ static USBD_StatusTypeDef USBD_SetConfig(USBD_HandleTypeDef *pdev, USBD_SetupReq
       {
         pdev->dev_state = USBD_STATE_ADDRESSED;
         pdev->dev_config = cfgidx;
-        (void)USBD_ClrClassConfig(pdev, cfgidx);
-        (void)USBD_CtlSendStatus(pdev);
+        ret = USBD_ClrClassConfig(pdev, cfgidx);
+        if (ret != USBD_OK)
+        {
+          USBD_CtlError(pdev, req);
+        }
+        else
+        {
+          (void)USBD_CtlSendStatus(pdev);
+        }
       }
       else if (cfgidx != pdev->dev_config)
       {
-        /* Clear old configuration */
-        (void)USBD_ClrClassConfig(pdev, (uint8_t)pdev->dev_config);
+        /* A failed teardown still owns its storage and cannot be replaced. */
+        ret = USBD_ClrClassConfig(pdev, (uint8_t)pdev->dev_config);
+        if (ret != USBD_OK)
+        {
+          pdev->dev_state = USBD_STATE_ADDRESSED;
+          pdev->dev_config = 0U;
+          USBD_CtlError(pdev, req);
+          break;
+        }
 
         /* set new configuration */
         pdev->dev_config = cfgidx;
@@ -790,8 +814,8 @@ static USBD_StatusTypeDef USBD_SetConfig(USBD_HandleTypeDef *pdev, USBD_SetupReq
         if (ret != USBD_OK)
         {
           USBD_CtlError(pdev, req);
-          (void)USBD_ClrClassConfig(pdev, (uint8_t)pdev->dev_config);
           pdev->dev_state = USBD_STATE_ADDRESSED;
+          pdev->dev_config = 0U;
         }
         else
         {

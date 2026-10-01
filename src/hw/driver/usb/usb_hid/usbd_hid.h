@@ -169,6 +169,7 @@ typedef struct {
 bool usbHidReadViaRequest(uint8_t *data, uint32_t *generation);
 bool usbHidEnqueueViaResponse(const uint8_t *data, uint8_t length, uint32_t generation);
 bool usbHidViaResponsesPending(void);
+void usbHidOnBusResetBegin(void);
 void usbHidOnSuspend(void);
 bool usbHidHostSleeping(void);
 bool usbHidRequestRemoteWakeFromInput(void);

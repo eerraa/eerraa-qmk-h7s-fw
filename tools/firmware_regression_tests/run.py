@@ -52,12 +52,66 @@ def main() -> None:
                 ROOT/'src/hw/driver/usb/usb_class_pool.c'], [*inc, f"-I{HID}",
                 f"-I{ROOT/'src/lib/ST/STM32_USB_Device_Library/Core/Inc'}",
                 f"-I{ROOT/'src/hw/driver/usb/usb_cdc'}", "-DTEST_USB_TRANSPORT", "-DUSB_DIAGNOSTICS_HOST_TEST", "-Wno-unused-parameter"])
+        from usb_pcd_cases import generate as generate_pcd
+        pcd_source = generate_pcd(ROOT, BUILD)
+        execute("test_usb_pcd", [pcd_source, HID/'usbd_hid.c', HID/'hid_tx_queue.c', HID/'usb_diagnostics.c',
+                ROOT/'src/hw/driver/usb/usb_class_pool.c'], [*inc, f"-I{HID}", f"-I{BUILD}",
+                f"-I{ROOT/'src/lib/ST/STM32_USB_Device_Library/Core/Inc'}",
+                f"-I{ROOT/'src/hw/driver/usb/usb_cdc'}", "-DTEST_USB_TRANSPORT", "-DUSB_DIAGNOSTICS_HOST_TEST", "-Wno-unused-parameter"])
+        from usb_irq_cases import generate as generate_irq
+        irq_source = generate_irq(ROOT, BUILD)
+        for callbacks in (0, 1):
+            execute("test_usb_irq_bridge_cb" + str(callbacks), [irq_source],
+                    [f"-I{BUILD}", f"-DUSE_HAL_PCD_REGISTER_CALLBACKS={callbacks}", "-DTEST_USB_IRQ_BRIDGE",
+                     "-Wno-pointer-to-int-cast", "-Wno-unused-function"])
+        from usb_flush_cases import generate as generate_flush
+        execute("test_usb_flush", [generate_flush(ROOT, BUILD)], [f"-I{BUILD}"])
+        from teardown_cases import generate as generate_teardown
+        execute("test_usb_teardown", [generate_teardown(ROOT, BUILD), HID/'usbd_hid.c', HID/'hid_tx_queue.c',
+                HID/'usb_diagnostics.c', ROOT/'src/hw/driver/usb/usb_class_pool.c'],
+                [*inc, f"-I{HID}", f"-I{HERE}", f"-I{BUILD}",
+                f"-I{ROOT/'src/lib/ST/STM32_USB_Device_Library/Core/Inc'}",
+                f"-I{ROOT/'src/hw/driver/usb/usb_cdc'}", "-DTEST_USB_TRANSPORT", "-DUSB_DIAGNOSTICS_HOST_TEST", "-Wno-unused-parameter"])
+        from usb_reset_barrier_cases import generate as generate_reset_barrier
+        execute("test_usb_reset_barrier", [generate_reset_barrier(ROOT, BUILD), HID/'usbd_hid.c', HID/'hid_tx_queue.c',
+                HID/'usb_diagnostics.c', ROOT/'src/hw/driver/usb/usb_class_pool.c'],
+                [*inc, f"-I{HID}", f"-I{HERE}", f"-I{BUILD}",
+                f"-I{ROOT/'src/lib/ST/STM32_USB_Device_Library/Core/Inc'}",
+                f"-I{ROOT/'src/hw/driver/usb/usb_cdc'}", "-DTEST_USB_TRANSPORT", "-DUSB_DIAGNOSTICS_HOST_TEST", "-Wno-unused-parameter"])
+        from usb_cdc_control_cases import generate as generate_cdc_control
+        execute("test_usb_cdc_control", [generate_cdc_control(ROOT, BUILD)],
+                [*inc, f"-I{BUILD}", f"-I{ROOT/'src/lib/ST/STM32_USB_Device_Library/Core/Inc'}",
+                f"-I{ROOT/'src/hw/driver/usb/usb_cdc'}"])
+        from usb_cdc_lifecycle_cases import generate as generate_cdc_lifecycle
+        cdc_sources = [generate_cdc_lifecycle(ROOT, BUILD), BUILD/'usb_cdc_lifecycle_class.c',
+                       ROOT/'src/hw/driver/usb/usb_class_pool.c', ROOT/'src/common/core/qbuffer.c']
+        cdc_flags = [*inc, f"-I{HERE}", f"-I{BUILD}", f"-I{ROOT/'src/common/core'}", f"-I{HID}",
+                     f"-I{ROOT/'src/hw/driver/usb/usb_cdc'}", f"-I{ROOT/'src/hw/driver/usb/usb_cmp'}",
+                     f"-I{ROOT/'src/lib/ST/STM32_USB_Device_Library/Core/Inc'}",
+                     "-include", str(HERE/'usb_cdc_lifecycle_hardware.h'), "-Wno-unused-parameter"]
+        execute("test_usb_cdc_lifecycle", cdc_sources, cdc_flags)
+        execute("test_usb_cdc_lifecycle_composite", cdc_sources, [*cdc_flags, "-DUSE_USBD_COMPOSITE"])
+        from usb_composite_cases import generate as generate_composite
+        execute("test_usb_composite", [generate_composite(ROOT, BUILD)],
+                [f"-I{BUILD}", f"-I{HERE/'usb_composite_include'}",
+                 f"-I{ROOT/'src/lib/ST/STM32_USB_Device_Library/Core/Inc'}"])
+        from usb_ll_cases import generate as generate_ll
+        execute("test_usb_ll", [generate_ll(ROOT, BUILD)],
+                [f"-I{BUILD}", f"-I{HERE/'usb_ll_include'}", "-Wno-pointer-to-int-cast"])
+        from usb_close_cases import generate as generate_close
+        execute("test_usb_close", [generate_close(ROOT, BUILD)],
+                [f"-I{BUILD}", f"-I{HERE/'usb_ll_include'}", "-Wno-pointer-to-int-cast"])
+        from usb_stop_cases import generate as generate_stop
+        execute("test_usb_stop", [generate_stop(ROOT, BUILD)],
+                [f"-I{BUILD}", "-Wno-pointer-to-int-cast"])
     if args.only in (None, "qbuffer"):
         execute("test_qbuffer", [HERE/'test_qbuffer.c', ROOT/'src/common/core/qbuffer.c'],
                 [*inc, f"-I{ROOT/'src/common/core'}"])
     if args.only in (None, "input"):
         execute("test_input_features", [HERE/'test_input_features.c', QMK/'port/kkuk.c', QMK/'port/kill_switch.c'],
                 [f"-I{HERE/'input_include'}", f"-I{QMK/'port'}", "-DKKUK_ENABLE", "-DKILL_SWITCH_ENABLE", "-Wno-unused-parameter"])
+        from macro_cases import generate as generate_macro
+        execute("test_dynamic_macro", [generate_macro(ROOT, BUILD)], [f"-I{BUILD}"])
     if args.only in (None, "rgb"):
         from rgb_input_cases import generate as generate_rgb
         source = generate_rgb(ROOT, BUILD)

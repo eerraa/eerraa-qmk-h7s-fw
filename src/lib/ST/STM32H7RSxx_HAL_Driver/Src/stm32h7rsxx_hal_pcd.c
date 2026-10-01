@@ -1035,13 +1035,14 @@ HAL_StatusTypeDef HAL_PCD_Start(PCD_HandleTypeDef *hpcd)
   */
 HAL_StatusTypeDef HAL_PCD_Stop(PCD_HandleTypeDef *hpcd)
 {
+  HAL_StatusTypeDef ret;
   USB_OTG_GlobalTypeDef *USBx = hpcd->Instance;
 
   __HAL_LOCK(hpcd);
   __HAL_PCD_DISABLE(hpcd);
   (void)USB_DevDisconnect(hpcd->Instance);
 
-  (void)USB_FlushTxFifo(hpcd->Instance, 0x10U);
+  ret = USB_FlushTxFifo(hpcd->Instance, 0x10U);
 
   if (((USBx->GUSBCFG & USB_OTG_GUSBCFG_PHYSEL) != 0U) &&
       (hpcd->Init.battery_charging_enable == 1U))
@@ -1052,7 +1053,7 @@ HAL_StatusTypeDef HAL_PCD_Stop(PCD_HandleTypeDef *hpcd)
 
   __HAL_UNLOCK(hpcd);
 
-  return HAL_OK;
+  return ret;
 }
 
 #if defined (USB_OTG_FS) || defined (USB_OTG_HS)
@@ -1346,6 +1347,7 @@ void HAL_PCD_IRQHandler(PCD_HandleTypeDef *hpcd)
     /* Handle Reset Interrupt */
     if (__HAL_PCD_GET_FLAG(hpcd, USB_OTG_GINTSTS_USBRST))
     {
+      HAL_PCD_ResetBeginCallback(hpcd);
       USBx_DEVICE->DCTL &= ~USB_OTG_DCTL_RWUSIG;
       (void)USB_FlushTxFifo(hpcd->Instance, 0x10U);
 
@@ -1578,6 +1580,16 @@ __weak void HAL_PCD_SOFCallback(PCD_HandleTypeDef *hpcd)
   /* NOTE : This function should not be modified, when the callback is needed,
             the HAL_PCD_SOFCallback could be implemented in the user file
    */
+}
+
+/**
+  * @brief  USB bus reset beginning callback, before enumeration completion.
+  * @param  hpcd PCD handle
+  * @retval None
+  */
+__weak void HAL_PCD_ResetBeginCallback(PCD_HandleTypeDef *hpcd)
+{
+  UNUSED(hpcd);
 }
 
 /**
@@ -2032,20 +2044,22 @@ HAL_StatusTypeDef HAL_PCD_EP_Abort(PCD_HandleTypeDef *hpcd, uint8_t ep_addr)
   */
 HAL_StatusTypeDef HAL_PCD_EP_Flush(PCD_HandleTypeDef *hpcd, uint8_t ep_addr)
 {
+  HAL_StatusTypeDef ret = HAL_OK;
+
   __HAL_LOCK(hpcd);
 
   if ((ep_addr & 0x80U) == 0x80U)
   {
-    (void)USB_FlushTxFifo(hpcd->Instance, (uint32_t)ep_addr & EP_ADDR_MSK);
+    ret = USB_FlushTxFifo(hpcd->Instance, (uint32_t)ep_addr & EP_ADDR_MSK);
   }
   else
   {
-    (void)USB_FlushRxFifo(hpcd->Instance);
+    ret = USB_FlushRxFifo(hpcd->Instance);
   }
 
   __HAL_UNLOCK(hpcd);
 
-  return HAL_OK;
+  return ret;
 }
 
 /**

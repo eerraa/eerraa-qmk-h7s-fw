@@ -477,6 +477,23 @@ _Static_assert(sizeof(report_mouse_t) <= HID_EXK_EP_SIZE, "MOUSE 리포트가 EX
 _Static_assert(sizeof(report_extra_t) == 3U, "SYSTEM/CONSUMER 리포트 디스크립터(3B)와 report_extra_t 크기가 다르다.");
 
 static USBD_HID_HandleTypeDef *p_hhid = NULL;
+
+static bool usbHidAdmissionOpen(void)
+{
+  return p_hhid != NULL && !usbIsResetPending();
+}
+
+static void usbHidRetireSessionLocked(void)
+{
+  // Retiring software admission cannot release storage still owned by the controller.
+  if (p_hhid != NULL) {
+    p_hhid = NULL;
+    transport_generation++;
+  }
+  ep0_led_pending = false;
+  wake_state = USB_HID_WAKE_IDLE;
+  wake_skip_stale_sof = false;
+}
 static uint8_t HIDInEpAdd = HID_EPIN_ADDR;
 extern USBD_HandleTypeDef USBD_Device;
 
@@ -506,7 +523,9 @@ static uint8_t USBD_HID_Init(USBD_HandleTypeDef *pdev, uint8_t cfgidx)
 {
   UNUSED(cfgidx);
   // V260909R1: 구성마다 새 세대, 완전 초기화. 정상적인 DeInit 없는 재진입도 누적 할당하지 않는다.
-  if (p_hhid != NULL) USBD_HID_DeInit(pdev, cfgidx);
+  // A failed teardown keeps its handle and payloads until a later lifecycle teardown succeeds.
+  if (p_hhid == NULL && pdev->pClassDataCmsit[pdev->classId] != NULL) return (uint8_t)USBD_FAIL;
+  if (p_hhid != NULL && USBD_HID_DeInit(pdev, cfgidx) != USBD_OK) return (uint8_t)USBD_FAIL;
   USBD_HID_HandleTypeDef *hhid = USBD_malloc(sizeof(*hhid));
   if (hhid == NULL) return (uint8_t)USBD_EMEM;
   memset(hhid, 0, sizeof(*hhid));
@@ -549,17 +568,32 @@ fail:
 static uint8_t USBD_HID_DeInit(USBD_HandleTypeDef *pdev, uint8_t cfgidx)
 {
   UNUSED(cfgidx);
-  // V260909R1: 최초 bus reset에도 호출된다. 소유 중인 EP만 닫고 모든 alias를 무효화한다.
   const uint8_t endpoints[] = {HIDInEpAdd, HID_VIA_EP_IN, HID_EXK_EP_IN};
-  p_hhid = NULL;
+  uint8_t ret = (uint8_t)USBD_OK;
+  // Stop class admission before closing hardware; failed closes still own their storage.
+  uint32_t irq = usbHidLock();
+  usbHidRetireSessionLocked();
+  usbHidUnlock(irq);
   for (uint32_t i = 0; i < 3U; i++) {
-    if (pdev->ep_in[endpoints[i] & 0xFU].is_used) USBD_LL_CloseEP(pdev, endpoints[i]);
-    pdev->ep_in[endpoints[i] & 0xFU].is_used = 0U;
-    pdev->ep_in[endpoints[i] & 0xFU].bInterval = 0U;
+    if (pdev->ep_in[endpoints[i] & 0xFU].is_used) {
+      if (USBD_LL_CloseEP(pdev, endpoints[i]) != USBD_OK) {
+        ret = (uint8_t)USBD_FAIL;
+        continue;
+      }
+      pdev->ep_in[endpoints[i] & 0xFU].is_used = 0U;
+      pdev->ep_in[endpoints[i] & 0xFU].bInterval = 0U;
+    }
   }
-  if (pdev->ep_out[HID_VIA_EP_OUT & 0xFU].is_used) USBD_LL_CloseEP(pdev, HID_VIA_EP_OUT);
-  pdev->ep_out[HID_VIA_EP_OUT & 0xFU].is_used = 0U;
-  pdev->ep_out[HID_VIA_EP_OUT & 0xFU].bInterval = 0U;
+  if (pdev->ep_out[HID_VIA_EP_OUT & 0xFU].is_used) {
+    if (USBD_LL_CloseEP(pdev, HID_VIA_EP_OUT) != USBD_OK) {
+      ret = (uint8_t)USBD_FAIL;
+    } else {
+      pdev->ep_out[HID_VIA_EP_OUT & 0xFU].is_used = 0U;
+      pdev->ep_out[HID_VIA_EP_OUT & 0xFU].bInterval = 0U;
+    }
+  }
+  // hidTxInit also clears active.data. A close/flush failure cannot authorize that reuse.
+  if (ret != USBD_OK) return ret;
   void *handle = pdev->pClassDataCmsit[pdev->classId];
   if (pdev->pClassData == handle) pdev->pClassData = NULL;
   pdev->pClassDataCmsit[pdev->classId] = NULL;
@@ -581,9 +615,10 @@ static uint8_t USBD_HID_Setup(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *re
   USBD_StatusTypeDef ret = USBD_OK;
   uint16_t len;
   uint8_t *pbuf;
-  uint16_t status_info = 0U;
+  // EP0 keeps this buffer after Setup returns; the FIFO reads a full word.
+  __ALIGN_BEGIN static const uint32_t status_info __ALIGN_END = 0U;
 
-  if (hhid == NULL)
+  if (hhid == NULL || hhid != p_hhid || !usbHidAdmissionOpen())
   {
     return (uint8_t)USBD_FAIL;
   }
@@ -758,7 +793,7 @@ static uint8_t USBD_HID_Setup(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *re
   */
 static uint8_t USBD_HID_EP0_RxReady(USBD_HandleTypeDef *pdev)
 {
-  if (p_hhid != NULL && ep0_led_pending && USBD_LL_GetRxDataSize(pdev, 0U) == 1U)
+  if (usbHidAdmissionOpen() && ep0_led_pending && USBD_LL_GetRxDataSize(pdev, 0U) == 1U)
     usbHidSetStatusLed(ep0_req_buf[0]);
   ep0_led_pending = false;
   return (uint8_t)USBD_OK;
@@ -909,7 +944,7 @@ static uint8_t *USBD_HID_GetOtherSpeedCfgDesc(uint16_t *length)
 static uint8_t USBD_HID_DataIn(USBD_HandleTypeDef *pdev, uint8_t epnum)
 {
   uint32_t irq = usbHidLock();
-  if (p_hhid != NULL) {
+  if (usbHidAdmissionOpen()) {
     if (epnum == (HIDInEpAdd & 0xFU)) {
       if (hidTxComplete(&keyboard_tx))
       {
@@ -934,7 +969,7 @@ static uint8_t USBD_HID_DataIn(USBD_HandleTypeDef *pdev, uint8_t epnum)
 static uint8_t USBD_HID_DataOut(USBD_HandleTypeDef *pdev, uint8_t epnum)
 {
   uint32_t irq = usbHidLock();
-  if (p_hhid == NULL || epnum != (HID_VIA_EP_OUT & 0xFU) || !via_rx_armed) {
+  if (!usbHidAdmissionOpen() || epnum != (HID_VIA_EP_OUT & 0xFU) || !via_rx_armed) {
     usbHidUnlock(irq);
     return (uint8_t)USBD_FAIL;
   }
@@ -1001,7 +1036,7 @@ static bool usbHidArm(void *context, const hid_tx_packet_t *packet)
 
 static bool usbHidSessionValid(USBD_HandleTypeDef *pdev)
 {
-  return p_hhid != NULL && (pdev->dev_state == USBD_STATE_CONFIGURED ||
+  return usbHidAdmissionOpen() && (pdev->dev_state == USBD_STATE_CONFIGURED ||
       (pdev->dev_state == USBD_STATE_SUSPENDED && pdev->dev_old_state == USBD_STATE_CONFIGURED));
 }
 
@@ -1046,7 +1081,7 @@ static void usbHidSetKeyboardProtocolLocked(USBD_HandleTypeDef *pdev, USBD_HID_H
 
 static void usbHidRearmViaLocked(USBD_HandleTypeDef *pdev)
 {
-  if (p_hhid != NULL && !via_rx_armed && via_rx_count < HID_VIA_RX_DEPTH &&
+  if (usbHidAdmissionOpen() && !via_rx_armed && via_rx_count < HID_VIA_RX_DEPTH &&
       pdev->ep_out[HID_VIA_EP_OUT & 0xFU].is_used) {
     via_rx_armed = USBD_LL_PrepareReceive(pdev, HID_VIA_EP_OUT, via_hid_usb_rx_report,
                                         sizeof(via_hid_usb_rx_report)) == USBD_OK;
@@ -1079,7 +1114,7 @@ bool usbHidReadViaRequest(uint8_t *data, uint32_t *generation)
   if (data == NULL || generation == NULL) return false;
   uint32_t irq = usbHidLock();
   // 응답 슬롯을 확보할 수 있을 때만 부작용을 가진 다음 명령을 꺼낸다. TX 생산자는 하나다.
-  bool ready = p_hhid != NULL && USBD_Device.dev_state == USBD_STATE_CONFIGURED &&
+  bool ready = usbHidAdmissionOpen() && USBD_Device.dev_state == USBD_STATE_CONFIGURED &&
                via_rx_count != 0U && via_tx.count < via_tx.capacity;
   if (ready) {
     memcpy(data, via_rx[via_rx_head], HID_VIA_EP_SIZE);
@@ -1098,7 +1133,7 @@ bool usbHidEnqueueViaResponse(const uint8_t *data, uint8_t length, uint32_t gene
   hid_tx_packet_t packet = { .length = HID_VIA_EP_SIZE };
   memcpy(packet.data, data, length);
   uint32_t irq = usbHidLock();
-  bool ok = p_hhid != NULL && generation == transport_generation && hidTxPush(&via_tx, &packet);
+  bool ok = usbHidAdmissionOpen() && generation == transport_generation && hidTxPush(&via_tx, &packet);
   usbHidPumpLocked(&USBD_Device);
   usbHidUnlock(irq);
   return ok;
@@ -1108,7 +1143,7 @@ static bool usbHidRemoteWakeSuspended(void)
 {
   uint32_t irq = usbHidLock();
   PCD_HandleTypeDef *pcd = (PCD_HandleTypeDef *)USBD_Device.pData;
-  bool allowed = USBD_Device.dev_state == USBD_STATE_SUSPENDED && USBD_Device.dev_remote_wakeup &&
+  bool allowed = usbHidAdmissionOpen() && USBD_Device.dev_state == USBD_STATE_SUSPENDED && USBD_Device.dev_remote_wakeup &&
                  pcd != NULL && pcd->Instance != NULL;
   uint32_t suspend_stamp = suspend_ms;
   uint32_t suspend_epoch = wake_suspend_epoch;
@@ -1121,7 +1156,7 @@ static bool usbHidRemoteWakeSuspended(void)
   if (suspended_for < 5U) delay(5U - suspended_for);
 
   irq = usbHidLock();
-  if (USBD_Device.dev_state != USBD_STATE_SUSPENDED || !USBD_Device.dev_remote_wakeup ||
+  if (!usbHidAdmissionOpen() || USBD_Device.dev_state != USBD_STATE_SUSPENDED || !USBD_Device.dev_remote_wakeup ||
       USBD_Device.pData != pcd || pcd->Instance == NULL ||
       suspend_epoch != wake_suspend_epoch || generation != transport_generation) {
     usbHidUnlock(irq);
@@ -1199,7 +1234,7 @@ static bool usbHidRemoteWakeSuspended(void)
 // raises Suspend, but no host is asleep then and a key held at power-on must still reach it.
 bool usbHidHostSleeping(void)
 {
-  return USBD_Device.dev_state == USBD_STATE_SUSPENDED && USBD_Device.dev_old_state == USBD_STATE_CONFIGURED;
+  return usbHidAdmissionOpen() && USBD_Device.dev_state == USBD_STATE_SUSPENDED && USBD_Device.dev_old_state == USBD_STATE_CONFIGURED;
 }
 
 bool usbHidRequestRemoteWakeFromInput(void)
@@ -1294,6 +1329,13 @@ bool usbHidSendReportEXK(uint8_t *data, uint16_t length)
   return ok;
 }
 
+void usbHidOnBusResetBegin(void)
+{
+  uint32_t irq = usbHidLock();
+  usbHidRetireSessionLocked();
+  usbHidUnlock(irq);
+}
+
 void usbHidOnSuspend(void)
 {
   uint32_t irq = usbHidLock();
@@ -1337,7 +1379,8 @@ void usbHidGetTransportStats(usb_hid_transport_stats_t *stats)
 bool usbHidViaResponsesPending(void)
 {
   uint32_t irq = usbHidLock();
-  bool pending = via_tx.busy || via_tx.count != 0U;
+  // Retained failed-teardown payloads belong to a retired session, not a response drain.
+  bool pending = usbHidAdmissionOpen() && (via_tx.busy || via_tx.count != 0U);
   usbHidUnlock(irq);
   return pending;
 }

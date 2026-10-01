@@ -119,6 +119,7 @@ int main(void) {
     reset_callback=conf[conf.index('* @brief  Reset callback.'):conf.index('* @brief  Suspend callback.')]
     suspend_callback=conf[conf.index('* @brief  Suspend callback.'):conf.index('* @brief  Resume callback.')]
     resume_callback=conf[conf.index('* @brief  Resume callback.'):conf.index('* @brief  ISOOUTIncomplete callback.')]
+    resume_active=function(conf,'usbPcdResumeIfActive')
     assert 'static volatile bool bus_suspended = false;' in conf
     assert 'USB_OTG_DSTS_SUSPSTS' in hardware_active and '== 0U' in hardware_active
     assert 'if (bus_suspended && usbPcdHardwareActive(hpcd))' in sof_callback
@@ -132,9 +133,13 @@ int main(void) {
     assert 'hardware_resumed = usbPcdHardwareActive(hpcd)' in resume_callback
     assert 'bus_suspended = false;' in resume_callback
     assert 'pdev->dev_state == USBD_STATE_SUSPENDED' in resume_callback
-    assert 'usbHidOnResume()' in resume_callback
-    assert resume_callback.index('usbHidOnResume()') < resume_callback.index('USBD_LL_Resume(pdev)')
-    assert resume_callback.count('USBD_LL_Resume(pdev)') == 1
+    assert resume_callback.index('__HAL_PCD_UNGATE_PHYCLOCK(hpcd)') < resume_callback.index('usbPcdHardwareActive(hpcd)')
+    assert 'pcd_resume_pending = true;' in resume_callback
+    assert 'USB_OTG_GINTSTS_SOF' in resume_callback and 'pcd_resume_skip_stale_sof' in suspended_sof
+    assert 'usbPcdResumeIfActive(hpcd)' in resume_callback
+    assert 'usbPcdHardwareActive(hpcd)' in resume_active and 'USBD_STATE_SUSPENDED' in resume_active
+    assert resume_active.index('usbHidOnResume()') < resume_active.index('USBD_LL_Resume(pdev)')
+    assert resume_active.count('USBD_LL_Resume(pdev)') == 1
 
     sleep=(root/'src/ap/modules/qmk/port/rgb_sleep.c').read_text(encoding='utf-8')
     sleep_apply=function(sleep,'rgb_sleep_apply_rgb')

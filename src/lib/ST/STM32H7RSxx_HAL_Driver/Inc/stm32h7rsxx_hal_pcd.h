@@ -316,6 +316,7 @@ void HAL_PCD_IRQHandler(PCD_HandleTypeDef *hpcd);
 void HAL_PCD_SOFCallback(PCD_HandleTypeDef *hpcd);
 void HAL_PCD_SetupStageCallback(PCD_HandleTypeDef *hpcd);
 void HAL_PCD_ResetCallback(PCD_HandleTypeDef *hpcd);
+void HAL_PCD_ResetBeginCallback(PCD_HandleTypeDef *hpcd);
 void HAL_PCD_SuspendCallback(PCD_HandleTypeDef *hpcd);
 void HAL_PCD_ResumeCallback(PCD_HandleTypeDef *hpcd);
 void HAL_PCD_ConnectCallback(PCD_HandleTypeDef *hpcd);
