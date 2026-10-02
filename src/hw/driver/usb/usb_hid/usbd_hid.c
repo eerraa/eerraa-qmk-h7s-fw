@@ -50,7 +50,6 @@
 #include "report.h"
 #include "micros.h"
 #include "usbd_hid_internal.h"
-#include "usb_diagnostics.h"             // V260823R2: 실제 HID 전달/하드 이벤트 진단 코어
 
 
 #if HW_USB_LOG == 1
@@ -508,21 +507,6 @@ static void usbHidRetireSessionLocked(void)
 static uint8_t HIDInEpAdd = HID_EPIN_ADDR;
 extern USBD_HandleTypeDef USBD_Device;
 
-// V260823R2: ST USB 속도 값을 진단 계약의 안정된 값으로 정규화한다.
-static uint8_t usbHidDiagnosticsSpeedCode(uint8_t speed)
-{
-  if (speed == USBD_SPEED_HIGH)
-  {
-    return USB_DIAGNOSTICS_SPEED_HIGH;
-  }
-  if (speed == USBD_SPEED_FULL)
-  {
-    return USB_DIAGNOSTICS_SPEED_FULL;
-  }
-  return USB_DIAGNOSTICS_SPEED_UNKNOWN;
-}
-
-
 /**
   * @brief  USBD_HID_Init
   *         Initialize the HID interface
@@ -561,8 +545,6 @@ static uint8_t USBD_HID_Init(USBD_HandleTypeDef *pdev, uint8_t cfgidx)
   pdev->ep_out[HID_VIA_EP_OUT & 0xFU].bInterval = interval;
   usbHidRearmViaLocked(pdev);
   if (!via_rx_armed) goto fail;
-  usbDiagnosticsOnUsbConfigured(usbDiagnosticsIsActive() ? micros() : 0U,
-                                usbHidDiagnosticsSpeedCode(pdev->dev_speed));
   return (uint8_t)USBD_OK;
 fail:
   USBD_HID_DeInit(pdev, cfgidx);
@@ -810,50 +792,8 @@ static uint8_t USBD_HID_EP0_RxReady(USBD_HandleTypeDef *pdev)
   return (uint8_t)USBD_OK;
 }
 
-/**
-  * @brief  USBD_HID_SendReport
-  *         Send HID Report
-  * @param  buff: pointer to report
-  * @retval status
-  */
 
 
-/**
-  * @brief  USBD_HID_SendReportEXK
-  *         Send HID Report
-  * @param  buff: pointer to report
-  * @retval status
-  */
-
-
-/**
-  * @brief  USBD_HID_GetPollingInterval
-  *         return polling interval from endpoint descriptor
-  * @param  pdev: device instance
-  * @retval polling interval
-  */
-uint32_t USBD_HID_GetPollingInterval(USBD_HandleTypeDef *pdev)
-{
-  uint32_t polling_interval;
-
-  /* HIGH-speed endpoints */
-  if (pdev->dev_speed == USBD_SPEED_HIGH)
-  {
-    /* Sets the data transfer polling interval for high speed transfers.
-     Values between 1..16 are allowed. Values correspond to interval
-     of 2 ^ (bInterval-1). */
-    uint8_t hs_interval = usbBootModeGetHsInterval();
-    polling_interval    = (((1U << (hs_interval - 1U))) / 8U);           // V250923R1 Reflect dynamic HS interval
-  }
-  else   /* LOW and FULL-speed endpoints */
-  {
-    /* Sets the data transfer polling interval for low and full
-    speed transfers */
-    polling_interval =  HID_FS_BINTERVAL;
-  }
-
-  return ((uint32_t)(polling_interval));
-}
 
 #if (USBD_SUPPORT_USER_STRING_DESC == 1U)
 uint8_t *USBD_HID_GetUsrStrDescriptor(struct _USBD_HandleTypeDef *pdev, uint8_t index,  uint16_t *length)
@@ -963,7 +903,6 @@ static uint8_t USBD_HID_DataIn(USBD_HandleTypeDef *pdev, uint8_t epnum)
         keyboard_completed = true;
         keyboard_delay_ms = keyboard_active_delay_ms;
         keyboard_active_delay_ms = 0U;
-        if (usbDiagnosticsIsActive()) usbDiagnosticsOnReportTransferCompleted(keyboard_completed_us);
       }
     } else if (epnum == (HID_EXK_EP_IN & 0xFU)) {
       hidTxComplete(&extra_tx);
@@ -1040,8 +979,6 @@ static bool usbHidArm(void *context, const hid_tx_packet_t *packet)
   bool ok = USBD_LL_Transmit(&USBD_Device, ep, data, length) == USBD_OK;
   if (!ok) transport_stats.arm_failures++;
   if (ok && ep == HIDInEpAdd) keyboard_active_delay_ms = packet->delay_after_ms;
-  if (ok && ep == HIDInEpAdd && packet->diagnostic_session != 0U)
-    usbDiagnosticsOnReportTransferStarted(packet->request_us, packet->diagnostic_session, keyboard_tx.count - 1U);
   return ok;
 }
 
@@ -1049,6 +986,29 @@ static bool usbHidSessionValid(USBD_HandleTypeDef *pdev)
 {
   return usbHidAdmissionOpen() && (pdev->dev_state == USBD_STATE_CONFIGURED ||
       (pdev->dev_state == USBD_STATE_SUSPENDED && pdev->dev_old_state == USBD_STATE_CONFIGURED));
+}
+
+// Endpoint metadata belongs to the admitted HID session, independently of pending BootMode.
+const char *usbHidGetPollingLabel(void)
+{
+  uint32_t irq = usbHidLock();
+  uint8_t ep = HIDInEpAdd & 0x0FU;
+  bool valid = usbHidSessionValid(&USBD_Device) && USBD_Device.ep_in[ep].is_used;
+  uint8_t speed = USBD_Device.dev_speed;
+  uint8_t interval = USBD_Device.ep_in[ep].bInterval;
+  usbHidUnlock(irq);
+
+  if (valid) {
+    if (speed == USBD_SPEED_FULL && interval == 1U) return "1000 Hz (FS)";
+    if (speed == USBD_SPEED_HIGH) {
+      switch (interval) {
+        case 1U: return "8000 Hz (HS)";
+        case 2U: return "4000 Hz (HS)";
+        case 3U: return "2000 Hz (HS)";
+      }
+    }
+  }
+  return "Unavailable";
 }
 
 static bool usbHidFreezeKeyCandidateLocked(void)
@@ -1094,8 +1054,6 @@ static void usbHidSetKeyboardProtocolLocked(USBD_HandleTypeDef *pdev, USBD_HID_H
   usbHidFreezeKeyCandidateLocked();
   hhid->Protocol = protocol;
   hid_tx_packet_t resync = keyboard_latest;
-  resync.request_us = 0U;
-  resync.diagnostic_session = 0U;
   resync.delay_after_ms = 0U;
   if (keyboard_reconcile || !usbHidSessionValid(pdev) || !hidTxPush(&keyboard_tx, &resync)) keyboard_reconcile = true;
   usbHidPumpLocked(pdev);
@@ -1121,8 +1079,6 @@ static void usbHidResetTransport(void)
   hidTxInit(&via_tx, via_slots, HID_TX_DEPTH);
   keyboard_reconcile = true;
   extra_reconcile = 7U;
-  keyboard_latest.request_us = 0U;
-  keyboard_latest.diagnostic_session = 0U;
   keyboard_latest.delay_after_ms = 0U;
   keyboard_delay_ms = keyboard_active_delay_ms = 0U;
   keyboard_completed = false;
@@ -1331,10 +1287,6 @@ static bool usbHidSubmitKeyboard(uint8_t *data, uint16_t length, uint32_t scan_t
   if (data == NULL || length != HID_KEYBOARD_REPORT_SIZE) return false;
   hid_tx_packet_t packet = { .length = HID_KEYBOARD_REPORT_SIZE };
   memcpy(packet.data, data, length);
-  if (usbDiagnosticsIsActive()) {
-    packet.request_us = micros();
-    packet.diagnostic_session = usbDiagnosticsGetSessionId();
-  }
   uint32_t irq = usbHidLock();
   usbHidPumpLocked(&USBD_Device);
   bool configured = usbHidSessionValid(&USBD_Device);
@@ -1344,11 +1296,9 @@ static bool usbHidSubmitKeyboard(uint8_t *data, uint16_t length, uint32_t scan_t
                   usbHidIsSingleKeyUpdate(&packet, usage, pressed);
   bool merge = eligible && keyboard_candidate.valid && keyboard_candidate.scan_token == scan_token &&
                keyboard_candidate.pressed == pressed &&
-               keyboard_candidate.packet.diagnostic_session == packet.diagnostic_session &&
                (keyboard_candidate.touched[usage / 8U] & (1U << (usage % 8U))) == 0U;
   bool ok = false;
   if (merge) {
-    // Keep the first update's request time so merged latency is not understated.
     memcpy(keyboard_candidate.packet.data, packet.data, packet.length);
     keyboard_candidate.touched[usage / 8U] |= 1U << (usage % 8U);
     ok = true;
@@ -1369,12 +1319,9 @@ static bool usbHidSubmitKeyboard(uint8_t *data, uint16_t length, uint32_t scan_t
   if (!ok) {
     if (configured) {
       transport_stats.keyboard_coalesced++;
-      usbDiagnosticsOnReportQueueDrop(usbDiagnosticsIsActive() ? micros() : 0U);
     }
     keyboard_reconcile = true;
   }
-  if (usbDiagnosticsIsActive())
-    usbDiagnosticsOnReportQueueDepth(keyboard_tx.count + (keyboard_candidate.valid ? 1U : 0U));
   usbHidPumpLocked(&USBD_Device);
   usbHidUnlock(irq);
   return ok;
@@ -1418,7 +1365,6 @@ bool usbHidSendReportEXK(uint8_t *data, uint16_t length)
   if (!ok) {
     if (configured) {
       transport_stats.extra_coalesced++;
-      usbDiagnosticsOnReportQueueDrop(usbDiagnosticsIsActive() ? micros() : 0U);  // 기존 wire 집계는 keyboard + EXK
     }
     extra_reconcile |= 1U << index;
   }

@@ -50,8 +50,6 @@
 #include "usbd_cdc.h"
 #include "usbd_hid.h"
 #include "usbd_hid_internal.h"
-#include "micros.h"
-#include "usb_diagnostics.h"  // V260823R2: reset/suspend 하드 이벤트 카운터
 
 #define USBD_HANDOFF_RESET_HOLD_MS  (100U)   // V260912R1: 물려받은 USB 블록을 리셋한 뒤 호스트가 분리를 확정할 시간
 
@@ -65,11 +63,6 @@ static bool pcd_resume_skip_stale_sof = false;
 static volatile uint32_t sof_count = 0;  // V260901R1: SOF 생존 카운터. 점수는 계산하지 않는다.
 static bool host_seen = false;           // V260901R1: 한 번이라도 주소를 받은 뒤에만 호스트 소실로 본다
 
-// V260823R2: USB Device Library 속도를 진단 프로토콜 값으로 정규화한다.
-static uint8_t usbDiagnosticsSpeedFromUsbd(USBD_SpeedTypeDef speed)
-{
-  return speed == USBD_SPEED_HIGH ? USB_DIAGNOSTICS_SPEED_HIGH : USB_DIAGNOSTICS_SPEED_FULL;
-}
 
 /* External functions --------------------------------------------------------*/
 
@@ -356,8 +349,6 @@ void HAL_PCD_ResetCallback(PCD_HandleTypeDef *hpcd)
   {
     Error_Handler();
   }
-  usbDiagnosticsOnUsbReset(usbDiagnosticsIsActive() ? micros() : 0U,
-                           usbDiagnosticsSpeedFromUsbd(speed));       // V260823R2: 초기 reset도 부팅 누계에 포함
   // USB Reset is bus activity and starts a new USB session. It authoritatively
   // ends any cached physical-suspend state before the device stack is reset.
   bus_suspended = false;
@@ -401,7 +392,6 @@ void HAL_PCD_SuspendCallback(PCD_HandleTypeDef *hpcd)
 
   is_connected = false;
   bus_suspended = true;
-  usbDiagnosticsOnUsbSuspend(usbDiagnosticsIsActive() ? micros() : 0U);  // V260823R2
   /* USER CODE END 2 */
 }
 

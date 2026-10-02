@@ -3,6 +3,8 @@
 #ifdef BOOTMODE_ENABLE
 
 #include "usb.h"
+#include "usbd_hid.h"
+#include <string.h>
 #include "via.h"
 #include "era_state_sync.h"  // V260823R1: BootMode 선택값 변경 시 CONFIG revision
 
@@ -21,25 +23,32 @@ static void bootmode_sync_pending(void)
   }
 }
 
-// V251108R1: channel 13 value ID 1/2 BootMode 처리기
+// Selection and Apply retain their existing behavior; value 4 is an observation only.
 void via_qmk_usb_bootmode_command(uint8_t *data, uint8_t length)
 {
-  if (data == NULL)
-  {
+  if (data == NULL || length == 0U) return;
+  uint8_t *command_id = &data[0];
+  if (*command_id == id_custom_save) return;
+  if (length < 4U) { *command_id = id_unhandled; return; }
+  uint8_t *value_id = &data[2];
+  uint8_t *value_data = &data[3];
+
+  if (*value_id == id_qmk_usb_polling_current) {
+    if (*command_id == id_custom_get_value) {
+      if (length < 32U) { *command_id = id_unhandled; return; }
+      const char *label = usbHidGetPollingLabel();
+      memset(value_data, 0, 29U);
+      memcpy(value_data, label, strlen(label));
+    } else if (*command_id != id_custom_set_value) {
+      *command_id = id_unhandled;
+    }
     return;
   }
-
+  if (*value_id != id_qmk_usb_bootmode_select && *value_id != id_qmk_usb_bootmode_apply) {
+    *command_id = id_unhandled;
+    return;
+  }
   bootmode_sync_pending();
-
-  uint8_t *command_id = &(data[0]);
-
-  if ((*command_id != id_custom_save) && length < 4)
-  {
-    return;
-  }
-
-  uint8_t *value_id   = &(data[2]);
-  uint8_t *value_data = &(data[3]);
 
   switch (*command_id)
   {
@@ -82,11 +91,6 @@ void via_qmk_usb_bootmode_command(uint8_t *data, uint8_t length)
         value_data[0] = 0U;
       }
       break;
-    }
-
-    case id_custom_save:
-    {
-      break;  // V251108R4: 저장 명령은 Indicator와 동일하게 no-op
     }
 
     default:

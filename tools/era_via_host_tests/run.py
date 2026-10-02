@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Portable host tests for VIA value/transport layers, USB diagnostics, RGB SLEEP, CLEAN, VERSION, and TX producer.
+"""Portable host tests for VIA value/transport layers, USB polling, RGB SLEEP, CLEAN, VERSION, and TX producer.
 
 Windows 문서 명령은 tools/era_via_host_tests/run.ps1 이다. 이 스크립트는 같은 검사를
 PATH의 gcc로 돌린다 (mingw 경로가 없는 Linux 포함).
@@ -101,21 +101,6 @@ def main() -> int:
             SANDBOX / "mousekey_config.c",
         ],
         gcc_exact,
-    )
-
-    compile_and_run(
-        HERE / "test_usb_diagnostics.exe",
-        [
-            HERE / "test_usb_diagnostics.c",
-            ROOT / "src" / "hw" / "driver" / "usb" / "usb_hid" / "usb_diagnostics.c",
-            QMK / "port" / "era_usb_diagnostics.c",
-        ],
-        [
-            "-DUSB_DIAGNOSTICS_HOST_TEST",
-            f"-I{HERE / 'diagnostics_include'}",
-            f"-I{ROOT / 'src' / 'hw' / 'driver' / 'usb' / 'usb_hid'}",
-            f"-I{QMK / 'port'}",
-        ],
     )
 
     compile_and_run(

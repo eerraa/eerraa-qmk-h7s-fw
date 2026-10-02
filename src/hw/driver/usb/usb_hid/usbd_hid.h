@@ -145,7 +145,7 @@ extern USBD_ClassTypeDef USBD_HID;
 /** @defgroup USB_CORE_Exported_Functions
   * @{
   */
-uint32_t USBD_HID_GetPollingInterval(USBD_HandleTypeDef *pdev);
+const char *usbHidGetPollingLabel(void);
 
 
 enum 
@@ -184,7 +184,7 @@ void usbHidEndKeyScan(uint32_t scan_token);
 // V260911R3: 마지막 keyboard 스냅샷 뒤에 최소 간격을 설정한다. 호출자는 기다리지 않는다.
 void usbHidDelayKeyboardReport(uint16_t delay_ms);
 bool usbHidSendReportEXK(uint8_t *p_data, uint16_t length);
-void usbHidSetStatusLed(uint8_t led_bits);  // V260823R2: 레거시 HID rate/monitor API는 관측 전용 진단 API로 대체
+void usbHidSetStatusLed(uint8_t led_bits);
 
 /**
   * @}

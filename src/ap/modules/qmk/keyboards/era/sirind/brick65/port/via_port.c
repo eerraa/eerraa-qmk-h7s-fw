@@ -155,7 +155,8 @@ static void via_handle_usb_polling_channel(uint8_t *data, uint8_t length)
 
 #ifdef BOOTMODE_ENABLE
   if (value_id == id_qmk_usb_bootmode_select ||
-      value_id == id_qmk_usb_bootmode_apply)
+      value_id == id_qmk_usb_bootmode_apply ||
+      value_id == id_qmk_usb_polling_current)
   {
     via_qmk_usb_bootmode_command(data, length);
     return;

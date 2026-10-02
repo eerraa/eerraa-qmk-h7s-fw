@@ -95,9 +95,8 @@ delivery guarantee.
 Finite overflow is explicit. Preserve the already accepted prefix, then converge
 keyboard/button/system/consumer state to the newest state after the prefix
 drains. Intermediate events may be coalesced. Relative mouse motion/wheel deltas
-must not be replayed during reconciliation. The aggregate wire drop counter and
-the local transport counters keep their existing meanings; changing the
-diagnostic wire envelope is a `docs/contract_via.md` change.
+must not be replayed during reconciliation. Local transport counters retain
+their meanings; the retired diagnostic wire aggregate is no longer exposed.
 
 Keyboard tap timing is transport-owned and nonblocking. Requested keyboard
 intervals are measured from completion of the latest accepted keyboard snapshot,
@@ -289,17 +288,12 @@ reused. Its EEPROM slot remains `EECONFIG_USER_RESERVED_32` so later USER slot
 addresses do not move; nothing should read or write that reserved value. Storage
 ownership is `docs/contract_eeprom.md` §1.
 
-Selector `0x07` is observation-only. Its wire envelope is
-`docs/contract_via.md` §6. It must not apply/reset polling mode, write
-diagnostic history to EEPROM, become State Sync recovery, or emit a synthetic
-stability score. Session/counter storage is RAM-only; CLEAR zeros session state
-only and must not clear boot counters. RGB Sleep may use
-SOF activity to detect host loss, but that observation is not a stability score
-and must not invoke polling apply/reset.
-
-If more observation is required, extend the coordinated read-only diagnostics
-protocol. Do not restore automatic benchmarking, scoring, downgrade, or recovery
-control.
+User diagnostics and their dedicated instrumentation are also retired. Selector
+`0x07` stays reserved; the replacement is the last-read keyboard IN setting TEXT
+under `docs/contract_via.md` §6. Keep real report spacing, ownership/generation
+barriers and internal transport counters. Do not retain unused session collectors
+or timers as a hidden replacement. RGB Sleep may observe SOF for host loss, but
+must not score stability or invoke polling apply/reset.
 
 ## 5. Polling mode is user-owned
 
@@ -326,11 +320,10 @@ Applying the already active mode still requests that reset. Custom SAVE on this
 control is a no-op; persistence belongs to Apply. The CLI boot-mode setter is
 also an explicit user path with the same persist-and-reset boundary.
 
-No diagnostic, monitor, State Sync or ordinary USB service path may call polling
-apply/reset on the user's behalf. Apply/reboot ends the current enumeration, so
-an in-flight diagnostic session cannot continue on it; host behavior across that
-boundary is owned by `docs/contract_via.md` §6 and
-`the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md`.
+No monitor, State Sync or ordinary USB service path may call polling apply/reset
+on the user's behalf. Apply/reboot ends the current enumeration. A new TEXT
+value requires a successful read in the successor connection; the old snapshot
+is not proof of the new setting. Host refresh ownership is `docs/contract_via.md` §6.
 
 ## 6. Bootloader-to-firmware handoff
 
@@ -369,9 +362,6 @@ state lookup outside that stale-cache gate. A future cache is acceptable only
 with wrap-safe 32-bit expiry and complete invalidation for the state that affects
 the deadline. The long-idle regression in `tools/firmware_regression_tests/`
 owns the executable guard.
-
-Diagnostic deadlines use their separate 32-bit wrap-safe rule; selector
-semantics remain `docs/contract_via.md` §6.
 
 ## 8. Reactive RGB input belongs to physical switch transitions
 

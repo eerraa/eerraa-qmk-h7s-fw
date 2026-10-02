@@ -104,7 +104,6 @@ bool hwInit(void)
 #ifdef BOOTMODE_ENABLE
   bootmode_init();                                            // V251112R6: BootMode 기본값 초기화
 #endif
-  // V260823R2: USB 진단은 RAM 전용이므로 부팅 EEPROM 초기화/로드 단계가 없다.
   bool reset_guard_ok = hwRunResetGuardWithRetry();            // 실패 시 LED 표시 후 재시도
 #ifdef BOOTMODE_ENABLE
   if (reset_guard_ok && usbBootModeLoad() != true)           // V250923R1 Apply stored USB boot mode preference

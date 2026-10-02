@@ -1,4 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
+# H7S custom UI support revision: keyboard IN polling configuration label.
+add_compile_definitions(VIA_FIRMWARE_VERSION=0x00000001)
 set(QMK_ROOT_PATH "${CMAKE_CURRENT_SOURCE_DIR}/src/ap/modules/qmk")
 
 set (QMK_KEYBOARD_PATH ${QMK_ROOT_PATH}/${KEYBOARD_PATH})

@@ -152,7 +152,7 @@ hardware-unverified (`docs/state_open.md`). Backend page completion is not a
 multi-page transaction: this layout provides no journaling, power-loss-safe
 transaction boundary, or persistence of in-flight RAM updates across power loss.
 
-USB diagnostics do not write EEPROM (`docs/contract_usb.md` §4).
+The read-only USB polling setting does not write EEPROM (`docs/contract_usb.md` §4).
 RGB SLEEP writes only its four-byte slot on VIA SAVE / CLEAN / invalid-slot
 init (`src/ap/modules/qmk/port/rgb_sleep.c`). The slot is signature, a version
 byte, and uint16 seconds. The version byte's high bit is an inverted

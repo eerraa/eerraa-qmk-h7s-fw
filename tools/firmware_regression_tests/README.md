@@ -28,7 +28,7 @@ SAVE/reload. These prove logical transitions, not game/USB latency.
 - The production HID FIFO runs 100000 deterministic operations against an independent
   order model. Failed arms retain the head, and delayed pointer reads verify the
   active payload remains unchanged.
-- The production HID class, diagnostics implementation and fixed class pool run
+- The production HID class and fixed class pool run
   against an endpoint mock that retains pointers, provides RX NAK/backpressure,
   injects arm failures and executes the actual class callbacks. Tests cover overflow,
   response credit and generations, EP0 input sizes, 2048 configurations, partial
@@ -40,11 +40,16 @@ SAVE/reload. These prove logical transitions, not game/USB latency.
   Remote-Wake cases inject the H7RS early-WKUINT behavior, enforce the 10 ms RWUSIG
   window, reject stale/SUSPSTS SOF, de-duplicate late WKUINT and consume VIA after
   fresh-SOF logical Resume.
+- `test_usb_polling.h` checks the active keyboard IN setting across pending/saved
+  mode changes, Other-Speed reads, FS/HS, Suspend, failed initialization and raw
+  Reset. Failed-teardown tests also reject retained endpoint metadata.
+  `polling_cases.py` compiles production BootMode, five board routers and the
+  keyboard-value switches for TEXT boundaries and reserved-selector echo.
 - `test_keyboard_merge.h`, included in the actual HID transport fixture, covers
   immediate single-key submission, completion before scan end, twenty same-scan
   plain presses with an immutable first packet and one merged suffix, direction
   and scan/action barriers, malformed/filtered deltas, Boot's seven-key release
-  projection, protocol/diagnostic-session changes, earliest merged request time,
+  projection, protocol changes,
   arm failures, Caps intervals, Suspend and raw-reset retirement. A deterministic
   3200-transition run compares externally delivered per-usage edges with input
   edges while completions and ordinary reports interleave with scans.

@@ -20,7 +20,6 @@
 #undef USBD_CtlPrepareRx
 #undef USBD_CtlSendData
 #undef USBD_CtlError
-#include "usb_diagnostics.h"
 
 static bool is_connected, bus_suspended;
 static volatile bool pcd_reset_pending;

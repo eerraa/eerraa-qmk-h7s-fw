@@ -103,7 +103,7 @@ enum via_keyboard_value_id {
     id_firmware_version    = 0x04,
     id_device_indication   = 0x05,
     id_era_state_sync      = 0x06,  // V260821R1: GET_KEYBOARD_VALUE 리비전 봉투
-    id_era_usb_diagnostics = 0x07,  // V260823R2: 읽기 전용 USB 진단 세션 봉투
+    // 0x07 is reserved for the retired ERA USB diagnostics selector.
 };
 
 enum via_channel_id {
@@ -161,6 +161,8 @@ enum via_qmk_audio_value {
 enum via_qmk_usb_polling_value {
     id_qmk_usb_bootmode_select = 1,
     id_qmk_usb_bootmode_apply  = 2,
+    // Value 3 remains reserved.
+    id_qmk_usb_polling_current = 4,
 };
 
 // V260901R1: 소비자 없는 STATUS를 제거하고 KEY RESPONSE value ID를 설정값 1~4로 한정

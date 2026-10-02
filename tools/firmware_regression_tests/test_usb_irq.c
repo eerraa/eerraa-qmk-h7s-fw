@@ -269,8 +269,6 @@ static unsigned reset_begin_count, resume_count, ungate_count;
 #define PCD_SPEED_HIGH USBD_HS_SPEED
 #define PCD_SPEED_HIGH_IN_FULL USB_OTG_SPEED_HIGH_IN_FULL
 #define PCD_SPEED_FULL USBD_FS_SPEED
-#define USB_DIAGNOSTICS_SPEED_HIGH 2U
-#define USB_DIAGNOSTICS_SPEED_FULL 1U
 static struct { uint32_t SCR; } mock_scb;
 #define SCB (&mock_scb)
 #define SCB_SCR_SLEEPDEEP_Msk 4U
@@ -278,10 +276,6 @@ static struct { uint32_t SCR; } mock_scb;
 #define __HAL_PCD_GATE_PHYCLOCK(h) ((void)(h), bridge_pcgcctl |= USB_OTG_PCGCCTL_STOPCLK)
 #define __HAL_PCD_UNGATE_PHYCLOCK(h) ((void)(h), bridge_pcgcctl &= ~USB_OTG_PCGCCTL_STOPCLK, ungate_count++)
 #define logPrintf(...) assert(false && "USB callbacks must not enter the shared logger")
-static bool usbDiagnosticsIsActive(void) { return false; }
-static uint32_t micros(void) { return 0U; }
-static void usbDiagnosticsOnUsbReset(uint32_t time, uint8_t speed) { (void)time; (void)speed; }
-static void usbDiagnosticsOnUsbSuspend(uint32_t time) { (void)time; }
 static void Error_Handler(void) { assert(false); }
 static void usbHidOnBusResetBegin(void)
 {

@@ -48,16 +48,16 @@ def main() -> None:
                 ROOT/'src/hw/driver/eeprom/zd24c128.c', ROOT/'src/hw/driver/i2c_async.c'],
                 [*inc, "-D_USE_HW_I2C", "-D_USE_HW_EEPROM", "-DEEPROM_CHIP_ZD24C128"])
     if args.only in (None, "usb"):
-        execute("test_usb_transport", [HERE/'test_usb_transport.c', HID/'usbd_hid.c', HID/'hid_tx_queue.c', HID/'usb_diagnostics.c',
+        execute("test_usb_transport", [HERE/'test_usb_transport.c', HID/'usbd_hid.c', HID/'hid_tx_queue.c',
                 ROOT/'src/hw/driver/usb/usb_class_pool.c'], [*inc, f"-I{HID}",
                 f"-I{ROOT/'src/lib/ST/STM32_USB_Device_Library/Core/Inc'}",
-                f"-I{ROOT/'src/hw/driver/usb/usb_cdc'}", "-DTEST_USB_TRANSPORT", "-DUSB_DIAGNOSTICS_HOST_TEST", "-Wno-unused-parameter"])
+                f"-I{ROOT/'src/hw/driver/usb/usb_cdc'}", "-DTEST_USB_TRANSPORT", "-Wno-unused-parameter"])
         from usb_pcd_cases import generate as generate_pcd
         pcd_source = generate_pcd(ROOT, BUILD)
-        execute("test_usb_pcd", [pcd_source, HID/'usbd_hid.c', HID/'hid_tx_queue.c', HID/'usb_diagnostics.c',
+        execute("test_usb_pcd", [pcd_source, HID/'usbd_hid.c', HID/'hid_tx_queue.c',
                 ROOT/'src/hw/driver/usb/usb_class_pool.c'], [*inc, f"-I{HID}", f"-I{BUILD}",
                 f"-I{ROOT/'src/lib/ST/STM32_USB_Device_Library/Core/Inc'}",
-                f"-I{ROOT/'src/hw/driver/usb/usb_cdc'}", "-DTEST_USB_TRANSPORT", "-DUSB_DIAGNOSTICS_HOST_TEST", "-Wno-unused-parameter"])
+                f"-I{ROOT/'src/hw/driver/usb/usb_cdc'}", "-DTEST_USB_TRANSPORT", "-Wno-unused-parameter"])
         from usb_irq_cases import generate as generate_irq
         irq_source = generate_irq(ROOT, BUILD)
         for callbacks in (0, 1):
@@ -75,16 +75,16 @@ def main() -> None:
         execute("test_usb_flush", [generate_flush(ROOT, BUILD)], [f"-I{BUILD}"])
         from teardown_cases import generate as generate_teardown
         execute("test_usb_teardown", [generate_teardown(ROOT, BUILD), HID/'usbd_hid.c', HID/'hid_tx_queue.c',
-                HID/'usb_diagnostics.c', ROOT/'src/hw/driver/usb/usb_class_pool.c'],
+                ROOT/'src/hw/driver/usb/usb_class_pool.c'],
                 [*inc, f"-I{HID}", f"-I{HERE}", f"-I{BUILD}",
                 f"-I{ROOT/'src/lib/ST/STM32_USB_Device_Library/Core/Inc'}",
-                f"-I{ROOT/'src/hw/driver/usb/usb_cdc'}", "-DTEST_USB_TRANSPORT", "-DUSB_DIAGNOSTICS_HOST_TEST", "-Wno-unused-parameter"])
+                f"-I{ROOT/'src/hw/driver/usb/usb_cdc'}", "-DTEST_USB_TRANSPORT", "-Wno-unused-parameter"])
         from usb_reset_barrier_cases import generate as generate_reset_barrier
         execute("test_usb_reset_barrier", [generate_reset_barrier(ROOT, BUILD), HID/'usbd_hid.c', HID/'hid_tx_queue.c',
-                HID/'usb_diagnostics.c', ROOT/'src/hw/driver/usb/usb_class_pool.c'],
+                ROOT/'src/hw/driver/usb/usb_class_pool.c'],
                 [*inc, f"-I{HID}", f"-I{HERE}", f"-I{BUILD}",
                 f"-I{ROOT/'src/lib/ST/STM32_USB_Device_Library/Core/Inc'}",
-                f"-I{ROOT/'src/hw/driver/usb/usb_cdc'}", "-DTEST_USB_TRANSPORT", "-DUSB_DIAGNOSTICS_HOST_TEST", "-Wno-unused-parameter"])
+                f"-I{ROOT/'src/hw/driver/usb/usb_cdc'}", "-DTEST_USB_TRANSPORT", "-Wno-unused-parameter"])
         from usb_cdc_control_cases import generate as generate_cdc_control
         execute("test_usb_cdc_control", [generate_cdc_control(ROOT, BUILD)],
                 [*inc, f"-I{BUILD}", f"-I{ROOT/'src/lib/ST/STM32_USB_Device_Library/Core/Inc'}",
@@ -142,6 +142,8 @@ def main() -> None:
             execute("test_rgb_frames_" + board, [frame_source], [f"-I{HERE}", f"-I{HERE/'ws2812_include'}",
                     f"-I{ROOT/'src/common/hw/include'}", f"-I{QMK/'quantum'}", *layout, "-Wno-unused-function"])
     if args.only in (None, "guards"):
+        from polling_cases import generate as generate_polling
+        execute("test_polling_wire", [generate_polling(ROOT, BUILD)], [])
         from source_cases import generate
         via, reset, rgb_gate, ws2812, rgb_sat = generate(ROOT, BUILD)
         execute("test_via_guard", [via], [])

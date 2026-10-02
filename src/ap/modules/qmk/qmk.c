@@ -3,8 +3,6 @@
 #include "qmk/port/platforms/eeprom.h"            // V251112R5: EEPROM 버스트 모드 제어
 #include "qmk/port/debounce_profile.h"
 #include "qmk/port/sys_port.h"                    // V260901R1: EEPROM CLEAN 10초 확인 창
-#include "usb_diagnostics.h"                      // V260823R2: 세션 중에만 메인 루프 간격 계측
-#include "micros.h"
 
 
 static void cliQmk(cli_args_t *args);
@@ -54,10 +52,6 @@ bool qmkInit(void)
 
 void qmkUpdate(void)
 {
-  if (usbDiagnosticsIsActive())
-  {
-    usbDiagnosticsTask(micros());                                // V260823R2: idle일 때 타이머 읽기/계측 task 없음
-  }
   keyboard_task();
 #ifdef _USE_HW_WS2812
   ws2812Task();                                      // V260910R6: RGB DMA 완료 후 대기 중 최신 프레임을 비차단 전송

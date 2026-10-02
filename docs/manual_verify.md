@@ -43,6 +43,20 @@ cmake -S . -B build -DKEYBOARD_PATH='/keyboards/era/keynetix/may65' -G "MinGW Ma
 cmake --build build -j10
 ```
 
+Generate official VIA polling-TEXT candidates separately from shipped definitions:
+
+```powershell
+python -X utf8 tools/prepare_polling_test_json.py build-usb-polling-delivery/official-via-test
+```
+
+The generator validates that each of the five definitions gains only the gated
+read-only label. Release packages may include these definitions paired with their
+matching support-revision-1 firmware; preserve the source definitions as the old
+firmware compatibility path. Generation does not verify an official browser
+session. Apply/reboot refresh and legacy-firmware acceptance remain
+`docs/state_open.md` items; user guidance must describe the last-read snapshot
+and F5 refresh rather than promise automatic refresh.
+
 Build the board whose `config.h` or `<board>/port/` is affected. In Git Bash,
 `MSYS_NO_PATHCONV=1` may be needed for the slash-prefixed `KEYBOARD_PATH`;
 keep `ARM_TOOLCHAIN_DIR` in the form expected by the CMake toolchain file.

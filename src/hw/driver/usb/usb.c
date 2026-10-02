@@ -13,7 +13,6 @@
 #include "eeprom.h"
 #include "qmk/port/port.h"
 #include "qmk/port/platforms/eeprom.h"
-#include "usb_diagnostics.h"                                          // V260823R2: 관측 전용 진단 초기화
 
 #define USB_RESET_RESPONSE_GRACE_MS   (40U)                           // V251109R4: VIA 응답 송신 보장을 위한 최소 유예
 #define USB_BOOTMODE_APPLY_GRACE_MS   USB_RESET_RESPONSE_GRACE_MS     // V251109R4: BootMode 적용 시 동일 유예 사용
@@ -333,7 +332,6 @@ static void cliBoot(cli_args_t *args);                                       // 
 
 bool usbInit(void)
 {
-  usbDiagnosticsInit();                                               // V260823R2: RAM 전용 카운터/세션 초기화
 #ifdef _USE_HW_CLI
   cliAdd("usb", cliCmd);
   cliAdd("boot", cliBoot);                                    // V250923R1 Expose boot mode control

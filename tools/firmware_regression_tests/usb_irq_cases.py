@@ -122,7 +122,7 @@ def generate(root: Path, build: Path, pcd_source: str | None = None,
     conf = conf_source if conf_source is not None else (root / "src/hw/driver/usb/usbd_conf.c").read_text(encoding="utf-8")
     usb = (root / "src/hw/driver/usb/usb.c").read_text(encoding="utf-8")
     bridge = [bridge_function(conf, name) for name in (
-        "usbDiagnosticsSpeedFromUsbd", "USBD_is_connected", "USBD_is_reset_pending",
+        "USBD_is_connected", "USBD_is_reset_pending",
         "usbPcdBeginReset", "usbPcdOnIrqEntry", "HAL_PCD_ResetBeginCallback",
         "usbPcdHardwareActive", "usbPcdResumeIfActive", "usbHidLogicalSuspendedSof",
         "SOFCallback", "SuspendCallback", "ResumeCallback", "DataInStageCallback",

@@ -36,6 +36,7 @@ static uint8_t status_class_deinit(USBD_HandleTypeDef *d, uint8_t config)
 
 static void check_blocked_admission(void *handle, uint32_t generation)
 {
+  assert(strcmp(usbHidGetPollingLabel(), "Unavailable") == 0);
   uint8_t keyboard[HID_KEYBOARD_REPORT_SIZE] = {0}, extra[6] = {2U, 1U, 1U};
   uint8_t via[HID_VIA_EP_SIZE] = {0};
   keyboard[2] = 5U;

@@ -155,7 +155,6 @@ bool eeprom_apply_factory_defaults(bool write_reset_guard)
 #ifdef BOOTMODE_ENABLE
   usbBootModeApplyDefaults();                               // V251114R4: USER 블록이 없을 때만 기본값 백업 적용
 #endif
-  // V260823R2: USB 진단에는 EEPROM 기본값/flush 경로가 없다.
 #endif
   if (eeprom_flush_pending() != true)
   {

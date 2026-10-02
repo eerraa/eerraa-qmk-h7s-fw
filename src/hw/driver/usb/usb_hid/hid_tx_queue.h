@@ -5,11 +5,9 @@
 // V260909R1: 호출자가 IRQ 직렬화를 소유한다. active.data는 완료 전까지 불변이다.
 #define HID_TX_PACKET_BYTES 32U
 typedef struct {
-  uint32_t request_us;
-  uint16_t diagnostic_session;
+  // USB transfer buffers and every queue slot must remain word-aligned.
+  uint8_t data[HID_TX_PACKET_BYTES] __attribute__((aligned(4)));
   uint8_t length;
-  uint8_t reserved;
-  uint8_t data[HID_TX_PACKET_BYTES];
   uint16_t delay_after_ms; // V260911R3: 전송 완료 뒤 다음 keyboard 리포트까지의 최소 간격, wire 밖의 메타데이터
 } hid_tx_packet_t;
 

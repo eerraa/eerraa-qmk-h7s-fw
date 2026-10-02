@@ -1,5 +1,4 @@
 /* Actual HID class tests: a logical candidate must never postpone first service. */
-#include "usb_diagnostics.h"
 
 static void merge_fixture(void)
 {
@@ -220,41 +219,6 @@ static void test_keyboard_merge(void)
   assert(delivered[1].length == 8U && delivered[1].data[2] == 4U && delivered[1].data[3] == 0U);
   assert(delivered[2].data[3] == 0U && delivered[3].data[3] == 5U);
 
-  // Diagnostics account for the report, with the earliest merged request time;
-  // planned combination is not an overflow/drop and cannot hide queue residency.
-  merge_fixture();
-  memset(report, 0, sizeof(report));
-  merge_seed(report);
-  usbDiagnosticsInit();
-  assert(usbDiagnosticsStart(10U, 0U, 125U, micros()));
-  report[2] = 4U;
-  assert(usbHidSubmitKeyUpdate(report, sizeof(report), 10U, 4U, true));
-  clock_us_fraction = 20U;
-  report[3] = 5U;
-  assert(usbHidSubmitKeyUpdate(report, sizeof(report), 10U, 5U, true));
-  clock_us_fraction = 40U; complete(1U);
-  clock_us_fraction = 100U; complete(1U);
-  usb_diagnostics_snapshot_t observation;
-  usbDiagnosticsCapture(&observation, micros());
-  assert(observation.report_samples == 1U && observation.latency_max_us == 100U);
-  assert(observation.queue_depth_peak == 1U && observation.session_counters.report_drops == 0U);
-  assert(usbDiagnosticsStop(micros()));
-
-  merge_fixture();
-  assert(usbDiagnosticsStart(10U, 0U, 125U, micros()));
-  memset(report, 0, sizeof(report));
-  merge_seed(report);
-  report[2] = 4U;
-  assert(usbHidSubmitKeyUpdate(report, sizeof(report), 10U, 4U, true));
-  assert(usbDiagnosticsStop(micros()));
-  assert(usbDiagnosticsStart(10U, 0U, 125U, micros()));
-  report[3] = 5U;
-  assert(usbHidSubmitKeyUpdate(report, sizeof(report), 10U, 5U, true));
-  drain();
-  assert(delivered_count == 3U && delivered[1].data[3] == 0U && delivered[2].data[3] == 5U);
-  usbDiagnosticsCapture(&observation, micros());
-  assert(observation.report_samples == 1U);
-  assert(usbDiagnosticsStop(micros()));
 
   merge_fixture();
   memset(report, 0, sizeof(report));

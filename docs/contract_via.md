@@ -5,7 +5,7 @@ Canonical for: official VIA compatibility, exact-value encoding, State Sync revi
 
 Implementation-owned inventories are not repeated here. Current command/channel/value ids are in `src/ap/modules/qmk/quantum/via.h`; dispatch is in `src/ap/modules/qmk/quantum/via.c` and `<board>/port/via_port.c`; official VIA definitions are `src/ap/modules/qmk/keyboards/era/**/json/*-VIA.JSON`; the firmware version is `_DEF_FIRMWARE_VERSION` in `src/hw/hw_def.h`.
 
-The app-side owners are `the-via-eerraa/docs/adr/0001-state-sync-protocol.md` for State Sync/exact-ms and `the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md` for diagnostics. Local document checks prove only this repository; a peer or remote revision is not verified merely because these pointers exist.
+The app-side owners are `the-via-eerraa/docs/adr/0001-state-sync-protocol.md` for State Sync/exact-ms and `the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md` for the retired diagnostics migration. Local document checks prove only this repository; a peer or remote revision is not verified merely because these pointers exist.
 
 ## 1. Official VIA compatibility and shipped ids
 
@@ -107,7 +107,7 @@ Selector `0x06` publishes three RAM uint32 equality tokens: KEYMAP, MACRO, and C
 - KEYMAP and MACRO mutation commands bump their domain when the mutation command is accepted; those paths intentionally do not compare old/new payloads first.
 - CONFIG custom setters bump only when the value observable by GET changes. A same-value custom SET is a no-op and must not bump.
 - Layout-options write bumps CONFIG. EEPROM reset bumps all three domains.
-- Custom SAVE schedules persistence only and does not itself bump. Selector `0x07` diagnostics does not bump. VIA-core RGB state and read-only version/system paths are outside this CONFIG revision contract.
+- Custom SAVE schedules persistence only and does not itself bump. The read-only polling TEXT does not bump. VIA-core RGB state and read-only version/system paths are outside this CONFIG revision contract.
 
 `src/ap/modules/qmk/port/era_state_sync.c` owns token storage/advance. Find mutation sites from `era_state_sync_bump_keymap()`, `era_state_sync_bump_macro()`, and `era_state_sync_bump_config()` in current source; this document does not maintain a handler inventory.
 
@@ -152,105 +152,62 @@ App responsibility: send tagged 32-byte GETs through the per-path serialized tra
 
 `src/ap/modules/qmk/port/era_state_sync.c` owns the firmware encoder. `tools/era_via_host_tests/test_era_via_exact_ms.c` covers OK, unsupported version, reserved-byte invalid, tag echo, and short-frame false return.
 
-## 6. selector `0x07` — H7S USB diagnostics v1
+## 6. Keyboard USB setting TEXT and retired diagnostics
 
-Diagnostics uses GET keyboard value `0x02` / SET keyboard value `0x03` + selector `0x07`, protocol version `0x01`, a 32-byte payload, and big-endian multibyte integers. It is request/reply only; firmware must not emit unsolicited diagnostics packets.
+User diagnostics and dedicated firmware instrumentation are removed. The observation
+loss (report timing, queue peak/drop sessions, loop stalls and USB event histories)
+is accepted; internal transport counters are not a user-facing replacement.
+Keyboard-value selector `0x07` remains reserved. GET/SET return `id_unhandled`
+by changing only byte 0; selector, tag and all other request bytes are preserved.
+This retirement does not change `VIA_PROTOCOL_VERSION` or custom SET command id `0x07`.
 
-This protocol is observation-only with respect to polling policy. START selects only a diagnostic duration; mode selection/apply/reboot stays on the existing BootMode controls. Diagnostics must not automatically downgrade polling, write diagnostic history to EEPROM, reset the device, or become State Sync recovery. `docs/contract_usb.md` §4 owns that product boundary; the app side is `the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md`.
+Custom channel 13/value 4 is read-only. A 32-byte GET returns a NUL-terminated
+ASCII value in bytes 3..31 (29 bytes including NUL); unused bytes are zero.
+Only `1000 Hz (FS)`, `2000 Hz (HS)`, `4000 Hz (HS)`, `8000 Hz (HS)` and
+`Unavailable` are valid. Short GETs are rejected before writing the payload.
+SET has no side effects; channel SAVE retains its no-op meaning. Value 1 is
+pending selection, value 2 is Apply, and retired value 3 remains reserved.
+Neither GET nor the read-only SET changes CONFIG revision or EEPROM.
 
-### Request
+The HID owner copies session validity, its actual keyboard IN endpoint's
+`is_used`/`bInterval`, and negotiated speed under the existing lock. Conversion
+happens after unlocking. Configured and same-session suspended states are valid;
+failed initialization/teardown and raw Reset are invalid even if metadata remains.
+Pending/saved BootMode, shared descriptors and a different composite class's
+pointer are not the source. Existing response-generation checks discard a reply
+if its transport session retires after the snapshot.
 
-| Byte | Field |
-| ---: | --- |
-| `0` | GET `0x02` or SET `0x03` |
-| `1` | selector `0x07` |
-| `2` | protocol `0x01` |
-| `3` | operation |
-| `4..5` | host tag, BE16 |
-| `6` | START duration seconds or SNAPSHOT chunk index; otherwise 0 |
-| `7..8` | snapshot sequence, BE16; chunk-0 SNAPSHOT sends 0 |
-| `9..31` | reserved, all 0 |
+The TEXT means **keyboard IN interval setting at the last successful read**,
+not measured host polling or input latency. A pending choice or Apply request
+must not optimistically replace it. Firmware support revision
+`VIA_FIRMWARE_VERSION=1` is assigned by the common QMK CMake configuration;
+`id_firmware_version` returns that 32-bit value. It is independent of the date
+version, VIA protocol revision and EEPROM reset key.
 
-| Operation | Id | Command |
-| --- | ---: | --- |
-| capabilities | `0x00` | GET |
-| snapshot | `0x01` | GET |
-| start | `0x10` | SET |
-| stop | `0x11` | SET |
-| clear | `0x12` | SET |
+Polling-TEXT definitions use a label with command `id_qmk_usb_polling_current`
+and firmware-only `showIf: {id_firmware_version} >= 1`. The existing official
+JSONs remain the legacy compatibility path until external acceptance. Generate
+the TEXT definitions with `tools/prepare_polling_test_json.py`; release packages
+may pair them with their matching support-revision-1 firmware. This pairing is
+not approval to replace definitions used with old firmware. Version-0 pruning is only
+assured when the client successfully reads the current version and performs
+firmware-only pruning. Undefined/stale cached versions may bypass that guard;
+no unconditional official-client failure guarantee is claimed.
 
-START duration is exactly 10, 30, or 60 seconds.
+The custom app follow-up must own this observation outside generic CONFIG/menu
+caches, scoped to device, connection generation and definition. It must verify
+the current connection's support version before GET, use optional handling for
+unhandled only, strictly validate the payload, invalidate failed/stale values,
+and query on reconnect/screen activation/explicit refresh. Transport errors
+retain the existing transport policy. Ordinary CONFIG replacement must not
+restore a stale value. No new wire generation or polling loop is required.
+The peer is read-only in this firmware change; its existing diagnostic contract
+is a migration input, not evidence that the app change is complete.
 
-### Response
-
-| Byte | Field |
-| ---: | --- |
-| `0` | echoed command |
-| `1` | `0x07` |
-| `2` | `0x01` |
-| `3` | echoed operation |
-| `4..5` | echoed tag, BE16 |
-| `6` | status |
-| `7` | state: idle 0, running 1, complete 2, stopped 3 |
-| `8..9` | session id, BE16; none is 0 |
-| `10..11` | frozen snapshot sequence, BE16 |
-| `12` | chunk index |
-| `13` | chunk count |
-| `14..31` | 18-byte operation payload |
-
-| Status | Id |
-| --- | ---: |
-| OK | `0x00` |
-| unsupported version | `0x01` |
-| invalid | `0x02` |
-| busy | `0x03` |
-| no session | `0x04` |
-| stale snapshot | `0x05` |
-
-Version validation precedes request-shape validation. With a supported version, wrong GET/SET-to-operation pairing, nonzero reserved bytes, nonzero sequence on chunk 0, invalid START duration, or an invalid chunk index returns INVALID. `length < 32` follows §5: the direct handler returns false and raw-HID transport sends no selector reply.
-
-Concurrent START returns BUSY. STOP without a running session returns NO SESSION. CLEAR while running returns BUSY. SNAPSHOT chunk 0 freezes a new nonzero sequence; later chunks must present that sequence or receive STALE SNAPSHOT.
-
-### Capabilities payload (`14..31`)
-
-| Payload byte | Field |
-| ---: | --- |
-| `0` | flags: report timing `0x01`, histogram `0x02`, firmware timing `0x04`, timeline `0x08`, boot counters `0x10` |
-| `1` | duration mask for 10/30/60 s, bits `0x07` |
-| `2` | histogram bins: 8 |
-| `3` | timeline capacity: 8 |
-| `4..5` | recommended snapshot interval: 1000 ms, BE16 |
-| `6` | endian: 1 = big |
-| `7` | time unit: 1 = µs |
-| `8` | firmware-version ASCII length, maximum 9 |
-| `9..17` | `_DEF_FIRMWARE_VERSION` ASCII and zero padding |
-
-START OK payload is duration, BootMode, and expected interval µs (BE32). STOP/CLEAR payload is zero. The expected interval is derived from selected BootMode at START, not negotiated link speed.
-
-### Snapshot chunks
-
-| Chunk | 18-byte payload |
-| ---: | --- |
-| `0` | mode U8, speed U8, duration U8, event count U8, elapsed ms U32, expected interval µs U32, report samples U32, bin/timeline count U8×2 |
-| `1` | latency min / average / max / window max U32×4, queue peak U16 |
-| `2..3` | histogram U32×4 each |
-| `4` | loop samples / max / window max / stall count U32×4, stall threshold U16 |
-| `5` | boot drops / resets / configurations / suspends U32×4 |
-| `6` | boot speed changes, session drops / resets / configurations U32×4 |
-| `7` | session suspends / speed changes / timeline overwrites U32×3, zero padding |
-| `8..11` | two events each: type U8 + relative ms U32 + value U32 |
-
-Base chunk count is 8; timeline data adds one chunk per two events, up to 12. Sequence 0 is skipped on wrap. `src/ap/modules/qmk/port/era_usb_diagnostics.c` owns envelope encoding; `src/hw/driver/usb/usb_hid/usb_diagnostics.c` owns captured measurements.
-
-### Instrumentation safety bound
-
-The accepted implementation is RAM-only with no heap and no EEPROM diagnostics history. The current bounded footprint is a 272-byte live session, 236-byte frozen wire snapshot, 20-byte boot counters, plus 6 bytes of sequence/valid/speed/next-id state. Snapshot capture copies 292 bytes under the global IRQ mask at about 1 Hz. Idle does not read TIM5 for diagnostics; an active session reads the 1 µs counter once per main loop and at report request/completion. The 32-bit microsecond counter wraps after about 4295 s, well beyond the 60 s maximum session.
-
-These numbers are an 8 kHz-path safety/performance bound, not an invitation to duplicate structure layouts elsewhere. A change that materially grows RAM, IRQ-masked copy, timer-read frequency, or session duration must re-measure and restate the bound.
-
-App responsibility: strict 32-byte parsing, per-path serial exchange, echoed-tag matching, frozen-sequence chunk reads, capability opt-in, display/persistence of long-term history, and comparison caveats. The app keeps mode changes user-driven and must not turn observations into an automatic stability verdict. See `the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md`.
-
-`tools/era_via_host_tests/test_usb_diagnostics.c` covers firmware envelope/status/chunk behavior. Hardware/host measurements remain separate; host tests do not prove physical latency or stability.
+`tools/firmware_regression_tests/polling_cases.py` checks production command
+bodies and all five board routers; `test_usb_polling.h` checks the real HID
+accessor. Software fixtures do not prove official VIA refresh after Apply/reboot,
+legacy-firmware behavior on that client, or physical endpoint timing.
 
 ## 7. MOUSE unit conversion
 

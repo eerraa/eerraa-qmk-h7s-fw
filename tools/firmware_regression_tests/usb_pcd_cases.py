@@ -24,7 +24,7 @@ def function(source: str, name: str) -> str:
 def generate(root: Path, build: Path, conf_source: str | None = None) -> Path:
     conf = conf_source if conf_source is not None else (root / "src/hw/driver/usb/usbd_conf.c").read_text(encoding="utf-8")
     core = (root / "src/lib/ST/STM32_USB_Device_Library/Core/Src/usbd_core.c").read_text(encoding="utf-8")
-    names = ["usbDiagnosticsSpeedFromUsbd"]
+    names = []
     for name in ("USBD_is_connected", "USBD_is_reset_pending", "usbPcdBeginReset", "usbPcdOnIrqEntry"):
         if re.search(rf"(?:void|bool) {name}\(", conf):
             names.append(name)
