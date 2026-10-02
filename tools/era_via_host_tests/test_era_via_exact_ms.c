@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #include "via.h"
+#include "keycodes.h"
 #include "tapping_term.h"
 #include "tapdance.h"
 #include "port.h"
@@ -362,6 +363,48 @@ static void test_direct_mode(void) {
 }
 
 
+/* Reproduce the official-VIA screenshot: Caps tap + GUI hold cannot enter On press.
+ * Invalid SET must preserve the actual setting even if the host displays it optimistically. */
+static void test_on_press_conflict(void) {
+    tapdance_storage_apply_defaults();
+    for (uint8_t slot = 0; slot < 8; ++slot) {
+        uint8_t tap[32] = {id_custom_set_value, id_qmk_tapdance, (uint8_t)(slot * 5U + 1U), 0, KC_CAPS};
+        uint8_t hold[32] = {id_custom_set_value, id_qmk_tapdance, (uint8_t)(slot * 5U + 2U), 0, KC_LGUI};
+        expect_true("Caps tap accepted", tapdance_handle_via_command(tap, 32));
+        expect_true("GUI hold accepted", tapdance_handle_via_command(hold, 32));
+        expect_true("after-decision accepts Caps/GUI", direct_command(id_custom_set_value, slot, 1, 32));
+        direct_command(id_custom_save, slot, 0, 32);
+        uint8_t saved[88], after[88];
+        eeprom_read_block(saved, EECONFIG_USER_TAPDANCE, sizeof(saved));
+        uint32_t revision = era_state_sync_config_revision();
+        uint8_t mode[32] = {id_custom_set_value, id_qmk_tapdance, (uint8_t)(49U + slot), 2};
+        uint8_t request[32];
+        memcpy(request, mode, sizeof(mode));
+        expect_true("On press with GUI hold rejected", !tapdance_handle_via_command(mode, 32));
+        expect_eq_u8("On press conflict returns unhandled", mode[0], id_unhandled);
+        expect_true("conflict retains request bytes", memcmp(mode + 1, request + 1, 31) == 0);
+        expect_eq_u8("conflict keeps previous mode", direct_command(id_custom_get_value, slot, 0, 32), 1);
+        hold[0] = id_custom_get_value;
+        expect_true("GUI hold readable after rejection", tapdance_handle_via_command(hold, 32));
+        expect_eq_u8("GUI hold remains assigned", hold[4], KC_LGUI);
+        expect_true("rejected mode does not bump revision", era_state_sync_config_revision() == revision);
+        direct_command(id_custom_save, slot, 0, 32);
+        eeprom_read_block(after, EECONFIG_USER_TAPDANCE, sizeof(after));
+        expect_true("VIA follow-up SAVE preserves rejected setting", memcmp(saved, after, sizeof(saved)) == 0);
+
+        hold[0] = id_custom_set_value; hold[3] = 0; hold[4] = KC_TRNS;
+        expect_true("set Transparent first", tapdance_handle_via_command(hold, 32));
+        expect_true("then On press succeeds", direct_command(id_custom_set_value, slot, 2, 32));
+        hold[0] = id_custom_set_value; hold[3] = 0; hold[4] = KC_LGUI;
+        expect_true("GUI assignment while On press rejected", !tapdance_handle_via_command(hold, 32));
+        expect_eq_u8("reverse conflict returns unhandled", hold[0], id_unhandled);
+        expect_true("leave On press before assigning hold", direct_command(id_custom_set_value, slot, 1, 32));
+        hold[0] = id_custom_set_value;
+        expect_true("GUI hold succeeds after mode change", tapdance_handle_via_command(hold, 32));
+    }
+    tapdance_storage_apply_defaults();
+}
+
 static void test_advanced_timing(void) {
     uint8_t report[32];
     tapdance_storage_apply_defaults(); tapdance_storage_flush(true);
@@ -519,6 +562,7 @@ int main(void) {
     test_mousekey();
     test_full_term_range();
     test_direct_mode();
+    test_on_press_conflict();
     test_advanced_timing();
 
     zero_report(report);

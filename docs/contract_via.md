@@ -11,7 +11,7 @@ The app-side owners are `the-via-eerraa/docs/adr/0001-state-sync-protocol.md` fo
 
 Official VIA with the firmware-local official definitions must remain usable without the custom app. Custom-app controls are additive; they do not replace or silently reinterpret the legacy path.
 
-Shipped channel/value meanings are wire ABI. Do not renumber or reuse a shipped id to compact a hole. VIA-reserved channels 1, 3, 4, and 5 remain reserved; retired channel 13 value 3 remains reserved by `docs/contract_usb.md` §4. New features take unused additive ids and must be reflected in firmware, every affected official JSON, and the app definition in the same compatibility change. Use `via.h` and the JSON as the current id inventory rather than copying the full list here.
+Shipped channel/value meanings are wire ABI. Do not renumber or reuse a shipped id to compact a hole. VIA-reserved channels 1, 3, 4, and 5 remain reserved; retired channel 13 value 3 remains reserved by `docs/contract_usb.md` §4. New features take unused additive ids and must be reflected in firmware, every affected official JSON, and the app definition in the same compatibility change. The explicit exception is advanced Tap Dance editing (§3): official JSON retains the basic path and directs advanced slots to the custom app without changing the Custom Value wire ABI. Use `via.h` and the JSON as the current id inventory rather than copying the full list here.
 
 GET keyboard-value selectors `0x06` (§5) and `0x07` (§6) are ERA additions in an id range QMK extends in order. QMK VIA protocol 13 (QMK release 2026-05-31) gives `0x06` to QMK's id_keycodes_version, which official VIA reads from protocol-13 boards before remapping. Keep `VIA_PROTOCOL_VERSION` at `0x000C` until both selectors move to new ids together with the app (`the-via-eerraa/docs/adr/0001-state-sync-protocol.md`); shipped firmware keeps its ids.
 
@@ -60,8 +60,20 @@ Custom Value GET/SET/SAVE. Payload byte 0 is 0 legacy, 1 after-decision, or
 2 on-press. Missing payloads and other values are refused without mutation.
 GET/SET echo appends `0xD2` in byte 1 when the buffer has room. A definition
 alone is not support evidence: older firmware's unmarked zero reply must keep
-the old editor. The four action and term IDs keep their encodings. Official
-V3 TAPDANCE menus expose the same byte as an Input start dropdown.
+the old editor. The four action and term IDs keep their encodings.
+
+Official V3 TAPDANCE menus edit only mode-0 (Legacy) slots: the four actions and
+legacy Term presets. Modes 1/2 are edited in the custom app at `https://usekb.cc`;
+official JSON shows their stored mode plus "Advanced settings: Visit usekb.cc"
+without editable action or timing controls. Empty mode-0 slots remain editable.
+Unknown mode values also show an unavailable status and no editable controls.
+A hidden read-only label binding (`showIf: "0"`) retains each existing mode GET
+as the display-condition source; it is not a rendered ASCII label or a new wire
+command. Constant-false display conditions must not prune this GET. Static labels
+consume no commands. Mode SET, advanced timing controls, and automatic conversion
+are absent from the official UI; firmware support and stored settings remain.
+Opening a definition must never reset a slot. The website guidance is plain text,
+not a promise of a clickable link or an app-side Legacy conversion feature.
 
 Mode 0 keeps the existing Tap Dance rules, including empty-action fallback.
 In modes 1/2, On Tap is the base key. `KC_TRNS` in an additional action means
@@ -87,8 +99,9 @@ zero follows the original term. Values 65..72 enable hold-on-other-key, byte
 0/1 only. Hold-time GET/SET echo has marker `0xD3` in value byte 2; the flag
 has `0xD3` in byte 1. Mode GET/SET echo retains byte 1 `0xD2` and advertises
 these extra controls with byte 2 `0xD3`. Old firmware is never probed for the
-new values without that capability. Official VIA definitions expose the same
-range and dropdown controls. Invalid and short SETs never mutate settings.
+new values without that capability. These controls are edited in the custom app;
+official definitions omit their bindings and do not query the advanced timing
+values. Invalid and short SETs never mutate settings.
 
 Modes 1/2 capture both thresholds and the flag with the first press. Released
 dances use the existing term, measured from the preceding press; held dances
