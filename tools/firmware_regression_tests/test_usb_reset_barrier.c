@@ -46,6 +46,14 @@ USBD_StatusTypeDef USBD_LL_DeInit(USBD_HandleTypeDef *d)
 #include "usb_teardown_core.inc"
 #include "usb_reset_barrier_service.inc"
 
+static bool boot_store_ok;
+static UsbBootMode_t boot_stored_mode;
+static bool usbBootModeStore(UsbBootMode_t mode)
+{
+  boot_stored_mode = mode;
+  return boot_store_ok;
+}
+
 static void begin_case(void)
 {
   usb_reset_request.pending = false;
@@ -89,6 +97,52 @@ static uint32_t enqueue_pair(bool queued_only)
   assert((active[HID_VIA_EP_IN & 15U] == NULL) == queued_only);
   assert(usbHidViaResponsesPending());
   return generation;
+}
+
+static void test_bootmode_grace(void)
+{
+  begin_case();
+  clock_ms = UINT32_MAX - 250U;
+  uint32_t start = clock_ms;
+  boot_store_ok = false;
+  assert(!usbBootModeSaveAndReset(USB_BOOT_MODE_HS_8K));
+  assert(!usb_reset_request.pending);
+  boot_store_ok = true;
+  assert(usbBootModeSaveAndReset(USB_BOOT_MODE_HS_8K));
+  assert(boot_stored_mode == USB_BOOT_MODE_HS_8K);
+  assert(clock_ms == start && usb_reset_request.ready_ms == start + 500U);
+
+  // Follow-up VIA traffic and keyboard reports remain serviceable during the grace period.
+  enqueue_pair(false);
+  uint8_t key[HID_KEYBOARD_REPORT_SIZE] = {0};
+  key[2] = 4U;
+  assert(usbHidSendReport(key, sizeof(key)));
+  assert(active[HID_EPIN_ADDR & 15U] && active[HID_EPIN_ADDR & 15U][2] == 4U);
+  complete(HID_EPIN_ADDR & 15U);
+  clock_ms = start + 499U;
+  usbProcessDeferredReset();
+  expect_no_reset();
+  clock_ms++;
+  usbProcessDeferredReset();
+  expect_no_reset(); // Outstanding VIA replies still prevent teardown after the deadline.
+  complete(HID_VIA_EP_IN & 15U);
+  complete(HID_VIA_EP_IN & 15U);
+  eeprom_pending = true;
+  usbProcessDeferredReset();
+  expect_no_reset();
+  eeprom_pending = false;
+  usbProcessDeferredReset();
+  expect_reset_once();
+  assert(clock_ms - start == 600U); // 500 ms connected grace + 100 ms detached wait.
+  stop();
+
+  begin_case();
+  start = clock_ms;
+  assert(usbScheduleGraceReset(0U));
+  assert(usb_reset_request.ready_ms == start + 40U); // Other reset callers keep their default.
+  usb_reset_request.pending = false;
+  stop();
+  puts("PASS: BootMode Apply keeps keyboard/VIA service for 500ms, preserves TX/EEPROM barriers and 100ms detach; generic reset stays 40ms");
 }
 
 static void test_live_barrier(bool suspended)
@@ -298,10 +352,11 @@ int main(int argc, char **argv)
   const char *selected = argc > 1 ? argv[1] : "all";
   bool all = !strcmp(selected, "all");
   const char *cases[] = {"all", "live", "suspend", "retired-keyboard", "retired-via",
-                        "retired-out", "retired-queued", "no-request", "admission", "wake"};
+                        "retired-out", "retired-queued", "no-request", "admission", "wake", "bootmode"};
   bool known = false;
   for (unsigned i = 0U; i < sizeof(cases) / sizeof(cases[0]); i++) known |= !strcmp(selected, cases[i]);
   assert(known);
+  if (all || !strcmp(selected, "bootmode")) test_bootmode_grace();
   if (all || !strcmp(selected, "live")) test_live_barrier(false);
   if (all || !strcmp(selected, "suspend")) test_live_barrier(true);
   if (all || !strcmp(selected, "retired-keyboard")) test_retired_barrier(HID_EPIN_ADDR, false, true);

@@ -8,8 +8,10 @@ from teardown_cases import generate as generate_teardown
 
 def generate(root: Path, build: Path) -> Path:
     source = (root / "src/hw/driver/usb/usb.c").read_text(encoding="utf-8")
+    usb_header = (root / "src/hw/driver/usb/usb.h").read_text(encoding="utf-8")
+    boot_mode = re.search(r"typedef enum UsbBootMode\b.*?} UsbBootMode_t;", usb_header, re.S).group(0)
     constants = []
-    for name in ("USB_RESET_RESPONSE_GRACE_MS", "USB_RESET_DETACH_DELAY_MS"):
+    for name in ("USB_RESET_RESPONSE_GRACE_MS", "USB_BOOTMODE_APPLY_GRACE_MS", "USB_RESET_DETACH_DELAY_MS"):
         match = re.search(rf"^#define\s+{name}\s+[^\n]+", source, re.M)
         assert match, name
         constants.append(match.group(0))
@@ -22,7 +24,9 @@ def generate(root: Path, build: Path) -> Path:
         depth += (source[end] == "{") - (source[end] == "}")
         end += 1
     (build / "usb_reset_barrier_service.inc").write_text(
-        "\n\n".join([*constants, source[match.start():end],
+        "\n\n".join([*constants, boot_mode,
+                     "static bool usbBootModeStore(UsbBootMode_t mode);",
+                     source[match.start():end], function(source, "usbBootModeSaveAndReset"),
                      function(source, "usbProcessDeferredReset")]) + "\n",
         encoding="utf-8",
     )

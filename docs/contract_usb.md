@@ -312,6 +312,12 @@ are wire ABI under `docs/contract_via.md`.
 Selecting a mode changes only the pending user choice. Apply is a distinct
 explicit action: it persists the selected mode and schedules USB teardown/MCU
 reset after the response and pending EEPROM work are allowed to complete.
+BootMode Apply keeps the main loop and USB service running for at least 500 ms
+before teardown, allowing host follow-up requests to finish. EEPROM durability
+and live response drain remain required after that deadline. Keep the detached
+wait at 100 ms before MCU reset; other reset callers retain their own grace.
+This is a host-compatibility grace, not acknowledgement that the browser has
+finished processing every request.
 Only replies in a live transport generation count toward response drain; buffers
 retained after that generation retires must not indefinitely block an already
 requested reset. Keep the EEPROM durability barrier and do not schedule a reset

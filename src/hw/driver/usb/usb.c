@@ -15,7 +15,7 @@
 #include "qmk/port/platforms/eeprom.h"
 
 #define USB_RESET_RESPONSE_GRACE_MS   (40U)                           // V251109R4: VIA 응답 송신 보장을 위한 최소 유예
-#define USB_BOOTMODE_APPLY_GRACE_MS   USB_RESET_RESPONSE_GRACE_MS     // V251109R4: BootMode 적용 시 동일 유예 사용
+#define USB_BOOTMODE_APPLY_GRACE_MS   (500U)                          // Allow host follow-up requests while the main loop keeps servicing USB.
 #define USB_RESET_DETACH_DELAY_MS     (100U)                          // V251109R7: 호스트가 디태치를 감지할 최소 시간
 
 
