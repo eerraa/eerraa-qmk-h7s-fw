@@ -88,6 +88,8 @@
   * @{
   */
 #if defined (USB_OTG_FS) || defined (USB_OTG_HS)
+static void PCD_ReadRxFifo(PCD_HandleTypeDef *hpcd);
+static HAL_StatusTypeDef PCD_AbortEndpoint(PCD_HandleTypeDef *hpcd, PCD_EPTypeDef *ep);
 static HAL_StatusTypeDef PCD_WriteEmptyTxFifo(PCD_HandleTypeDef *hpcd, uint32_t epnum);
 static HAL_StatusTypeDef PCD_EP_OutXfrComplete_int(PCD_HandleTypeDef *hpcd, uint32_t epnum);
 static HAL_StatusTypeDef PCD_EP_OutSetupPacket_int(PCD_HandleTypeDef *hpcd, uint32_t epnum);
@@ -1097,30 +1099,7 @@ void HAL_PCD_IRQHandler(PCD_HandleTypeDef *hpcd)
     {
       USB_MASK_INTERRUPT(hpcd->Instance, USB_OTG_GINTSTS_RXFLVL);
 
-      RegVal = USBx->GRXSTSP;
-
-      ep = &hpcd->OUT_ep[RegVal & USB_OTG_GRXSTSP_EPNUM];
-
-      if (((RegVal & USB_OTG_GRXSTSP_PKTSTS) >> 17) ==  STS_DATA_UPDT)
-      {
-        if ((RegVal & USB_OTG_GRXSTSP_BCNT) != 0U)
-        {
-          (void)USB_ReadPacket(USBx, ep->xfer_buff,
-                               (uint16_t)((RegVal & USB_OTG_GRXSTSP_BCNT) >> 4));
-
-          ep->xfer_buff += (RegVal & USB_OTG_GRXSTSP_BCNT) >> 4;
-          ep->xfer_count += (RegVal & USB_OTG_GRXSTSP_BCNT) >> 4;
-        }
-      }
-      else if (((RegVal & USB_OTG_GRXSTSP_PKTSTS) >> 17) == STS_SETUP_UPDT)
-      {
-        (void)USB_ReadPacket(USBx, (uint8_t *)hpcd->Setup, 8U);
-        ep->xfer_count += (RegVal & USB_OTG_GRXSTSP_BCNT) >> 4;
-      }
-      else
-      {
-        /* ... */
-      }
+      PCD_ReadRxFifo(hpcd);
 
       USB_UNMASK_INTERRUPT(hpcd->Instance, USB_OTG_GINTSTS_RXFLVL);
     }
@@ -1838,24 +1817,44 @@ HAL_StatusTypeDef HAL_PCD_EP_Open(PCD_HandleTypeDef *hpcd, uint8_t ep_addr,
   */
 HAL_StatusTypeDef HAL_PCD_EP_Close(PCD_HandleTypeDef *hpcd, uint8_t ep_addr)
 {
-  PCD_EPTypeDef *ep;
-
-  if ((ep_addr & 0x80U) == 0x80U)
+  if ((hpcd == NULL) || (hpcd->Instance == NULL) || ((ep_addr & 0x70U) != 0U) ||
+      ((ep_addr & EP_ADDR_MSK) >= hpcd->Init.dev_endpoints)) return HAL_ERROR;
+  /* EP0 lifecycle belongs to reset/control handling, not class teardown. */
+  if ((ep_addr & EP_ADDR_MSK) == 0U) return HAL_ERROR;
+  uint32_t irq = __get_PRIMASK();
+  __disable_irq();
+  if (hpcd->Lock == HAL_LOCKED)
   {
-    ep = &hpcd->IN_ep[ep_addr & EP_ADDR_MSK];
-    ep->is_in = 1U;
+    __set_PRIMASK(irq);
+    return HAL_BUSY;
   }
-  else
-  {
-    ep = &hpcd->OUT_ep[ep_addr & EP_ADDR_MSK];
-    ep->is_in = 0U;
-  }
-  ep->num = ep_addr & EP_ADDR_MSK;
+  hpcd->Lock = HAL_LOCKED;
+  uint32_t epnum = ep_addr & EP_ADDR_MSK;
+  PCD_EPTypeDef *ep = (ep_addr & 0x80U) ? &hpcd->IN_ep[epnum] : &hpcd->OUT_ep[epnum];
+  ep->num = epnum;
+  ep->is_in = (ep_addr & 0x80U) != 0U;
+  uint32_t USBx_BASE = (uint32_t)hpcd->Instance;
 
-  __HAL_LOCK(hpcd);
-  (void)USB_DeactivateEndpoint(hpcd->Instance, ep);
-  __HAL_UNLOCK(hpcd);
-  return HAL_OK;
+  /* Close is the hardware lifetime boundary for every caller, including USBD.
+   * No descriptor/interrupt retirement is allowed after a failed stop/flush. */
+  HAL_StatusTypeDef ret = PCD_AbortEndpoint(hpcd, ep);
+  if (ret == HAL_OK) ret = USB_DeactivateEndpoint(hpcd->Instance, ep);
+  if (ret == HAL_OK)
+  {
+    if (ep->is_in != 0U)
+    {
+      USBx_INEP(epnum)->DIEPINT = USBx_INEP(epnum)->DIEPINT;
+      ep->xfer_buff = NULL;
+      ep->xfer_count = ep->xfer_len = 0U;
+    }
+    else
+    {
+      USBx_OUTEP(epnum)->DOEPINT = USBx_OUTEP(epnum)->DOEPINT;
+    }
+  }
+  hpcd->Lock = HAL_UNLOCKED;
+  __set_PRIMASK(irq);
+  return ret;
 }
 
 
@@ -2069,23 +2068,28 @@ HAL_StatusTypeDef HAL_PCD_EP_ClrStall(PCD_HandleTypeDef *hpcd, uint8_t ep_addr)
    */
 HAL_StatusTypeDef HAL_PCD_EP_Abort(PCD_HandleTypeDef *hpcd, uint8_t ep_addr)
 {
-  HAL_StatusTypeDef ret;
-  PCD_EPTypeDef *ep;
-
-  if ((0x80U & ep_addr) == 0x80U)
+  if ((hpcd == NULL) || (hpcd->Instance == NULL) || ((ep_addr & 0x70U) != 0U) ||
+      ((ep_addr & EP_ADDR_MSK) >= hpcd->Init.dev_endpoints)) return HAL_ERROR;
+  /* RM0477: control OUT endpoint zero cannot be disabled. */
+  if (ep_addr == 0U) return HAL_ERROR;
+  uint32_t irq = __get_PRIMASK();
+  __disable_irq();
+  if (hpcd->Lock == HAL_LOCKED)
   {
-    ep = &hpcd->IN_ep[ep_addr & EP_ADDR_MSK];
+    __set_PRIMASK(irq);
+    return HAL_BUSY;
   }
-  else
-  {
-    ep = &hpcd->OUT_ep[ep_addr & EP_ADDR_MSK];
-  }
-
-  /* Stop Xfer */
-  ret = USB_EPStopXfer(hpcd->Instance, ep);
-
+  hpcd->Lock = HAL_LOCKED;
+  PCD_EPTypeDef *ep = (ep_addr & 0x80U) ? &hpcd->IN_ep[ep_addr & EP_ADDR_MSK]
+                                      : &hpcd->OUT_ep[ep_addr & EP_ADDR_MSK];
+  ep->num = ep_addr & EP_ADDR_MSK;
+  ep->is_in = (ep_addr & 0x80U) != 0U;
+  HAL_StatusTypeDef ret = PCD_AbortEndpoint(hpcd, ep);
+  hpcd->Lock = HAL_UNLOCKED;
+  __set_PRIMASK(irq);
   return ret;
 }
+
 
 /**
   * @brief  Flush an endpoint
@@ -2204,6 +2208,86 @@ HAL_StatusTypeDef HAL_PCD_SetTestMode(const PCD_HandleTypeDef *hpcd, uint8_t tes
   * @{
   */
 #if defined (USB_OTG_FS) || defined (USB_OTG_HS)
+/* Caller owns the PCD lock and masks interrupts for the entire lifecycle
+ * operation. Quiesce RX even for an inactive OUT endpoint: its final packet
+ * can still be queued after hardware has cleared EPENA. */
+static HAL_StatusTypeDef PCD_AbortEndpoint(PCD_HandleTypeDef *hpcd, PCD_EPTypeDef *ep)
+{
+  USB_OTG_GlobalTypeDef *USBx = hpcd->Instance;
+  uint32_t USBx_BASE = (uint32_t)USBx;
+  HAL_StatusTypeDef ret;
+
+  if ((ep->is_in == 0U) && (ep->num != 0U))
+  {
+    /* H7RS OUT disable requires effective Global OUT NAK. In slave mode
+     * its status is queued behind received packets, including EP0 SETUP. */
+    uint32_t mask = USBx->GINTMSK & (USB_OTG_GINTMSK_GONAKEFFM | USB_OTG_GINTMSK_RXFLVLM);
+    uint32_t own_nak = (USBx->GINTSTS & USB_OTG_GINTSTS_BOUTNAKEFF) == 0U;
+    uint32_t count = 0U;
+    USBx->GINTMSK &= ~(USB_OTG_GINTMSK_GONAKEFFM | USB_OTG_GINTMSK_RXFLVLM);
+    if (own_nak != 0U)
+    {
+      USBx_DEVICE->DCTL |= USB_OTG_DCTL_SGONAK;
+    }
+    while (((USBx->GINTSTS & USB_OTG_GINTSTS_BOUTNAKEFF) == 0U) && (count < USB_EP_STOP_MAX_POLLS))
+    {
+      if (((USBx->GAHBCFG & USB_OTG_GAHBCFG_DMAEN) == 0U) &&
+          ((USBx->GINTSTS & USB_OTG_GINTSTS_RXFLVL) != 0U))
+      {
+        PCD_ReadRxFifo(hpcd);
+      }
+      count++;
+    }
+    ret = ((USBx->GINTSTS & USB_OTG_GINTSTS_BOUTNAKEFF) != 0U)
+          ? USB_EPStopXfer(USBx, ep) : HAL_ERROR;
+    if (own_nak != 0U)
+    {
+      USBx_DEVICE->DCTL |= USB_OTG_DCTL_CGONAK;
+    }
+    USBx->GINTMSK |= mask;
+  }
+  else
+  {
+    if (ep->is_in != 0U) USBx_DEVICE->DIEPEMPMSK &= ~(1UL << ep->num);
+    ret = USB_EPStopXfer(USBx, ep);
+    if ((ret == HAL_OK) && (ep->is_in != 0U)) ret = USB_FlushTxFifo(USBx, ep->num);
+  }
+  return ret;
+}
+
+/* Consume through the normal receive path while OUT NAK becomes effective.
+ * A pending SETUP or another endpoint's data must not be discarded. */
+static void PCD_ReadRxFifo(PCD_HandleTypeDef *hpcd)
+{
+  USB_OTG_GlobalTypeDef *USBx = hpcd->Instance;
+  PCD_EPTypeDef *ep;
+  uint32_t RegVal;
+  RegVal = USBx->GRXSTSP;
+
+  ep = &hpcd->OUT_ep[RegVal & USB_OTG_GRXSTSP_EPNUM];
+
+  if (((RegVal & USB_OTG_GRXSTSP_PKTSTS) >> 17) ==  STS_DATA_UPDT)
+  {
+    if ((RegVal & USB_OTG_GRXSTSP_BCNT) != 0U)
+    {
+      (void)USB_ReadPacket(USBx, ep->xfer_buff,
+                           (uint16_t)((RegVal & USB_OTG_GRXSTSP_BCNT) >> 4));
+
+      ep->xfer_buff += (RegVal & USB_OTG_GRXSTSP_BCNT) >> 4;
+      ep->xfer_count += (RegVal & USB_OTG_GRXSTSP_BCNT) >> 4;
+    }
+  }
+  else if (((RegVal & USB_OTG_GRXSTSP_PKTSTS) >> 17) == STS_SETUP_UPDT)
+  {
+    (void)USB_ReadPacket(USBx, (uint8_t *)hpcd->Setup, 8U);
+    ep->xfer_count += (RegVal & USB_OTG_GRXSTSP_BCNT) >> 4;
+  }
+  else
+  {
+    /* ... */
+  }
+}
+
 /**
   * @brief  Check FIFO for the next packet to be loaded.
   * @param  hpcd PCD handle

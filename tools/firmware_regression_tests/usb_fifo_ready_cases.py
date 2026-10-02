@@ -48,7 +48,7 @@ def generate(root: Path, build: Path, pcd_source: str | None = None,
             "USB_EnableInTransfer", "USB_EPStartXfer",
         ), function),
         (pcd_path, pcd, (
-            "HAL_PCD_EP_Transmit", "PCD_WriteEmptyTxFifo", "HAL_PCD_EP_TransmitReady",
+            "PCD_ReadRxFifo", "HAL_PCD_EP_Transmit", "PCD_WriteEmptyTxFifo", "HAL_PCD_EP_TransmitReady",
             "PCD_EP_OutXfrComplete_int", "PCD_EP_OutSetupPacket_int", "HAL_PCD_IRQHandler",
         ), function),
         (conf_path, conf, (

@@ -99,7 +99,7 @@ def generate(root: Path, build: Path, pcd_source: str | None = None,
         "USB_EnableInTransfer", "USB_EPStartXfer", "USB_ActivateRemoteWakeup", "USB_DeActivateRemoteWakeup",
     )]
     functions += [function(source, name) for name in (
-        "HAL_PCD_EP_Transmit", "HAL_PCD_EP_Receive", "PCD_WriteEmptyTxFifo",
+        "PCD_ReadRxFifo", "HAL_PCD_EP_Transmit", "HAL_PCD_EP_Receive", "PCD_WriteEmptyTxFifo",
         "PCD_EP_OutXfrComplete_int", "PCD_EP_OutSetupPacket_int", "HAL_PCD_IRQHandler",
         "HAL_PCD_ActivateRemoteWakeup", "HAL_PCD_DeActivateRemoteWakeup",
     )]

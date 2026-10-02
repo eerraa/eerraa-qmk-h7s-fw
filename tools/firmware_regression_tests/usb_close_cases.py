@@ -1,9 +1,9 @@
-"""Compile unchanged bridge/HAL close routines against the H7RS LL fixture."""
+"""Compile production bridge/HAL close control flow with modeled MMIO accesses."""
 from __future__ import annotations
 
 from pathlib import Path
 
-from usb_ll_cases import function, generate as generate_ll, typedef
+from usb_ll_cases import function, generate as generate_ll, typedef, register_access
 
 
 def generate(root: Path, build: Path, conf_source: str | None = None) -> Path:
@@ -16,12 +16,12 @@ def generate(root: Path, build: Path, conf_source: str | None = None) -> Path:
     (build / "usb_close_defs.inc").write_text(typedef(usbd, "enum", "USBD_StatusTypeDef") + "\n", encoding="utf-8")
     generated = []
     for path, source, names in (
-        (hal_path, hal, ("HAL_PCD_EP_Abort", "HAL_PCD_EP_Close", "HAL_PCD_EP_Flush")),
+        (hal_path, hal, ("PCD_ReadRxFifo", "PCD_AbortEndpoint", "HAL_PCD_EP_Abort", "HAL_PCD_EP_Close", "HAL_PCD_EP_Flush")),
         (conf_path, conf, ("USBD_Get_USB_Status", "USBD_LL_CloseEP")),
     ):
         for name in names:
             routine = function(source, name)
             line = source[:source.index(routine)].count("\n") + 1
-            generated.append(f'#line {line} "{path.as_posix()}"\n{routine}')
+            generated.append(f'#line {line} "{path.as_posix()}"\n{register_access(routine)}')
     (build / "usb_close_functions.inc").write_text("\n\n".join(generated) + "\n", encoding="utf-8")
     return root / "tools/firmware_regression_tests/test_usb_close.c"

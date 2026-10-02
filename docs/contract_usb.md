@@ -210,6 +210,26 @@ without skipping their remaining teardown calls. Composite initialization must
 stop at the first failed class and roll back only earlier successful classes;
 the failed class owns its partial cleanup. Class teardown must not flush
 the shared RX FIFO, and control endpoint lifecycle remains core-owned.
+Hardware teardown is owned by HAL PCD Close/Abort, not by a class-specific
+bridge sequence. Close must finish stop and any IN FIFO flush before endpoint
+deactivation, interrupt retirement or IN descriptor clearing. Abort quiesces the
+transfer but retains its descriptor for the caller. Both serialize the whole
+operation with the PCD lock and restore the caller's interrupt mask.
+Class Close rejects EP0; OUT EP0 cannot be disabled by hardware. Reset/control
+handling continues to own that endpoint.
+
+Follow [RM0477 Rev 9](https://www.stmcu.jp/wp/wp-content/uploads/2024/03/RM0477_Rev9.pdf)
+§62.15.6, pp. 3196–3197 and 3205: establish Global OUT NAK before OUT disable;
+stop IN FIFO refill, establish non-isochronous IN NAK, and wait for a fresh
+endpoint-disabled indication. An early EPENA clear is not a substitute for an
+outstanding disable's completion. Direct LL deactivation must reject an enabled
+endpoint or a pending disable instead of initiating another stop.
+
+In slave mode, OUT teardown processes queued receive statuses through the same
+receive path as the IRQ, preserving SETUP and other-endpoint payloads. This also
+applies when EPENA was already clear: the completed transfer's payload may still
+be queued. NAK timeout must not proceed to disable or release ownership. Restore
+interrupt masks and release only Global OUT NAK acquired by this operation.
 
 Raw bus Reset and enumeration completion are separate boundaries. At the first
 software observation of Reset, retire old HID admission and wake/control epochs

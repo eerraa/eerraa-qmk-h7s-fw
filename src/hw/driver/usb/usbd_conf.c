@@ -669,31 +669,7 @@ USBD_StatusTypeDef USBD_LL_OpenEP(USBD_HandleTypeDef *pdev, uint8_t ep_addr, uin
   */
 USBD_StatusTypeDef USBD_LL_CloseEP(USBD_HandleTypeDef *pdev, uint8_t ep_addr)
 {
-  // V260909R1: 다음 bus generation에 이전 TXFE/XFRC/EPDISD가 섞이지 않도록 먼저 quiesce한다.
-  PCD_HandleTypeDef *hpcd = pdev->pData;
-  uint32_t ep = ep_addr & 0x7FU;
-  if (hpcd == NULL || ep >= hpcd->Init.dev_endpoints) return USBD_FAIL;
-  uint32_t irq = __get_PRIMASK();
-  __disable_irq();
-  uint32_t USBx_BASE = (uint32_t)hpcd->Instance;
-  if (ep_addr & 0x80U) USBx_DEVICE->DIEPEMPMSK &= ~(1UL << ep);
-  HAL_StatusTypeDef status = HAL_PCD_EP_Abort(hpcd, ep_addr);
-  // A failed stop can still own the transfer. Do not deactivate or retire it.
-  if (status == HAL_OK) status = HAL_PCD_EP_Close(hpcd, ep_addr);
-  if (status == HAL_OK && (ep_addr & 0x80U)) status = HAL_PCD_EP_Flush(hpcd, ep_addr);
-  if (status == HAL_OK) {
-    if (ep_addr & 0x80U) {
-      USBx_INEP(ep)->DIEPINT = USBx_INEP(ep)->DIEPINT;
-      hpcd->IN_ep[ep].xfer_buff = NULL;
-      hpcd->IN_ep[ep].xfer_count = hpcd->IN_ep[ep].xfer_len = 0U;
-    } else {
-      USBx_OUTEP(ep)->DOEPINT = USBx_OUTEP(ep)->DOEPINT;
-      // RXFLVL가 이미 수신한 payload를 처리할 수 있으므로 OUT 버퍼 포인터는 유효하게 유지한다.
-      // 공유 RX FIFO를 flush하면 EP0/다른 class의 패킷까지 사라지므로 flush하지 않는다.
-    }
-  }
-  __set_PRIMASK(irq);
-  return USBD_Get_USB_Status(status);
+  return USBD_Get_USB_Status(HAL_PCD_EP_Close(pdev->pData, ep_addr));
 }
 
 /**

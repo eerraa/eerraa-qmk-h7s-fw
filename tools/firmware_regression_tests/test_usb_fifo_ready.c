@@ -122,6 +122,7 @@ static HAL_StatusTypeDef USB_FlushTxFifo(USB_OTG_GlobalTypeDef *instance, uint32
 static uint32_t HAL_RCC_GetHCLKFreq(void) { return 200000000U; }
 static HAL_StatusTypeDef USB_SetTurnaroundTime(USB_OTG_GlobalTypeDef *instance, uint32_t hclk, uint8_t speed)
 { assert(instance == controller && hclk == 200000000U); assert(speed == USBD_FS_SPEED || speed == USBD_HS_SPEED); return HAL_OK; }
+static HAL_StatusTypeDef HAL_PCD_EP_Flush(PCD_HandleTypeDef *handle, uint8_t ep);
 static HAL_StatusTypeDef HAL_PCD_EP_Abort(PCD_HandleTypeDef *handle, uint8_t ep)
 {
   assert(handle == &pcd); aborts++;
@@ -130,9 +131,22 @@ static HAL_StatusTypeDef HAL_PCD_EP_Abort(PCD_HandleTypeDef *handle, uint8_t ep)
 }
 static HAL_StatusTypeDef HAL_PCD_EP_Close(PCD_HandleTypeDef *handle, uint8_t ep)
 {
-  assert(handle == &pcd); closes++;
-  if (close_status == HAL_OK) in_ep(ep & EP_ADDR_MSK)->DIEPCTL &= ~USB_OTG_DIEPCTL_USBAEP;
-  return close_status;
+  assert(handle == &pcd);
+  uint32_t mask = irq_mask;
+  irq_mask = 1U;
+  unsigned epnum = ep & EP_ADDR_MSK;
+  device()->DIEPEMPMSK &= ~(1U << epnum);
+  HAL_StatusTypeDef ret = HAL_PCD_EP_Abort(handle, ep);
+  if (ret == HAL_OK) { closes++; ret = close_status; }
+  if (ret == HAL_OK) ret = HAL_PCD_EP_Flush(handle, ep);
+  if (ret == HAL_OK) {
+    in_ep(epnum)->DIEPCTL &= ~USB_OTG_DIEPCTL_USBAEP;
+    model_clear_in(controller, epnum, in_ep(epnum)->DIEPINT);
+    pcd.IN_ep[epnum].xfer_buff = NULL;
+    pcd.IN_ep[epnum].xfer_len = pcd.IN_ep[epnum].xfer_count = 0U;
+  }
+  irq_mask = mask;
+  return ret;
 }
 static HAL_StatusTypeDef HAL_PCD_EP_Flush(PCD_HandleTypeDef *handle, uint8_t ep)
 {

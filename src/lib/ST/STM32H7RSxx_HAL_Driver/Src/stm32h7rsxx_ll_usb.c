@@ -671,16 +671,17 @@ HAL_StatusTypeDef USB_ActivateDedicatedEndpoint(const USB_OTG_GlobalTypeDef *USB
   */
 HAL_StatusTypeDef USB_DeactivateEndpoint(const USB_OTG_GlobalTypeDef *USBx, const USB_OTG_EPTypeDef *ep)
 {
+  if ((ep->is_in == 0U) && (ep->num == 0U)) return HAL_ERROR;
   uint32_t USBx_BASE = (uint32_t)USBx;
   uint32_t epnum = (uint32_t)ep->num;
 
   /* Read DEPCTLn register */
   if (ep->is_in == 1U)
   {
-    if ((USBx_INEP(epnum)->DIEPCTL & USB_OTG_DIEPCTL_EPENA) == USB_OTG_DIEPCTL_EPENA)
+    if ((USBx_INEP(epnum)->DIEPCTL & (USB_OTG_DIEPCTL_EPENA | USB_OTG_DIEPCTL_EPDIS)) != 0U)
     {
-      USBx_INEP(epnum)->DIEPCTL |= USB_OTG_DIEPCTL_SNAK;
-      USBx_INEP(epnum)->DIEPCTL |= USB_OTG_DIEPCTL_EPDIS;
+      /* Deactivation cannot substitute for a completed stop. */
+      return HAL_ERROR;
     }
 
     USBx_DEVICE->DEACHMSK &= ~(USB_OTG_DAINTMSK_IEPM & (uint32_t)(1UL << (ep->num & EP_ADDR_MSK)));
@@ -693,10 +694,10 @@ HAL_StatusTypeDef USB_DeactivateEndpoint(const USB_OTG_GlobalTypeDef *USBx, cons
   }
   else
   {
-    if ((USBx_OUTEP(epnum)->DOEPCTL & USB_OTG_DOEPCTL_EPENA) == USB_OTG_DOEPCTL_EPENA)
+    if ((USBx_OUTEP(epnum)->DOEPCTL & (USB_OTG_DOEPCTL_EPENA | USB_OTG_DOEPCTL_EPDIS)) != 0U)
     {
-      USBx_OUTEP(epnum)->DOEPCTL |= USB_OTG_DOEPCTL_SNAK;
-      USBx_OUTEP(epnum)->DOEPCTL |= USB_OTG_DOEPCTL_EPDIS;
+      /* Deactivation cannot substitute for a completed stop. */
+      return HAL_ERROR;
     }
 
     USBx_DEVICE->DEACHMSK &= ~(USB_OTG_DAINTMSK_OEPM & ((uint32_t)(1UL << (ep->num & EP_ADDR_MSK)) << 16));
@@ -956,52 +957,54 @@ HAL_StatusTypeDef USB_EPStartXfer(USB_OTG_GlobalTypeDef *USBx, USB_OTG_EPTypeDef
    */
 HAL_StatusTypeDef USB_EPStopXfer(const USB_OTG_GlobalTypeDef *USBx, USB_OTG_EPTypeDef *ep)
 {
-  __IO uint32_t count = 0U;
-  HAL_StatusTypeDef ret = HAL_OK;
+  if ((ep->is_in == 0U) && (ep->num == 0U)) return HAL_ERROR;
   uint32_t USBx_BASE = (uint32_t)USBx;
+  uint32_t count = 0U;
 
-  /* IN endpoint */
-  if (ep->is_in == 1U)
+  if (ep->is_in != 0U)
   {
-    /* EP enable, IN data in FIFO */
-    if (((USBx_INEP(ep->num)->DIEPCTL) & USB_OTG_DIEPCTL_EPENA) == USB_OTG_DIEPCTL_EPENA)
+    uint32_t ctl = USBx_INEP(ep->num)->DIEPCTL;
+    if ((ctl & (USB_OTG_DIEPCTL_EPENA | USB_OTG_DIEPCTL_EPDIS)) == 0U) return HAL_OK;
+    if ((ctl & USB_OTG_DIEPCTL_EPDIS) == 0U)
     {
-      USBx_INEP(ep->num)->DIEPCTL |= (USB_OTG_DIEPCTL_SNAK);
-      USBx_INEP(ep->num)->DIEPCTL |= (USB_OTG_DIEPCTL_EPDIS);
-
-      do
+      /* RM0477: stop FIFO writes, establish IN NAK, then wait for disable done.
+       * Isochronous incomplete transfers use SNAK/EPDIS without INEPNE. */
+      USBx_INEP(ep->num)->DIEPINT = USB_OTG_DIEPINT_EPDISD;
+      USBx_INEP(ep->num)->DIEPCTL |= USB_OTG_DIEPCTL_SNAK;
+      if (ep->type != EP_TYPE_ISOC)
       {
-        count++;
-
-        if (count > 10000U)
+        while ((USBx_INEP(ep->num)->DIEPINT & USB_OTG_DIEPINT_INEPNE) == 0U)
         {
-          ret = HAL_ERROR;
-          break;
+          if ((USBx_INEP(ep->num)->DIEPCTL & USB_OTG_DIEPCTL_EPENA) == 0U) return HAL_OK;
+          if (++count >= USB_EP_STOP_MAX_POLLS) return HAL_ERROR;
         }
-      } while (((USBx_INEP(ep->num)->DIEPCTL) & USB_OTG_DIEPCTL_EPENA) ==  USB_OTG_DIEPCTL_EPENA);
+      }
+      if ((USBx_INEP(ep->num)->DIEPCTL & USB_OTG_DIEPCTL_EPENA) == 0U) return HAL_OK;
+      USBx_INEP(ep->num)->DIEPCTL |= USB_OTG_DIEPCTL_SNAK | USB_OTG_DIEPCTL_EPDIS;
+    }
+    count = 0U;
+    while ((USBx_INEP(ep->num)->DIEPINT & USB_OTG_DIEPINT_EPDISD) == 0U)
+    {
+      if (++count >= USB_EP_STOP_MAX_POLLS) return HAL_ERROR;
     }
   }
-  else /* OUT endpoint */
+  else
   {
-    if (((USBx_OUTEP(ep->num)->DOEPCTL) & USB_OTG_DOEPCTL_EPENA) == USB_OTG_DOEPCTL_EPENA)
+    uint32_t ctl = USBx_OUTEP(ep->num)->DOEPCTL;
+    if ((ctl & (USB_OTG_DOEPCTL_EPENA | USB_OTG_DOEPCTL_EPDIS)) == 0U) return HAL_OK;
+    /* The PCD owner drains queued RX statuses and establishes OUT NAK. */
+    if ((ep->num != 0U) && ((USBx->GINTSTS & USB_OTG_GINTSTS_BOUTNAKEFF) == 0U)) return HAL_ERROR;
+    if ((ctl & USB_OTG_DOEPCTL_EPDIS) == 0U)
     {
-      USBx_OUTEP(ep->num)->DOEPCTL |= (USB_OTG_DOEPCTL_SNAK);
-      USBx_OUTEP(ep->num)->DOEPCTL |= (USB_OTG_DOEPCTL_EPDIS);
-
-      do
-      {
-        count++;
-
-        if (count > 10000U)
-        {
-          ret = HAL_ERROR;
-          break;
-        }
-      } while (((USBx_OUTEP(ep->num)->DOEPCTL) & USB_OTG_DOEPCTL_EPENA) ==  USB_OTG_DOEPCTL_EPENA);
+      USBx_OUTEP(ep->num)->DOEPINT = USB_OTG_DOEPINT_EPDISD;
+      USBx_OUTEP(ep->num)->DOEPCTL |= USB_OTG_DOEPCTL_SNAK | USB_OTG_DOEPCTL_EPDIS;
+    }
+    while ((USBx_OUTEP(ep->num)->DOEPINT & USB_OTG_DOEPINT_EPDISD) == 0U)
+    {
+      if (++count >= USB_EP_STOP_MAX_POLLS) return HAL_ERROR;
     }
   }
-
-  return ret;
+  return HAL_OK;
 }
 
 

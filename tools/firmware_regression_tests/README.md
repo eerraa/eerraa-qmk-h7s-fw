@@ -155,18 +155,20 @@ SAVE/reload. These prove logical transitions, not game/USB latency.
   the complete SETUP dispatcher, nor prove composite enumeration on a host.
 - `usb_ll_cases.py` executes production H7RS FIFO flush, endpoint stop and
   deactivate routines against scripted registers. It checks AHB-idle/flush
-  timeouts, the last successful polling boundary, FIFO selection and a stop
-  failure with EPENA still set. Deactivate's successful return alone does not
-  prove endpoint quiescence. The fixture overrides only its FIFO polling bound
-  to 64 iterations; the production bound and abort/reset sequences are unchanged.
-  Target elapsed time is not inferred from host runtime.
-- `usb_close_cases.py` connects the actual PCD bridge, HAL Abort/Close/Flush and
-  those LL routines. Abort failure, an already-locked close and FIFO timeout
-  retain transfer descriptors and skip later teardown stages; successful IN
-  close retires them. OUT close preserves its receive pointer and never flushes
-  shared RX. Both initial PRIMASK states are restored. This model records
-  endpoint interrupt-register accesses; it does not implement their W1C
-  hardware effects, delayed bus traffic or physical endpoint-disable timing.
+  timeouts, FIFO selection, NAK and disable completion, and rejection of direct
+  deactivation while enabled. The fixture overrides only the FIFO polling bound
+  to 64 iterations; production FIFO bounds and bus-reset sequencing are unchanged.
+- `usb_close_cases.py` connects the production USBD status adapter, HAL Close/Abort,
+  common receive/abort helpers and LL routines. It covers delayed/missing/already-
+  effective OUT NAK, IN NAK failure and natural completion, stale EPDISD,
+  EPENA clearing before EPDISD, failure followed by explicit cleanup, queued
+  SETUP/data with active or already-inactive OUT, and both initial PRIMASK states.
+  Direct HAL callers get the same complete teardown as USBD callers; a locked
+  handle, stop failure or FIFO timeout cannot deactivate the endpoint or retire
+  descriptors. Abort retains descriptors after success, while Close retires IN.
+  The MMIO adapter implements endpoint W1C stores and scripted NAK/disable
+  progression. It does not emulate electrical timing, real host traffic or DMA.
+  DMA cases skip slave FIFO reads; they do not establish real DMA quiescence.
 - `usb_stop_cases.py` executes the actual HAL Stop, LL disconnect/global-interrupt
   disable and bridge status mapping with injected FIFO results. HAL returns the
   FIFO status and the bridge preserves its mapping; cleanup and unlock run after
@@ -216,8 +218,9 @@ BRICK60. The model does not supply the controller's automatic bus-reset effects.
 The explicit `--assert-reset-boundary` mode asserts that the observed paths are
 absent and intentionally fails with the current HAL. It is not a required green
 regression check. The production software observer/guard is tested by bridge
-mode above; controller reset/abort register order and FIFO polling bounds remain
-unchanged pending the H7RS-specific evidence tracked in `docs/state_open.md`.
+mode above; controller reset order and FIFO polling bounds remain unchanged.
+The endpoint teardown follows RM0477 Rev 9 §62.15.6; hardware acceptance
+of the consolidated patch remains tracked in `docs/state_open.md`.
 
 ### Physical RGB input coverage
 

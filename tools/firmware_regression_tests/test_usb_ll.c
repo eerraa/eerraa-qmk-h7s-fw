@@ -39,6 +39,7 @@ static void check_endpoint(unsigned is_in, unsigned epnum, unsigned clear_after)
 {
   usb_ll_reset();
   usb_ll_seed_endpoint(is_in, epnum, true, clear_after);
+  usb_ll_controller.status[0] = USB_OTG_GINTSTS_BOUTNAKEFF;
   USB_OTG_EPTypeDef ep = {0};
   uint8_t buffer[64] = {0};
   ep.num = (uint8_t)epnum;
@@ -54,36 +55,38 @@ static void check_endpoint(unsigned is_in, unsigned epnum, unsigned clear_after)
   assert(usb_ll_fifo.accesses == 0U);
   if (clear_after == 0U) {
     assert(result == HAL_ERROR);
-    assert(script->disable_polls == 10000U);
+    assert(script->disable_polls >= USB_EP_STOP_MAX_POLLS);
     assert((usb_ll_endpoint_control(is_in, epnum) & USB_OTG_DIEPCTL_EPENA) != 0U);
   } else {
     assert(result == HAL_OK);
-    assert(script->disable_polls == clear_after);
+    assert(script->disable_polls >= script->done_after);
     assert((usb_ll_endpoint_control(is_in, epnum) & USB_OTG_DIEPCTL_EPENA) == 0U);
   }
 
-  assert(USB_DeactivateEndpoint(&usb_ll_controller, &ep) == HAL_OK);
+  HAL_StatusTypeDef deactivated = USB_DeactivateEndpoint(&usb_ll_controller, &ep);
   uint32_t endpoint_mask = 1U << (epnum + (is_in ? 0U : 16U));
-  assert(usb_ll_device.DAINTMSK == (UINT32_MAX & ~endpoint_mask));
-  assert(usb_ll_device.DEACHMSK == (UINT32_MAX & ~endpoint_mask));
-  assert(usb_ll_device.DIEPEMPMSK == UINT32_MAX);
-  assert((usb_ll_endpoint_control(is_in, epnum) & USB_OTG_DIEPCTL_USBAEP) == 0U);
-  assert(usb_ll_irq_accesses[is_in][epnum] == 0U && usb_ll_fifo.accesses == 0U);
   if (clear_after == 0U) {
-    /* A successful Deactivate return is compatible with a still-active scripted
-     * endpoint after Abort failed; it is not evidence of hardware quiescence. */
-    assert((usb_ll_endpoint_control(is_in, epnum) & USB_OTG_DIEPCTL_EPENA) != 0U);
+    assert(deactivated == HAL_ERROR);
+    assert(usb_ll_device.DAINTMSK == UINT32_MAX && usb_ll_device.DEACHMSK == UINT32_MAX);
+    assert((usb_ll_endpoint_control(is_in, epnum) & USB_OTG_DIEPCTL_USBAEP) != 0U);
+  } else {
+    assert(deactivated == HAL_OK);
+    assert(usb_ll_device.DAINTMSK == (UINT32_MAX & ~endpoint_mask));
+    assert(usb_ll_device.DEACHMSK == (UINT32_MAX & ~endpoint_mask));
+    assert((usb_ll_endpoint_control(is_in, epnum) & USB_OTG_DIEPCTL_USBAEP) == 0U);
   }
+  assert(usb_ll_device.DIEPEMPMSK == UINT32_MAX && usb_ll_fifo.accesses == 0U);
 }
 
 static void check_direct_deactivate(unsigned is_in, unsigned epnum)
 {
   usb_ll_reset();
   usb_ll_seed_endpoint(is_in, epnum, true, 50U);
+  usb_ll_controller.status[0] = USB_OTG_GINTSTS_BOUTNAKEFF;
   USB_OTG_EPTypeDef ep = {0};
   ep.num = (uint8_t)epnum;
   ep.is_in = (uint8_t)is_in;
-  assert(USB_DeactivateEndpoint(&usb_ll_controller, &ep) == HAL_OK);
+  assert(USB_DeactivateEndpoint(&usb_ll_controller, &ep) == HAL_ERROR);
   assert((usb_ll_endpoint_control(is_in, epnum) & USB_OTG_DIEPCTL_EPENA) != 0U);
   assert(usb_ll_ep_script[is_in][epnum].disable_polls < 50U);
   assert(usb_ll_fifo.accesses == 0U);
@@ -112,6 +115,6 @@ int main(void)
       check_direct_deactivate(is_in, ep);
     }
   }
-  puts("PASS: unchanged H7RS LL flush handles scripted AHB/flush timeout and FIFO selection; abort failure and deactivate success do not establish endpoint quiescence");
+  puts("PASS: H7RS LL requires NAK and disable completion; direct deactivation rejects an active endpoint; FIFO timeout/selection retained");
   return 0;
 }

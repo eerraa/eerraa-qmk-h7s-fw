@@ -41,6 +41,9 @@ extern "C" {
 #define HAL_USB_TIMEOUT                                       0xF000000U
 #endif /* define HAL_USB_TIMEOUT */
 
+/* Bounded register polling; usable while interrupts/SysTick are masked. */
+#define USB_EP_STOP_MAX_POLLS 10000U
+
 #ifndef HAL_USB_CURRENT_MODE_MAX_DELAY_MS
 #define HAL_USB_CURRENT_MODE_MAX_DELAY_MS                           200U
 #endif /* define HAL_USB_CURRENT_MODE_MAX_DELAY_MS */
