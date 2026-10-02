@@ -8,9 +8,12 @@ H7S Firmware Guide
 
 ■ 펌웨어 업데이트
 
-V260916R1 및 그 이전 배포본에서 V261001R2로 처음 업데이트하면 저장 형식
-변경으로 키맵·매크로·설정이 초기화됩니다. 먼저 SAVE + LOAD로 백업하고,
+V261002R1은 MAY65 매트릭스 확장에 따라 EEPROM 형식을 변경했습니다.
+이전 형식에서 처음 업데이트하면 모든 보드의 키맵·매크로·설정이 초기화됩니다.
+먼저 SAVE + LOAD로 백업하고,
 백업 파일에 포함되지 않는 설정과 탭댄스는 따로 기록하십시오.
+MAY65는 5×15에서 5×16으로 바뀌어 기존 키맵 백업을 그대로 불러올 수 없습니다.
+기존 백업을 참고하여 키맵을 수동으로 다시 설정하십시오.
 이 릴리스부터 메이커별 USB 식별자를 사용합니다. 메이커와 보드 이름이 모두
 일치하는 ZIP을 사용하고, 업데이트 후 브라우저에서 기기 연결을 다시 허용하십시오.
 
@@ -49,10 +52,12 @@ English
 
 ■ Firmware Update
 
-The first upgrade from V260916R1 or an earlier release to V261001R2 resets
-keymaps, macros and settings because the stored format changed. Back up with
-SAVE + LOAD first, and separately record settings and Tap Dance actions that
-the backup file does not include.
+V261002R1 changes the EEPROM format to expand the MAY65 matrix. The first
+upgrade from the previous format resets keymaps, macros and settings on every
+board. Back up with SAVE + LOAD first, and separately record settings and
+Tap Dance actions that the backup file does not include.
+MAY65 changes from 5×15 to 5×16, so its previous keymap backup cannot be loaded
+directly. Use the old backup as a reference to configure the keymap manually.
 This release uses maker-specific USB identities. Choose the ZIP matching both
 the maker and board, then authorize the keyboard again in the browser.
 

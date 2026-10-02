@@ -1,9 +1,9 @@
 {
-  "reset_key": "0x48375301",
-  "reason": "기존 USER 주소와 88바이트 탭댄스 형식을 유지하며 미사용 USER 172..195에 독립된 24바이트 시간 레코드를 추가한다. 서명·버전이 유효하지 않으면 해당 레코드만 기본값으로 초기화하므로 전체 초기화 키는 유지한다.",
+  "reset_key": "0x48375302",
+  "reason": "MAY65 매트릭스를 5x15에서 5x16으로 확장하여 기존 동적 키맵의 행·레이어 stride와 매크로 주소가 바뀐다. 사용자가 전 보드 공통 EEPROM 전체 초기화를 명시적으로 수용했으므로 ERA_EEPROM_RESET_KEY를 0x48375302로 올린다. USER 슬롯 주소와 독립 24바이트 탭댄스 시간 레코드 형식은 유지한다.",
   "groups": {
     "board src/ap/modules/qmk/keyboards/era/comm/intigrity80/config.h": "0249ead8a27d8278",
-    "board src/ap/modules/qmk/keyboards/era/keynetix/may65/config.h": "aac2456ae6e7b787",
+    "board src/ap/modules/qmk/keyboards/era/keynetix/may65/config.h": "d883bb76de304c3e",
     "board src/ap/modules/qmk/keyboards/era/sirind/brick60/config.h": "aac2456ae6e7b787",
     "board src/ap/modules/qmk/keyboards/era/sirind/brick65/config.h": "aac2456ae6e7b787",
     "board src/ap/modules/qmk/keyboards/era/sirind/sculpturei/config.h": "0249ead8a27d8278",

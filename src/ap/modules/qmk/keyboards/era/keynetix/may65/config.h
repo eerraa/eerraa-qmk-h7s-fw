@@ -29,7 +29,7 @@
 #define DYNAMIC_KEYMAP_LAYER_COUNT  8
 
 #define MATRIX_ROWS                 5
-#define MATRIX_COLS                 15
+#define MATRIX_COLS                 16
 #define DEBOUNCE                    5
 #define DEBOUNCE_TYPE               sym_defer_pk
 
