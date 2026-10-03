@@ -228,7 +228,7 @@ legacy-firmware behavior on that client, or physical endpoint timing.
 ## 7. MOUSE precision
 
 V261004R1 stores integer report counts and real millisecond ramp durations.
-Custom VIA offers one local **Precise values** switch at the bottom of MOUSE;
+Custom VIA offers one local **Advanced settings** switch at the bottom of MOUSE;
 it changes presentation only, never SET/SAVE or drafts. Stock VIA retains the
 six basic dropdown controls. A read projects to the nearest preset without
 changing stored precision; ties choose the lower preset. Wheel acceleration
