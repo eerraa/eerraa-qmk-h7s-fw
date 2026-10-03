@@ -98,7 +98,6 @@ static void reset_session(void)
   g_now_ms = 0;
   g_clean_calls = 0;
   g_boot_calls = 0;
-  via_qmk_system_task();
   via_set(2, 0);
   via_set(3, 0);
   via_set(4, 0);
@@ -138,37 +137,33 @@ int main(void)
 
   reset_session();
   via_set(2, 1);
-  g_now_ms = 9999;
-  expect_true("GET still 1 at 9999 ms", via_get(2) == 1);
   g_now_ms = 10000;
-  expect_true("GET expires bits at 10 s without a task", via_get(2) == 0);
+  expect_true("confirmation survives ten seconds", via_get(2) == 1);
+  via_set(3, 1);
+  g_now_ms = UINT32_MAX;
+  expect_true("confirmations survive long delay", via_get(2) == 1 && via_get(3) == 1);
+  g_now_ms = 20;
+  via_save();
+  expect_true("timer wrap and SAVE do not clear or CLEAN",
+              via_get(2) == 1 && via_get(3) == 1 && g_clean_calls == 0);
+  via_set(4, 1);
+  expect_true("delayed third toggle CLEANs once", g_clean_calls == 1);
+  expect_true("delayed CLEAN consumes all bits",
+              via_get(2) == 0 && via_get(3) == 0 && via_get(4) == 0);
+  via_set(4, 1);
+  via_save();
+  expect_true("repeated final toggle cannot repeat CLEAN", g_clean_calls == 1);
 
   reset_session();
-  via_set(2, 1);
-  via_set(3, 1);
-  g_now_ms = 10000;
-  via_qmk_system_task();
-  expect_true("task expires bits at 10 s",
-              via_get(2) == 0 && via_get(3) == 0);
   via_set(4, 1);
-  expect_true("stale third toggle does not CLEAN", g_clean_calls == 0);
-  expect_true("third toggle after expiry is a new window", via_get(4) == 1);
-
-  reset_session();
   via_set(2, 1);
-  g_now_ms = 9000;
+  g_now_ms = 60000;
+  via_set(2, 0);
   via_set(3, 1);
-  g_now_ms = 10000;
-  via_set(4, 1);
-  expect_true("later toggles do not extend the 10 s window", g_clean_calls == 0);
-
-  reset_session();
+  expect_true("OFF cancels only its own confirmation",
+              via_get(2) == 0 && via_get(3) == 1 && via_get(4) == 1 && g_clean_calls == 0);
   via_set(2, 1);
-  g_now_ms = 1000;
-  via_set(3, 1);
-  g_now_ms = 2000;
-  via_set(4, 1);
-  expect_true("three confirms inside 10 s CLEAN", g_clean_calls == 1);
+  expect_true("confirmation order is unrestricted", g_clean_calls == 1);
 
   reset_session();
   via_set(1, 0);

@@ -71,9 +71,9 @@ the old editor. The four action and term IDs keep their encodings.
 
 Official V3 TAPDANCE menus edit only mode-0 (Legacy) slots: the four actions and
 legacy Term presets. Modes 1/2 are edited in the custom app at `https://usekb.cc`;
-official JSON shows their stored mode plus "Advanced settings: Visit usekb.cc"
+official JSON shows only "Advanced settings: Visit usekb.cc"
 without editable action or timing controls. Empty mode-0 slots remain editable.
-Unknown mode values also show an unavailable status and no editable controls.
+Unknown mode values show the same guidance and no editable controls.
 A hidden read-only label binding (`showIf: "0"`) retains each existing mode GET
 as the display-condition source; it is not a rendered ASCII label or a new wire
 command. Constant-false display conditions must not prune this GET. Static labels

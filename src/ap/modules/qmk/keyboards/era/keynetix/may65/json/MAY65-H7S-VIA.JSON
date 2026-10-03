@@ -410,24 +410,6 @@
               ]
             },
             {
-              "showIf": "{id_qmk_tapdance_1_mode} == 1",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["After decision"]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_1_mode} == 2",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["On press"]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_1_mode} != 0 && {id_qmk_tapdance_1_mode} != 1 && {id_qmk_tapdance_1_mode} != 2",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["Unavailable"]
-            },
-            {
               "label": "Advanced settings",
               "type": "label",
               "content": ["Visit usekb.cc"]
@@ -495,24 +477,6 @@
                   ]
                 }
               ]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_2_mode} == 1",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["After decision"]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_2_mode} == 2",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["On press"]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_2_mode} != 0 && {id_qmk_tapdance_2_mode} != 1 && {id_qmk_tapdance_2_mode} != 2",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["Unavailable"]
             },
             {
               "label": "Advanced settings",
@@ -584,24 +548,6 @@
               ]
             },
             {
-              "showIf": "{id_qmk_tapdance_3_mode} == 1",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["After decision"]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_3_mode} == 2",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["On press"]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_3_mode} != 0 && {id_qmk_tapdance_3_mode} != 1 && {id_qmk_tapdance_3_mode} != 2",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["Unavailable"]
-            },
-            {
               "label": "Advanced settings",
               "type": "label",
               "content": ["Visit usekb.cc"]
@@ -669,24 +615,6 @@
                   ]
                 }
               ]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_4_mode} == 1",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["After decision"]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_4_mode} == 2",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["On press"]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_4_mode} != 0 && {id_qmk_tapdance_4_mode} != 1 && {id_qmk_tapdance_4_mode} != 2",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["Unavailable"]
             },
             {
               "label": "Advanced settings",
@@ -758,24 +686,6 @@
               ]
             },
             {
-              "showIf": "{id_qmk_tapdance_5_mode} == 1",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["After decision"]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_5_mode} == 2",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["On press"]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_5_mode} != 0 && {id_qmk_tapdance_5_mode} != 1 && {id_qmk_tapdance_5_mode} != 2",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["Unavailable"]
-            },
-            {
               "label": "Advanced settings",
               "type": "label",
               "content": ["Visit usekb.cc"]
@@ -843,24 +753,6 @@
                   ]
                 }
               ]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_6_mode} == 1",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["After decision"]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_6_mode} == 2",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["On press"]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_6_mode} != 0 && {id_qmk_tapdance_6_mode} != 1 && {id_qmk_tapdance_6_mode} != 2",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["Unavailable"]
             },
             {
               "label": "Advanced settings",
@@ -932,24 +824,6 @@
               ]
             },
             {
-              "showIf": "{id_qmk_tapdance_7_mode} == 1",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["After decision"]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_7_mode} == 2",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["On press"]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_7_mode} != 0 && {id_qmk_tapdance_7_mode} != 1 && {id_qmk_tapdance_7_mode} != 2",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["Unavailable"]
-            },
-            {
               "label": "Advanced settings",
               "type": "label",
               "content": ["Visit usekb.cc"]
@@ -1017,24 +891,6 @@
                   ]
                 }
               ]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_8_mode} == 1",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["After decision"]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_8_mode} == 2",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["On press"]
-            },
-            {
-              "showIf": "{id_qmk_tapdance_8_mode} != 0 && {id_qmk_tapdance_8_mode} != 1 && {id_qmk_tapdance_8_mode} != 2",
-              "label": "Input mode",
-              "type": "label",
-              "content": ["Unavailable"]
             },
             {
               "label": "Advanced settings",

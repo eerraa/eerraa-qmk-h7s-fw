@@ -1,6 +1,5 @@
 #include "sys_port.h"
 #include "bootloader.h"
-#include "timer.h"
 
 
 
@@ -15,17 +14,14 @@ enum via_qmk_ver_item {
 #define SYS_EEP_RESET_BIT_1             (1U << 1)
 #define SYS_EEP_RESET_BIT_DONE          (1U << 2)
 #define SYS_EEP_RESET_MASK              (SYS_EEP_RESET_BIT_0 | SYS_EEP_RESET_BIT_1 | SYS_EEP_RESET_BIT_DONE)
-#define SYS_EEP_RESET_CONFIRM_WINDOW_MS (10000U)  // V260901R1: 첫 확인부터 10초. 이후 토글은 창을 늘리지 않는다
 
 
 static void via_qmk_sys_get_value(uint8_t *data);
 static void via_qmk_sys_set_value(uint8_t *data);
 static uint8_t sys_eep_reset_bit(uint8_t value_id);
-static void sys_eep_reset_expire(void);
 
 
 static uint8_t  eep_reset_confirm = 0x00;
-static uint32_t eep_reset_confirm_started_ms = 0;
 
 
 static uint8_t sys_eep_reset_bit(uint8_t value_id)
@@ -41,20 +37,6 @@ static uint8_t sys_eep_reset_bit(uint8_t value_id)
     default:
       return 0U;
   }
-}
-
-static void sys_eep_reset_expire(void)
-{
-  if (eep_reset_confirm != 0U &&
-      timer_elapsed32(eep_reset_confirm_started_ms) >= SYS_EEP_RESET_CONFIRM_WINDOW_MS)
-  {
-    eep_reset_confirm = 0U;  // V260901R1: 부분 확인은 10초 뒤 폐기한다. VIA GET이 꺼짐을 돌려준다
-  }
-}
-
-void via_qmk_system_task(void)
-{
-  sys_eep_reset_expire();
 }
 
 void via_qmk_system(uint8_t *data, uint8_t length)
@@ -117,7 +99,6 @@ void via_qmk_sys_set_value(uint8_t *data)
       }
     default:
       {
-        sys_eep_reset_expire();
         bit = sys_eep_reset_bit(*value_id);
         if (bit == 0U)
         {
@@ -125,10 +106,6 @@ void via_qmk_sys_set_value(uint8_t *data)
         }
         if (value_data[0] != 0U)
         {
-          if (eep_reset_confirm == 0U)
-          {
-            eep_reset_confirm_started_ms = timer_read32();
-          }
           eep_reset_confirm |= bit;
           if ((eep_reset_confirm & SYS_EEP_RESET_MASK) == SYS_EEP_RESET_MASK)
           {
@@ -161,7 +138,6 @@ void via_qmk_sys_get_value(uint8_t *data)
       }
     default:
       {
-        sys_eep_reset_expire();
         bit = sys_eep_reset_bit(*value_id);
         if (bit != 0U)
         {

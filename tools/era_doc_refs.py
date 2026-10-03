@@ -428,10 +428,8 @@ def check_tapdance() -> None:
                     editable = [item for item in shown if item["type"] != "label"]
                     assert {item["content"][0] for item in editable} == (set(expected) if mode == 0 else set())
                     assert any(item.get("label") == "Advanced settings" and item.get("content") == ["Visit usekb.cc"] for item in shown)
-                    if mode:
-                        status = "After decision" if mode == 1 else "On press" if mode == 2 else "Unavailable"
-                        assert any(item.get("label") == "Input mode" and item.get("content") == [status] for item in shown)
-                    else:
+                    assert not any(item.get("label") == "Input mode" for item in shown)
+                    if mode == 0:
                         assert all(item["type"] == ("dropdown" if item["content"][0].endswith("_term") else "keycode") for item in editable)
                         term = next(item for item in editable if item["content"][0].endswith("_term"))
                         assert [option[1] for option in term["options"]] == list(range(10, 51, 2))
