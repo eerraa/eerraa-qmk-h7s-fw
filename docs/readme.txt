@@ -8,7 +8,7 @@ H7S Firmware Guide
 
 ■ 펌웨어 업데이트
 
-V261003R5는 USB 진단 대신 조회 시점의 폴링 설정을 표시하며, 폴링 변경 시
+V261004R1은 USB 진단 대신 조회 시점의 폴링 설정을 표시하며, 폴링 변경 시
 VIA 후속 통신을 처리한 뒤 재부팅합니다. 공식 VIA의 Tap Dance는 기본 모드 편집만
 제공하고 고급 설정은 https://usekb.cc 에서 편집합니다.
 V261002R1과 저장 형식이 같으므로 그 버전에서 업데이트할 때 설정을 유지합니다.
@@ -57,7 +57,7 @@ English
 
 ■ Firmware Update
 
-V261003R5 replaces USB diagnostics with the last-read polling setting and
+V261004R1 replaces USB diagnostics with the last-read polling setting and
 allows VIA follow-up traffic before restarting after a polling change. Official
 VIA edits basic Tap Dance slots; use https://usekb.cc for advanced settings.
 The storage format is unchanged from V261002R1, so updates from that version
