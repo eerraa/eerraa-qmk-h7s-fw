@@ -15,7 +15,7 @@ Shipped channel/value meanings are wire ABI. Do not renumber or reuse a shipped 
 
 GET keyboard-value selectors `0x06` (§5) and `0x07` (§6) are ERA additions in an id range QMK extends in order. QMK VIA protocol 13 (QMK release 2026-05-31) gives `0x06` to QMK's id_keycodes_version, which official VIA reads from protocol-13 boards before remapping. Keep `VIA_PROTOCOL_VERSION` at `0x000C` until both selectors move to new ids together with the app (`the-via-eerraa/docs/adr/0001-state-sync-protocol.md`); shipped firmware keeps its ids.
 
-The local `menu` check verifies that firmware-routed channels remain reachable from official JSON. It does not verify the peer app overlay.
+The local `menu` check verifies that firmware-routed channels remain reachable from official JSON. The `tapdance` check verifies the official editing boundary for every slot and mode byte. Neither verifies the peer app overlay or a live official-browser session.
 
 Official menu names are shared with EERRAA: lighting sits under `Lighting` in submenus named for where the LEDs are (`Underglow`, `RGB Row`, never an engine name), and lock indication under `Indicators` with `Indicator` / `Indicator N` dropdowns whose value 0 reads `RGB Effect` where the indicator shares the lighting LEDs (INTIGRITY80, BRICK60) and `Off` on a dedicated LED. Labels are not wire ABI, but a rename must reach every official JSON, `docs/usevia.txt` and the app definition together.
 
@@ -54,6 +54,14 @@ Official `*-VIA.JSON` definitions keep the legacy one-byte ×10 ms controls. Leg
 `src/ap/modules/qmk/port/tapping_term_policy.h` owns the shared exact validity and legacy projection; `tapping_term.c` and `tapdance.c` own the handlers. Wire and EEPROM terms remain uint16 with unchanged IDs, offsets, signatures and versions. Runtime key events retain a 32-bit captured timestamp through the tapping queue; elapsed comparisons and Tap Dance deadlines must represent intervals greater than the maximum term. Legacy GET is read-only even for values outside its display range; only explicit Legacy SET normalizes the stored value. SAVE/reload must preserve every valid exact value. App encoding and definition bounds are owned by `the-via-eerraa/docs/adr/0001-state-sync-protocol.md`.
 
 ### Tap Dance input modes
+
+The QMK and H7S support policy is shared with
+`the-via-eerraa/docs/PROJECT_DIRECTION.md` **Tap Dance and exact-ms**: official
+VIA edits basic Legacy slots; the custom app owns advanced modes and independent
+timing. This is a narrow exception to feature parity, not permission to remove
+other official VIA controls. Restricting the advanced slots prevents a basic
+editor from changing actions whose inheritance, explicit silence and timing it
+cannot explain or edit completely.
 
 H7S channel 16 values 49..56 select the input mode for TD0..TD7 through
 Custom Value GET/SET/SAVE. Payload byte 0 is 0 legacy, 1 after-decision, or

@@ -10,7 +10,7 @@ Run only the checks whose inputs or asserted behavior the change can affect.
 | Change | Required check | Evidence boundary |
 | --- | --- | --- |
 | `docs/` only, checker unchanged | `python -X utf8 tools/era_doc_refs.py` | Local paths, pointers, reachability, menu exposure, retired-USB guard, distribution version consistency, and the storage-format record; not sentence meaning, peer state, or hardware. |
-| Official `*-VIA.JSON` | `python -X utf8 tools/era_doc_refs.py` | The `menu` check proves firmware-routed channels are reachable in local official JSON only. |
+| Official `*-VIA.JSON` | `python -X utf8 tools/era_doc_refs.py` | The `menu` check proves firmware-routed channels are reachable; `tapdance` checks Legacy-only editing, hidden mode GETs and advanced/unknown guidance for every slot and mode byte. Neither proves an official-browser session. |
 | `tools/era_doc_refs.py` or `tools/era_doc_refs_selftest.py` | checker plus `python -X utf8 tools/era_doc_refs_selftest.py` | Positive baseline plus planted negative fixtures for the document checker; not product behavior. |
 | `hooks/pre-commit`, `.gitattributes`, or `hooks/test_pre_commit.py` | checker plus `python hooks/test_pre_commit.py` | Hook wiring, staged-snapshot execution, interpreter fallback, and fail-closed launcher behavior. |
 | `tools/era_via_host_tests/` or firmware source covered by those fixtures | `pwsh -NoProfile -File tools/era_via_host_tests/run.ps1`; when host `gcc` is already on PATH, `python tools/era_via_host_tests/run.py` is the equivalent entry | Compiled host fixtures and source guards only; no ARM target or physical USB device. |

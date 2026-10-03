@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import re
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -36,6 +37,16 @@ def plant_readme_release_filename(body: bytes) -> bytes:
     current = current_firmware_version()
     planted = b"V000101R1" if current != b"V000101R1" else b"V000101R2"
     return body + b"\nselftest-" + planted + b".uf2\n"
+
+
+def plant_td_advanced_alias(body: bytes) -> bytes:
+    definition = json.loads(body)
+    menu = next(menu for menu in definition["menus"] if isinstance(menu, dict) and menu.get("label") == "TAPDANCE")
+    menu["content"][0]["content"].append({
+        "label": "Hidden advanced time", "type": "range", "showIf": "0",
+        "content": ["alternate_hold_time", 16, 57], "options": [0, 65535],
+    })
+    return json.dumps(definition).encode()
 
 
 def run_checker() -> tuple[int, str]:
@@ -76,6 +87,17 @@ PROBES = (
      lambda b: b"void usbInstabilitySelftest(void);\n", True),
     ("menu", "[menu]", JSON_DOC,
      lambda b: b.replace(b", 17,", b", 99,"), False),
+    ("td-advanced", "[tapdance]", JSON_DOC,
+     lambda b: b.replace(b'"{id_qmk_tapdance_1_mode} == 0"', b'"{id_qmk_tapdance_1_mode} != 255"', 1), False),
+    ("td-hidden", "[tapdance]", JSON_DOC,
+     lambda b: b.replace(b'"label": "TAPDANCE",', b'"showIf": "0", "label": "TAPDANCE",', 1), False),
+    ("td-probe", "[tapdance]", JSON_DOC,
+     lambda b: b.replace(b'"id_qmk_tapdance_1_mode", 16, 49', b'"id_qmk_tapdance_1_mode", 16, 57', 1), False),
+    ("td-alias", "[tapdance]", JSON_DOC, plant_td_advanced_alias, False),
+    ("td-guidance", "[tapdance]", JSON_DOC,
+     lambda b: b.replace(b'"Visit usekb.cc"', b'"Visit elsewhere"', 1), False),
+    ("td-unknown", "[tapdance]", JSON_DOC,
+     lambda b: b.replace(b'"Unavailable"', b'"Legacy"', 1), False),
     ("version", "릴리스 파일명이", "docs/readme.txt",
      plant_readme_release_filename, False),
     ("storage", "[storage]", "src/ap/modules/qmk/port/port.h",

@@ -7,6 +7,7 @@
   symbol   백틱 안 식별자가 src/ 또는 tools/에 실재하는가
   retired  폐기된 USB 심볼이 src/에 되살아나지 않았는가
   menu     펌웨어가 라우팅하는 VIA 채널이 보드 JSON에서 도달 가능한가
+  tapdance 공식 VIA가 Legacy만 편집하고 고급 슬롯은 안내만 표시하는가
   version  사용자 배포 파일명이 현재 펌웨어 버전과 일치하는가
   storage  저장 형식이 바뀌었는데 EEPROM 초기화 키 결정이 기록되지 않았는가
 
@@ -20,6 +21,7 @@
 from __future__ import annotations
 
 import hashlib
+import ast
 import json
 import re
 import shutil
@@ -342,6 +344,88 @@ def check_menu() -> None:
             )
 
 
+def check_tapdance() -> None:
+    """공식 정의의 지원 경계를 모든 슬롯/모드에서 검사한다. 실제 브라우저 시험은 아니다."""
+    def items(node, conditions=()):
+        if isinstance(node, list):
+            for child in node:
+                yield from items(child, conditions)
+        elif isinstance(node, dict):
+            conditions += (str(node["showIf"]),) if "showIf" in node else ()
+            if "type" in node:
+                yield node, conditions
+            else:
+                yield from items(node.get("content", []), conditions)
+
+    def visible(conditions, command, mode):
+        # Interpret only numeric comparisons/boolean operators used by this
+        # contract. Never execute definition-provided text as Python code.
+        def value(node):
+            if isinstance(node, ast.Constant) and type(node.value) is int:
+                return node.value
+            if isinstance(node, ast.BoolOp) and isinstance(node.op, (ast.And, ast.Or)):
+                values = [bool(value(child)) for child in node.values]
+                return all(values) if isinstance(node.op, ast.And) else any(values)
+            if isinstance(node, ast.Compare) and len(node.ops) == 1:
+                left, right = value(node.left), value(node.comparators[0])
+                if isinstance(node.ops[0], ast.Eq):
+                    return left == right
+                if isinstance(node.ops[0], ast.NotEq):
+                    return left != right
+            raise ValueError("unsupported Tap Dance display condition")
+
+        return all(bool(value(ast.parse(
+            condition.replace("{" + command + "}", str(mode)).replace("&&", " and ").replace("||", " or "),
+            mode="eval").body)) for condition in conditions)
+
+    for row in boards():
+        path = row["json"]
+        definition = json.loads(read(ROOT / path))
+        menus = [menu for menu in definition.get("menus", [])
+                 if isinstance(menu, dict) and menu.get("label") == "TAPDANCE"]
+        if len(menus) != 1 or len(menus[0].get("content", [])) != 8:
+            report("tapdance", path, "TAPDANCE에 TD0..TD7이 필요하다")
+            continue
+        all_items = list(items(definition.get("menus", [])))
+        for item, _ in all_items:
+            content = item.get("content")
+            if (isinstance(content, list) and len(content) >= 3 and content[1] == 16
+                    and isinstance(content[2], int) and 57 <= content[2] <= 72):
+                report("tapdance", path, "고급 시간 값은 별칭이나 숨김 label로도 공식 정의에 선언할 수 없다")
+        for index, slot in enumerate(menus[0]["content"]):
+            prefix = f"id_qmk_tapdance_{index + 1}_"
+            command = prefix + "mode"
+            expected = {prefix + name: (16, 5 * index + offset)
+                        for offset, name in enumerate(("tap", "hold", "dtap", "thold", "term"), 1)}
+            allowed = {**expected, command: (16, 49 + index)}
+            slot_nodes = {id(item) for item, _ in items(slot)}
+            slot_items = [(item, conditions) for item, conditions in all_items if id(item) in slot_nodes]
+            bindings = [(item, conditions) for item, conditions in all_items
+                        if isinstance(item.get("content"), list) and item["content"]
+                        and str(item["content"][0]).startswith(prefix)]
+            try:
+                assert slot.get("label") == f"TD{index}"
+                assert len(bindings) == 6
+                assert {item["content"][0] for item, _ in bindings} == set(allowed)
+                assert all(tuple(item["content"][1:]) == allowed[item["content"][0]] for item, _ in bindings)
+                probe = next(item for item, _ in bindings if item["content"][0] == command)
+                assert probe["type"] == "label" and probe.get("showIf") == "0"
+                for mode in range(256):
+                    shown = [item for item, conditions in slot_items if visible(conditions, command, mode)]
+                    editable = [item for item in shown if item["type"] != "label"]
+                    assert {item["content"][0] for item in editable} == (set(expected) if mode == 0 else set())
+                    assert any(item.get("label") == "Advanced settings" and item.get("content") == ["Visit usekb.cc"] for item in shown)
+                    if mode:
+                        status = "After decision" if mode == 1 else "On press" if mode == 2 else "Unavailable"
+                        assert any(item.get("label") == "Input mode" and item.get("content") == [status] for item in shown)
+                    else:
+                        assert all(item["type"] == ("dropdown" if item["content"][0].endswith("_term") else "keycode") for item in editable)
+                        term = next(item for item in editable if item["content"][0].endswith("_term"))
+                        assert [option[1] for option in term["options"]] == list(range(10, 51, 2))
+            except (AssertionError, KeyError, IndexError, ValueError, SyntaxError, TypeError, StopIteration):
+                report("tapdance", path, f"TD{index}: Legacy 편집/고급 안내/숨김 mode GET 계약 불일치")
+
+
 def check_source_comments() -> None:
     """소스 주석이 문서를 부르면 그 문서가 실재해야 한다.
 
@@ -511,6 +595,7 @@ def main() -> int:
     check_index()
     check_retired()
     check_menu()
+    check_tapdance()
     check_release_version()
     check_storage()
 
