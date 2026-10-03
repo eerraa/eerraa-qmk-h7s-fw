@@ -23,6 +23,13 @@
 #include "print.h"
 #include "debug.h"
 #include "mousekey.h"
+#ifdef ERA_MOUSEKEY_RUNTIME_DELTA
+#    include "era_mousekey_precision.h"
+uint8_t mk_cursor_top = 16, mk_wheel_top = MOUSEKEY_WHEEL_DELTA * MOUSEKEY_WHEEL_MAX_SPEED;
+uint16_t mk_cursor_ramp_ms = 1000, mk_wheel_ramp_ms = MOUSEKEY_WHEEL_TIME_TO_MAX * MOUSEKEY_WHEEL_INTERVAL;
+static uint32_t era_cursor_started, era_wheel_started;
+#endif
+
 
 #ifdef ERA_MOUSEKEY_RUNTIME_DELTA
 // V260823R1: VIA MOUSE 페이지가 이벤트당 스텝 크기를 런타임으로 쓴다.
@@ -104,6 +111,9 @@ uint8_t mk_wheel_time_to_max = MOUSEKEY_WHEEL_TIME_TO_MAX;
 /* Default accelerated mode */
 
 static uint8_t move_unit(void) {
+#ifdef ERA_MOUSEKEY_RUNTIME_DELTA
+    return era_mousekey_unit(mk_move_delta, mk_cursor_top, mk_cursor_ramp_ms, timer_elapsed32(era_cursor_started), mousekey_accel, MOUSEKEY_MOVE_MAX);
+#else
     uint16_t unit;
     if (mousekey_accel & (1 << 0)) {
         unit = (MOUSEKEY_MOVE_DELTA * mk_max_speed) / 4;
@@ -119,6 +129,7 @@ static uint8_t move_unit(void) {
         unit = (MOUSEKEY_MOVE_DELTA * mk_max_speed * mousekey_repeat) / mk_time_to_max;
     }
     return (unit > MOUSEKEY_MOVE_MAX ? MOUSEKEY_MOVE_MAX : (unit == 0 ? 1 : unit));
+#endif
 }
 
 #            else // MOUSEKEY_INERTIA mode
@@ -169,6 +180,9 @@ static int8_t move_unit(uint8_t axis) {
 #            endif // end MOUSEKEY_INERTIA mode
 
 static uint8_t wheel_unit(void) {
+#ifdef ERA_MOUSEKEY_RUNTIME_DELTA
+    return era_mousekey_unit(mk_wheel_delta, mk_wheel_top, mk_wheel_ramp_ms, timer_elapsed32(era_wheel_started), mousekey_accel, MOUSEKEY_WHEEL_MAX);
+#else
     uint16_t unit;
     if (mousekey_accel & (1 << 0)) {
         unit = (MOUSEKEY_WHEEL_DELTA * mk_wheel_max_speed) / 4;
@@ -184,6 +198,7 @@ static uint8_t wheel_unit(void) {
         unit = (MOUSEKEY_WHEEL_DELTA * mk_wheel_max_speed * mousekey_wheel_repeat) / mk_wheel_time_to_max;
     }
     return (unit > MOUSEKEY_WHEEL_MAX ? MOUSEKEY_WHEEL_MAX : (unit == 0 ? 1 : unit));
+#endif
 }
 
 #        else /* #ifndef MK_KINETIC_SPEED */
@@ -350,7 +365,11 @@ void mousekey_task(void) {
 
 #    else // default acceleration
 
+#    ifdef ERA_MOUSEKEY_RUNTIME_DELTA
+    if ((tmpmr.x || tmpmr.y) && timer_elapsed(last_timer_c) >= (mousekey_repeat ? mk_interval : mk_delay * 10)) {
+#    else
     if ((tmpmr.x || tmpmr.y) && timer_elapsed(last_timer_c) > (mousekey_repeat ? mk_interval : mk_delay * 10)) {
+#    endif
         if (mousekey_repeat != UINT8_MAX) mousekey_repeat++;
         if (tmpmr.x != 0) mouse_report.x = move_unit() * ((tmpmr.x > 0) ? 1 : -1);
         if (tmpmr.y != 0) mouse_report.y = move_unit() * ((tmpmr.y > 0) ? 1 : -1);
@@ -370,7 +389,11 @@ void mousekey_task(void) {
 
 #    endif // MOUSEKEY_INERTIA or not
 
+#    ifdef ERA_MOUSEKEY_RUNTIME_DELTA
+    if ((tmpmr.v || tmpmr.h) && timer_elapsed(last_timer_w) >= (mousekey_wheel_repeat ? mk_wheel_interval : mk_wheel_delay * 10)) {
+#    else
     if ((tmpmr.v || tmpmr.h) && timer_elapsed(last_timer_w) > (mousekey_wheel_repeat ? mk_wheel_interval : mk_wheel_delay * 10)) {
+#    endif
         if (mousekey_wheel_repeat != UINT8_MAX) mousekey_wheel_repeat++;
         if (tmpmr.v != 0) mouse_report.v = wheel_unit() * ((tmpmr.v > 0) ? 1 : -1);
         if (tmpmr.h != 0) mouse_report.h = wheel_unit() * ((tmpmr.h > 0) ? 1 : -1);
@@ -396,6 +419,10 @@ void mousekey_task(void) {
 }
 
 void mousekey_on(uint8_t code) {
+#ifdef ERA_MOUSEKEY_RUNTIME_DELTA
+    if (IS_MOUSEKEY_MOVE(code) && !mouse_report.x && !mouse_report.y) era_cursor_started = timer_read32();
+    if (IS_MOUSEKEY_WHEEL(code) && !mouse_report.v && !mouse_report.h) era_wheel_started = timer_read32();
+#endif
 #    ifdef MK_KINETIC_SPEED
     if (mouse_timer == 0) {
         mouse_timer = timer_read();

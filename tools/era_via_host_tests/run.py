@@ -75,6 +75,7 @@ def prepare_sandbox() -> None:
 
 def main() -> int:
     os.chdir(ROOT)
+    run([sys.executable, str(HERE / 'test_mouse_runtime.py')])
     prepare_sandbox()
     gcc_exact = [
         "-Wno-unused-parameter",

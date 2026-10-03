@@ -110,3 +110,6 @@ void tap_dance_run_quantum_keycode(keyrecord_t *record, uint16_t keycode) {
 void add_weak_mods(uint8_t mods) { (void)mods; }
 void del_weak_mods(uint8_t mods) { (void)mods; }
 void send_keyboard_report(void) {}
+
+uint8_t mk_cursor_top, mk_wheel_top;
+uint16_t mk_cursor_ramp_ms, mk_wheel_ramp_ms;

@@ -225,15 +225,51 @@ bodies and all five board routers; `test_usb_polling.h` checks the real HID
 accessor. Software fixtures do not prove official VIA refresh after Apply/reboot,
 legacy-firmware behavior on that client, or physical endpoint timing.
 
-## 7. MOUSE unit conversion
+## 7. MOUSE precision
 
-VIA exposes pixels and milliseconds while the QMK engine stores step/ratio and event counts. The user-visible quantities are the contract; `src/ap/modules/qmk/port/mousekey_config.c` owns conversion.
+V261004R1 stores integer report counts and real millisecond ramp durations.
+Custom VIA offers one local **Precise values** switch at the bottom of MOUSE;
+it changes presentation only, never SET/SAVE or drafts. Stock VIA retains the
+six basic dropdown controls. A read projects to the nearest preset without
+changing stored precision; ties choose the lower preset. Wheel acceleration
+projects zero ramp to Off, otherwise the nearest Mild/Strong target count,
+ignoring duration for this classification. Choosing a preset writes that preset.
 
-- Top speed is derived from first-step × ratio. Recompute the ratio with rounding and engine clamping when first speed changes; do not floor it or expose the raw pair as independent user controls.
-- Acceleration duration is held in time. Convert it to `mk_time_to_max` from the current interval with rounding. If the one-byte event count cannot represent the requested duration, GET reports the representable shorter value rather than echoing an impossible request.
-- Acceleration Off means the first-step speed is used immediately. Runtime max-speed is folded to 1 while the stored ratio is preserved, so re-enabling acceleration restores the user's ramp. GET of top speed continues to report the stored effective top.
+The existing V3 Custom Value channel is QMK 13 / H7S 17. IDs 1–6 keep their
+legacy byte payloads. ID 7 is read-only capability: payload `E4 01`. IDs 8–14
+carry BE16; GET adds `E4` after the two value bytes:
 
-`tools/era_via_host_tests/test_era_via_exact_ms.c` (`test_mousekey`) covers these round trips.
+| ID | Value | Integer range |
+| --- | --- | --- |
+| 8 | Cursor start report count | 1–127 |
+| 9 | Cursor target report count | 1–127 |
+| 10 | Cursor ramp ms | 0–65535 |
+| 11 | Cursor interval ms | 1–255 |
+| 12 | Wheel interval ms | 1–255 |
+| 13 | Wheel target report count | 1–127 |
+| 14 | Wheel ramp ms | 0–65535 |
+
+Zero ramp uses constant start count (wheel: one step). A smaller target than
+start ramps down. Counts are HID report units, not guaranteed screen pixels;
+OS pointer/scroll processing still applies. Ramps use elapsed time from the
+first held direction, independently for cursor and wheel. Adding an axis does
+not restart a ramp; releasing the last direction or clearing starts the next
+press fresh. Existing cadence, diagonal correction and acceleration keys remain.
+
+Probe support on the current connection before querying exact fields. Only
+unhandled or an all-zero legacy H7S reply means unsupported. Timeout, malformed
+and disconnect remain errors. Once advertised, exact fields are required CONFIG
+values, subject to the existing device/definition/generation candidate lifetime.
+The date version is not a capability. Invalid exact SET is unhandled and leaves
+runtime/storage unchanged. SET changes runtime; SAVE acknowledges persistence.
+A failed SAVE remains retryable even if a GET already equals the draft.
+
+MOUSE v2 remains 16 bytes with version at byte 10 and signature at byte 12.
+V261004R1 changes both global EEPROM reset keys: the first boot from an older
+storage identity resets **all** keymaps, macros and settings. Back up first;
+backup formats do not necessarily contain every feature. No v1 migration is
+performed. Split units must use matching firmware, as required by the existing
+storage contract.
 
 ## 8. Verification boundary
 

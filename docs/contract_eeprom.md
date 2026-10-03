@@ -30,8 +30,9 @@ defaults. MOUSE checks signature and version only; out-of-range fields are
 clamped one by one — the knobs in `mousekey_config_storage_t`
 (`src/ap/modules/qmk/port/mousekey_config.c`) are independent, so one bad field
 is not a reason to drop the rest. The MOUSE slot stores that whole struct even
-when the VIA page exposes a subset (`docs/contract_via.md`); opening the rest
-later is a definition change, not a migration.
+with version 2 and unchanged slot size/offset. V261004R1 changes both the
+meaning of stored MOUSE bytes and the global reset key; the first boot resets
+all settings. No v1 migration is performed (`docs/contract_via.md` §7).
 
 A failed validity check restores defaults in RAM and flushes immediately from
 init. A MOUSE signature that is valid but has out-of-range fields only flags

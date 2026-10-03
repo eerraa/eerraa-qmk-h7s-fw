@@ -179,6 +179,8 @@ extern "C" {
 #endif
 
 #ifdef ERA_MOUSEKEY_RUNTIME_DELTA
+extern uint8_t mk_cursor_top, mk_wheel_top;
+extern uint16_t mk_cursor_ramp_ms, mk_wheel_ramp_ms;
 extern uint8_t mk_move_delta;   // V260823R1: 이벤트당 커서 스텝(px)
 extern uint8_t mk_wheel_delta;  // V260823R1: 이벤트당 휠 스텝
 #endif

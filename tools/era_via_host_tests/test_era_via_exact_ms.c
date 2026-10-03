@@ -147,120 +147,51 @@ static uint8_t mousekey_set_echo(uint8_t value_id, uint8_t value) {
     return report[3];
 }
 
+static uint16_t mouse_exact(uint8_t command, uint8_t id, uint16_t value) {
+    uint8_t data[32] = {command, id_qmk_mousekey, id, value >> 8, value & 255};
+    expect_true("MOUSE precision handled", mousekey_config_handle_via_command(data, sizeof(data)));
+    if (command == id_custom_get_value) expect_eq_u8("MOUSE marker", data[5], 0xE4);
+    return ((uint16_t)data[3] << 8) | data[4];
+}
 static void test_mousekey(void) {
-    uint32_t pre;
-
     mousekey_config_init();
-
-    /* 기본값이 엔진 변수까지 그대로 내려갔는가 */
-    expect_eq_u8("mk default step 4px", mk_move_delta, 4);
-    expect_eq_u8("mk default interval 10ms", mk_interval, 10);
-    expect_eq_u8("mk default ratio 4", mk_max_speed, 4);
-    expect_eq_u8("mk default ramp 100 events", mk_time_to_max, 100);
-    expect_eq_u8("mk default top 16px", mousekey_get(id_qmk_mousekey_cursor_max_speed), 16);
-    expect_eq_u8("mk default accel 1.0s = 20 units", mousekey_get(id_qmk_mousekey_cursor_acceleration), 20);
-
-    /* 첫 스텝을 바꿔도 최고 속도는 제자리 */
-    expect_true("mk start 8px SET", mousekey_set(id_qmk_mousekey_cursor_min_speed, 8));
-    expect_eq_u8("mk start reads 8px", mousekey_get(id_qmk_mousekey_cursor_min_speed), 8);
-    expect_eq_u8("mk top held at 16px across start change", mousekey_get(id_qmk_mousekey_cursor_max_speed), 16);
-    expect_eq_u8("mk ratio recomputed to 2", mk_max_speed, 2);
-
-    /* 최고 속도는 반올림이라 상한에 정확히 닿는다 (내림이면 120으로 떨어진다) */
-    expect_true("mk top 127px SET", mousekey_set(id_qmk_mousekey_cursor_max_speed, 127));
-    expect_eq_u8("mk ratio 16 by rounding", mk_max_speed, 16);
-    expect_eq_u8("mk top reads back 127px", mousekey_get(id_qmk_mousekey_cursor_max_speed), 127);
-
-    /* 갱신 주기를 바꿔도 램프 시간은 유지된다 */
-    expect_true("mk start back to 4px", mousekey_set(id_qmk_mousekey_cursor_min_speed, 4));
-    expect_true("mk accel 1.5s SET", mousekey_set(id_qmk_mousekey_cursor_acceleration, 30));
-    expect_eq_u8("mk accel reads 1.5s", mousekey_get(id_qmk_mousekey_cursor_acceleration), 30);
-    expect_true("mk interval 16ms SET", mousekey_set(id_qmk_mousekey_cursor_interval, 16));
-    expect_eq_u8("mk interval reads 16ms", mousekey_get(id_qmk_mousekey_cursor_interval), 16);
-    expect_eq_u8("mk accel still 1.5s after rate change", mousekey_get(id_qmk_mousekey_cursor_acceleration), 30);
-    expect_eq_u8("mk ramp recomputed to 94 events at 16ms", mk_time_to_max, 94);
-    expect_true("mk interval 20ms SET", mousekey_set(id_qmk_mousekey_cursor_interval, 20));
-    expect_eq_u8("mk accel still 1.5s at 20ms", mousekey_get(id_qmk_mousekey_cursor_acceleration), 30);
-    expect_eq_u8("mk ramp 75 events at 20ms", mk_time_to_max, 75);
-
-    /* mk_time_to_max 가 1바이트라 빠른 주기에서는 긴 램프가 닿지 않는다.
-       5ms에서 상한은 255 x 5 = 1275ms이므로 1.5s 요청은 잘리고,
-       되읽기는 요청값이 아니라 엔진이 실제로 든 짧은 램프를 정직하게 보고한다.
-       (JSON은 200/s와 2.0s를 함께 제시하므로 이 조합은 실제로 사용자가 만날 수 있다.) */
-    expect_true("mk interval 5ms SET", mousekey_set(id_qmk_mousekey_cursor_interval, 5));
-    expect_eq_u8("mk ramp clamps to 255 events at 5ms", mk_time_to_max, 255);
-    expect_eq_u8("mk clamped ramp reads back honestly (1.275s -> 26)", mousekey_get(id_qmk_mousekey_cursor_acceleration), 26);
-
-    /* 페이지가 제시하는 (가속, 주기) 조합 중 1바이트 이벤트 수에 담기는 것은 모두
-       정확히 왕복해야 한다. 50ms 표시 단위를 고른 이유가 이것이다.
-       담기지 않는 조합은 잘린 값을 정직하게 되돌려야 하고, 절대 요청값을 되돌리면 안 된다. */
-    {
-        static const uint8_t ramps[]     = {10, 15, 20, 25, 30, 40};
-        static const uint8_t intervals[] = {5, 8, 10, 16, 20};
-        size_t i, j;
-        bool   exact_ok  = true;
-        bool   honest_ok = true;
-        for (i = 0; i < sizeof(intervals); i++) {
-            mousekey_set(id_qmk_mousekey_cursor_interval, intervals[i]);
-            for (j = 0; j < sizeof(ramps); j++) {
-                uint32_t want_ms = (uint32_t)ramps[j] * 50u;
-                uint32_t events  = (want_ms + intervals[i] / 2u) / intervals[i];
-                uint8_t  got;
-                mousekey_set(id_qmk_mousekey_cursor_acceleration, ramps[j]);
-                got = mousekey_get(id_qmk_mousekey_cursor_acceleration);
-                if (events <= 255u) {
-                    if (got != ramps[j]) {
-                        exact_ok = false;
-                    }
-                } else {
-                    /* 잘렸다면 되읽기는 반드시 요청보다 짧아야 한다 */
-                    if (got >= ramps[j]) {
-                        honest_ok = false;
-                    }
-                }
-            }
-        }
-        expect_true("mk representable accel x rate round-trips exactly", exact_ok);
-        expect_true("mk unrepresentable accel reads back shorter, never the request", honest_ok);
-    }
-
-    /* 가속 off는 최고 속도가 아니라 첫 스텝 속도로 고정한다 */
-    mousekey_set(id_qmk_mousekey_cursor_interval, 10);
-    mousekey_set(id_qmk_mousekey_cursor_min_speed, 4);
-    mousekey_set(id_qmk_mousekey_cursor_max_speed, 32);
-    expect_true("mk accel off SET", mousekey_set(id_qmk_mousekey_cursor_acceleration, 0));
-    expect_eq_u8("mk accel off reads 0", mousekey_get(id_qmk_mousekey_cursor_acceleration), 0);
-    expect_eq_u8("mk accel off drives ratio 1", mk_max_speed, 1);
-    expect_eq_u8("mk accel off keeps step at 4px", mk_move_delta, 4);
-    expect_eq_u8("mk accel off keeps stored top 32px", mousekey_get(id_qmk_mousekey_cursor_max_speed), 32);
-    expect_true("mk accel restored SET", mousekey_set(id_qmk_mousekey_cursor_acceleration, 20));
-    expect_eq_u8("mk ratio 8 recovered", mk_max_speed, 8);
-
-    /* 클램프된 값을 에코한다 */
-    expect_eq_u8("mk interval 0 clamps to 1 in echo", mousekey_set_echo(id_qmk_mousekey_cursor_interval, 0), 1);
-    expect_eq_u8("mk wheel interval 0 clamps to 1", mousekey_set_echo(id_qmk_mousekey_wheel_interval, 0), 1);
-
-    /* 휠 가속은 한 드롭다운이 두 값을 옮긴다 */
-    expect_true("mk wheel accel off SET", mousekey_set(id_qmk_mousekey_wheel_acceleration, 0));
-    expect_eq_u8("mk wheel accel off reads 0", mousekey_get(id_qmk_mousekey_wheel_acceleration), 0);
-    expect_eq_u8("mk wheel off max speed 1", mk_wheel_max_speed, 1);
-    expect_eq_u8("mk wheel off ramp 0", mk_wheel_time_to_max, 0);
-    expect_true("mk wheel accel strong SET", mousekey_set(id_qmk_mousekey_wheel_acceleration, 2));
-    expect_eq_u8("mk wheel strong reads 2", mousekey_get(id_qmk_mousekey_wheel_acceleration), 2);
-    expect_eq_u8("mk wheel strong max speed", mk_wheel_max_speed, MOUSEKEY_WHEEL_MAX_SPEED);
-    expect_true("mk out-of-range wheel accel falls to strong", mousekey_set(id_qmk_mousekey_wheel_acceleration, 9));
-    expect_eq_u8("mk out-of-range wheel accel reads 2", mousekey_get(id_qmk_mousekey_wheel_acceleration), 2);
-
-    /* 값이 실제로 바뀐 SET에서만 CONFIG revision이 오른다 */
-    mousekey_set(id_qmk_mousekey_cursor_min_speed, 4);
-    pre = era_state_sync_config_revision();
-    expect_true("mk no-op SET handled", mousekey_set(id_qmk_mousekey_cursor_min_speed, 4));
-    expect_true("mk no-op SET does not bump CONFIG", era_state_sync_config_revision() == pre);
-    expect_true("mk changing SET handled", mousekey_set(id_qmk_mousekey_cursor_min_speed, 2));
-    expect_true("mk changing SET bumps CONFIG", era_state_sync_config_revision() != pre);
-
-    /* 모르는 value id는 거절한다 */
-    expect_true("mk unknown value id rejected", mousekey_set(99, 1) == false);
+    expect_eq_u16("default real cursor time", mk_cursor_ramp_ms, 1000);
+    expect_eq_u8("default actual target", mk_cursor_top, 16);
+    uint8_t cap[32] = {id_custom_get_value, id_qmk_mousekey, 7};
+    expect_true("MOUSE capability", mousekey_config_handle_via_command(cap, sizeof(cap)));
+    expect_eq_u8("cap marker", cap[3], 0xE4); expect_eq_u8("cap revision", cap[4], 1);
+    mouse_exact(id_custom_set_value, 8, 7);
+    mouse_exact(id_custom_set_value, 9, 17);
+    mouse_exact(id_custom_set_value, 10, 137);
+    expect_eq_u16("exact start", mouse_exact(id_custom_get_value, 8, 0), 7);
+    expect_eq_u16("exact target", mouse_exact(id_custom_get_value, 9, 0), 17);
+    expect_eq_u16("exact time", mouse_exact(id_custom_get_value, 10, 0), 137);
+    expect_eq_u8("runtime target is not ratio-rounded", mk_cursor_top, 17);
+    expect_eq_u16("runtime time", mk_cursor_ramp_ms, 137);
+    expect_eq_u8("stock closest target", mousekey_get(2), 16);
+    expect_eq_u8("stock closest ramp", mousekey_get(3), 10);
+    expect_eq_u16("stock read never changes exact target", mouse_exact(id_custom_get_value, 9, 0), 17);
+    mouse_exact(id_custom_set_value, 10, 65535);
+    mouse_exact(id_custom_set_value, 11, 1);
+    expect_eq_u16("fast rate never truncates ramp", mk_cursor_ramp_ms, 65535);
+    mouse_exact(id_custom_set_value, 13, 6); mouse_exact(id_custom_set_value, 14, 137);
+    expect_eq_u8("wheel tie projects Mild", mousekey_get(6), 1);
+    mouse_exact(id_custom_set_value, 13, 7);
+    expect_eq_u8("wheel nearest Strong", mousekey_get(6), 2);
+    mouse_exact(id_custom_set_value, 14, 0);
+    expect_eq_u8("wheel zero ramp Off", mousekey_get(6), 0);
+    uint8_t invalid[32] = {id_custom_set_value, id_qmk_mousekey, 9, 0, 128};
+    expect_true("invalid exact rejected", !mousekey_config_handle_via_command(invalid, sizeof(invalid)));
+    expect_eq_u8("invalid exact unhandled", invalid[0], id_unhandled);
+    expect_eq_u8("failed SET leaves target", mk_cursor_top, 17);
+    mousekey_config_storage_flush(true);
+    mouse_exact(id_custom_set_value, 9, 27);
+    mousekey_config_init();
+    expect_eq_u8("SAVE survives reload", mk_cursor_top, 17);
+    expect_eq_u16("long ramp survives reload", mk_cursor_ramp_ms, 65535);
+    mousekey_set(3, 30); mousekey_set(4, 5);
+    expect_eq_u16("stock ramp remains full duration", mk_cursor_ramp_ms, 1500);
+    expect_eq_u8("stock ramp roundtrip", mousekey_get(3), 30);
 }
 
 static void test_state_sync_invalid(void) {
