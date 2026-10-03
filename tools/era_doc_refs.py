@@ -332,7 +332,20 @@ def check_retired() -> None:
 
 def check_menu() -> None:
     known = channel_map()
+    def commands(node):
+        if isinstance(node, dict):
+            content = node.get("content")
+            if isinstance(content, list) and len(content) >= 3 and content[1:3] == [13, 4]:
+                yield content
+            for child in node.values():
+                yield from commands(child)
+        elif isinstance(node, list):
+            for child in node:
+                yield from commands(child)
     for row in boards():
+        definition = json.loads((ROOT / row["json"]).read_text(encoding="utf-8"))
+        if any(commands(definition)):
+            report("menu", row["json"], "스톡 VIA는 폴링 TEXT를 자동 갱신하지 않는다 — Custom 앱에서만 표시")
         routed = routed_channels(row["via_port"])
         exposed = exposed_channels(ROOT / row["json"])
         missing = sorted(known[name] for name in routed if known[name] not in exposed)

@@ -49,6 +49,15 @@ def plant_td_advanced_alias(body: bytes) -> bytes:
     return json.dumps(definition).encode()
 
 
+def plant_polling_text(body: bytes) -> bytes:
+    definition = json.loads(body)
+    definition["menus"].append({"label": "Observation", "content": [{
+        "label": "Polling", "type": "label", "showIf": "0",
+        "content": ["alternate_polling_name", 13, 4, 0],
+    }]})
+    return json.dumps(definition).encode()
+
+
 def run_checker() -> tuple[int, str]:
     proc = subprocess.run(
         [sys.executable, "-X", "utf8", str(CHECKER)],
@@ -94,6 +103,7 @@ PROBES = (
     ("td-probe", "[tapdance]", JSON_DOC,
      lambda b: b.replace(b'"id_qmk_tapdance_1_mode", 16, 49', b'"id_qmk_tapdance_1_mode", 16, 57', 1), False),
     ("td-alias", "[tapdance]", JSON_DOC, plant_td_advanced_alias, False),
+    ("polling-text", "[menu]", JSON_DOC, plant_polling_text, False),
     ("td-guidance", "[tapdance]", JSON_DOC,
      lambda b: b.replace(b'"Visit usekb.cc"', b'"Visit elsewhere"', 1), False),
     ("td-unknown", "[tapdance]", JSON_DOC,

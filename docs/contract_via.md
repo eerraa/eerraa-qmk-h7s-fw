@@ -9,9 +9,9 @@ The app-side owners are `the-via-eerraa/docs/adr/0001-state-sync-protocol.md` fo
 
 ## 1. Official VIA compatibility and shipped ids
 
-Official VIA with the firmware-local official definitions must remain usable without the custom app. Custom-app controls are additive; they do not replace or silently reinterpret the legacy path.
+Stock VIA with the firmware-local definitions keeps basic configuration usable. Features it cannot support correctly, or that need complicated explanations or awkward UI, are reduced in official JSON and supported in the Custom app at usekb.cc. usevia.txt documents this boundary. Preserve existing wire meanings; equal UI exposure is not required.
 
-Shipped channel/value meanings are wire ABI. Do not renumber or reuse a shipped id to compact a hole. VIA-reserved channels 1, 3, 4, and 5 remain reserved; retired channel 13 value 3 remains reserved by `docs/contract_usb.md` §4. New features take unused additive ids and must be reflected in firmware, every affected official JSON, and the app definition in the same compatibility change. The explicit exception is advanced Tap Dance editing (§3): official JSON retains the basic path and directs advanced slots to the custom app without changing the Custom Value wire ABI. Use `via.h` and the JSON as the current id inventory rather than copying the full list here.
+Shipped channel/value meanings are wire ABI. Do not renumber or reuse a shipped id to compact a hole. VIA-reserved channels 1, 3, 4, and 5 remain reserved; retired channel 13 value 3 remains reserved by `docs/contract_usb.md` §4. New features take unused additive ids. Review firmware and both definition surfaces in the same compatibility change, using the stock usability policy above. Advanced Tap Dance editing (§3) and polling observations (§6) belong to the Custom app; official JSON retains the basic path without changing the Custom Value wire ABI. Use `via.h` and the JSON as the current id inventory rather than copying the full list here.
 
 GET keyboard-value selectors `0x06` (§5) and `0x07` (§6) are ERA additions in an id range QMK extends in order. QMK VIA protocol 13 (QMK release 2026-05-31) gives `0x06` to QMK's id_keycodes_version, which official VIA reads from protocol-13 boards before remapping. Keep `VIA_PROTOCOL_VERSION` at `0x000C` until both selectors move to new ids together with the app (`the-via-eerraa/docs/adr/0001-state-sync-protocol.md`); shipped firmware keeps its ids.
 
@@ -58,8 +58,7 @@ Official `*-VIA.JSON` definitions keep the legacy one-byte ×10 ms controls. Leg
 The QMK and H7S support policy is shared with
 `the-via-eerraa/docs/PROJECT_DIRECTION.md` **Tap Dance and exact-ms**: official
 VIA edits basic Legacy slots; the custom app owns advanced modes and independent
-timing. This is a narrow exception to feature parity, not permission to remove
-other official VIA controls. Restricting the advanced slots prevents a basic
+timing under the stock usability policy in §1. Restricting advanced slots prevents a basic
 editor from changing actions whose inheritance, explicit silence and timing it
 cannot explain or edit completely.
 
@@ -205,15 +204,11 @@ must not optimistically replace it. Firmware support revision
 `id_firmware_version` returns that 32-bit value. It is independent of the date
 version, VIA protocol revision and EEPROM reset key.
 
-Polling-TEXT definitions use a label with command `id_qmk_usb_polling_current`
-and firmware-only `showIf: {id_firmware_version} >= 1`. The existing official
-JSONs remain the legacy compatibility path until external acceptance. Generate
-the TEXT definitions with `tools/prepare_polling_test_json.py`; release packages
-may pair them with their matching support-revision-1 firmware. This pairing is
-not approval to replace definitions used with old firmware. Version-0 pruning is only
-assured when the client successfully reads the current version and performs
-firmware-only pruning. Undefined/stale cached versions may bypass that guard;
-no unconditional official-client failure guarantee is claimed.
+Stock JSON and release packages omit polling TEXT. Keep Boot Polling Mode and
+Apply; after reboot and a fresh GET, the dropdown reflects the stored BootMode.
+It is not the actual negotiated FS/HS endpoint interval. usevia.txt directs
+endpoint observation to usekb.cc. A matching firmware revision does not make
+stock TEXT refresh reliable and is not a reason to add it to release packages.
 
 The custom app follow-up must own this observation outside generic CONFIG/menu
 caches, scoped to device, connection generation and definition. It must verify

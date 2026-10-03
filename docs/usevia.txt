@@ -10,6 +10,9 @@ Official VIA Guide
 한국어
 ----------------------------------------------------------------------
 
+스톡 VIA는 기본 설정을 지원합니다. 복잡한 고급 편집과 자동 갱신 상태 표시는
+usekb.cc Custom 앱에서 지원합니다.
+
 ■ 공식 VIA 시작
 
 키보드에 맞는 펌웨어 배포본에 동봉된 VIA JSON을 사용하십시오.
@@ -157,9 +160,8 @@ RGB Effect(조명 효과가 그대로 보임), 전용 LED인 경우 Off입니다
 ■ SYSTEM
 
 USB POLLING:
-Keyboard USB setting (last read)는 마지막 조회에서 확인한 키보드 USB 설정입니다.
-실측 폴링레이트나 입력 지연을 뜻하지 않습니다. 재부팅 후 이전 값이 보이면
-F5로 새로고침하여 다시 확인하십시오.
+Boot Polling Mode는 선택할 설정이며 재부팅 후 다시 읽으면 저장한 모드를 표시합니다.
+실제 FS/HS 연결의 폴링 설정은 usekb.cc Custom 앱에서 확인하십시오.
 CONFIGURE -> SYSTEM -> USB POLLING에서 1 kHz (FS), 2 kHz (HS), 4 kHz (HS),
 8 kHz (HS) 중 선택한 뒤 Apply를 사용합니다. 선택만으로는 적용되지 않으며
 Apply는 같은 모드를 다시 선택해도 키보드를 재시작합니다. 분리 전 최소 500ms 동안
@@ -190,6 +192,9 @@ CONFIGURE -> SYSTEM -> EEPROM에서 세 확인 토글을 10초 안에 모두 켜
 ----------------------------------------------------------------------
 English
 ----------------------------------------------------------------------
+
+Stock VIA supports basic configuration. Use the Custom app at usekb.cc for
+advanced editing and automatically refreshed status.
 
 ■ Starting Official VIA
 
@@ -338,9 +343,8 @@ and shows the lighting effect, or Off when it uses a dedicated LED.
 ■ SYSTEM
 
 USB POLLING:
-Keyboard USB setting (last read) shows the setting at the last successful read,
-not a measured polling rate or input latency. If an old value remains after
-restarting the keyboard, refresh with F5 to read it again.
+Boot Polling Mode is the selected setting; a fresh read after reboot shows the
+stored mode. Use the Custom app at usekb.cc to inspect the FS/HS endpoint setting.
 Choose 1 kHz (FS), 2 kHz (HS), 4 kHz (HS), or 8 kHz (HS) in CONFIGURE ->
 SYSTEM -> USB POLLING and use Apply. Selection alone does not apply the mode.
 Apply restarts the keyboard even when selecting the same mode. Input and VIA
