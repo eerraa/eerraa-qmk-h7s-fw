@@ -124,9 +124,9 @@ The second physical press never adds a speculative base input before a hold.
 
 Selector `0x06` publishes three RAM uint32 equality tokens: KEYMAP, MACRO, and CONFIG. They start at 1 and skip 0 on wrap. They are invalidation tokens, not data values and not EEPROM addresses.
 
-- KEYMAP and MACRO mutation commands bump their domain when the mutation command is accepted; those paths intentionally do not compare old/new payloads first.
+- KEYMAP advances after changed keymap/encoder bytes have verified physical receipts. MACRO advances only after the completion marker has a verified receipt; opener/payload staging and unchanged retries do not advance it. These are durable invalidations, not per-command counters. Failed or pending storage must not publish completed MACRO.
 - CONFIG custom setters bump only when the value observable by GET changes. A same-value custom SET is a no-op and must not bump.
-- Layout-options write bumps CONFIG. EEPROM reset bumps all three domains.
+- Layout-options write bumps CONFIG. A checked EEPROM reset publishes affected durable KEYMAP/MACRO changes and bumps CONFIG only after successful completion.
 - Custom SAVE schedules persistence only and does not itself bump. The read-only polling TEXT does not bump. VIA-core RGB state and read-only version/system paths are outside this CONFIG revision contract.
 
 `src/ap/modules/qmk/port/era_state_sync.c` owns token storage/advance. Find mutation sites from `era_state_sync_bump_keymap()`, `era_state_sync_bump_macro()`, and `era_state_sync_bump_config()` in current source; this document does not maintain a handler inventory.

@@ -11,7 +11,10 @@ void cliUpdate(void);
 void apInit(void)
 {  
   cliOpen(HW_UART_CH_CLI, 115200);  
-  qmkInit();
+  if (!qmkInit()) {
+    logPrintf("[!] QMK storage initialization failed\n");
+    while (1) { ledToggle(_DEF_LED1); delay(250); }
+  }
 
   logBoot(false);
 }

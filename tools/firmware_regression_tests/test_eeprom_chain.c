@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "hw_def.h"
 #include "i2c.h"
 #include "eeprom.h"
@@ -7,12 +8,28 @@
 
 uint32_t test_irqmask, test_ipsr;
 static uint32_t clock_ms, blocking_calls, starts, probes, forced_stops;
-static bool auto_clock, complete_irqs = true, fail_start, fail_read;
+static bool auto_clock, complete_irqs = true, fail_start, fail_read, corrupt_program;
+static uint32_t readbacks, macro_revision, keymap_revision;
+void era_state_sync_bump_keymap(void) { keymap_revision++; }
+void era_state_sync_bump_macro(void) { macro_revision++; }
+bool dynamic_keymap_macro_set_buffer_checked(uint16_t offset, uint16_t size, uint8_t *data);
+bool dynamic_keymap_macro_reset_checked(void);
+void dynamic_keymap_macro_get_buffer(uint16_t offset, uint16_t size, uint8_t *data);
 static I2C_TypeDef regs;
 static I2C_HandleTypeDef handle = {.Instance = &regs, .State = HAL_I2C_STATE_READY};
 static uint8_t device[16384];
-static struct { bool active, probe; uint16_t offset, length; uint8_t *data; uint32_t start; } bus;
+static struct { bool active, probe, read; uint16_t offset, length; uint8_t *data; uint32_t start; } bus;
 static struct { bool pending; uint16_t offset, length; uint8_t data[32]; uint32_t ready; } program;
+
+static const char *cut_file;
+static unsigned cut_boundary, cut_steps;
+static void power_cut_point(void)
+{
+  if (!cut_file || ++cut_steps != cut_boundary) return;
+  FILE *f = fopen(cut_file, "wb"); assert(f);
+  assert(fwrite(device, 1, sizeof(device), f) == sizeof(device)); fclose(f);
+  exit(0);  // cold recovery runs in a new process, with no preserved RAM state
+}
 
 static void complete_bus(void)
 {
@@ -21,7 +38,10 @@ static void complete_bus(void)
   handle.State = HAL_I2C_STATE_READY;
   handle.XferISR = NULL;
   uint32_t saved = test_ipsr; test_ipsr = 1U;
-  if (!bus.probe) {
+  if (bus.read) {
+    memcpy(bus.data, &device[bus.offset], bus.length);
+    HAL_I2C_MemRxCpltCallback(&handle);
+  } else if (!bus.probe) {
     assert(!program.pending);
     program.pending = true;
     program.offset = bus.offset; program.length = bus.length;
@@ -33,12 +53,15 @@ static void complete_bus(void)
     assert(i2cAsyncOnError(&handle));
   } else {
     if (program.pending) {
-      memcpy(&device[program.offset], program.data, program.length);
+      if (!corrupt_program) for (unsigned i=0; i<program.length; i++) {
+        device[program.offset+i] = program.data[i]; power_cut_point();
+      }
       program.pending = false;
     }
     HAL_I2C_MasterTxCpltCallback(&handle);
   }
   test_ipsr = saved;
+  power_cut_point();
 }
 uint32_t millis(void)
 {
@@ -48,7 +71,7 @@ uint32_t millis(void)
 uint32_t micros(void) { return clock_ms * 1000U; }
 void delay(uint32_t ms) { blocking_calls++; clock_ms += ms; }
 void eeconfig_disable(void) {}
-void eeconfig_init(void) {}
+bool eeconfig_init_quantum_checked(void) { return true; }
 void usbBootModeApplyDefaults(void) {}
 void host_i2c_disable(I2C_HandleTypeDef *h) { (void)h; forced_stops++; bus.active = false; }
 I2C_HandleTypeDef *i2cGetHandle(uint8_t ch) { return ch == 0U ? &handle : NULL; }
@@ -64,7 +87,7 @@ HAL_StatusTypeDef HAL_I2C_Mem_Write_IT(I2C_HandleTypeDef *h, uint16_t address, u
   starts++;
   h->ErrorCode = 0U;
   h->XferISR = (void *)(uintptr_t)1U;
-  bus.active = true; bus.probe = false; bus.offset = offset; bus.length = length; bus.data = data; bus.start = clock_ms;
+  bus.active = true; bus.probe = false; bus.read = false; bus.offset = offset; bus.length = length; bus.data = data; bus.start = clock_ms;
   return HAL_OK;
 }
 HAL_StatusTypeDef HAL_I2C_Master_Transmit_IT(I2C_HandleTypeDef *h, uint16_t address, uint8_t *data, uint16_t length)
@@ -73,7 +96,19 @@ HAL_StatusTypeDef HAL_I2C_Master_Transmit_IT(I2C_HandleTypeDef *h, uint16_t addr
   h->ErrorCode = 0U;
   probes++;
   h->XferISR = (void *)(uintptr_t)2U;
-  bus.active = true; bus.probe = true; bus.start = clock_ms;
+  bus.active = true; bus.probe = true; bus.read = false; bus.start = clock_ms;
+  return HAL_OK;
+}
+HAL_StatusTypeDef HAL_I2C_Mem_Read_IT(I2C_HandleTypeDef *h, uint16_t address, uint16_t offset,
+                                   uint16_t mode, uint8_t *data, uint16_t length)
+{
+  assert(test_irqmask == 1U && address == 0xA0U && mode == I2C_MEMADD_SIZE_16BIT && !bus.active);
+  if (fail_read) return HAL_ERROR;
+  readbacks++;
+  h->ErrorCode = 0U;
+  h->XferISR = (void *)(uintptr_t)3U;
+  bus.active = true; bus.probe = false; bus.read = true;
+  bus.offset = offset; bus.length = length; bus.data = data; bus.start = clock_ms;
   return HAL_OK;
 }
 bool i2cReadA16Bytes(uint8_t ch, uint16_t dev, uint16_t offset, uint8_t *data, uint32_t length, uint32_t timeout)
@@ -97,8 +132,37 @@ static void settle(void)
   assert(!eeprom_is_pending() && !bus.active && !program.pending);
 }
 static uint8_t *address(uintptr_t value) { return (uint8_t *)value; }
-int main(void)
+int main(int argc, char **argv)
 {
+  if (argc == 3 && strcmp(argv[1], "recover") == 0) {
+    FILE *f = fopen(argv[2], "rb"); assert(f);
+    assert(fread(device, 1, sizeof(device), f) == sizeof(device)); fclose(f);
+    assert(eepromInit() && eeprom_init());
+    if (device[3071U] == 0U) {
+      bool old = true, completed = true;
+      for (unsigned i=0; i<28; i++) { old &= device[1024U+i] == 0U; completed &= device[1024U+i] == 0xA7U; }
+      assert(old || completed);
+    } else assert(device[3071U] == 0xFFU);
+    auto_clock = true;
+    uint8_t opened=0xFFU, closed=0U, payload[28]; memset(payload,0xA7,sizeof(payload));
+    assert(dynamic_keymap_macro_set_buffer_checked(2047U,1U,&opened));
+    assert(dynamic_keymap_macro_set_buffer_checked(0U,sizeof(payload),payload));
+    assert(dynamic_keymap_macro_set_buffer_checked(2047U,1U,&closed));
+    assert(eeprom_flush_pending() && device[3071U] == 0U);
+    assert(memcmp(&device[1024U],payload,sizeof(payload)) == 0);
+    return 0;
+  }
+  if (argc == 4 && strcmp(argv[1], "cut") == 0) {
+    memset(device,0xFF,sizeof(device)); assert(eepromInit() && eeprom_init()); auto_clock = true;
+    assert(dynamic_keymap_macro_reset_checked() && eeprom_flush_pending());
+    cut_file = argv[3]; cut_boundary = (unsigned)strtoul(argv[2],NULL,10);
+    uint8_t opened=0xFFU, closed=0U, payload[28]; memset(payload,0xA7,sizeof(payload));
+    assert(dynamic_keymap_macro_set_buffer_checked(2047U,1U,&opened));
+    assert(dynamic_keymap_macro_set_buffer_checked(0U,sizeof(payload),payload));
+    assert(dynamic_keymap_macro_set_buffer_checked(2047U,1U,&closed));
+    assert(eeprom_flush_pending());
+    return 2;  // no cut: matrix has visited all physical byte and bus boundaries
+  }
   memset(device, 0xFF, sizeof(device));
   assert(eepromInit()); eeprom_init(); assert(eeprom_is_ready());
   blocking_calls = 0U;
@@ -162,6 +226,58 @@ int main(void)
   test_ipsr = 1U; assert(!eeprom_flush_pending()); test_ipsr = 0U;
   settle();
   assert(blocking_calls == 0U);  // no synchronous HAL/ready/delay in all runtime persistence paths
+
+  uint32_t prior_failures = eeprom_get_write_failure_count();
+  corrupt_program = true; auto_clock = true;
+  eeprom_write_byte(address(123U), 0xB4U);
+  assert(!eeprom_flush_pending());
+  assert(eeprom_is_pending() && device[123U] != 0xB4U && readbacks > 0U);
+  assert(eeprom_get_write_failure_count() > prior_failures);
+  /* Same-value retry must retain dirty intent after ACK-without-program. */
+  eeprom_write_byte(address(123U), 0xB4U);
+  corrupt_program = false;
+  assert(eeprom_flush_pending() && device[123U] == 0xB4U);
+  auto_clock = false;
+
+  /* Actual macro caller: unopened/payload/close, retained failure, equal retry. */
+  const uint32_t marker = 3071U;
+  uint8_t closed = 0U, opened = 0xFFU, payload[28];
+  memset(payload, 0xA7, sizeof(payload));
+  auto_clock = true;
+  assert(dynamic_keymap_macro_reset_checked());
+  assert(eeprom_flush_pending());
+  uint32_t revision = macro_revision;
+  assert(dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &opened));
+  assert(device[marker] == 0xFFU);
+  assert(dynamic_keymap_macro_set_buffer_checked(0U, sizeof(payload), payload));
+  assert(dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &closed));
+  uint8_t visible;
+  dynamic_keymap_macro_get_buffer(2047U, 1U, &visible);
+  assert(visible != 0U && macro_revision == revision);
+  corrupt_program = true;
+  assert(!eeprom_flush_pending());
+  assert(eeprom_read_byte(address(marker)) != 0U && macro_revision == revision);
+  corrupt_program = false;
+  assert(eeprom_flush_pending());
+  assert(device[marker] == 0U && macro_revision == revision + 1U);
+  assert(memcmp(&device[1024U], payload, sizeof(payload)) == 0);
+  assert(dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &closed));
+  assert(eeprom_flush_pending() && macro_revision == revision + 1U);
+
+  /* Failed invalidation must neither accept/drop a chunk nor allow a later CLOSE. */
+  fail_start = true;
+  payload[0] = 0x91U;
+  assert(!dynamic_keymap_macro_set_buffer_checked(0U, sizeof(payload), payload));
+  fail_start = false;
+  assert(eeprom_flush_pending());
+  assert(!dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &closed));
+  assert(eeprom_read_byte(address(marker)) != 0U && device[1024U] != 0x91U);
+  assert(dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &opened));
+  assert(dynamic_keymap_macro_set_buffer_checked(0U, sizeof(payload), payload));
+  assert(dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &closed));
+  assert(eeprom_flush_pending());
+  assert(device[1024U] == 0x91U && device[marker] == 0U);
+  auto_clock = false;
 
   uint32_t invalid_before = eeprom_get_invalid_access_count();
   eeprom_write_byte(address(TOTAL_EEPROM_BYTE_COUNT), 0U);

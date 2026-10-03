@@ -114,6 +114,15 @@ hold-on-other-key, version 1, a zero uint16 reserved field and signature
 hold times and flags. A zero hold time follows the slot term. Defaults and
 SAVE cover both records, through the existing EEPROM persistence owner.
 
+Factory defaults have one checked owner chain: reset guard, QMK defaults, VIA
+defaults and keyboard/user defaults. Keyboard/user initialization is not repeated
+by the outer factory function. The old guard is durably invalidated first; VIA
+validity, QMK validity and the reset guard are published only after their preceding
+payload barriers succeed. Matching reset guard with corrupt QMK validity still
+uses this checked path; qmkInit/apInit must not continue after failure. Per-slot
+validity rules in §1 remain independent. EEPROM CLEAN uses the same next-boot path.
+This changes no byte addresses, reset key, VIA build date or firmware version.
+
 ## 3. One RAM image, asynchronous persistence, explicit durability
 
 The runtime writer is `src/ap/modules/qmk/port/platforms/eeprom.c`. One RAM image
@@ -124,7 +133,8 @@ forming a finite write-event queue, and QMK-image writes do not bypass that owne
 Normal service performs bounded work per call and returns before the physical
 write cycle completes. Current page/scan sizes and retry timing are source-owned.
 The external EEPROM path is asynchronous; completion means the backend has
-confirmed write-cycle readiness, not merely that the last I2C data byte was sent.
+confirmed write-cycle readiness and read back the submitted page unchanged.
+A bus ACK alone is not a durability receipt.
 
 Completion clears pending state only for bytes whose submitted snapshot still
 matches the latest RAM value. A newer write during the transfer therefore remains
@@ -142,13 +152,23 @@ and response completion; if either cannot complete, the reset remains pending
 while keyboard processing continues.
 
 Initial image-read failure stops hardware initialization rather than exposing a
-partly filled image. Invalid accesses fail within the image bounds. Maintenance
+partly filled image. Reinitialization returns failure instead of discarding
+retained dirty intent. Invalid accesses fail within the image bounds. Maintenance
 writes inside the QMK image share the same writer so a later snapshot cannot undo
 an out-of-band byte write; maintenance code may use the durability barrier.
 
+A generic completion-byte fence retires an old validity marker before payload
+mutation and schedules the final marker only after all preceding dirty pages
+have verified receipts. Reads keep the marker invalid until final readback.
+Failed invalidation rejects the payload and latches CLOSE rejection until a fresh
+opener/reset; it must never silently drop a chunk and later publish success.
+The macro caller uses this fence for upload and RESET. A failed command uses the
+existing VIA unhandled response. KEYMAP and MACRO durable notifications originate
+in the image writer; CONFIG runtime SET semantics remain separate.
+
 The shipped external I2C backend is the asynchronous path. Internal flash
-emulation (`src/hw/driver/eeprom/emul.c`) remains a synchronous fallback and is
-hardware-unverified (`docs/state_open.md`). Backend page completion is not a
+emulation (`src/hw/driver/eeprom/emul.c`) remains an unselected synchronous fallback, with readback required by the image
+writer, and is hardware-unverified (`docs/state_open.md`). Backend page completion is not a
 multi-page transaction: this layout provides no journaling, power-loss-safe
 transaction boundary, or persistence of in-flight RAM updates across power loss.
 

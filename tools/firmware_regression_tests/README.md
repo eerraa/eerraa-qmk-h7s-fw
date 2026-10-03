@@ -370,3 +370,23 @@ none of this measures hardware.
 The Tap Dance input fixture also covers independent hold deadlines versus the
 consecutive-press window, captured timing, early hold before layer lookup,
 first-press immediacy and cached release after the layer turns off.
+
+## EEPROM receipt and initialization fixtures
+
+`--only eeprom` links the production RAM-image writer, ZD24C128 page state
+machine and I2C IT owner to a modeled chip/bus. The macro GET/SET/RESET and
+completion notification bodies are extracted intact from production. Tests cover
+ACK-without-program, readback errors, same-value retry, immutable in-flight data,
+failed invalidation/CLOSE, and revision publication only after completion.
+
+The fixture also stops at each modeled programmed byte and bus-completion edge
+of an upload. Recovery starts a new process using only the saved physical image;
+it checks that a zero marker describes an old or complete new payload and that a
+fresh full upload succeeds. These are simulated cuts, not electrical power tests.
+
+`storage_cases.py` separately connects the actual factory -> quantum -> VIA
+initialization owners, injecting failure at every flush barrier. Default providers
+and flush receipts are stubs in that fixture; it checks ownership and fail-closed
+propagation, not physical page timing. The chip/bus chain above provides the
+independent physical receipt coverage. The unselected internal-flash emulation
+backend is not exercised by shipped-board tests.

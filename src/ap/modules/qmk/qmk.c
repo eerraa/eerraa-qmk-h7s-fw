@@ -14,7 +14,8 @@ static bool is_suspended = false;
 
 bool qmkInit(void)
 {
-  eeprom_init();
+  if (!eeprom_is_ready()) return false;
+  if (!eeconfig_is_enabled() && !eeprom_apply_factory_defaults(true)) return false;
   via_hid_init();
   debounce_profile_init();                         // V251115R1: VIA 디바운스 프로필 초기 로드
 #ifdef G_TERM_ENABLE
@@ -113,8 +114,8 @@ void cliQmk(cli_args_t *args)
 
   if (args->argc == 2 && args->isStr(0, "clear") && args->isStr(1, "eeprom"))
   {
-    eeconfig_init();
-    cliPrintf("Clearing EEPROM\n");
+    bool cleared = eeprom_apply_factory_defaults(true);
+    cliPrintf(cleared ? "Clearing EEPROM\n" : "EEPROM clear failed\n");
     ret = true;
   }
 

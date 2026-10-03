@@ -104,18 +104,23 @@ void via_init(void) {
     }
 }
 
-void eeconfig_init_via(void) {
+bool eeconfig_init_via_checked(void) {
     // set the magic number to false, in case this gets interrupted
     via_eeprom_set_valid(false);
+    if (!eeprom_flush_pending()) return false;
     // This resets the layout options
     via_set_layout_options(VIA_EEPROM_LAYOUT_OPTIONS_DEFAULT);
     // This resets the keymaps in EEPROM to what is in flash.
     dynamic_keymap_reset();
     // This resets the macros in EEPROM to nothing.
-    dynamic_keymap_macro_reset();
+    if (!dynamic_keymap_macro_reset_checked()) return false;
     // Save the magic number last, in case saving was interrupted
+    if (!eeprom_flush_pending()) return false;
     via_eeprom_set_valid(true);
+    return eeprom_flush_pending();
 }
+
+void eeconfig_init_via(void) { (void)eeconfig_init_via_checked(); }
 
 // This is generalized so the layout options EEPROM usage can be
 // variable, between 1 and 4 bytes.
@@ -391,12 +396,10 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
         }
         case id_dynamic_keymap_set_keycode: {
             dynamic_keymap_set_keycode(command_data[0], command_data[1], command_data[2], (command_data[3] << 8) | command_data[4]);
-            era_state_sync_bump_keymap();  // V260821R1
             break;
         }
         case id_dynamic_keymap_reset: {
             dynamic_keymap_reset();
-            era_state_sync_bump_keymap();  // V260821R1
             break;
         }
         case id_custom_set_value:
@@ -407,10 +410,10 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
         }
 #ifdef VIA_EEPROM_ALLOW_RESET
         case id_eeprom_reset: {
-            via_eeprom_set_valid(false);
-            eeconfig_init_via();
-            era_state_sync_bump_keymap();  // V260823R1: EEPROM 초기화는 세 도메인 전부를 바꾼다
-            era_state_sync_bump_macro();
+            if (!eeconfig_init_via_checked()) {
+                *command_id = id_unhandled;
+                break;
+            }
             era_state_sync_bump_config();
             break;
         }
@@ -434,13 +437,11 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
         case id_dynamic_keymap_macro_set_buffer: {
             uint16_t offset = (command_data[0] << 8) | command_data[1];
             uint16_t size   = command_data[2]; // size <= 28
-            dynamic_keymap_macro_set_buffer(offset, size, &command_data[3]);
-            era_state_sync_bump_macro();  // V260821R1
+            if (!dynamic_keymap_macro_set_buffer_checked(offset, size, &command_data[3])) *command_id = id_unhandled;
             break;
         }
         case id_dynamic_keymap_macro_reset: {
-            dynamic_keymap_macro_reset();
-            era_state_sync_bump_macro();  // V260821R1
+            if (!dynamic_keymap_macro_reset_checked()) *command_id = id_unhandled;
             break;
         }
         case id_dynamic_keymap_get_layer_count: {
@@ -457,7 +458,6 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
             uint16_t offset = (command_data[0] << 8) | command_data[1];
             uint16_t size   = command_data[2]; // size <= 28
             dynamic_keymap_set_buffer(offset, size, &command_data[3]);
-            era_state_sync_bump_keymap();  // V260821R1
             break;
         }
 #ifdef ENCODER_MAP_ENABLE
@@ -469,7 +469,6 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
         }
         case id_dynamic_keymap_set_encoder: {
             dynamic_keymap_set_encoder(command_data[0], command_data[1], command_data[2] != 0, (command_data[3] << 8) | command_data[4]);
-            era_state_sync_bump_keymap();  // V260821R1
             break;
         }
 #endif

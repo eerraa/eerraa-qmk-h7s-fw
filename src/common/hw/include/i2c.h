@@ -25,6 +25,7 @@ I2C_HandleTypeDef *i2cGetHandle(uint8_t ch);
 bool i2cAsyncOwned(uint8_t ch);
 bool i2cWriteA16BytesAsync(uint8_t ch, uint8_t address, uint16_t offset, uint8_t *data, uint16_t length);
 bool i2cProbeAsync(uint8_t ch, uint8_t address);
+bool i2cReadA16BytesAsync(uint8_t ch, uint8_t address, uint16_t offset, uint8_t *data, uint16_t length);
 i2c_async_result_t i2cAsyncPoll(uint8_t ch, uint32_t *error);
 bool i2cAsyncOnError(I2C_HandleTypeDef *handle);
 

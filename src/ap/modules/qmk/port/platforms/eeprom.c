@@ -18,6 +18,39 @@ static uint8_t page_snapshot[EEPROM_WRITE_PAGE_SIZE];
 static uint32_t pending_bytes, pending_max, failure_count, invalid_accesses, completed_pages;
 static uint32_t page_cursor, active_page, active_length, retry_after_ms;
 static bool image_ready, write_active, retry_pending;
+static bool commit_pending, commit_started, commit_rejected;
+static uintptr_t commit_address;
+static uint8_t commit_value, commit_previous;
+
+__attribute__((weak)) void eeprom_note_commit(uint32_t address, uint32_t length) { (void)address; (void)length; }
+bool eeprom_commit_is_pending(void) { return commit_pending; }
+bool eeprom_commit_failed(void) { return commit_rejected; }
+bool eeprom_prepare_commit(uint8_t *addr, uint8_t invalid)
+{
+  if (!image_ready || (uintptr_t)addr >= TOTAL_EEPROM_BYTE_COUNT) { commit_rejected = true; return false; }
+  commit_rejected = false;
+  eeprom_update_byte(addr, invalid);
+  bool ok = eeprom_is_ready() && !eeprom_byte_is_pending((uintptr_t)addr);
+  if (!ok) ok = eeprom_flush_pending();
+  commit_rejected = !ok;
+  return ok;
+}
+bool eeprom_byte_is_pending(uintptr_t address)
+{
+  return address < TOTAL_EEPROM_BYTE_COUNT && (dirty_pages[address / EEPROM_WRITE_PAGE_SIZE] & (1UL << (address % EEPROM_WRITE_PAGE_SIZE))) != 0U;
+}
+bool eeprom_commit_byte(uint8_t *addr, uint8_t value)
+{
+  if (commit_rejected || !image_ready || (uintptr_t)addr >= TOTAL_EEPROM_BYTE_COUNT) return false;
+  if (commit_pending) return commit_address == (uintptr_t)addr && commit_value == value;
+  if (pending_bytes == 0U && eeprom_buf[(uintptr_t)addr] == value) return true;
+  commit_address = (uintptr_t)addr;
+  commit_previous = eeprom_buf[commit_address];
+  commit_value = value;
+  commit_pending = true;
+  commit_started = false;
+  return true;
+}
 _Static_assert(TOTAL_EEPROM_BYTE_COUNT <= 16384U, "EEPROM image exceeds chip");
 
 static bool eeprom_address_valid(uintptr_t addr, size_t length)
@@ -36,16 +69,18 @@ static void eeprom_write_reset_guard(void)
 }
 
 
-void eeprom_init(void)
+bool eeprom_init(void)
 {
   // V260909R1: 재초기화도 미저장 의도를 버리지 않는다. 초기 읽기 실패는 hwInit이 전파한다.
-  if (pending_bytes != 0U && !eeprom_flush_pending()) return;
+  if (eeprom_is_pending() && !eeprom_flush_pending()) return false;
   image_ready = eepromRead(0U, eeprom_buf, sizeof(eeprom_buf));
-  if (!image_ready) { failure_count++; return; }
+  if (!image_ready) { failure_count++; return false; }
   memset(dirty_pages, 0, sizeof(dirty_pages));
   pending_bytes = 0U;
   page_cursor = 0U;
   write_active = retry_pending = false;
+  commit_rejected = false;
+  return true;
 }
 
 static void eeprom_complete_page(void)
@@ -55,6 +90,7 @@ static void eeprom_complete_page(void)
   for (uint32_t i = 0; i < active_length; i++) {
     uint32_t bit = 1UL << i;
     if ((dirty_pages[active_page] & bit) && eeprom_buf[addr + i] == page_snapshot[i]) {
+      if (!commit_pending || addr + i != commit_address) eeprom_note_commit(addr + i, 1U);
       dirty_pages[active_page] &= ~bit;
       pending_bytes--;
     }
@@ -64,7 +100,20 @@ static void eeprom_complete_page(void)
 
 void eeprom_update(void)
 {
-  if (!image_ready || pending_bytes == 0U || eepromIsErasing()) return;
+  if (!image_ready || eepromIsErasing()) return;
+  if (pending_bytes == 0U) {
+    if (!commit_pending) return;
+    if (commit_started) {
+      commit_pending = false;
+      eeprom_note_commit(commit_address, 1U);
+      return;
+    }
+    uintptr_t address = commit_address;
+    uint8_t value = commit_value;
+    eeprom_write_byte((uint8_t *)address, value);
+    commit_pending = commit_started = true;
+    return;
+  }
   if (write_active) {
 #if defined(EEPROM_CHIP_ZD24C128)
     eeprom_async_result_t result = eepromWritePagePoll();
@@ -103,14 +152,16 @@ void eeprom_update(void)
     }
 #else
     // 미검증 flash-emulation 빌드는 기존 동기 backend를 유지한다. 외부 EEPROM과 같은 시간 보장은 없다.
-    if (eepromWritePage(addr, page_snapshot, active_length)) eeprom_complete_page();
+    uint8_t verify[EEPROM_WRITE_PAGE_SIZE];
+    if (eepromWritePage(addr, page_snapshot, active_length) && eepromRead(addr, verify, active_length)
+        && memcmp(verify, page_snapshot, active_length) == 0) eeprom_complete_page();
     else { failure_count++; retry_after_ms = millis() + EEPROM_FAILURE_BACKOFF_MS; retry_pending = true; }
 #endif
     return;
   }
 }
 
-bool eeprom_is_pending(void) { return pending_bytes != 0U; }
+bool eeprom_is_pending(void) { return pending_bytes != 0U || commit_pending; }
 
 bool eeprom_flush_pending(void)
 {
@@ -138,14 +189,11 @@ bool eeprom_apply_factory_defaults(bool write_reset_guard)
     return false;
   }
 
-  eeconfig_disable();
-  eeconfig_init();
-#if (EECONFIG_KB_DATA_SIZE) > 0
-  eeconfig_init_kb_datablock();
+  /* Retire the previous validity before any default can reach hardware. */
+#ifdef VIA_ENABLE
+  if (!eepromResetGuardInvalidate()) return false;
 #endif
-#if (EECONFIG_USER_DATA_SIZE) > 0
-  eeconfig_init_user_datablock();
-#endif
+  if (!eeconfig_init_quantum_checked()) return false;
   if (eeprom_flush_pending() != true)
   {
     return false;
@@ -202,6 +250,7 @@ uint8_t eeprom_read_byte(const uint8_t *addr)
 {
   uintptr_t offset = (uintptr_t)addr;
   if (!image_ready || !eeprom_address_valid(offset, 1U)) { invalid_accesses++; return 0xFFU; }
+  if (commit_pending && offset == commit_address) return commit_previous;
   return eeprom_buf[offset];
 }
 
@@ -231,12 +280,15 @@ void eeprom_read_block(void *buf, const void *addr, uint32_t len)
     return;
   }
   memcpy(buf, &eeprom_buf[(uintptr_t)addr], len);
+  if (commit_pending && commit_address >= (uintptr_t)addr && commit_address - (uintptr_t)addr < len)
+    ((uint8_t *)buf)[commit_address - (uintptr_t)addr] = commit_previous;
 }
 
 void eeprom_write_byte(uint8_t *addr, uint8_t value)
 {
   uintptr_t offset = (uintptr_t)addr;
   if (!image_ready || !eeprom_address_valid(offset, 1U)) { invalid_accesses++; return; }
+  if (commit_pending && offset == commit_address) commit_pending = commit_started = false;
   if (eeprom_buf[offset] == value) return;
   eeprom_buf[offset] = value;
   uint32_t page = offset / EEPROM_WRITE_PAGE_SIZE;

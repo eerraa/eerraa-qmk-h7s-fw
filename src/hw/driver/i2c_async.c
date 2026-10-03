@@ -8,6 +8,7 @@ typedef struct {
   volatile uint32_t error;
   uint32_t started_ms;
   bool probe;
+  bool read;
 } i2c_async_t;
 static i2c_async_t transfers[I2C_MAX_CH];
 
@@ -17,7 +18,7 @@ bool i2cAsyncOwned(uint8_t ch)
 }
 
 static bool i2cAsyncStart(uint8_t ch, uint8_t address, uint16_t offset,
-                          uint8_t *data, uint16_t length, bool probe)
+                          uint8_t *data, uint16_t length, bool probe, bool read)
 {
   if (ch >= I2C_MAX_CH || address > 0x7FU || !i2cIsBegin(ch) ||
       (!probe && (data == NULL || length == 0U))) return false;
@@ -28,12 +29,14 @@ static bool i2cAsyncStart(uint8_t ch, uint8_t address, uint16_t offset,
   if (h == NULL || t->result != I2C_ASYNC_IDLE) { __set_PRIMASK(irq); return false; }
   t->error = HAL_I2C_ERROR_NONE;
   t->probe = probe;
+  t->read = read;
   t->started_ms = millis();
   t->result = I2C_ASYNC_BUSY;
   // NBYTES=0 + AUTOEND는 주소 ACK만 검사한다. 어떤 EEPROM data byte도 쓰지 않는다.
   HAL_StatusTypeDef status = probe
       ? HAL_I2C_Master_Transmit_IT(h, (uint16_t)address << 1, NULL, 0U)
-      : HAL_I2C_Mem_Write_IT(h, (uint16_t)address << 1, offset, I2C_MEMADD_SIZE_16BIT, data, length);
+      : read ? HAL_I2C_Mem_Read_IT(h, (uint16_t)address << 1, offset, I2C_MEMADD_SIZE_16BIT, data, length)
+             : HAL_I2C_Mem_Write_IT(h, (uint16_t)address << 1, offset, I2C_MEMADD_SIZE_16BIT, data, length);
   if (status != HAL_OK) t->result = I2C_ASYNC_IDLE;
   __set_PRIMASK(irq);
   return status == HAL_OK;
@@ -41,12 +44,17 @@ static bool i2cAsyncStart(uint8_t ch, uint8_t address, uint16_t offset,
 
 bool i2cWriteA16BytesAsync(uint8_t ch, uint8_t address, uint16_t offset, uint8_t *data, uint16_t length)
 {
-  return i2cAsyncStart(ch, address, offset, data, length, false);
+  return i2cAsyncStart(ch, address, offset, data, length, false, false);
+}
+
+bool i2cReadA16BytesAsync(uint8_t ch, uint8_t address, uint16_t offset, uint8_t *data, uint16_t length)
+{
+  return i2cAsyncStart(ch, address, offset, data, length, false, true);
 }
 
 bool i2cProbeAsync(uint8_t ch, uint8_t address)
 {
-  return i2cAsyncStart(ch, address, 0U, NULL, 0U, true);
+  return i2cAsyncStart(ch, address, 0U, NULL, 0U, true, false);
 }
 
 i2c_async_result_t i2cAsyncPoll(uint8_t ch, uint32_t *error)
@@ -91,7 +99,13 @@ static i2c_async_t *i2cAsyncFind(I2C_HandleTypeDef *h)
 void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *h)
 {
   i2c_async_t *t = i2cAsyncFind(h);
-  if (t != NULL && !t->probe) t->result = I2C_ASYNC_DONE;
+  if (t != NULL && !t->probe && !t->read) t->result = I2C_ASYNC_DONE;
+}
+
+void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *h)
+{
+  i2c_async_t *t = i2cAsyncFind(h);
+  if (t != NULL && t->read) t->result = I2C_ASYNC_DONE;
 }
 
 void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *h)

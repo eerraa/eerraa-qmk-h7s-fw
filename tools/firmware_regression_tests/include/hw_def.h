@@ -61,6 +61,8 @@ HAL_StatusTypeDef HAL_I2C_Mem_Write_IT(I2C_HandleTypeDef *, uint16_t, uint16_t, 
 HAL_StatusTypeDef HAL_I2C_Master_Transmit_IT(I2C_HandleTypeDef *, uint16_t, uint8_t *, uint16_t);
 uint32_t HAL_I2C_GetError(I2C_HandleTypeDef *);
 void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *);
+void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *);
+HAL_StatusTypeDef HAL_I2C_Mem_Read_IT(I2C_HandleTypeDef *, uint16_t, uint16_t, uint16_t, uint8_t *, uint16_t);
 void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *);
 
 #include "log.h"

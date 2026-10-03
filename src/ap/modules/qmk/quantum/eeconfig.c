@@ -16,7 +16,7 @@
 #if defined(VIA_ENABLE)
 bool via_eeprom_is_valid(void);
 void via_eeprom_set_valid(bool valid);
-void eeconfig_init_via(void);
+bool eeconfig_init_via_checked(void);
 #endif
 
 /** \brief eeconfig enable
@@ -42,12 +42,13 @@ __attribute__((weak)) void eeconfig_init_kb(void) {
 /*
  * FIXME: needs doc
  */
-void eeconfig_init_quantum(void) {
+bool eeconfig_init_quantum_checked(void) {
 #if defined(EEPROM_DRIVER)
     eeprom_driver_erase();
 #endif
 
-    eeprom_update_word(EECONFIG_MAGIC, EECONFIG_MAGIC_NUMBER);
+    eeconfig_disable();
+    if (!eeprom_flush_pending()) return false;
     eeprom_update_byte(EECONFIG_DEBUG, 0);
     default_layer_state = (layer_state_t)1 << 0;
     eeprom_update_byte(EECONFIG_DEFAULT_LAYER, default_layer_state);
@@ -80,18 +81,23 @@ void eeconfig_init_quantum(void) {
     // Just in case if power is lost mid init, this makes sure that it pets
     // properly re-initialized.
     via_eeprom_set_valid(false);
-    eeconfig_init_via();
+    if (!eeconfig_init_via_checked()) return false;
 #endif
 
     eeconfig_init_kb();
+    if (!eeprom_flush_pending()) return false;
+    eeconfig_enable();
+    return eeprom_flush_pending();
 }
+
+void eeconfig_init_quantum(void) { (void)eeconfig_init_quantum_checked(); }
 
 /** \brief eeconfig initialization
  *
  * FIXME: needs doc
  */
 void eeconfig_init(void) {
-    eeconfig_init_quantum();
+    eeprom_apply_factory_defaults(true);
 }
 
 /** \brief eeconfig enable

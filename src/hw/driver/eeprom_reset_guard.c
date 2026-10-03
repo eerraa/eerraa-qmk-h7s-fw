@@ -90,7 +90,7 @@ bool eepromResetGuardCheck(void)
     return false;
   }
 
-  eeprom_init();  // 포맷한 칩과 RAM 이미지를 다시 맞춘다
+  if (!eeprom_init()) return false;  // 포맷한 칩과 RAM 이미지를 다시 맞춘다
 
   if (eeprom_apply_factory_defaults(true) != true)              // VIA CLEAN과 같은 초기화 경로
   {

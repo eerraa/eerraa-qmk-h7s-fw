@@ -28,7 +28,9 @@ static uint8_t page_write_buf[EEPROM_PAGE_SIZE];                   // V251112R5:
 
 static bool eepromWaitReady(uint32_t timeout_ms);
 // V260909R1: page_write_buf의 소유권은 WRITE -> READY ACK가 끝날 때까지 유지한다.
-typedef enum { PAGE_IDLE, PAGE_WRITE, PAGE_WAIT_READY, PAGE_PROBE } page_state_t;
+typedef enum { PAGE_IDLE, PAGE_WRITE, PAGE_WAIT_READY, PAGE_PROBE, PAGE_VERIFY } page_state_t;
+static uint8_t page_verify_buf[EEPROM_PAGE_SIZE];
+static uint16_t page_address, page_length;
 static page_state_t page_state;
 static uint32_t page_ready_begin_ms, page_next_probe_ms;
 
@@ -39,6 +41,8 @@ bool eepromWritePageStart(uint32_t addr, const uint8_t *data, uint32_t length)
       length > EEPROM_MAX_SIZE - addr) return false;
   memcpy(page_write_buf, data, length);
   if (!i2cWriteA16BytesAsync(i2c_ch, i2c_addr, (uint16_t)addr, page_write_buf, (uint16_t)length)) return false;
+  page_address = (uint16_t)addr;
+  page_length = (uint16_t)length;
   page_state = PAGE_WRITE;
   return true;
 }
@@ -47,12 +51,21 @@ eeprom_async_result_t eepromWritePagePoll(void)
 {
   if (page_state == PAGE_IDLE) return EEPROM_ASYNC_IDLE;
   uint32_t now = millis();
-  if (page_state == PAGE_WRITE || page_state == PAGE_PROBE) {
+  if (page_state == PAGE_WRITE || page_state == PAGE_PROBE || page_state == PAGE_VERIFY) {
     i2c_async_result_t result = i2cAsyncPoll(i2c_ch, NULL);
     if (result == I2C_ASYNC_BUSY) return EEPROM_ASYNC_BUSY;
-    if (page_state == PAGE_PROBE && result == I2C_ASYNC_DONE) {
+    if (page_state == PAGE_VERIFY) {
       page_state = PAGE_IDLE;
-      return EEPROM_ASYNC_DONE;
+      return result == I2C_ASYNC_DONE && memcmp(page_verify_buf, page_write_buf, page_length) == 0
+          ? EEPROM_ASYNC_DONE : EEPROM_ASYNC_ERROR;
+    }
+    if (page_state == PAGE_PROBE && result == I2C_ASYNC_DONE) {
+      if (!i2cReadA16BytesAsync(i2c_ch, i2c_addr, page_address, page_verify_buf, page_length)) {
+        page_state = PAGE_IDLE;
+        return EEPROM_ASYNC_ERROR;
+      }
+      page_state = PAGE_VERIFY;
+      return EEPROM_ASYNC_BUSY;
     }
     if (page_state == PAGE_WRITE && result == I2C_ASYNC_DONE) {
       page_ready_begin_ms = now;
@@ -183,7 +196,10 @@ bool eepromWritePage(uint32_t addr, uint8_t const *p_data, uint32_t length)
     return false;
   }
 
-  return eepromWaitReady(EEPROM_WRITE_READY_TIMEOUT_MS);
+  if (!eepromWaitReady(EEPROM_WRITE_READY_TIMEOUT_MS)) return false;
+  uint8_t verify[EEPROM_PAGE_SIZE];
+  return i2cReadA16Bytes(i2c_ch, i2c_addr, addr, verify, length, EEPROM_WRITE_I2C_TIMEOUT_MS)
+      && memcmp(verify, page_write_buf, length) == 0;
 }
 
 bool eepromWriteByte(uint32_t addr, uint8_t data_in)

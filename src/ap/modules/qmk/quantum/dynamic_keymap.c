@@ -18,6 +18,7 @@
 #include "keymap_introspection.h"
 #include "action.h"
 #include "eeprom.h"
+#include "qmk/port/era_state_sync.h"
 #include "progmem.h"
 #include "send_string.h"
 #include "keycodes.h"
@@ -245,26 +246,42 @@ void dynamic_keymap_macro_get_buffer(uint16_t offset, uint16_t size, uint8_t *da
     }
 }
 
-void dynamic_keymap_macro_set_buffer(uint16_t offset, uint16_t size, uint8_t *data) {
-    void *   target = (void *)(DYNAMIC_KEYMAP_MACRO_EEPROM_ADDR + offset);
-    uint8_t *source = data;
-    for (uint16_t i = 0; i < size; i++) {
-        if (offset + i < DYNAMIC_KEYMAP_MACRO_EEPROM_SIZE) {
-            eeprom_update_byte(target, *source);
-        }
-        source++;
-        target++;
+bool dynamic_keymap_macro_set_buffer_checked(uint16_t offset, uint16_t size, uint8_t *data) {
+    const uintptr_t marker = DYNAMIC_KEYMAP_MACRO_EEPROM_ADDR + DYNAMIC_KEYMAP_MACRO_EEPROM_SIZE - 1U;
+    if (offset >= DYNAMIC_KEYMAP_MACRO_EEPROM_SIZE || size == 0U || data == NULL) return false;
+    if (size > DYNAMIC_KEYMAP_MACRO_EEPROM_SIZE - offset) size = DYNAMIC_KEYMAP_MACRO_EEPROM_SIZE - offset;
+    bool closes = offset + size == DYNAMIC_KEYMAP_MACRO_EEPROM_SIZE && data[size - 1U] == 0U;
+    bool payload = offset < DYNAMIC_KEYMAP_MACRO_EEPROM_SIZE - 1U;
+    bool opener = !payload && !closes;
+    if (!opener && eeprom_commit_failed()) return false;
+    /* Retire the previous marker before any payload can reach another page. */
+    if (payload || !closes) {
+        if (!eeprom_prepare_commit((uint8_t *)marker, 0xFFU)) return false;
     }
+    for (uint16_t i = 0; i < size; i++) {
+        uintptr_t address = DYNAMIC_KEYMAP_MACRO_EEPROM_ADDR + offset + i;
+        if (address == marker && data[i] == 0U) {
+            if (!eeprom_commit_byte((uint8_t *)marker, 0U)) return false;
+        }
+        else eeprom_update_byte((uint8_t *)address, data[i]);
+    }
+    return true;
 }
 
-void dynamic_keymap_macro_reset(void) {
-    void *p   = (void *)(DYNAMIC_KEYMAP_MACRO_EEPROM_ADDR);
-    void *end = (void *)(DYNAMIC_KEYMAP_MACRO_EEPROM_ADDR + DYNAMIC_KEYMAP_MACRO_EEPROM_SIZE);
-    while (p != end) {
-        eeprom_update_byte(p, 0);
-        ++p;
-    }
+bool dynamic_keymap_macro_reset_checked(void) {
+    const uintptr_t marker = DYNAMIC_KEYMAP_MACRO_EEPROM_ADDR + DYNAMIC_KEYMAP_MACRO_EEPROM_SIZE - 1U;
+    bool changed = eeprom_commit_is_pending();
+    for (uintptr_t p = DYNAMIC_KEYMAP_MACRO_EEPROM_ADDR; !changed && p <= marker; ++p) changed = eeprom_read_byte((uint8_t *)p) != 0U;
+    if (!changed) return true;
+    if (!eeprom_prepare_commit((uint8_t *)marker, 0xFFU)) return false;
+    for (uintptr_t p = DYNAMIC_KEYMAP_MACRO_EEPROM_ADDR; p < marker; ++p) eeprom_update_byte((uint8_t *)p, 0U);
+    return eeprom_commit_byte((uint8_t *)marker, 0U);
 }
+
+void dynamic_keymap_macro_set_buffer(uint16_t offset, uint16_t size, uint8_t *data) {
+    (void)dynamic_keymap_macro_set_buffer_checked(offset, size, data);
+}
+void dynamic_keymap_macro_reset(void) { (void)dynamic_keymap_macro_reset_checked(); }
 
 void dynamic_keymap_macro_send(uint8_t id) {
     if (id >= DYNAMIC_KEYMAP_MACRO_COUNT) {
@@ -349,4 +366,11 @@ void dynamic_keymap_macro_send(uint8_t id) {
         }
         send_string_with_delay(data, DYNAMIC_KEYMAP_MACRO_DELAY);
     }
+}
+
+void eeprom_note_commit(uint32_t address, uint32_t length) {
+    uint32_t macro = DYNAMIC_KEYMAP_MACRO_EEPROM_ADDR;
+    uint32_t marker = macro + DYNAMIC_KEYMAP_MACRO_EEPROM_SIZE - 1U;
+    if (address < macro && address + length > DYNAMIC_KEYMAP_EEPROM_ADDR) era_state_sync_bump_keymap();
+    if (address <= marker && address + length > marker && eeprom_read_byte((const uint8_t *)(uintptr_t)marker) == 0U && !eeprom_commit_is_pending()) era_state_sync_bump_macro();
 }

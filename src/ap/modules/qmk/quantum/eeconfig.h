@@ -92,6 +92,7 @@ bool eeconfig_is_disabled(void);
 
 void eeconfig_init(void);
 void eeconfig_init_quantum(void);
+bool eeconfig_init_quantum_checked(void);
 void eeconfig_init_kb(void);
 void eeconfig_init_user(void);
 

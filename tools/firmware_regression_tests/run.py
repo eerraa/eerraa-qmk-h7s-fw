@@ -44,9 +44,22 @@ def main() -> None:
     if args.only in (None, "eeprom"):
         image = BUILD/"eeprom_image.c"
         shutil.copyfile(QMK/"port/platforms/eeprom.c", image)
-        execute("test_eeprom_chain", [HERE/'test_eeprom_chain.c', image,
+        from storage_cases import macro_callers, initialization_callers
+        execute("test_eeprom_initialization", [initialization_callers(ROOT, BUILD)], [])
+        execute("test_eeprom_chain", [HERE/'test_eeprom_chain.c', image, macro_callers(ROOT, BUILD),
                 ROOT/'src/hw/driver/eeprom/zd24c128.c', ROOT/'src/hw/driver/i2c_async.c'],
                 [*inc, "-D_USE_HW_I2C", "-D_USE_HW_EEPROM", "-DEEPROM_CHIP_ZD24C128"])
+        chain = BUILD / ("test_eeprom_chain.exe" if os.name == "nt" else "test_eeprom_chain")
+        snapshot = BUILD / "power-cut-eeprom.bin"
+        for boundary in range(1, 1000):
+            result = subprocess.run([str(chain), "cut", str(boundary), str(snapshot)], timeout=30)
+            if result.returncode == 2:
+                print(f"PASS: physical EEPROM model, {boundary-1} torn-byte/bus cuts, cold mount and upload retry", flush=True)
+                break
+            result.check_returncode()
+            subprocess.run([str(chain), "recover", str(snapshot)], check=True, timeout=30)
+        else:
+            raise AssertionError("power-cut boundary limit exceeded")
     if args.only in (None, "usb"):
         execute("test_usb_transport", [HERE/'test_usb_transport.c', HID/'usbd_hid.c', HID/'hid_tx_queue.c',
                 ROOT/'src/hw/driver/usb/usb_class_pool.c'], [*inc, f"-I{HID}",

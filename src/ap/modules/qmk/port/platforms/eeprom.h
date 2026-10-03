@@ -7,9 +7,16 @@
 
 
 
-void     eeprom_init(void);
+bool     eeprom_init(void);
 void     eeprom_update(void);
 bool     eeprom_is_pending(void);
+// A completion byte is published only after prior writes and its own readback.
+bool     eeprom_commit_byte(uint8_t *addr, uint8_t value);
+bool     eeprom_prepare_commit(uint8_t *addr, uint8_t invalid);
+bool     eeprom_commit_failed(void);
+bool     eeprom_commit_is_pending(void);
+bool     eeprom_byte_is_pending(uintptr_t address);
+void     eeprom_note_commit(uint32_t address, uint32_t length);
 bool     eeprom_flush_pending(void);
 void     eeprom_task(void);
 void     eeprom_req_clean(void);
