@@ -8,6 +8,9 @@ H7S Firmware Guide
 
 ■ 펌웨어 업데이트
 
+V261005R1은 EEPROM 저장 경로를 정리한 유지보수 업데이트입니다.
+V261004R1/R2와 저장 형식이 같아 키맵·매크로·설정을 유지합니다.
+
 V261004R2는 일반 입력·Tap Dance·매크로가 겹친 출력의 해제와 USB 세션 복원을
 정리하고 매크로 시작 작업량을 제한합니다. V261004R1과 저장 형식이 같아
 R1에서 업데이트할 때 키맵·매크로·설정을 유지합니다.
@@ -61,6 +64,9 @@ English
 ----------------------------------------------------------------------
 
 ■ Firmware Update
+
+V261005R1 is a maintenance update that cleans up the EEPROM storage path.
+Storage is unchanged from V261004R1/R2; keymaps, macros and settings are preserved.
 
 V261004R2 corrects overlapping ordinary/Tap Dance/macro output release and USB
 session restoration, and bounds macro activation work. Storage is unchanged from
