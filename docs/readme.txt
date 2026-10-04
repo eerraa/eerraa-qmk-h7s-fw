@@ -8,6 +8,10 @@ H7S Firmware Guide
 
 ■ 펌웨어 업데이트
 
+V261004R2는 일반 입력·Tap Dance·매크로가 겹친 출력의 해제와 USB 세션 복원을
+정리하고 매크로 시작 작업량을 제한합니다. V261004R1과 저장 형식이 같아
+R1에서 업데이트할 때 키맵·매크로·설정을 유지합니다.
+
 V261004R1은 USB 진단 대신 조회 시점의 폴링 설정을 표시하며, 폴링 변경 시
 VIA 후속 통신을 처리한 뒤 재부팅합니다. 공식 VIA의 Tap Dance는 기본 모드 편집만
 제공하고 고급 설정은 https://usekb.cc 에서 편집합니다.
@@ -57,6 +61,10 @@ English
 ----------------------------------------------------------------------
 
 ■ Firmware Update
+
+V261004R2 corrects overlapping ordinary/Tap Dance/macro output release and USB
+session restoration, and bounds macro activation work. Storage is unchanged from
+V261004R1; updating from R1 preserves keymaps, macros and settings.
 
 V261004R1 replaces USB diagnostics with the last-read polling setting and
 allows VIA follow-up traffic before restarting after a polling change. Official
