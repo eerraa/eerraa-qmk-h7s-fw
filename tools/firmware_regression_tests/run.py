@@ -68,6 +68,10 @@ def main() -> None:
             subprocess.run([str(chain), "recover", str(snapshot)], check=True, timeout=30)
         else:
             raise AssertionError("power-cut boundary limit exceeded")
+        from state_sync_cases import storage as generate_state_storage
+        execute("test_state_sync_storage", [generate_state_storage(ROOT, BUILD), image,
+                ROOT/'src/hw/driver/eeprom/zd24c128.c', ROOT/'src/hw/driver/i2c_async.c'],
+                [f"-I{HERE}", *inc, "-D_USE_HW_I2C", "-D_USE_HW_EEPROM", "-DEEPROM_CHIP_ZD24C128"])
     if args.only in (None, "usb"):
         execute("test_usb_transport", [HERE/'test_usb_transport.c', HID/'usbd_hid.c', HID/'hid_tx_queue.c',
                 ROOT/'src/hw/driver/usb/usb_class_pool.c'], [*inc, f"-I{HID}",
@@ -165,6 +169,10 @@ def main() -> None:
             frame_source = generate_frames(ROOT, BUILD, board)
             execute("test_rgb_frames_" + board, [frame_source], [f"-I{HERE}", f"-I{HERE/'ws2812_include'}",
                     f"-I{ROOT/'src/common/hw/include'}", f"-I{QMK/'quantum'}", *layout, "-Wno-unused-function"])
+        from state_sync_cases import rgb as generate_state_rgb
+        execute("test_state_sync_rgb", [generate_state_rgb(ROOT, BUILD), QMK/'port/era_state_sync.c'],
+                [f"-I{HERE}", f"-I{HERE/'ws2812_include'}", f"-I{ROOT/'src/common/hw/include'}",
+                 f"-I{ROOT/'src/ap/modules'}", "-Wno-unused-function", "-Wno-return-type"])
     if args.only in (None, "guards"):
         from polling_cases import generate as generate_polling
         execute("test_polling_wire", [generate_polling(ROOT, BUILD)], [])

@@ -14,7 +14,7 @@ void era_state_sync_bump_keymap(void);
 void era_state_sync_bump_macro(void);
 """
     names = ['dynamic_keymap_macro_get_buffer', 'dynamic_keymap_macro_set_buffer_checked',
-             'dynamic_keymap_macro_reset_checked', 'eeprom_note_commit']
+             'dynamic_keymap_macro_reset_checked', 'eeprom_note_change']
     out.write_text(prefix + '\n'.join(function(source, name) for name in names), encoding='utf-8')
     return out
 
@@ -68,7 +68,11 @@ static bool eeprom_flush_pending(void) {
     return true;
 }
 static uint8_t eeprom_read_byte(const uint8_t *p) { return ram[(uintptr_t)p]; }
-static void eeprom_update_byte(void *p, uint8_t v) { ram[(uintptr_t)p] = v; }
+static void via_eeprom_note_change(uint32_t address, uint32_t length);
+static void eeprom_update_byte(void *p, uint8_t v) {
+    uint8_t before=ram[(uintptr_t)p]; ram[(uintptr_t)p]=v;
+    if (before!=v) via_eeprom_note_change((uintptr_t)p,1U);
+}
 static void eeprom_update_word(void *p, uint16_t v) { memcpy(ram+(uintptr_t)p,&v,2); }
 static void eeprom_update_dword(void *p, uint32_t v) {
     memcpy(ram+(uintptr_t)p,&v,4);
@@ -116,7 +120,7 @@ static bool cli_is_str(int i,const char *text) { return strcmp(text,i==0?"clear"
 static void cliPrintf(const char *text,...) { snprintf(cli_result,sizeof(cli_result),"%s",text); }
 """
     prefix += constants
-    names = ['via_eeprom_set_valid', 'via_get_layout_options', 'via_store_layout_options',
+    names = ['via_eeprom_note_change', 'via_eeprom_set_valid', 'via_get_layout_options', 'via_store_layout_options',
              'via_set_layout_options', 'eeconfig_init_via_checked', 'eeconfig_publish_via_defaults']
     body = '\n'.join(function(via,n) for n in names)
     body += '\n' + function(quantum,'eeconfig_update_user_datablock')
@@ -168,9 +172,13 @@ int main(void) {
     reset_case(); cliQmk(&args); assert(strcmp(cli_result,"Clearing EEPROM\n")==0); assert_published();
     reset_case(); via_set_layout_options(0xFEDCBA98U);
     assert(callback_value==0xFEDCBA98U && via_get_layout_options()==(0xFEDCBA98U&mask()) && config_bumps==1U);
+    via_set_layout_options(0xFEDCBA98U);
+    assert(config_bumps==1U);  // Same GET-visible layout is not another invalidation.
     assert(eeprom_flush_pending()); layout_options_staged=false;
     assert(via_get_layout_options()==(0xFEDCBA98U&mask()));
-    ram[VIA_EEPROM_LAYOUT_OPTIONS_ADDR]=0x31U;
+    eeprom_update_byte((void *)VIA_EEPROM_LAYOUT_OPTIONS_ADDR,0x31U);
+    assert(config_bumps==2U);
+    eeprom_update_byte((void *)VIA_EEPROM_LAYOUT_OPTIONS_ADDR,0x31U); assert(config_bumps==2U);
     assert((via_get_layout_options() >> ((VIA_EEPROM_LAYOUT_OPTIONS_SIZE-1U)*8U))==0x31U);
     reset_case(); fail_at=5;
     assert(!eeprom_apply_factory_defaults(true)); assert_old();

@@ -166,8 +166,12 @@ have verified receipts. Reads keep the marker invalid until final readback.
 Failed invalidation rejects the payload and latches CLOSE rejection until a fresh
 opener/reset; it must never silently drop a chunk and later publish success.
 The macro caller uses this fence for upload and RESET. A failed command uses the
-existing VIA unhandled response. KEYMAP and MACRO durable notifications originate
-in the image writer; CONFIG runtime SET semantics remain separate.
+existing VIA unhandled response. A generic image observer reports changes to
+GET-visible bytes; the dynamic-keymap owner classifies KEYMAP and MACRO ranges.
+This runtime invalidation is separate from physical completion. The final macro
+marker's hidden staging is not visible mutation: fence release after verified
+readback reports its visible transition once. Core/custom CONFIG runtime owners
+publish their own semantic changes. `docs/contract_via.md` §4 owns token meaning.
 
 The shipped external I2C backend is the asynchronous path. Internal flash
 emulation (`src/hw/driver/eeprom/emul.c`) remains an unselected synchronous fallback, with readback required by the image

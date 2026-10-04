@@ -1,5 +1,6 @@
 '실제 H7S 합성기/호스트 mailbox/Pulse와 전체 WS2812 드라이버를 연결한다.'
 from pathlib import Path
+from state_sync_cases import rgb_publication_support
 import re
 
 from rgb_modes import pulse_defines
@@ -97,7 +98,7 @@ static void host_keyboard_leds_update(uint8_t value) { host_bits=value; }
     chunks = [pre, macros, constants, '#define RGBLIGHT_LED_COUNT HW_WS2812_RGB_CNT\n',
               '#include "hw_def.h"\n', f'#include "{(selected/"src/hw/driver/ws2812.c").as_posix()}"\n',
               colors, f'#include "{(qmk/"quantum/led.h").as_posix()}"\n', driver_type, indicator_types, runtime_types, support, declarations,
-              prototypes, pulse, mailbox,
+              prototypes, rgb_publication_support(rgb), pulse, mailbox,
               'static rgblight_indicator_target_callback_t rgblight_indicator_target_callback = rgblight_indicator_target_active_default;\n',
               '\n'.join(functions),
               'static void rgblight_timer_task(void) { if (rgblight_indicator_any_pending_render()) rgblight_request_render(); }\n',

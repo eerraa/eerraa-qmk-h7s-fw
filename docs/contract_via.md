@@ -124,10 +124,31 @@ The second physical press never adds a speculative base input before a hold.
 
 Selector `0x06` publishes three RAM uint32 equality tokens: KEYMAP, MACRO, and CONFIG. They start at 1 and skip 0 on wrap. They are invalidation tokens, not data values and not EEPROM addresses.
 
-- KEYMAP advances after changed keymap/encoder bytes have verified physical receipts. MACRO advances only after the completion marker has a verified receipt; opener/payload staging and unchanged retries do not advance it. These are durable invalidations, not per-command counters. Failed or pending storage must not publish completed MACRO.
-- CONFIG custom setters bump only when the value observable by GET changes. A same-value custom SET is a no-op and must not bump.
-- Layout-options write bumps CONFIG. A checked EEPROM reset publishes affected durable KEYMAP/MACRO changes and bumps CONFIG only after successful completion.
-- Custom SAVE schedules persistence only and does not itself bump. The read-only polling TEXT does not bump. VIA-core RGB state and read-only version/system paths are outside this CONFIG revision contract.
+- All three tokens invalidate the values observable through existing GET. A changed
+  runtime value advances its domain before another command can read it. A token
+  is not a storage receipt; asynchronous persistence must not advance it again
+  when the GET-visible value is unchanged.
+- KEYMAP covers changed keymap/encoder bytes in the shared RAM image, including
+  single-key, buffer, reset, and image-reload paths. Same-value writes are no-ops.
+- MACRO covers visible payload and completion-marker changes. Opening an upload
+  immediately invalidates the old candidate. Payload edits also invalidate it;
+  the final zero remains hidden until verified persistence releases the existing
+  completion fence. Only that visible nonzero-to-zero transition publishes the
+  completed candidate. Failed or pending storage cannot expose a completed macro.
+  The app must reject a macro candidate whose final marker is nonzero, as well as
+  candidates whose before/after revision tokens differ.
+- CONFIG custom setters and VIA-core RGB settings advance only for changed
+  GET-visible values. Enable, mode, HSV and speed changes share the core RGB
+  mutation owner, including physical RGB key actions. Animation frames, sleep
+  output gating, and unchanged retries do not invalidate configuration.
+- Layout options and checked defaults/reset follow the same visible-value rule.
+  Custom SAVE schedules persistence only and does not itself bump. The read-only
+  polling TEXT and version/system observations do not bump CONFIG.
+
+These semantics use the existing v1 envelope and existing GET/SET commands.
+They add no value mirror, storage offsets, or persistence-status wire field.
+The firmware publishes changes immediately; the app's refresh cadence and stale
+value presentation remain app-owned and are not a firmware latency guarantee.
 
 `src/ap/modules/qmk/port/era_state_sync.c` owns token storage/advance. Find mutation sites from `era_state_sync_bump_keymap()`, `era_state_sync_bump_macro()`, and `era_state_sync_bump_config()` in current source; this document does not maintain a handler inventory.
 

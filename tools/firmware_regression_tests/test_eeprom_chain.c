@@ -254,7 +254,8 @@ int main(int argc, char **argv)
   assert(dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &closed));
   uint8_t visible;
   dynamic_keymap_macro_get_buffer(2047U, 1U, &visible);
-  assert(visible != 0U && macro_revision == revision);
+  assert(visible != 0U && macro_revision == revision + 1U + sizeof(payload));
+  revision = macro_revision;
   corrupt_program = true;
   assert(!eeprom_flush_pending());
   assert(eeprom_read_byte(address(marker)) != 0U && macro_revision == revision);

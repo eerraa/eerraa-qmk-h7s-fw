@@ -1,6 +1,7 @@
 """실제 matrix/QMK TD/LT/RGB 소스 구간을 한 호스트 fixture로 연결한다."""
 import re
 from pathlib import Path
+from state_sync_cases import rgb_publication_support
 
 from rgb_modes import check_fixture_numbers
 
@@ -133,6 +134,7 @@ def generate(root: Path, build: Path, source_root: Path | None = None) -> Path:
     host_parts.append(function(host, 'host_keyboard_send'))
     support_index = chunks.index('#include "test_rgb_input_support.h"\n') + 1
     chunks[support_index:support_index] = host_parts
+    chunks += [rgb_publication_support(rgb)]
     chunks += [function(rgb, name) for name in (
         'rgblight_request_render', 'rgblight_indicator_restore_pulse_effect',
         'rgblight_sethsv_eeprom_helper',  # V260913R1: 실제 설정 커밋 경로. 커밋 뒤 RGB task가 그려야 한다.

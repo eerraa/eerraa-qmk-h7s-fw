@@ -368,9 +368,12 @@ void dynamic_keymap_macro_send(uint8_t id) {
     }
 }
 
-void eeprom_note_commit(uint32_t address, uint32_t length) {
-    uint32_t macro = DYNAMIC_KEYMAP_MACRO_EEPROM_ADDR;
-    uint32_t marker = macro + DYNAMIC_KEYMAP_MACRO_EEPROM_SIZE - 1U;
+void eeprom_note_change(uint32_t address, uint32_t length) {
+#ifdef VIA_ENABLE
+    via_eeprom_note_change(address, length);
+#endif
+    const uint32_t macro = DYNAMIC_KEYMAP_MACRO_EEPROM_ADDR;
+    const uint32_t end = macro + DYNAMIC_KEYMAP_MACRO_EEPROM_SIZE;
     if (address < macro && address + length > DYNAMIC_KEYMAP_EEPROM_ADDR) era_state_sync_bump_keymap();
-    if (address <= marker && address + length > marker && eeprom_read_byte((const uint8_t *)(uintptr_t)marker) == 0U && !eeprom_commit_is_pending()) era_state_sync_bump_macro();
+    if (address < end && address + length > macro) era_state_sync_bump_macro();
 }
