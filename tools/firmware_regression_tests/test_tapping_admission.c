@@ -60,6 +60,8 @@ void process_record(keyrecord_t *record) {
 }
 
 void clear_keyboard(void) { clear_count++; }
+void layer_clear_physical_momentary(void) {}
+action_t action_for_keycode(uint16_t keycode) { return (action_t){.code = keycode}; }
 
 static keyrecord_t record_at(unsigned col, bool pressed, uint32_t time) {
     keyrecord_t record = {.event = {.key = {.row = 0, .col = col}, .pressed = pressed, .time = time, .type = KEY_EVENT}};

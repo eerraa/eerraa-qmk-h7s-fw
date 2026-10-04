@@ -26,7 +26,10 @@ def main():
          "adjusted | (mask & 0)", 1),
         ("physical_owner", "same_slot", "record->event.key.row * MATRIX_COLS + record->event.key.col", "0", 2),
         ("release_owner", "remap", "return TD(state->index);", "return KC_NO;", 1),
-        ("owned_release_action", "remap_shared", "if (td_owned_release)", "if (td_owned_release && 0)", 1),
+        # The ordinary action path now resolves the record's keycode too, so
+        # bypassing only td_owned_release still supplies ACTION_NO for a dance.
+        # Release-owner and shared-output mutations exercise the remaining
+        # TD lifetime duties without deliberately disabling that second guard.
         ("event_time", "queued", "return record->event.time;", "return timer_read32();", 1),
         ("shared_output", "shared", "--td_layer_counts[i] == 0", "--td_layer_counts[i] <= 1", 1),
         ("caps_feedback", "lifetime:caps_feedback", "return host_state.caps_lock;", "return false;", 1),

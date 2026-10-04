@@ -88,7 +88,7 @@ static void action_exec_with_scan(keyevent_t event, uint32_t scan_token) {
         debug_event(event);
         ac_dprintf("\n");
 #if defined(RETRO_TAPPING) || defined(RETRO_TAPPING_PER_KEY) || (defined(AUTO_SHIFT_ENABLE) && defined(RETRO_SHIFT))
-        uint16_t event_keycode = get_event_keycode(event, false);
+        uint16_t event_keycode = event.pressed ? keymap_key_to_keycode(layer_switch_get_layer(event.key), event.key) : get_event_keycode(event, false);
         if (event.pressed) {
             retro_tap_primed   = false;
             retro_tap_curr_key = event_keycode;
@@ -279,7 +279,7 @@ void process_record_tap_hint(keyrecord_t *record) {
         return;
     }
 
-    action_t action = layer_switch_get_action(record->event.key);
+    action_t action = action_for_keycode(get_record_keycode(record, false));
 
     switch (action.kind.id) {
 #    ifdef SWAP_HANDS_ENABLE
@@ -339,10 +339,10 @@ void process_record_handler(keyrecord_t *record) {
     if (record->keycode) {
         action = action_for_keycode(record->keycode);
     } else {
-        action = store_or_get_action(record->event.pressed, record->event.key);
+        action = action_for_keycode(get_record_keycode(record, false));
     }
 #else
-    action_t action = store_or_get_action(record->event.pressed, record->event.key);
+    action_t action = action_for_keycode(get_record_keycode(record, false));
 #endif
     ac_dprintf("ACTION: ");
     debug_action(action);
@@ -478,6 +478,27 @@ void process_action(keyrecord_t *record, action_t action) {
     keyevent_t event = record->event;
 #ifndef NO_ACTION_TAPPING
     uint8_t tap_count = record->tap.count;
+#endif
+#ifndef NO_ACTION_LAYER
+    /* Physical momentary layers have a release owner independent of TG/TO. */
+    const uint16_t previous_layer_owner = layer_physical_owner();
+    bool physical_momentary = action.kind.id == ACT_LAYER_MODS;
+    if (action.kind.id == ACT_LAYER_TAP || action.kind.id == ACT_LAYER_TAP_EXT) {
+        physical_momentary = action.layer_tap.code == OP_ON_OFF;
+#    ifndef NO_ACTION_TAPPING
+        physical_momentary |= action.layer_tap.code < OP_TAP_TOGGLE && tap_count == 0;
+#    endif
+    }
+    uint16_t layer_owner = UINT16_MAX;
+    if (physical_momentary && IS_KEYEVENT(event) && event.key.row < MATRIX_ROWS && event.key.col < MATRIX_COLS
+#    ifdef TAPDANCE_ENABLE
+        && !record->tap_dance_injected
+#    endif
+#    ifdef TAP_DANCE_OWNED_ACTIONS
+        && tap_dance_action_get_owner() == UINT8_MAX
+#    endif
+    ) layer_owner = (uint16_t)event.key.row * MATRIX_COLS + event.key.col;
+    layer_set_physical_owner(layer_owner);
 #endif
     const bool key_update = report_key_update_allowed(record, action);
     if (!key_update) host_keyboard_end_key_scan(0U);
@@ -1019,6 +1040,9 @@ void process_action(keyrecord_t *record, action_t action) {
         layer_off(get_oneshot_layer());
     }
 #endif
+#ifndef NO_ACTION_LAYER
+    layer_set_physical_owner(previous_layer_owner);
+#endif
 #ifdef TAP_DANCE_OWNED_ACTIONS
     tap_dance_action_set_owner(td_previous_owner);
 #endif
@@ -1300,10 +1324,10 @@ bool is_tap_record(keyrecord_t *record) {
     if (record->keycode) {
         action = action_for_keycode(record->keycode);
     } else {
-        action = layer_switch_get_action(record->event.key);
+        action = action_for_keycode(get_record_keycode(record, false));
     }
 #else
-    action_t action = layer_switch_get_action(record->event.key);
+    action_t action = action_for_keycode(get_record_keycode(record, false));
 #endif
     return is_tap_action(action);
 }

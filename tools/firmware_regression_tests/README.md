@@ -282,6 +282,21 @@ are explicit tests. In particular a release arriving after a full waiting ring
 still clears queued events. Increased capacity does not establish losslessness
 for all input rates or host stalls, nor prevent downstream transport overflow.
 
+`--only rgb` also executes production VIA keycode/buffer/split-byte/reset
+commands while physical keys are held. Basic keys, modifiers, MO/LT/MT,
+mouse and consumer releases retain their original mapping; subsequent presses
+use the new mapping. Delayed same-position generations, duplicate ingress,
+generation wrap, clear-while-held and shared TD outputs exercise lifetime
+boundaries. The actual tapping overflow path retires physical momentary layers
+while retaining independent persistent contributions and accepting later input.
+EEPROM bytes and unrelated VIA commands are adapters; this does not test
+physical USB timing or EEPROM durability.
+
+The input group also links the complete production `action_layer.c` with
+native QMK headers and Tap Dance disabled. Tri-layer helper publication,
+shared physical owners, persistent same-bit layers and explicit replacement
+must not promote a temporary contribution into persistent state.
+
 ### Dynamic macro bounds
 
 `--only input` also compiles the unmodified production macro reader with

@@ -92,6 +92,7 @@ static uint16_t other_keycode = KC_A;
 static uint16_t layered_other_keycode, third_keycode;
 extern layer_state_t layer_state, default_layer_state;
 void layer_state_set(layer_state_t); void layer_on(uint8_t); void layer_off(uint8_t);
+uint16_t layer_physical_owner(void); void layer_set_physical_owner(uint16_t); void layer_clear_physical_momentary(void);
 void layer_clear(void); void layer_move(uint8_t); void layer_invert(uint8_t);
 bool layer_state_cmp(layer_state_t, uint8_t);
 void clear_keyboard(void); void clear_keyboard_but_mods(void); void clear_keyboard_but_mods_and_keys(void);
@@ -213,8 +214,11 @@ static void led_set(uint8_t value) { rgblight_indicator_post_host_event((led_t){
 
 /* Keymap is an adapter; the production core must request it again after
  * a TD interruption changes the effective layer. */
+static bool fixture_dynamic_keymap;
+uint16_t dynamic_keymap_get_keycode(uint8_t, uint8_t, uint8_t);
 static uint16_t fixture_layer_keycode(uint8_t layer, keypos_t key)
 {
+  if (fixture_dynamic_keymap) return dynamic_keymap_get_keycode(layer, key.row, key.col);
   if (key.col == 2 && third_keycode != KC_NO) return third_keycode;
   if (key.col != 0 && layer == 1 && layered_other_keycode != KC_NO) return layered_other_keycode;
   return key.col == 0 ? mapped_keycode : other_keycode;
@@ -224,15 +228,21 @@ static uint8_t fixture_layer(keypos_t key)
   return key.col != 0 && (layer_state & 2U) && layered_other_keycode != KC_NO ? 1 : 0;
 }
 static uint16_t fixture_keycode(keypos_t key) { return fixture_layer_keycode(fixture_layer(key), key); }
-/* Match the production press-source cache, including release after layer-off. */
-static uint8_t fixture_source_layer[MATRIX_COLS];
+#define MAX_LAYER_BITS 3
+#define MAX_LAYER 4
+static bool disable_action_cache;
 uint16_t keymap_key_to_keycode(uint8_t layer, keypos_t key) { return fixture_layer_keycode(layer, key); }
-uint8_t read_source_layers_cache(keypos_t key) { return fixture_source_layer[key.col % MATRIX_COLS]; }
-uint16_t get_event_keycode(keyevent_t event, bool cache)
-{
-  if (event.pressed && cache) fixture_source_layer[event.key.col % MATRIX_COLS] = fixture_layer(event.key);
-  return fixture_layer_keycode(fixture_source_layer[event.key.col % MATRIX_COLS], event.key);
-}
+uint8_t read_source_layers_cache(keypos_t key);
+uint16_t read_source_keycode_cache(keypos_t key);
+void begin_source_keycode_record(keyrecord_t *record);
+bool read_source_keycode_record(keyrecord_t *record, uint16_t *keycode);
+void update_source_keycode_record(keyrecord_t *record, uint16_t keycode);
+void update_source_layers_cache(keypos_t key, uint8_t layer);
+uint8_t layer_switch_get_layer(keypos_t key);
+action_t layer_switch_get_action(keypos_t key);
+action_t store_or_get_action(bool pressed, keypos_t key);
+uint16_t get_event_keycode(keyevent_t event, bool cache);
+bool is_tap_action(action_t action);
 /* Product retro tapping is a VIA option; the fixture toggles it per case. */
 bool retro_tap_primed; uint16_t retro_tap_curr_key; uint8_t retro_tap_curr_mods, retro_tap_next_mods;
 static bool fixture_retro;
@@ -257,15 +267,7 @@ static action_t action_for_keycode(uint16_t code)
    * action of its own (lighting, macro, custom) is ACTION_NO. */
   return (action_t){.code = code <= QK_MODS_MAX ? code : ACTION_NO};
 }
-static action_t layer_switch_get_action(keypos_t key)
-{
-  return action_for_keycode(fixture_keycode(key));
-}
-static action_t store_or_get_action(bool pressed, keypos_t key)
-{
-  if (pressed) fixture_source_layer[key.col % MATRIX_COLS] = fixture_layer(key);
-  return action_for_keycode(fixture_layer_keycode(fixture_source_layer[key.col % MATRIX_COLS], key));
-}
+action_t action_for_key(uint8_t layer, keypos_t key) { return action_for_keycode(keymap_key_to_keycode(layer, key)); }
 static bool pre_process_record_kb(uint16_t code, keyrecord_t *record) {
   return accept_record && (!fixture_pre_process_record || fixture_pre_process_record(code, record));
 }
@@ -322,3 +324,5 @@ static void rgblight_render_frame(void)
 }
 static void eeconfig_flush_rgblight_current(bool force) { (void)force; }
 static void rgblight_timer_task(void) {} // V260913R1: 만료는 rgblight_task의 1 ms 게이트가 판정한다. 애니메이션 타이머는 관여하지 않는다.
+
+#include "test_input_remap_support.h"

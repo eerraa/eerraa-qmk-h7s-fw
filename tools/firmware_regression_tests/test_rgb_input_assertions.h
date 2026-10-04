@@ -45,7 +45,11 @@ static void reset_fixture(uint16_t keycode, uint8_t mode, uint32_t time)
   layered_other_keycode = third_keycode = KC_NO;
   quantum_log_len = 0;
   fixture_retro = false; retro_tap_primed = false; retro_tap_curr_key = 0; retro_tap_curr_mods = retro_tap_next_mods = 0;
-  memset(fixture_source_layer, 0, sizeof(fixture_source_layer));
+  memset(source_layers_cache, 0, sizeof(source_layers_cache));
+  memset(source_press_generation, 0, sizeof(source_press_generation));
+  memset(source_press_down, 0, sizeof(source_press_down));
+  memset(source_keycode_cache, 0, sizeof(source_keycode_cache));
+  fixture_dynamic_keymap = false;
   g_tapping_term = 200;
   layer_clear();
   output_suspended = false;
@@ -348,11 +352,13 @@ static void check_config_commit_renders_committed_value(void)
 #include "test_td_ownership.h"
 #include "test_td_lifetime.h"
 #include "test_td_direct.h"
+#include "test_input_remap_assertions.h"
 
 int main(int argc, char **argv)
 {
   if (argc > 2 && strcmp(argv[1], "--ownership") == 0) { check_td_ownership(argv[2]); return 0; }
   if (argc > 2 && strcmp(argv[1], "--lifetime") == 0) { check_td_lifetime(argv[2]); return 0; }
+  if (argc > 2 && strcmp(argv[1], "--input-remap") == 0) { check_input_remap(argv[2]); return 0; }
   bool trace_only = argc > 1 && strcmp(argv[1], "--trace") == 0;
   _Static_assert(TAP_HOLD_CAPS_DELAY == 80 && TAP_CODE_DELAY == 0, "QMK Caps compatibility default must remain 80 ms");
   check_td_direct();
@@ -408,6 +414,8 @@ int main(int argc, char **argv)
       "quantum_tap", "quantum_hold", "quantum_nested", "quantum_clear", "quantum_clear_hold",
       "tap_only_release", "storage_reset", "own_clear_hold", "dispatch_epoch", "own_clear_chord"};
   for (unsigned i = 0; i < sizeof(lifetime_cases) / sizeof(lifetime_cases[0]); ++i) check_td_lifetime(lifetime_cases[i]);
+  check_input_remap("remap");
+  check_input_remap("overflow");
   puts("PASS: actual matrix/QMK TD/LT/RGB + wait port: 80ms Caps interval requested without blocking; pulse, holds, replay, overlay, sleep and wrap; slot terms and overlapping dances");
   return 0;
 }

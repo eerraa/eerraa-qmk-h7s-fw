@@ -31,7 +31,7 @@ void clear_keyboard(void);
 """
     (target / "action.h").write_text(action_header, encoding="utf-8")
     (target / "action_layer.h").write_text(
-        '#pragma once\n#include "action.h"\naction_t layer_switch_get_action(keypos_t key);\n', encoding="utf-8")
+        '#pragma once\n#include "action.h"\naction_t layer_switch_get_action(keypos_t key);\naction_t action_for_keycode(uint16_t);\nvoid layer_clear_physical_momentary(void);\n', encoding="utf-8")
     (target / "timer.h").write_text(
         '#pragma once\n#include <stdint.h>\n#define TIMER_DIFF_32(a, b) ((uint32_t)((a) - (b)))\n', encoding="utf-8")
     for name in ("action_tapping.c", "action_tapping.h"):

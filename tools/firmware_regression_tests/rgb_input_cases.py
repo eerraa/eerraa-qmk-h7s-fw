@@ -6,7 +6,7 @@ from rgb_modes import check_fixture_numbers
 
 
 def function(source, name):
-    match = re.search(rf'^(?:__attribute__\(\(weak\)\)\s+)?(?:static\s+)?(?:inline\s+)?(?:void|bool|layer_state_t|uint\d+_t)\s+{name}\([^;]*?\)\s*\{{', source, re.M)
+    match = re.search(rf'^(?:__attribute__\(\(weak\)\)\s+)?(?:static\s+)?(?:inline\s+)?(?:void|bool|action_t|layer_state_t|uint\d+_t)\s+{name}\([^;]*?\)\s*\{{', source, re.M)
     assert match, name
     end, depth = match.end(), 1
     while depth:
@@ -36,6 +36,9 @@ def generate(root: Path, build: Path, source_root: Path | None = None) -> Path:
     util_header = read(selected / 'quantum/action_util.h')
     layers = read(selected / 'quantum/action_layer.c')
     report = read(selected / 'port/protocol/report.c')
+    dynamic = read(selected / 'quantum/dynamic_keymap.c')
+    via = read(selected / 'quantum/via.c')
+    via_header = read(selected / 'quantum/via.h')
     suspend = read(selected / 'port/platforms/suspend.c')
     report_header = read(selected / 'port/protocol/report.h')
     strip_includes = lambda text: re.sub(r'^\s*#\s*include[^\n]*\n', '', text, flags=re.M)
@@ -62,7 +65,7 @@ def generate(root: Path, build: Path, source_root: Path | None = None) -> Path:
     indicator_declarations = '\n'.join(f[:f.index('{')].rstrip() + ';' for f in indicator_functions)
 
     chunks = [
-        '#include <assert.h>\n#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <string.h>\n',
+        '#include <limits.h>\n#include <assert.h>\n#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <string.h>\n',
         '#define MATRIX_ROWS 5\n#define MATRIX_COLS 15\n#define PACKED __attribute__((packed))\n#define TAPDANCE_ENABLE\n#define NO_RESET\n#define NO_DEBUG\n#define DYNAMIC_TAPPING_TERM_ENABLE\n#define EXTRAKEY_ENABLE\n#define MOUSEKEY_ENABLE\n'
         # Production boards compile these per-key policies through G_TERM_ENABLE.
         '#define RETRO_TAPPING_PER_KEY\n#define PERMISSIVE_HOLD_PER_KEY\n#define HOLD_ON_OTHER_KEY_PRESS_PER_KEY\n',
@@ -87,6 +90,10 @@ def generate(root: Path, build: Path, source_root: Path | None = None) -> Path:
         indicator_declarations,
         'static rgblight_indicator_target_callback_t rgblight_indicator_target_callback = rgblight_indicator_target_active_default;\n',
         '#include "test_rgb_input_support.h"\n',
+        via_header[via_header.index('enum via_command_id {'):via_header.index('enum via_channel_id {')],
+        dynamic[dynamic.index('void *dynamic_keymap_key_to_eeprom_address('):dynamic.index('#ifdef ENCODER_MAP_ENABLE', dynamic.index('void *dynamic_keymap_key_to_eeprom_address('))],
+        *[function(dynamic, name) for name in ('dynamic_keymap_get_layer_count', 'dynamic_keymap_reset', 'dynamic_keymap_get_buffer', 'dynamic_keymap_set_buffer')],
+        function(via, 'raw_hid_receive'),
         *indicator_functions,
         strip_includes(util[util.index('static uint8_t real_mods'):]),
         report[report.index('#ifdef RING_BUFFERED_6KRO_REPORT_ENABLE'):report.index('#ifdef MOUSE_ENABLE')],
@@ -96,12 +103,14 @@ def generate(root: Path, build: Path, source_root: Path | None = None) -> Path:
         function(layers, 'default_layer_state_set'),
         *[function(layers, name) for name in ('default_layer_set', 'default_layer_or', 'default_layer_and', 'default_layer_xor')],
         strip_includes(layer_part),
+        layers[layers.index('#if !defined(NO_ACTION_LAYER) && !defined(STRICT_LAYER_RELEASE)'):layers.index('#ifndef NO_ACTION_LAYER\nlayer_state_t update_tri_layer_state')],
         function(layers, "update_tri_layer_state"),
         function(layers, "update_tri_layer"),
         *[function(action, name) for name in ('register_mouse', 'send_system_usage', 'send_consumer_usage')],
         *[function(action, name) for name in ('register_code', 'unregister_code', 'register_mods', 'unregister_mods', 'register_weak_mods', 'unregister_weak_mods', 'clear_keyboard', 'clear_keyboard_but_mods', 'clear_keyboard_but_mods_and_keys')],
         *[function(quantum, name) for name in ('extract_mod_bits', 'do_code16', 'register_code16', 'unregister_code16')],
         function(quantum, 'translate_kb_to_tap_dance'),
+        function(quantum, 'get_event_keycode'),
         function(quantum, 'get_record_keycode'),
         function(wait_port, 'wait_ms'),
         function(host, 'host_keyboard_delay'),

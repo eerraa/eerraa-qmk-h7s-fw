@@ -144,6 +144,9 @@ def main() -> None:
                 [f"-I{BUILD/'tapping_admission'}", f"-I{QMK/'quantum'}", *layout,
                  "-DTAPPING_TERM_PER_KEY", "-DPERMISSIVE_HOLD_PER_KEY", "-DHOLD_ON_OTHER_KEY_PRESS_PER_KEY",
                  "-DTAPDANCE_ENABLE", "-Wno-unused-parameter", "-Wno-unused-function"])
+        from layer_owner_cases import generate as generate_layer_owners
+        owner_sources, owner_flags = generate_layer_owners(ROOT, BUILD)
+        execute("test_layer_owner_no_td", owner_sources, owner_flags)
         from merge_frontend_cases import generate as generate_frontend
         execute("test_merge_frontend", [generate_frontend(ROOT, BUILD)],
                 [f"-I{HERE}", f"-I{QMK/'quantum'}", f"-I{QMK/'port'}", *layout,
