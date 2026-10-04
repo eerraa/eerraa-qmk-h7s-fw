@@ -16,9 +16,8 @@ bool     eeprom_prepare_commit(uint8_t *addr, uint8_t invalid);
 bool     eeprom_commit_failed(void);
 bool     eeprom_commit_is_pending(void);
 bool     eeprom_byte_is_pending(uintptr_t address);
-// Runtime GET visibility and durable receipts are separate observations.
+// Notify changes to values exposed by runtime GETs.
 void     eeprom_note_change(uint32_t address, uint32_t length);
-void     eeprom_note_commit(uint32_t address, uint32_t length);
 bool     eeprom_flush_pending(void);
 void     eeprom_task(void);
 bool     eeprom_req_clean(void);

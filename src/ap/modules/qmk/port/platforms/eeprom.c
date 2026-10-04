@@ -23,7 +23,6 @@ static uintptr_t commit_address;
 static uint8_t commit_value, commit_previous;
 
 __attribute__((weak)) void eeprom_note_change(uint32_t address, uint32_t length) { (void)address; (void)length; }
-__attribute__((weak)) void eeprom_note_commit(uint32_t address, uint32_t length) { (void)address; (void)length; }
 bool eeprom_commit_is_pending(void) { return commit_pending; }
 bool eeprom_commit_failed(void) { return commit_rejected; }
 bool eeprom_prepare_commit(uint8_t *addr, uint8_t invalid)
@@ -144,7 +143,6 @@ static void eeprom_complete_page(void)
   for (uint32_t i = 0; i < active_length; i++) {
     uint32_t bit = 1UL << i;
     if ((dirty_pages[active_page] & bit) && eeprom_buf[addr + i] == page_snapshot[i]) {
-      if (!commit_pending || addr + i != commit_address) eeprom_note_commit(addr + i, 1U);
       dirty_pages[active_page] &= ~bit;
       pending_bytes--;
     }
@@ -160,7 +158,6 @@ void eeprom_update(void)
     if (commit_started) {
       commit_pending = false;
       if (commit_previous != eeprom_buf[commit_address]) eeprom_note_change(commit_address, 1U);
-      eeprom_note_commit(commit_address, 1U);
       return;
     }
     uintptr_t address = commit_address;
