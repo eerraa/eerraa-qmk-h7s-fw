@@ -8,6 +8,8 @@
 #ifdef _USE_HW_I2C
 #include "cli.h"
 
+#define I2C_TIMING_KERNEL_CLOCK_HZ 150000000U
+
 #ifdef _USE_HW_RTOS
 #define lock()      xSemaphoreTake(mutex_lock, portMAX_DELAY);
 #define unLock()    xSemaphoreGive(mutex_lock);
@@ -176,26 +178,37 @@ bool i2cBegin(uint8_t ch, uint32_t freq_khz)
       HAL_I2C_DeInit(p_handle);
       if(HAL_I2C_Init(p_handle) != HAL_OK)
       {
+        HAL_I2C_DeInit(p_handle);
+        is_begin[ch] = false;
+        return false;
+      }
+      // MSP가 선택한 실제 커널 클록을 확인한 뒤 timing 표를 사용한다.
+      uint32_t kernel_clock_hz = HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_I2C23);
+      if (kernel_clock_hz != I2C_TIMING_KERNEL_CLOCK_HZ)
+      {
+        logPrintf("[I2C] unsupported kernel clock %luHz\n", (unsigned long)kernel_clock_hz);
+        HAL_I2C_DeInit(p_handle);
+        is_begin[ch] = false;
+        return false;
+      }
+      uint32_t fast_mode_plus = freq_khz >= 1000 ? I2C_FASTMODEPLUS_ENABLE : I2C_FASTMODEPLUS_DISABLE;
+      // 표의 필터/출력 구동 조건을 적용하지 못하면 전송을 허용하지 않는다.
+      if (HAL_I2CEx_ConfigFastModePlus(p_handle, fast_mode_plus) != HAL_OK
+          || HAL_I2CEx_ConfigAnalogFilter(p_handle, I2C_ANALOGFILTER_ENABLE) != HAL_OK
+          || HAL_I2CEx_ConfigDigitalFilter(p_handle, 0) != HAL_OK)
+      {
+        HAL_I2C_DeInit(p_handle);
+        is_begin[ch] = false;
+        return false;
       }
       if (freq_khz >= 1000)
       {
-        HAL_I2CEx_ConfigFastModePlus(p_handle, I2C_FASTMODEPLUS_ENABLE);   // V251112R5: 1 MHz FastMode Plus
         logPrintf("[I2C] ch%d FastModePlus TIMING=0x%08lX freq=%lukHz\n",
                   ch + 1,
                   (unsigned long)p_handle->Init.Timing,
                   (unsigned long)freq_khz);
       }
-      else
-      {
-        HAL_I2CEx_ConfigFastModePlus(p_handle, I2C_FASTMODEPLUS_DISABLE);
-      }
       i2c_errcount[ch] = 0;
-
-      /* Enable the Analog I2C Filter */
-      HAL_I2CEx_ConfigAnalogFilter(p_handle,I2C_ANALOGFILTER_ENABLE);
-
-      /* Configure Digital filter */
-      HAL_I2CEx_ConfigDigitalFilter(p_handle, 0);
 
       ret = true;
       is_begin[ch] = true;
@@ -205,6 +218,11 @@ bool i2cBegin(uint8_t ch, uint32_t freq_khz)
   return ret;
 }
 
+// ST H7S BSP의 TIMINGR 식, DS14359 Table 124의 analog filter 50..165 ns 기준.
+// 커널 150 MHz (+/-1% 설계 여유), analog filter ON, DNF=0.
+// Sm/Fm은 규격 최대 rise/fall (1000/300, 300/300 ns)를 허용한다.
+// Fm+는 ZD24C128A의 rise/fall <=100 ns, tSU.DAT>=100 ns, tHIGH>=400 ns를 반영한다.
+// 실제 보드 전이시간 측정값이 아니며, 모든 모드에서 가장 빠른 코너도 요청 속도 이하이다.
 uint32_t i2cGetTimming(uint32_t freq_khz)
 {
   uint32_t ret;
@@ -212,19 +230,19 @@ uint32_t i2cGetTimming(uint32_t freq_khz)
   switch(freq_khz)
   {
     case 100:
-      ret = 0x20C0EDFF;
+      ret = 0xB0F43B40;
       break;
 
     case 400:
-      ret = 0x00E063FF;
+      ret = 0x40C91A2C;
       break;
 
     case 1000:
-      ret = 0x00722425;      // V251112R5: PCLK1=75MHz 기준 tLOW=0.506us/tHIGH=0.493us로 Fm+ 최소 규격 충족
+      ret = 0x10F61B26;
       break;
 
     default:
-      ret = 0x00E063FF;
+      ret = 0x40C91A2C;
       break;
   };
 

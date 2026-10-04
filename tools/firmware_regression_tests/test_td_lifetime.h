@@ -449,6 +449,12 @@ static void check_td_lifetime(const char *name) {
     /* A TD storage reset retires held dances, as the EERRAA reset does. */
     tapdance_state[0]=(tapdance_slot_state_t){{KC_B,KC_LCTL,KC_NO,KC_NO},200};
     scan(1000,0,true); tick(1201); assert(get_mods()==MOD_BIT(KC_LCTL));
+    uint32_t reset_epoch = tap_dance_input_epoch();
+    tapdance_slot_state_t previous = tapdance_state[0];
+    tapdance_storage_stage_defaults();
+    assert(get_mods()==MOD_BIT(KC_LCTL) && tap_dance_states[0].in_use && !tap_dance_states[0].cancelled);
+    assert(tap_dance_input_epoch()==reset_epoch && memcmp(&previous,&tapdance_state[0],sizeof(previous))==0);
+    tick(1250); assert(get_mods()==MOD_BIT(KC_LCTL));
     tapdance_storage_apply_defaults();
     assert(get_mods()==0 && tap_dance_states[0].cancelled);
     scan(1300,0,false); task(); tick(1400);

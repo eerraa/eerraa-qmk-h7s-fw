@@ -216,6 +216,7 @@ bool eepromRead(uint32_t addr, uint8_t *p_data, uint32_t length)
 
 bool eepromWrite(uint32_t addr, uint8_t *p_data, uint32_t length)
 {
+  if (p_data == NULL || addr >= EEPROM_MAX_SIZE || length > EEPROM_MAX_SIZE - addr) return false;
   if (page_state != PAGE_IDLE) return false;  // V260909R1: async 저장 소유권 보호
 
   bool ret = false;

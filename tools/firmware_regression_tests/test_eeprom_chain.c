@@ -72,6 +72,7 @@ uint32_t micros(void) { return clock_ms * 1000U; }
 void delay(uint32_t ms) { blocking_calls++; clock_ms += ms; }
 void eeconfig_disable(void) {}
 bool eeconfig_init_quantum_checked(void) { return true; }
+void eeconfig_publish_quantum_defaults(void) {}
 void usbBootModeApplyDefaults(void) {}
 void host_i2c_disable(I2C_HandleTypeDef *h) { (void)h; forced_stops++; bus.active = false; }
 I2C_HandleTypeDef *i2cGetHandle(uint8_t ch) { return ch == 0U ? &handle : NULL; }
@@ -264,10 +265,51 @@ int main(int argc, char **argv)
   assert(dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &closed));
   assert(eeprom_flush_pending() && macro_revision == revision + 1U);
 
+  /* An opener must not synchronously drain unrelated keymap SAVE backlog. */
+  for (unsigned i = 256U; i < 768U; i++)
+    eeprom_write_byte(address(i), eeprom_read_byte(address(i)) ^ 0x5AU);
+  uint32_t opener_writes = starts, opener_reads = readbacks;
+  assert(dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &opened));
+  assert(device[marker] == 0xFFU && starts == opener_writes + 1U && readbacks == opener_reads + 1U);
+  assert(eeprom_get_write_pending_count() == 512U);
+  assert(dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &closed));
+  assert(eeprom_flush_pending());
+
+  /* Preserve an unrelated in-flight snapshot, then prioritize marker readback. */
+  for (unsigned i = 256U; i < 768U; i++)
+    eeprom_write_byte(address(i), eeprom_read_byte(address(i)) ^ 0x39U);
+  auto_clock = false;
+  for (unsigned i = 0; !bus.active && i < 128U; i++) eeprom_update();
+  assert(bus.active && !bus.probe && !bus.read && bus.offset >= 256U && bus.offset < 768U);
+  uint16_t in_flight_address = bus.offset;
+  uint8_t in_flight_snapshot = bus.data[0];
+  eeprom_write_byte(address(in_flight_address), in_flight_snapshot ^ 0xA5U);
+  opener_writes = starts; opener_reads = readbacks; auto_clock = true;
+  assert(dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &opened));
+  assert(starts == opener_writes + 1U && readbacks == opener_reads + 2U);
+  assert(device[in_flight_address] == in_flight_snapshot && device[marker] == 0xFFU);
+  assert(eeprom_byte_is_pending(in_flight_address) && eeprom_get_write_pending_count() > 0U);
+  assert(dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &closed));
+  assert(eeprom_flush_pending());
+  assert(device[in_flight_address] == (uint8_t)(in_flight_snapshot ^ 0xA5U));
+
+  /* A snapshot of the marker page containing the previous valid marker cannot retire invalidation. */
+  eeprom_write_byte(address(marker - 1U), eeprom_read_byte(address(marker - 1U)) ^ 0x47U);
+  auto_clock = false;
+  for (unsigned i = 0; !bus.active && i < 128U; i++) eeprom_update();
+  assert(bus.active && bus.offset == (marker & ~31U) && bus.data[31U] == 0U);
+  opener_writes = starts; opener_reads = readbacks; auto_clock = true;
+  assert(dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &opened));
+  assert(device[marker] == 0xFFU && starts == opener_writes + 1U && readbacks == opener_reads + 2U);
+  assert(dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &closed));
+  assert(eeprom_flush_pending());
+
   /* Failed invalidation must neither accept/drop a chunk nor allow a later CLOSE. */
   fail_start = true;
   payload[0] = 0x91U;
+  uint32_t invalidation_begin = clock_ms;
   assert(!dynamic_keymap_macro_set_buffer_checked(0U, sizeof(payload), payload));
+  assert((uint32_t)(clock_ms - invalidation_begin) <= 210U);
   fail_start = false;
   assert(eeprom_flush_pending());
   assert(!dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &closed));
@@ -277,7 +319,24 @@ int main(int argc, char **argv)
   assert(dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &closed));
   assert(eeprom_flush_pending());
   assert(device[1024U] == 0x91U && device[marker] == 0U);
+  test_ipsr = 1U;
+  assert(!dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &opened));
+  test_ipsr = 0U;
+  assert(eeprom_flush_pending() && device[marker] == 0xFFU);
+  assert(!dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &closed));
+  assert(dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &opened));
+  assert(dynamic_keymap_macro_set_buffer_checked(2047U, 1U, &closed));
+  assert(eeprom_flush_pending());
   auto_clock = false;
+
+  /* Invalid raw spans must fail before any valid prefix reaches the bus. */
+  uint8_t invalid_raw[2] = {0x61U, 0x62U};
+  uint32_t raw_calls = blocking_calls;
+  uint8_t last_physical_byte = device[sizeof(device) - 1U];
+  assert(!eepromWrite(sizeof(device) - 1U, invalid_raw, sizeof(invalid_raw)));
+  assert(!eepromWrite(UINT32_MAX, invalid_raw, sizeof(invalid_raw)));
+  assert(!eepromWrite(0U, NULL, 1U));
+  assert(blocking_calls == raw_calls && device[sizeof(device) - 1U] == last_physical_byte);
 
   uint32_t invalid_before = eeprom_get_invalid_access_count();
   eeprom_write_byte(address(TOTAL_EEPROM_BYTE_COUNT), 0U);

@@ -80,6 +80,23 @@ void eeconfig_post_flush_rgb_sleep_cfg(void)
 {
 }
 
+void rgb_sleep_storage_publish(void)
+{
+  // Publish verified settings without forgetting a currently suspended physical output.
+  eeconfig_init_rgb_sleep_cfg();
+  rgb_sleep_store.timeout_seconds = rgb_sleep_normalized_seconds(rgb_sleep_store.timeout_seconds);
+}
+
+void rgb_sleep_storage_stage_defaults(void)
+{
+  rgb_sleep_storage_t previous = rgb_sleep_store;
+  uint8_t previous_dirty = dirty_rgb_sleep_cfg;
+  rgb_sleep_storage_apply_defaults();
+  eeconfig_flush_rgb_sleep_cfg(true);
+  rgb_sleep_store = previous;
+  dirty_rgb_sleep_cfg = previous_dirty;
+}
+
 void rgb_sleep_storage_apply_defaults(void)
 {
   rgb_sleep_store.signature        = RGB_SLEEP_SIGNATURE;

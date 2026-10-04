@@ -17,7 +17,7 @@ enum via_qmk_ver_item {
 
 
 static void via_qmk_sys_get_value(uint8_t *data);
-static void via_qmk_sys_set_value(uint8_t *data);
+static bool via_qmk_sys_set_value(uint8_t *data);
 static uint8_t sys_eep_reset_bit(uint8_t value_id);
 
 
@@ -54,7 +54,7 @@ void via_qmk_system(uint8_t *data, uint8_t length)
           *command_id = id_unhandled;
           break;
         }
-        via_qmk_sys_set_value(value_id_and_data);
+        if (!via_qmk_sys_set_value(value_id_and_data)) *command_id = id_unhandled;
         break;
       }
     case id_custom_get_value:
@@ -79,7 +79,7 @@ void via_qmk_system(uint8_t *data, uint8_t length)
   }
 }
 
-void via_qmk_sys_set_value(uint8_t *data)
+bool via_qmk_sys_set_value(uint8_t *data)
 {
   // data = [ value_id, value_data ]
   uint8_t *value_id   = &(data[0]);
@@ -110,7 +110,7 @@ void via_qmk_sys_set_value(uint8_t *data)
           if ((eep_reset_confirm & SYS_EEP_RESET_MASK) == SYS_EEP_RESET_MASK)
           {
             eep_reset_confirm = 0U;
-            eeprom_req_clean();
+            if (!eeprom_req_clean()) return false;
           }
         }
         else
@@ -120,6 +120,7 @@ void via_qmk_sys_set_value(uint8_t *data)
         break;
       }
   }
+  return true;
 }
 
 void via_qmk_sys_get_value(uint8_t *data)

@@ -514,6 +514,35 @@ int main(void)
   rgb_sleep_task();
   expect_true("never-enumerated power stays lit", !rgb_sleep_is_dark() && g_suspend_calls == 0);
 
+  /* Failed reset staging preserves GET, unsaved SAVE intent and the physical sleep gate. */
+  {
+    via_set_timeout_exact(239);
+    via_set_timeout(3);
+    via_set_enable(true);
+    g_host_seen = true;
+    g_sof_count++;
+    rgb_sleep_task();
+    g_now_ms += RGB_SLEEP_SOF_STALE_MS + 1000U;
+    rgb_sleep_task();
+    expect_true("pre-reset sleep gate dark", rgb_sleep_is_dark() && g_rgb_suspended);
+    uint32_t revision = era_state_sync_config_revision();
+    reset_rgb_counts();
+    rgb_sleep_storage_stage_defaults();
+    expect_true("staged RGB keeps old GET", via_get_timeout() == 3 && rgb_sleep_enabled());
+    expect_true("staged RGB preserves physical gate", rgb_sleep_is_dark() && g_rgb_suspended && g_suspend_calls == 0 && g_wakeup_calls == 0);
+    expect_true("staged RGB leaves CONFIG", era_state_sync_config_revision() == revision);
+    rgb_sleep_storage_flush(false);
+    rgb_sleep_storage_publish();
+    expect_true("RGB dirty SET survives staging and SAVE", via_get_timeout() == 3);
+    rgb_sleep_storage_stage_defaults();
+    rgb_sleep_storage_publish();
+    expect_true("completed RGB reload keeps dark owner", via_get_timeout() == 10 && rgb_sleep_is_dark() && g_rgb_suspended);
+    g_sof_count++;
+    g_matrix_idle_ms = 0;
+    rgb_sleep_task();
+    expect_true("normal task wakes after successful factory publication", !rgb_sleep_is_dark() && !g_rgb_suspended && g_wakeup_calls == 1);
+  }
+
   if (g_fails != 0)
   {
     printf("%d failed\n", g_fails);

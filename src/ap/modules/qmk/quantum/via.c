@@ -104,12 +104,18 @@ void via_init(void) {
     }
 }
 
+static bool layout_options_staged;
+static uint32_t layout_options_before_reset;
+static void via_store_layout_options(uint32_t value);
+
 bool eeconfig_init_via_checked(void) {
     // set the magic number to false, in case this gets interrupted
     via_eeprom_set_valid(false);
     if (!eeprom_flush_pending()) return false;
-    // This resets the layout options
-    via_set_layout_options(VIA_EEPROM_LAYOUT_OPTIONS_DEFAULT);
+    // Keep the current GET value while a checked reset owns unpublished bytes.
+    if (!layout_options_staged) layout_options_before_reset = via_get_layout_options();
+    layout_options_staged = true;
+    via_store_layout_options(VIA_EEPROM_LAYOUT_OPTIONS_DEFAULT);
     // This resets the keymaps in EEPROM to what is in flash.
     dynamic_keymap_reset();
     // This resets the macros in EEPROM to nothing.
@@ -120,11 +126,21 @@ bool eeconfig_init_via_checked(void) {
     return eeprom_flush_pending();
 }
 
-void eeconfig_init_via(void) { (void)eeconfig_init_via_checked(); }
+void eeconfig_publish_via_defaults(void) {
+    layout_options_staged = false;
+    via_set_layout_options_kb(via_get_layout_options());
+    era_state_sync_bump_config();
+}
+
+void eeconfig_init_via(void) {
+    if (eeconfig_init_via_checked()) eeconfig_publish_via_defaults();
+}
 
 // This is generalized so the layout options EEPROM usage can be
 // variable, between 1 and 4 bytes.
 uint32_t via_get_layout_options(void) {
+    // Failed reset bytes may finish later; they do not publish a new runtime GET.
+    if (layout_options_staged) return layout_options_before_reset;
     uint32_t value = 0;
     // Start at the most significant byte
     void *source = (void *)(VIA_EEPROM_LAYOUT_OPTIONS_ADDR);
@@ -138,8 +154,7 @@ uint32_t via_get_layout_options(void) {
 
 __attribute__((weak)) void via_set_layout_options_kb(uint32_t value) {}
 
-void via_set_layout_options(uint32_t value) {
-    via_set_layout_options_kb(value);
+static void via_store_layout_options(uint32_t value) {
     // Start at the least significant byte
     void *target = (void *)(VIA_EEPROM_LAYOUT_OPTIONS_ADDR + VIA_EEPROM_LAYOUT_OPTIONS_SIZE - 1);
     for (uint8_t i = 0; i < VIA_EEPROM_LAYOUT_OPTIONS_SIZE; i++) {
@@ -147,6 +162,12 @@ void via_set_layout_options(uint32_t value) {
         value = value >> 8;
         target--;
     }
+}
+
+void via_set_layout_options(uint32_t value) {
+    via_store_layout_options(value);
+    layout_options_staged = false;
+    via_set_layout_options_kb(value);
     era_state_sync_bump_config();  // V260821R1: layout options는 CONFIG domain
 }
 
@@ -414,7 +435,7 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
                 *command_id = id_unhandled;
                 break;
             }
-            era_state_sync_bump_config();
+            eeconfig_publish_via_defaults();
             break;
         }
 #endif

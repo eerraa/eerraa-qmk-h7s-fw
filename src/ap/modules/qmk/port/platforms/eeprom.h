@@ -19,7 +19,7 @@ bool     eeprom_byte_is_pending(uintptr_t address);
 void     eeprom_note_commit(uint32_t address, uint32_t length);
 bool     eeprom_flush_pending(void);
 void     eeprom_task(void);
-void     eeprom_req_clean(void);
+bool     eeprom_req_clean(void);
 uint8_t  eeprom_read_byte(const uint8_t *addr);
 uint16_t eeprom_read_word(const uint16_t *addr);
 uint32_t eeprom_read_dword(const uint32_t *addr);

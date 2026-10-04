@@ -93,6 +93,7 @@ bool eeconfig_is_disabled(void);
 void eeconfig_init(void);
 void eeconfig_init_quantum(void);
 bool eeconfig_init_quantum_checked(void);
+void eeconfig_publish_quantum_defaults(void);
 void eeconfig_init_kb(void);
 void eeconfig_init_user(void);
 
@@ -144,6 +145,7 @@ bool eeconfig_is_user_datablock_valid(void);
 void eeconfig_read_user_datablock(void *data);
 void eeconfig_update_user_datablock(const void *data);
 void eeconfig_init_user_datablock(void);
+void eeconfig_publish_user_datablock(void);
 #endif // (EECONFIG_USER_DATA_SIZE) > 0
 
 // Any "checked" debounce variant used requires implementation of:

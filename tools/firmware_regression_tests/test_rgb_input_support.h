@@ -102,11 +102,14 @@ void reset_tap_dance(tap_dance_state_t *); void tap_dance_cancel_all(void);
 uint32_t tap_dance_input_epoch(void); bool tap_dance_discard_retired_record(keyrecord_t *);
 void tap_dance_run_quantum_keycode(keyrecord_t *record, uint16_t keycode);
 void tapdance_storage_apply_defaults(void);
+void tapdance_storage_stage_defaults(void);
+void tapdance_storage_flush(bool force);
 #endif
 static uint8_t bitpop(uint8_t value) { return (uint8_t)__builtin_popcount(value); }
 static keymap_config_t keymap_config = {.oneshot_enable = true};
 static void eeconfig_update_keymap(uint16_t value) { (void)value; }
 static bool command_proc(uint8_t code) { (void)code; return false; }
+static uint8_t dirty_tapdance, dirty_tapdance_timing;
 static void eeconfig_init_tapdance(void) {}
 static void eeconfig_init_tapdance_timing(void) {}
 static void eeconfig_flush_tapdance_timing(bool force) { (void)force; }

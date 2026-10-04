@@ -121,6 +121,16 @@ bool tapping_term_handle_via_command(uint8_t *data, uint8_t length)
   return handled;
 }
 
+void tapping_term_storage_stage_defaults(void)
+{
+  tapping_term_storage_t previous = tapping_term_storage;
+  uint8_t previous_dirty = dirty_tapping_term;
+  tapping_term_apply_defaults_locked();
+  eeconfig_flush_tapping_term(true);
+  tapping_term_storage = previous;
+  dirty_tapping_term = previous_dirty;
+}
+
 void tapping_term_storage_apply_defaults(void)
 {
   tapping_term_apply_defaults_locked();                     // V251123R4: EEPROM 초기화 시 기본값 적용

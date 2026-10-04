@@ -143,7 +143,7 @@ def generate(root: Path, build: Path, source_root: Path | None = None) -> Path:
         'tapdance_mode', 'tapdance_store_mode', 'tapdance_has_override', 'tapdance_should_finish_immediate', 'tapdance_decision_term', 'tapdance_hold_on_interrupt', 'tapdance_run_action', 'tapdance_register_keycode', 'tapdance_unregister_keycode',
         'tapdance_tap_width_ms', 'tapdance_tap_keycode', 'tapdance_set_runtime', 'tapdance_on_each_release', 'tapdance_on_each_tap',
         'tapdance_on_dance_finished', *(('tapdance_other_holds_action',) if 'static bool tapdance_other_holds_action(' in td else ()), 'tapdance_on_reset', 'tapdance_is_storage_valid', 'tapdance_apply_defaults_locked', 'tapdance_sync_state_from_storage', 'tapdance_init',
-        'tapdance_storage_apply_defaults')]
+        'tapdance_storage_flush', 'tapdance_storage_stage_defaults', 'tapdance_storage_apply_defaults')]
     # The product links quantum.c's strong VIA-alias remap, not the core's weak identity.
     weak_remap = '__attribute__((weak)) uint16_t tap_dance_remap_keycode(uint16_t keycode) {\n    return keycode;\n}\n'
     core = dance[dance.index('static tap_dance_state_t *active_td;'):]

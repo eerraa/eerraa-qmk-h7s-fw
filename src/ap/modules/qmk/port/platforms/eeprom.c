@@ -30,8 +30,20 @@ bool eeprom_prepare_commit(uint8_t *addr, uint8_t invalid)
   if (!image_ready || (uintptr_t)addr >= TOTAL_EEPROM_BYTE_COUNT) { commit_rejected = true; return false; }
   commit_rejected = false;
   eeprom_update_byte(addr, invalid);
-  bool ok = eeprom_is_ready() && !eeprom_byte_is_pending((uintptr_t)addr);
-  if (!ok) ok = eeprom_flush_pending();
+  bool ok = !eeprom_byte_is_pending((uintptr_t)addr);
+  if (!ok && __get_IPSR() == 0U && __get_PRIMASK() == 0U) {
+    uint32_t begin_ms = millis();
+    while (eeprom_byte_is_pending((uintptr_t)addr)) {
+      if ((uint32_t)(millis() - begin_ms) >= EEPROM_FLUSH_STALL_TIMEOUT_MS) {
+        failure_count++;
+        break;
+      }
+      // 이미 제출한 snapshot은 마친 뒤 marker만 우선 검증한다. 다른 SAVE를 여기서 비우지 않는다.
+      page_cursor = (uintptr_t)addr / EEPROM_WRITE_PAGE_SIZE;
+      eeprom_update();
+    }
+    ok = !eeprom_byte_is_pending((uintptr_t)addr);
+  }
   commit_rejected = !ok;
   return ok;
 }
@@ -218,31 +230,57 @@ bool eeprom_apply_factory_defaults(bool write_reset_guard)
     }
   }
 
+  eeconfig_publish_quantum_defaults();
   return true;
 }
 
+#ifdef VIA_ENABLE
+static enum {
+  EEPROM_CLEAN_IDLE,
+  EEPROM_CLEAN_DRAINING,
+  EEPROM_CLEAN_INVALIDATING,
+  EEPROM_CLEAN_RESET_QUEUED,
+} clean_state;
+
+static bool eeprom_clean_service(void)
+{
+  if (clean_state == EEPROM_CLEAN_DRAINING && !eeprom_is_pending())
+  {
+    eepromResetGuardStageInvalidation();
+    clean_state = EEPROM_CLEAN_INVALIDATING;
+  }
+  if (clean_state == EEPROM_CLEAN_INVALIDATING && !eeprom_is_pending())
+  {
+    // 실패 뒤 늦게 무효화가 완료되어도 reset 의도와 응답 송신 유예를 보존한다.
+    if (!mcu_reset_deferred()) return false;
+    clean_state = EEPROM_CLEAN_RESET_QUEUED;
+  }
+  return clean_state == EEPROM_CLEAN_RESET_QUEUED;
+}
+#endif
+
 void eeprom_task(void)
 {
-  eeprom_update();                                              // VIA CLEAN의 실제 삭제는 다음 부팅의 reset guard가 한다
+  eeprom_update();
+#ifdef VIA_ENABLE
+  (void)eeprom_clean_service();
+#endif
 }
 
-void eeprom_req_clean(void)
+bool eeprom_req_clean(void)
 {
 #ifdef VIA_ENABLE
-  logPrintf("[  ] VIA EEPROM clear : invalidating reset guard\n");
-  if (eepromResetGuardInvalidate() != true)
-  {
-    logPrintf("[!] VIA EEPROM clear : reset guard write fail\n");
-    return;
-  }
-
-  logPrintf("[  ] VIA EEPROM clear : rebooting to apply defaults\n");
-  if (mcu_reset_deferred() != true)
-  {
-    mcu_reset();                                                   // V250310R6: deferred 예약 실패 시 기존 리셋 경로로 폴백
-  }
+  if (!image_ready || __get_IPSR() != 0U || __get_PRIMASK() != 0U) return false;
+  if (clean_state == EEPROM_CLEAN_RESET_QUEUED) return true;
+  if (clean_state == EEPROM_CLEAN_IDLE) clean_state = EEPROM_CLEAN_DRAINING;
+  // 명시적 요청만 barrier를 기다린다. 실패 의도는 eeprom_task가 비차단으로 계속 처리한다.
+  if (!eeprom_flush_pending()) return false;
+  if (eeprom_clean_service()) return true;
+  if (!eeprom_flush_pending()) return false;
+  return eeprom_clean_service();
 #else
   logPrintf("[!] VIA EEPROM clear : reset guard needs VIA_ENABLE\n");
+  return false;
 #endif
 }
 

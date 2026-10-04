@@ -10,5 +10,6 @@
 
 void mousekey_config_init(void);
 void mousekey_config_storage_apply_defaults(void);
+void mousekey_config_storage_stage_defaults(void);
 void mousekey_config_storage_flush(bool force);
 bool mousekey_config_handle_via_command(uint8_t *data, uint8_t length);

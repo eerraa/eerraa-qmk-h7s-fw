@@ -11,6 +11,7 @@ def generate(root: Path, build: Path) -> Path:
     enums = "\n".join(re.findall(r"enum via_(?:command_id|keyboard_value_id|qmk_usb_polling_value)\s*\{.*?\};", header, re.S))
     usb = (root / "src/hw/driver/usb/usb.h").read_text(encoding="utf-8")
     mode = re.search(r"typedef enum UsbBootMode\b.*?} UsbBootMode_t;", usb, re.S).group(0)
+    default_mode = re.search(r"#ifndef USB_BOOT_MODE_DEFAULT_VALUE\n.*?#endif", usb, re.S).group(0)
     boot = (qmk / "port/bootmode.c").read_text(encoding="utf-8")
     boot = boot[boot.index("static UsbBootMode_t pending_boot_mode"):boot.rindex("#endif")]
     routers = []
@@ -85,6 +86,11 @@ int main(void) {
     label="8000 Hz (HS)";p[0]=id_custom_get_value;p[2]=4;routers[i](p,32);
     assert(strcmp((char *)p+3,"8000 Hz (HS)")==0);
   }
+  unsigned reset_bumps=bumps, reset_applies=applies;
+  UsbBootMode_t actual_mode=saved;
+  bootmode_publish_defaults();
+  assert(pending_boot_mode==USB_BOOT_MODE_DEFAULT_VALUE && pending_boot_mode_init);
+  assert(saved==actual_mode && bumps==reset_bumps && applies==reset_applies);
   for (unsigned cmd=2; cmd<=3; cmd++) {
     uint8_t p[32], before[32];
     for(unsigned i=0;i<32;i++)p[i]=(uint8_t)(i+123);
@@ -98,5 +104,5 @@ int main(void) {
 }
 '''.replace("ROUTERS", names)
     out = build / "test_polling_wire.c"
-    out.write_text(preamble + "\n#define VIA_FIRMWARE_VERSION " + version + "\n" + enums + mode + stubs + boot + "\n".join(routers) + wrapper + tests, encoding="utf-8")
+    out.write_text(preamble + "\n#define VIA_FIRMWARE_VERSION " + version + "\n" + enums + mode + "\n" + default_mode + "\n" + stubs + boot + "\n".join(routers) + wrapper + tests, encoding="utf-8")
     return out

@@ -91,8 +91,11 @@ The in-product EEPROM reset is the system-channel confirm sequence in
 SET 0 clears it. These RAM confirmation bits have no time limit and clear on
 reboot. GET and SAVE do not trigger CLEAN. Setting all three bits consumes the
 confirmations and calls
-`eeprom_req_clean()`, which uses `eepromResetGuardInvalidate()` to clear the
-guard and reboot, so the next boot runs the same `eepromResetGuardCheck()` path.
+`eeprom_req_clean()`, which shares the reset-guard invalidation owner and
+reboots only after the writer verifies the cleared guard, so the next boot runs
+the same `eepromResetGuardCheck()` path. A known persistence or reset-scheduling
+failure returns the existing VIA unhandled response. Once recorded, CLEAN intent
+survives such failures; normal service retries without a blocking durability wait.
 
 Tap Dance retains the 88-byte version-1 record, slot addresses, signature and
 all action/term offsets. Reserved byte 1 tags the input-mode extension with

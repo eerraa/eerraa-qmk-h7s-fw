@@ -17,6 +17,7 @@
 void     tapdance_init(void);
 bool     tapdance_handle_via_command(uint8_t *data, uint8_t length);
 void     tapdance_storage_apply_defaults(void);
+void     tapdance_storage_stage_defaults(void);
 void     tapdance_storage_flush(bool force);
 uint16_t tapdance_get_term_ms(uint16_t keycode);
 uint16_t tapdance_decision_term(uint8_t slot, uint8_t runtime_index, bool pressed);

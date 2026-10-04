@@ -197,6 +197,23 @@ void debounce_profile_save(bool force)
   eeconfig_flush_debounce_profile(force);
 }
 
+void debounce_profile_storage_stage_defaults(void)
+{
+  debounce_profile_storage_t previous = debounce_profile_storage;
+  uint8_t previous_dirty = dirty_debounce_profile;
+  debounce_profile_apply_defaults_locked();
+  eeconfig_flush_debounce_profile(true);
+  debounce_profile_storage = previous;
+  dirty_debounce_profile = previous_dirty;
+}
+
+void debounce_profile_storage_publish(void)
+{
+  eeconfig_init_debounce_profile();
+  debounce_profile_sync_from_storage();
+  if (debounce_profile_state.initialized) debounce_profile_apply_current();
+}
+
 void debounce_profile_storage_apply_defaults(void)
 {
   debounce_profile_apply_defaults_locked();                      // V251115R1: EEPROM 공장 초기화 경로에서 기본값만 기록

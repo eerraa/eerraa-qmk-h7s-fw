@@ -6,6 +6,7 @@
 #include "via.h"
 #include "keycodes.h"
 #include "tapping_term.h"
+#include "tapping_term_policy.h"
 #include "tapdance.h"
 #include "port.h"
 #include "era_state_sync.h"
@@ -24,6 +25,7 @@ extern uint8_t  mk_move_delta;
 extern uint8_t  mk_wheel_delta;
 
 static int g_failures = 0;
+extern unsigned host_td_cancellations;
 
 static void expect_true(const char *name, bool cond) {
     if (!cond) {
@@ -495,6 +497,52 @@ int main(void) {
     test_direct_mode();
     test_on_press_conflict();
     test_advanced_timing();
+
+    /* Reset staging writes defaults without publishing GET or retiring held TD actions. */
+    {
+        expect_true("unsaved tapping SET before reset staging", tapping_exact_set(137));
+        expect_true("unsaved TD SET before reset staging", tapdance_exact_set(0, 281));
+        uint32_t revision = era_state_sync_config_revision();
+        uint16_t term = tapping_exact_get(), dance = tapdance_exact_get(0);
+        unsigned cancellations = host_td_cancellations;
+        tapping_term_storage_stage_defaults();
+        tapdance_storage_stage_defaults();
+        expect_eq_u16("staged tapping retains published GET", tapping_exact_get(), term);
+        expect_eq_u16("staged TD retains published GET", tapdance_exact_get(0), dance);
+        expect_true("staged TD does not cancel actions", host_td_cancellations == cancellations);
+        expect_true("staging does not bump CONFIG", era_state_sync_config_revision() == revision);
+        tapping_term_storage_flush(false);
+        tapdance_storage_flush(false);
+        tapping_term_init();
+        tapdance_init();
+        expect_eq_u16("unsaved tapping survives staging and ordinary SAVE", tapping_exact_get(), term);
+        expect_eq_u16("unsaved TD survives staging and ordinary SAVE", tapdance_exact_get(0), dance);
+        tapping_term_storage_stage_defaults();
+        tapdance_storage_stage_defaults();
+        tapping_term_init();
+        tapdance_init();
+        expect_eq_u16("completed tapping publication reloads defaults", tapping_exact_get(), ERA_TERM_DEFAULT_MS);
+        expect_eq_u16("completed TD publication reloads defaults", tapdance_exact_get(0), ERA_TERM_DEFAULT_MS);
+        expect_true("completed TD publication retires actions", host_td_cancellations == cancellations + 2U);
+    }
+    {
+        uint8_t packet[32] = {id_custom_set_value, id_qmk_mousekey, 8, 0, 7};
+        expect_true("pre-reset exact mouse SET", mousekey_config_handle_via_command(packet, 32));
+        uint8_t old_delta = mk_move_delta;
+        uint32_t revision = era_state_sync_config_revision();
+        mousekey_config_storage_stage_defaults();
+        packet[0] = id_custom_get_value;
+        mousekey_config_handle_via_command(packet, 32);
+        expect_eq_u16("staged MOUSE retains exact GET", be16(packet[3], packet[4]), 7);
+        expect_true("staged MOUSE retains engine settings", mk_move_delta == old_delta);
+        expect_true("staged MOUSE leaves CONFIG", era_state_sync_config_revision() == revision);
+        mousekey_config_storage_flush(false);
+        mousekey_config_init();
+        expect_true("MOUSE dirty SET survives staging", mk_move_delta == old_delta);
+        mousekey_config_storage_stage_defaults();
+        mousekey_config_init();
+        expect_true("completed MOUSE publication applies default", mk_move_delta == 4U);
+    }
 
     zero_report(report);
     report[0] = id_get_keyboard_value;

@@ -14,6 +14,12 @@ static bool          pending_boot_mode_init = false;
 static uint8_t       bootmode_encode_via_value(UsbBootMode_t mode);          // V251113R1: VIA JSON과 열거형 간 값 변환
 static UsbBootMode_t bootmode_decode_via_value(uint8_t via_value);
 
+void bootmode_publish_defaults(void)
+{
+  pending_boot_mode = USB_BOOT_MODE_DEFAULT_VALUE;
+  pending_boot_mode_init = true;
+}
+
 static void bootmode_sync_pending(void)
 {
   if (pending_boot_mode_init == false)

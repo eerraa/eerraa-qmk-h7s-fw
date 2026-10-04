@@ -42,13 +42,21 @@ def main() -> None:
         algorithms = [QMK/'quantum/debounce'/f"{name}.c" for name in ("sym_defer_pk", "sym_eager_pk", "asym_eager_defer_pk")]
         execute("test_debounce", [HERE/'test_debounce.c', runtime, *algorithms], [*inc, f"-I{QMK/'quantum'}"])
     if args.only in (None, "eeprom"):
+        from test_i2c_timing import verify as verify_i2c_timing
+        verify_i2c_timing(ROOT, BUILD/"i2c-timing", gcc())
         image = BUILD/"eeprom_image.c"
         shutil.copyfile(QMK/"port/platforms/eeprom.c", image)
-        from storage_cases import macro_callers, initialization_callers
-        execute("test_eeprom_initialization", [initialization_callers(ROOT, BUILD)], [])
+        from storage_cases import macro_callers, initialization_callers, default_provider_callers
+        initialization = initialization_callers(ROOT, BUILD)
+        for layout_size in range(1, 5):
+            execute("test_eeprom_initialization_" + str(layout_size), [initialization],
+                    ["-DVIA_EEPROM_LAYOUT_OPTIONS_SIZE=" + str(layout_size)])
         execute("test_eeprom_chain", [HERE/'test_eeprom_chain.c', image, macro_callers(ROOT, BUILD),
                 ROOT/'src/hw/driver/eeprom/zd24c128.c', ROOT/'src/hw/driver/i2c_async.c'],
                 [*inc, "-D_USE_HW_I2C", "-D_USE_HW_EEPROM", "-DEEPROM_CHIP_ZD24C128"])
+        execute("test_eeprom_default_provider", [default_provider_callers(ROOT, BUILD)],
+                [f"-I{ROOT/'tools/era_via_host_tests/include'}", f"-I{QMK/'port'}", f"-I{QMK/'quantum'}",
+                 f"-I{ROOT/'src/ap/modules'}", "-Wno-unused-function"])
         chain = BUILD / ("test_eeprom_chain.exe" if os.name == "nt" else "test_eeprom_chain")
         snapshot = BUILD / "power-cut-eeprom.bin"
         for boundary in range(1, 1000):

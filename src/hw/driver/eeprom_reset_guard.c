@@ -35,13 +35,20 @@ static bool eepromWriteMagic(uint32_t addr, uint32_t value)
 #endif  // VIA_ENABLE
 
 
+void eepromResetGuardStageInvalidation(void)
+{
+#ifdef VIA_ENABLE
+  eeprom_write_dword((uint32_t *)(uintptr_t)EECONFIG_USER_RESET_GUARD_MAGIC, ERA_EEPROM_RESET_GUARD_CLEAR);
+  eeprom_write_dword((uint32_t *)(uintptr_t)EECONFIG_USER_RESET_GUARD_KEY, ERA_EEPROM_RESET_GUARD_CLEAR);
+#endif
+}
+
 bool eepromResetGuardInvalidate(void)
 {
 #ifdef VIA_ENABLE
   // guard도 RAM 이미지와 같은 writer를 거친다. 기존 page 완료가 reset 의도를 덮지 못한다.
   if (!eeprom_flush_pending()) return false;
-  eeprom_write_dword((uint32_t *)(uintptr_t)EECONFIG_USER_RESET_GUARD_MAGIC, ERA_EEPROM_RESET_GUARD_CLEAR);
-  eeprom_write_dword((uint32_t *)(uintptr_t)EECONFIG_USER_RESET_GUARD_KEY, ERA_EEPROM_RESET_GUARD_CLEAR);
+  eepromResetGuardStageInvalidation();
   return eeprom_flush_pending();
 #else
   return false;

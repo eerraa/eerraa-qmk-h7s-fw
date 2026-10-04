@@ -13,6 +13,7 @@ static int g_fails = 0;
 static uint32_t g_now_ms = 0;
 static int g_clean_calls = 0;
 static int g_boot_calls = 0;
+static bool g_clean_ok = true;
 
 
 uint32_t timer_read32(void)
@@ -25,9 +26,10 @@ uint32_t timer_elapsed32(uint32_t last)
   return g_now_ms - last;
 }
 
-void eeprom_req_clean(void)
+bool eeprom_req_clean(void)
 {
   g_clean_calls++;
+  return g_clean_ok;
 }
 
 bool bootloader_jump_deferred(void)
@@ -77,12 +79,13 @@ static uint8_t via_get(uint8_t value_id)
   return buf[3];
 }
 
-static void via_set(uint8_t value_id, uint8_t value)
+static uint8_t via_set(uint8_t value_id, uint8_t value)
 {
   uint8_t buf[32];
 
   via_packet(id_custom_set_value, value_id, value, buf);
   via_qmk_system(buf, 32);
+  return buf[0];
 }
 
 static void via_save(void)
@@ -96,6 +99,7 @@ static void via_save(void)
 static void reset_session(void)
 {
   g_now_ms = 0;
+  g_clean_ok = true;
   g_clean_calls = 0;
   g_boot_calls = 0;
   via_set(2, 0);
@@ -128,6 +132,18 @@ int main(void)
   expect_true("three confirms CLEAN once", g_clean_calls == 1);
   expect_true("CLEAN clears confirm bits",
               via_get(2) == 0 && via_get(3) == 0 && via_get(4) == 0);
+
+  reset_session();
+  g_clean_ok = false;
+  expect_true("first confirmation still echoes", via_set(2, 1) == id_custom_set_value);
+  expect_true("second confirmation still echoes", via_set(3, 1) == id_custom_set_value);
+  expect_true("known CLEAN failure is unhandled", via_set(4, 1) == id_unhandled);
+  expect_true("failed CLEAN consumes confirmations once",
+              g_clean_calls == 1 && via_get(2) == 0 && via_get(3) == 0 && via_get(4) == 0);
+  g_clean_ok = true;
+  via_set(2, 1);
+  via_set(3, 1);
+  expect_true("fresh confirmations can retry CLEAN", via_set(4, 1) == id_custom_set_value && g_clean_calls == 2);
 
   reset_session();
   via_set(2, 1);

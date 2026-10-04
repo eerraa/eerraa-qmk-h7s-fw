@@ -6,3 +6,4 @@
 void eeconfig_disable(void);
 void eeconfig_init(void);
 bool eeconfig_init_quantum_checked(void);
+void eeconfig_publish_quantum_defaults(void);

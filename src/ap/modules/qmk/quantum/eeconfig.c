@@ -17,6 +17,7 @@
 bool via_eeprom_is_valid(void);
 void via_eeprom_set_valid(bool valid);
 bool eeconfig_init_via_checked(void);
+void eeconfig_publish_via_defaults(void);
 #endif
 
 /** \brief eeconfig enable
@@ -50,8 +51,7 @@ bool eeconfig_init_quantum_checked(void) {
     eeconfig_disable();
     if (!eeprom_flush_pending()) return false;
     eeprom_update_byte(EECONFIG_DEBUG, 0);
-    default_layer_state = (layer_state_t)1 << 0;
-    eeprom_update_byte(EECONFIG_DEFAULT_LAYER, default_layer_state);
+    eeprom_update_byte(EECONFIG_DEFAULT_LAYER, 1U);
     // Enable oneshot and autocorrect by default: 0b0001 0100 0000 0000
     eeprom_update_word(EECONFIG_KEYMAP, 0x1400);
     eeprom_update_byte(EECONFIG_BACKLIGHT, 0);
@@ -90,7 +90,19 @@ bool eeconfig_init_quantum_checked(void) {
     return eeprom_flush_pending();
 }
 
-void eeconfig_init_quantum(void) { (void)eeconfig_init_quantum_checked(); }
+void eeconfig_publish_quantum_defaults(void) {
+    default_layer_state = (layer_state_t)1 << 0;
+#if (EECONFIG_USER_DATA_SIZE) > 0
+    eeconfig_publish_user_datablock();
+#endif
+#if defined(VIA_ENABLE)
+    eeconfig_publish_via_defaults();
+#endif
+}
+
+void eeconfig_init_quantum(void) {
+    if (eeconfig_init_quantum_checked()) eeconfig_publish_quantum_defaults();
+}
 
 /** \brief eeconfig initialization
  *
@@ -339,6 +351,8 @@ void eeconfig_update_user_datablock(const void *data) {
  *
  * FIXME: needs doc
  */
+__attribute__((weak)) void eeconfig_publish_user_datablock(void) {}
+
 __attribute__((weak)) void eeconfig_init_user_datablock(void) {
     uint8_t dummy_user[(EECONFIG_USER_DATA_SIZE)] = {0};
     eeconfig_update_user_datablock(dummy_user);

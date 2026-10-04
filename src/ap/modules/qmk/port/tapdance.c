@@ -253,6 +253,22 @@ bool tapdance_handle_via_command(uint8_t *data, uint8_t length)
   return handled;
 }
 
+void tapdance_storage_stage_defaults(void)
+{
+  tapdance_storage_t previous = tapdance_storage;
+  tapdance_timing_storage_t previous_timing = tapdance_timing;
+  uint8_t previous_dirty = dirty_tapdance;
+  uint8_t previous_timing_dirty = dirty_tapdance_timing;
+  // Held actions remain owned by the current runtime until the complete reset is published.
+  tapdance_apply_defaults_locked();
+  tapdance_timing_defaults();
+  tapdance_storage_flush(true);
+  tapdance_storage = previous;
+  tapdance_timing = previous_timing;
+  dirty_tapdance = previous_dirty;
+  dirty_tapdance_timing = previous_timing_dirty;
+}
+
 void tapdance_storage_apply_defaults(void)
 {
   /* A reset retires held dances while their executed actions still exist. */

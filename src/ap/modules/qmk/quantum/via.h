@@ -307,6 +307,7 @@ void via_eeprom_set_valid(bool valid);
 // Called by QMK core to initialize dynamic keymaps etc.
 void eeconfig_init_via(void);
 bool eeconfig_init_via_checked(void);
+void eeconfig_publish_via_defaults(void);
 void via_init(void);
 
 // Used by VIA to store and retrieve the layout options.

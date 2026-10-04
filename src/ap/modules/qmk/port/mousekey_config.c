@@ -146,6 +146,14 @@ void mousekey_config_init(void) {
     }
     apply_runtime();
 }
+void mousekey_config_storage_stage_defaults(void) {
+    mousekey_config_storage_t previous = cfg;
+    uint8_t previous_dirty = dirty_mousekey_cfg;
+    defaults();
+    eeconfig_flush_mousekey_cfg(true);
+    cfg = previous;
+    dirty_mousekey_cfg = previous_dirty;
+}
 void mousekey_config_storage_apply_defaults(void) { defaults(); apply_runtime(); eeconfig_flag_mousekey_cfg(true); }
 void mousekey_config_storage_flush(bool force) { eeconfig_flush_mousekey_cfg(force); }
 bool mousekey_config_handle_via_command(uint8_t *data, uint8_t length) {

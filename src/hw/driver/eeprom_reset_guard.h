@@ -7,3 +7,5 @@
 bool eepromResetGuardCheck(void);
 // guard를 지워 다음 부팅이 전체 초기화하게 한다 (VIA EEPROM CLEAN).
 bool eepromResetGuardInvalidate(void);
+// Stage only; callers retain reset intent until the shared writer verifies both guard words.
+void eepromResetGuardStageInvalidation(void);

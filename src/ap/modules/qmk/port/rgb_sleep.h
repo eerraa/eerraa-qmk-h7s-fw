@@ -53,6 +53,8 @@ static inline uint8_t rgb_sleep_policy_preset_minutes(uint16_t seconds)
 void     rgb_sleep_init(void);
 void     rgb_sleep_task(void);
 void     rgb_sleep_storage_apply_defaults(void);
+void     rgb_sleep_storage_stage_defaults(void);
+void     rgb_sleep_storage_publish(void);
 void     rgb_sleep_storage_flush(bool force);
 bool     rgb_sleep_handle_via_command(uint8_t *data, uint8_t length);
 bool     rgb_sleep_enabled(void);
