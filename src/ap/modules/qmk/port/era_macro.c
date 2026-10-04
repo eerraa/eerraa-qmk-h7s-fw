@@ -87,19 +87,13 @@ bool era_macro_request(uint8_t id) {
         ++counters.rejected_invalid;
         return false;
     }
-    if (!active && pending_count == 0U) {
-        if (!macro_start(id)) {
-            ++counters.rejected_invalid;
-            return false;
-        }
-    } else {
-        if (pending_count == ERA_MACRO_QUEUE_CAPACITY) {
-            ++counters.rejected_full;
-            return false;
-        }
-        pending_ids[(pending_head + pending_count) % ERA_MACRO_QUEUE_CAPACITY] = id;
-        ++pending_count;
+    /* Dispatch records an ID only. Snapshot/selection belongs to the task. */
+    if (pending_count == ERA_MACRO_QUEUE_CAPACITY) {
+        ++counters.rejected_full;
+        return false;
     }
+    pending_ids[(pending_head + pending_count) % ERA_MACRO_QUEUE_CAPACITY] = id;
+    ++pending_count;
     ++counters.accepted;
     return true;
 }
@@ -187,10 +181,13 @@ void era_macro_task(void) {
     if (!session_valid || paused) return;
     macro_elapsed(timer_read32());
     if (waiting) return;
-    /* Zero intervals and empty macros are still bounded per main iteration. */
+    /* Copy/selection is a separate large cost: at most one activation, then
+     * at most sixteen small execution phases per main iteration. */
+    bool activated = false;
     for (uint8_t budget = 0U; budget < 16U && !waiting; ++budget) {
         if (!active) {
-            if (!pending_count) return;
+            if (activated || !pending_count) return;
+            activated = true;
             uint8_t id = pending_ids[pending_head];
             pending_head = (pending_head + 1U) % ERA_MACRO_QUEUE_CAPACITY;
             --pending_count;

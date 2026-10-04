@@ -320,6 +320,8 @@ and shared ordinary/TD/macro keyboard, modifier, mouse, system/consumer ownershi
 Generation races must reject old synthetic submissions and republish surviving
 owners even when the logical union is unchanged. The actual HID class's matching
 admission/reconciliation checks are exercised separately by `test_usb_session.h`.
+Dispatch performs zero EEPROM reads; an empty request burst takes at most one
+snapshot per task call. Invalid stored content is rejected at activation.
 Every shipped ASCII entry (except the command prefix) and all 255 nonzero TAP
 codes are compared with the original synchronous trace. Unmapped characters and
 non-keyboard dwell use cooperative release phases; none may enter `wait_ms`.

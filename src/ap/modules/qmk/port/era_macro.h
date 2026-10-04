@@ -5,7 +5,8 @@
 
 #define ERA_MACRO_QUEUE_CAPACITY 8U
 
-/* One active snapshot, then eight FIFO IDs resolved when they start. A full
+/* Requests only enqueue; the task starts at most one snapshot per call.
+ * One active snapshot, then eight FIFO IDs resolved when they start. A full
  * FIFO rejects the newest request and keeps the already accepted prefix. */
 bool era_macro_request(uint8_t id);
 void era_macro_task(void);

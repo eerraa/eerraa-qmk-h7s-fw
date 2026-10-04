@@ -84,6 +84,7 @@ typedef struct { uint32_t time; uint16_t length; uint8_t data[sizeof(report_mous
 static extra_captured_t extra_capture[2048];
 static unsigned extra_capture_count;
 static uint8_t storage[TOTAL_EEPROM_BYTE_COUNT];
+static unsigned eeprom_reads;
 static bool logical_keys[256];
 static report_keyboard_t logical_report, accepted_keyboard;
 static report_mouse_t logical_mouse, accepted_mouse;
@@ -107,6 +108,7 @@ static usb_hid_session_t usbHidGetSession(void) { return session; }
 static void HAL_Delay(uint32_t ms) { ++hal_waits; fixture_now += ms; }
 void delay(uint32_t);
 static uint8_t eeprom_read_byte(const uint8_t *address) {
+    ++eeprom_reads;
     uintptr_t index = (uintptr_t)address - DYNAMIC_KEYMAP_MACRO_EEPROM_ADDR;
     assert(index < sizeof(storage));
     return storage[index];
@@ -228,6 +230,7 @@ static void reset_fixture(const uint8_t *data, size_t size) {
     memset(&accepted_keyboard, 0, sizeof(accepted_keyboard));
     memset(&accepted_mouse, 0, sizeof(accepted_mouse));
     load(data, size);
+    eeprom_reads = 0U;
 }
 static int liveness(void) {
     const uint8_t macro[] = {SS_QMK_PREFIX, SS_DELAY_CODE, '1','0','0','0','|', 0};
@@ -360,7 +363,9 @@ static void queue_and_snapshot(void) {
     assert(count == sizeof(expected) && memcmp(pressed, expected, sizeof(expected)) == 0);
     const uint8_t invalid[] = {0}; reset_fixture(invalid, sizeof(invalid));
     storage[sizeof(storage)-1] = 0xFF;
-    assert(!era_macro_request(0) && !era_macro_request(16));
+    assert(era_macro_request(0) && !era_macro_request(16));
+    era_macro_get_stats(&before); at(fixture_now); era_macro_get_stats(&after);
+    assert(!busy() && after.rejected_invalid == before.rejected_invalid + 1U);
     puts("PASS: FIFO8 newest rejection, active snapshot and queued execution-time snapshot, invalid marker/id");
 }
 
@@ -388,7 +393,8 @@ static void reader_bounds(void) {
         assert(capture_count == 0U);
     }
     reset_fixture(empty, sizeof(empty)); memset(storage, 'a', sizeof(storage)-1U);
-    assert(!era_macro_request(1U));
+    assert(era_macro_request(1U)); drain(1);
+    assert(capture_count == 0U);
     assert(era_macro_request(0U)); drain(2000);
     assert(capture_count == (sizeof(storage)-1U)*2U);
     const uint8_t commands[] = {SS_TAP_CODE,SS_DOWN_CODE,SS_UP_CODE,SS_DELAY_CODE};
@@ -484,11 +490,28 @@ static void custom_layout_parity(void) {
 #endif
 #endif
 
+#ifdef ERA_MACRO_ENABLE
+static void activation_bounds(void) {
+    const uint8_t empty[] = {0}; reset_fixture(empty, sizeof(empty));
+    for (unsigned request = 0U; request < ERA_MACRO_QUEUE_CAPACITY; ++request) assert(era_macro_request(0));
+    assert(eeprom_reads == 0U);
+    assert(!era_macro_request(0));
+    for (unsigned step = 0U; step < ERA_MACRO_QUEUE_CAPACITY; ++step) {
+        unsigned before = eeprom_reads; qmkUpdate();
+        assert(eeprom_reads == before + sizeof(storage));
+        era_macro_stats_t stats; era_macro_get_stats(&stats);
+        assert(stats.queued == ERA_MACRO_QUEUE_CAPACITY - step - 1U);
+    }
+    assert(!busy());
+    puts("PASS: request performs zero EEPROM reads, FIFO saturation and one activation per task");
+}
+#endif
+
 int main(int argc, char **argv) {
     if (liveness()) return 1;
     if (argc == 2 && strcmp(argv[1], "--liveness-only") == 0) return 0;
 #ifdef ERA_MACRO_ENABLE
-    all_taps_nonblocking(); order_and_lifetime(); queue_and_snapshot(); malformed_and_clear(); reader_bounds(); suspend_wrap_and_epoch(); extra_ownership();
+    activation_bounds(); all_taps_nonblocking(); order_and_lifetime(); queue_and_snapshot(); malformed_and_clear(); reader_bounds(); suspend_wrap_and_epoch(); extra_ownership();
 #ifdef MACRO_CUSTOM_LAYOUT
     custom_layout_parity();
 #endif

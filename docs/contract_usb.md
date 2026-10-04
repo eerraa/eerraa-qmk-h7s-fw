@@ -117,7 +117,10 @@ actions or wait for a scan to finish.
 ### Nonblocking dynamic macros
 
 Dynamic VIA macros execute serially from a bounded FIFO of macro IDs. A full
-queue rejects the newest request and preserves accepted order. Each macro takes
+queue rejects the newest request and preserves accepted order. Input dispatch only
+enqueues an ID. The task bounds snapshot activation separately from execution
+phases, so consecutive empty or invalid macros cannot multiply the large copy and
+selection cost within one main-loop pass. Each macro takes
 an immutable byte snapshot when it starts; later queued IDs use the contents
 current at their own start. Edits cannot change a running macro halfway through.
 The cooperative executor returns to matrix, VIA, RGB and storage service between
