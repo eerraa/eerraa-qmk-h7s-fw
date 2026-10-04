@@ -124,7 +124,7 @@ void layer_clear_physical_momentary(void) {
     physical_layer_union = 0;
     layer_state_set_regular(regular_layer_state);
 }
-#ifdef TAP_DANCE_OWNED_ACTIONS
+#ifdef TAPDANCE_ENABLE
 #    include "process_keycode/process_tap_dance.h"
 static layer_state_t td_layer_owners[TAP_DANCE_MAX_SIMULTANEOUS];
 static layer_state_t td_layer_union;
@@ -172,7 +172,7 @@ __attribute__((weak)) layer_state_t layer_state_set_kb(layer_state_t state) {
 static void layer_state_set_regular(layer_state_t state) {
     regular_layer_state = state;
     state |= physical_layer_union;
-#ifdef TAP_DANCE_OWNED_ACTIONS
+#ifdef TAPDANCE_ENABLE
     state |= td_layer_union;
 #endif
     state = layer_state_set_kb(state);
@@ -196,7 +196,7 @@ void layer_state_set(layer_state_t state) {
     memset(physical_layer_owners, 0, sizeof(physical_layer_owners));
     memset(physical_layer_counts, 0, sizeof(physical_layer_counts));
     physical_layer_union = 0;
-#ifdef TAP_DANCE_OWNED_ACTIONS
+#ifdef TAPDANCE_ENABLE
     memset(td_layer_owners, 0, sizeof(td_layer_owners));
     memset(td_layer_counts, 0, sizeof(td_layer_counts));
     td_layer_union = 0;
@@ -244,8 +244,8 @@ void layer_move(uint8_t layer) {
  * Turns on given layer
  */
 void layer_on(uint8_t layer) {
-#ifdef TAP_DANCE_OWNED_ACTIONS
-    const uint8_t owner = tap_dance_action_get_owner();
+#ifdef TAPDANCE_ENABLE
+    const uint8_t owner = action_owner_current();
     if (owner < TAP_DANCE_MAX_SIMULTANEOUS) {
         tap_dance_replace_layers(owner, td_layer_owners[owner] | ((layer_state_t)1 << layer));
         return;
@@ -263,8 +263,8 @@ void layer_on(uint8_t layer) {
  * Turns off given layer
  */
 void layer_off(uint8_t layer) {
-#ifdef TAP_DANCE_OWNED_ACTIONS
-    const uint8_t owner = tap_dance_action_get_owner();
+#ifdef TAPDANCE_ENABLE
+    const uint8_t owner = action_owner_current();
     if (owner < TAP_DANCE_MAX_SIMULTANEOUS) {
         tap_dance_replace_layers(owner, td_layer_owners[owner] & ~((layer_state_t)1 << layer));
         return;

@@ -24,8 +24,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "usb.h"
 #ifdef ERA_MACRO_ENABLE
 #    include "qmk/port/era_macro.h"
-#    include "action_util.h"
 #endif
+#include "action_util.h"
 
 
 #ifdef DIGITIZER_ENABLE
@@ -55,6 +55,39 @@ static uint32_t key_update_scan_token;
 static uint8_t  key_update_usage;
 static bool     key_update_pressed;
 static uint32_t key_update_count;
+
+#ifdef ERA_MACRO_ENABLE
+/* Payload equality does not imply equal lifetime: an unchanged union can become
+ * generation-bound when a macro acquires it. These cache the last submit attempt,
+ * not USB acceptance (overflow may still update the transport's latest state). */
+typedef struct {
+    uint32_t generation;
+    bool bound;
+} host_report_context_t;
+static host_report_context_t keyboard_report_context;
+static host_report_context_t system_report_context;
+static host_report_context_t consumer_report_context;
+
+static host_report_context_t host_report_context_current(void) {
+    host_report_context_t context = {0};
+    context.bound = era_macro_report_generation(&context.generation);
+    return context;
+}
+
+static bool host_report_context_changed(const host_report_context_t *previous) {
+    const host_report_context_t current = host_report_context_current();
+    return current.bound != previous->bound ||
+           (current.bound && current.generation != previous->generation);
+}
+#endif
+
+bool host_keyboard_report_needs_send(void) {
+#ifdef ERA_MACRO_ENABLE
+    return host_report_context_changed(&keyboard_report_context);
+#else
+    return false;
+#endif
+}
 
 void host_set_driver(host_driver_t *d) {
     driver = d;
@@ -149,9 +182,9 @@ void host_keyboard_send(report_keyboard_t *report)
   uint32_t scan_token = key_update_scan_token;
   key_update_scan_token = 0U;  // A native key action may opt in only its first report.
 #ifdef ERA_MACRO_ENABLE
-  uint32_t generation;
-  if (era_macro_report_generation(&generation)) {
-    usbHidSendReportForGeneration((uint8_t *)report, sizeof(report_keyboard_t), generation);
+  keyboard_report_context = host_report_context_current();
+  if (keyboard_report_context.bound) {
+    usbHidSendReportForGeneration((uint8_t *)report, sizeof(report_keyboard_t), keyboard_report_context.generation);
   } else
 #endif
   if (scan_token != 0U) {
@@ -212,9 +245,11 @@ void host_nkro_send(report_nkro_t *report) {
 
 static void host_extra_snapshot(uint8_t *data, uint16_t length) {
 #ifdef ERA_MACRO_ENABLE
-    uint32_t generation;
-    if (era_macro_report_generation(&generation)) {
-        usbHidSendReportEXKForGeneration(data, length, generation);
+    const host_report_context_t context = host_report_context_current();
+    if (data[0] == REPORT_ID_SYSTEM) system_report_context = context;
+    if (data[0] == REPORT_ID_CONSUMER) consumer_report_context = context;
+    if (context.bound) {
+        usbHidSendReportEXKForGeneration(data, length, context.generation);
         return;
     }
 #endif
@@ -241,7 +276,11 @@ void host_mouse_send(report_mouse_t *report) {
 }
 
 void host_system_send(uint16_t usage) {
-  if (usage == last_system_usage) return;
+  if (usage == last_system_usage
+#ifdef ERA_MACRO_ENABLE
+      && !host_report_context_changed(&system_report_context)
+#endif
+  ) return;
   last_system_usage = usage;
 
   report_extra_t report = {
@@ -266,7 +305,11 @@ void host_system_send(uint16_t usage) {
 }
 
 void host_consumer_send(uint16_t usage) {
-  if (usage == last_consumer_usage) return;
+  if (usage == last_consumer_usage
+#ifdef ERA_MACRO_ENABLE
+      && !host_report_context_changed(&consumer_report_context)
+#endif
+  ) return;
   last_consumer_usage = usage;
 
 #ifdef BLUETOOTH_ENABLE
@@ -299,10 +342,10 @@ void host_consumer_send(uint16_t usage) {
 }
 
 
-#ifdef ERA_MACRO_ENABLE
+#ifdef ACTION_OWNERSHIP_ENABLE
 void host_extra_reconcile(void) {
-    last_system_usage = action_owned_usage(TD_USAGE_SYSTEM, last_system_usage);
-    last_consumer_usage = action_owned_usage(TD_USAGE_CONSUMER, last_consumer_usage);
+    last_system_usage = action_owned_usage(ACTION_USAGE_PAGE_SYSTEM, last_system_usage);
+    last_consumer_usage = action_owned_usage(ACTION_USAGE_PAGE_CONSUMER, last_consumer_usage);
     report_extra_t system = {.report_id = REPORT_ID_SYSTEM, .usage = last_system_usage};
     report_extra_t consumer = {.report_id = REPORT_ID_CONSUMER, .usage = last_consumer_usage};
     host_extra_snapshot((uint8_t *)&system, sizeof(system));

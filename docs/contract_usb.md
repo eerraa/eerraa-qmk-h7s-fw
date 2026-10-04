@@ -114,6 +114,31 @@ its payload work is bounded snapshot copying, including freezing a candidate
 and making the Boot-form copy when a packet is armed. It must not execute QMK
 actions or wait for a scan to finish.
 
+### Shared output contributions and feature lifetimes
+
+Ordinary QMK output (including unscoped firmware output), Tap Dance seats and
+macro lifetimes contribute through one common HID ownership layer. Selecting and
+restoring a scope accepts the same token domain; clearing another owner preserves
+the caller's scope. Ordinary keys/modifiers/mouse usages retain bit-state semantics,
+not physical-switch reference counts. Tap Dance alone owns its callback/input
+lifetime and momentary-layer policy; the common HID layer has no TD action types
+or layer lifetime. Macro execution and cancellation own their publication policy.
+
+System and consumer reports each carry one usage. A DOWN selects that owner's
+latest usage. A matching UP removes only its contribution, keeps the selected
+usage if any owner still holds it, otherwise selects the ordinary contribution,
+then the lowest surviving owner token. Normal release, owner cleanup and session
+reconciliation use this same projection. This cannot report two different usages
+simultaneously or remember multiple usages within one owner/page.
+
+Report-only key clearing does not cancel input ownership. Ordinary real-modifier
+clear clears only ordinary real modifiers; weak-modifier clear clears all weak contributions,
+as required by QMK action processing. Full keyboard clear cancels feature lifetimes
+before resetting ordinary state. Successful QMK initialization also retires macro
+execution before timers are reinitialized; failed EEPROM guards stop beforehand.
+Session reconciliation must force an unchanged
+surviving keyboard union through the ordinary report filter and deduplication cache.
+
 ### Nonblocking dynamic macros
 
 Dynamic VIA macros execute serially from a bounded FIFO of macro IDs. A full
@@ -129,7 +154,8 @@ Command order, character timing and transport-owned keyboard intervals remain.
 
 Synthetic output has separate ownership from ordinary and Tap Dance output.
 Explicit DOWN survives normal macro completion until its UP; temporary character
-modifiers are released on completion or malformed-input abort. A release must
+modifiers are released on completion or malformed-input abort. Explicit DOWN also
+survives malformed abort until its UP or feature cancellation. A release must
 not remove the same usage or modifier held by another owner. Explicit keyboard
 clear and a retired USB session cancel active and queued macros and release
 macro contributions. Cancellation republishes mouse buttons with zero relative
@@ -138,7 +164,10 @@ ordinary mouse-task interval. Same-session Suspend pauses execution with remaini
 preserved, and Resume continues it.
 
 Reports containing macro contributions carry the admitted USB generation into
-transport enqueue. The existing IRQ lock checks it before queue, candidate or
+transport enqueue. Equal report bytes do not justify suppressing a change between
+ordinary and generation-bound provenance. Host-side deduplication tracks the last
+submitted context; it is not a transport acceptance receipt. The existing IRQ lock
+checks the generation before queue, candidate or
 latest-state mutation. A new session neutralizes cached synthetic snapshots;
 the main loop cancels old macro ownership and republishes surviving physical/TD
 state, including unchanged unions. This prevents old macro output from crossing

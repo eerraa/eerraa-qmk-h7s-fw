@@ -312,7 +312,8 @@ must not promote a temporary contribution into persistent state.
 
 `--only input` connects production `qmkUpdate`, VIA macro dispatch, the cooperative
 executor, send-string LUTs, QMK register/tap/clear functions, contribution tables,
-and keyboard/EXK/interval host adapters. Bounded EEPROM and endpoint admission
+actual filtered/deduplicated keyboard sender, and keyboard/EXK/interval host adapters.
+Bounded EEPROM and endpoint admission
 are test adapters. It checks service and physical release during a long delay,
 command timing/order, FIFO overflow, active and queued content snapshots, malformed
 commands, explicit DOWN lifetime, keyboard clear, Suspend/resume, timer wrap,
@@ -320,20 +321,35 @@ and shared ordinary/TD/macro keyboard, modifier, mouse, system/consumer ownershi
 Generation races must reject old synthetic submissions and republish surviving
 owners even when the logical union is unchanged. The actual HID class's matching
 admission/reconciliation checks are exercised separately by `test_usb_session.h`.
-Dispatch performs zero EEPROM reads; an empty request burst takes at most one
-snapshot per task call. Invalid stored content is rejected at activation.
 Every shipped ASCII entry (except the command prefix) and all 255 nonzero TAP
 codes are compared with the original synchronous trace. Unmapped characters and
 non-keyboard dwell use cooperative release phases; none may enter `wait_ms`.
 Standalone `--positive-tap-delay`, `--nonkeyboard-layout` and `--custom-layout`
-variants cover positive tap delay and custom LUTs. `--remove-unmapped-fix`
-restores the reviewed executor only in generated input to expose its fallback.
+variants cover positive tap delay and custom LUTs.
 These deterministic clocks do not measure physical USB delivery or target latency.
 
-`macro_executor_cases.py --build <external-directory> --revision <base-commit>
---liveness-only` can execute the same liveness requirement against a fixed parent.
+`macro_executor_cases.py --build <directory>` runs the current production paths.
+Use `--features both|macro|td|neither --ownership-only` for the four compile
+boundaries and `--zero-delay` for an actual zero-interval build with a sixteen-phase
+cursor assertion. Dispatch must perform zero EEPROM reads and each task may take
+at most one snapshot, including empty and invalid requests. The normal fixture
+also executes the production VIA uptime value case during a long macro delay;
+the raw-HID dispatcher and State Sync/storage paths remain separate fixtures.
+
+Ownership cases cover all 72 different-usage press/release permutations on both
+extra pages, nested tokens, another owner's silent cleanup, ordinary real vs
+all-owner weak clear, report-only vs input reset, unchanged-union session replay,
+final-UP reset, successful QMK init and its fail-closed EEPROM guards. Same-payload
+ordinary-to-macro provenance is checked at the actual host adapter; the actual USB
+class separately checks identical unbound/bound snapshots across reset before
+producer reconciliation. These are two connected interface obligations, not a
+single end-to-end hardware execution.
+
+`--ownership-mutation usage-up|scope|activation|force|provenance|reconcile-context` removes individual
+fixes in generated production copies and must compile before failing at runtime.
 `--remove-fix --liveness-only` restores the synchronous caller only in generated
-copies. Input hashes and adapter boundaries accompany each generated fixture.
+copies. To run older APIs, use that revision's generator and fixture in an isolated
+checkout. Input hashes and adapter boundaries accompany every generated fixture.
 
 ### Full-range tapping time
 

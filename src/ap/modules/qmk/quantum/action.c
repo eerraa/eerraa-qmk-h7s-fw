@@ -371,9 +371,9 @@ void process_record_handler(keyrecord_t *record) {
  */
 
 void register_mouse(uint8_t mouse_keycode, bool pressed) {
-#ifdef TAP_DANCE_OWNED_ACTIONS
+#ifdef ACTION_OWNERSHIP_ENABLE
     /* Another input still holding this mouse code keeps it down. */
-    if (!tap_dance_mouse_update(mouse_keycode, pressed)) return;
+    if (!action_mouse_update(mouse_keycode, pressed)) return;
 #endif
 #ifdef MOUSEKEY_ENABLE
     // if mousekeys is enabled, let it do the brunt of the work
@@ -415,19 +415,21 @@ void register_mouse(uint8_t mouse_keycode, bool pressed) {
 }
 
 #ifdef EXTRAKEY_ENABLE
-/* Each extra report holds one usage; ownership decides whether an up may clear it. */
+/* Each extra report holds one usage; every edge publishes the surviving selection. */
 static void send_system_usage(uint16_t usage, bool pressed) {
-#    ifdef TAP_DANCE_OWNED_ACTIONS
-    if (!tap_dance_usage_update(TD_USAGE_SYSTEM, usage, host_last_system_usage(), pressed)) return;
-#    endif
+#    ifdef ACTION_OWNERSHIP_ENABLE
+    host_system_send(action_usage_update(ACTION_USAGE_PAGE_SYSTEM, usage, host_last_system_usage(), pressed));
+#    else
     host_system_send(pressed ? usage : 0);
+#    endif
 }
 
 static void send_consumer_usage(uint16_t usage, bool pressed) {
-#    ifdef TAP_DANCE_OWNED_ACTIONS
-    if (!tap_dance_usage_update(TD_USAGE_CONSUMER, usage, host_last_consumer_usage(), pressed)) return;
-#    endif
+#    ifdef ACTION_OWNERSHIP_ENABLE
+    host_consumer_send(action_usage_update(ACTION_USAGE_PAGE_CONSUMER, usage, host_last_consumer_usage(), pressed));
+#    else
     host_consumer_send(pressed ? usage : 0);
+#    endif
 }
 #endif
 
@@ -453,8 +455,8 @@ static bool report_key_update_allowed(const keyrecord_t *record, action_t action
 #ifdef TAPDANCE_ENABLE
     if (record->tap_dance_injected || tap_dance_owned_keycode(record) != KC_NO) return false;
 #endif
-#ifdef TAP_DANCE_OWNED_ACTIONS
-    if (tap_dance_action_get_owner() != UINT8_MAX) return false;
+#ifdef ACTION_OWNERSHIP_ENABLE
+    if (action_owner_current() != UINT8_MAX) return false;
 #endif
     if (get_mods() != 0U || get_weak_mods() != 0U) return false;
 #ifndef NO_ACTION_ONESHOT
@@ -468,15 +470,8 @@ static bool report_key_update_allowed(const keyrecord_t *record, action_t action
 }
 
 void process_action(keyrecord_t *record, action_t action) {
-#ifdef TAP_DANCE_OWNED_ACTIONS
-    uint8_t td_previous_owner = tap_dance_action_get_owner();
-    bool td_momentary = action.kind.id == ACT_LMODS || action.kind.id == ACT_RMODS || action.kind.id == ACT_LAYER_MODS;
-    if (action.kind.id == ACT_LAYER_TAP || action.kind.id == ACT_LAYER_TAP_EXT)
-        td_momentary = action.layer_tap.code == OP_ON_OFF || action.layer_tap.code < OP_TAP_TOGGLE;
-    if (action.kind.id == ACT_LMODS_TAP || action.kind.id == ACT_RMODS_TAP)
-        td_momentary = action.layer_tap.code != MODS_TAP_TOGGLE;
-    if (action.kind.id == ACT_USAGE || action.kind.id == ACT_MOUSEKEY) td_momentary = true;
-    if (!td_momentary) tap_dance_action_set_owner(UINT8_MAX);
+#ifdef TAPDANCE_ENABLE
+    const uint8_t previous_owner = tap_dance_action_scope(action);
 #endif
     keyevent_t event = record->event;
 #ifndef NO_ACTION_TAPPING
@@ -497,8 +492,8 @@ void process_action(keyrecord_t *record, action_t action) {
 #    ifdef TAPDANCE_ENABLE
         && !record->tap_dance_injected
 #    endif
-#    ifdef TAP_DANCE_OWNED_ACTIONS
-        && tap_dance_action_get_owner() == UINT8_MAX
+#    ifdef ACTION_OWNERSHIP_ENABLE
+        && action_owner_current() == UINT8_MAX
 #    endif
     ) layer_owner = (uint16_t)event.key.row * MATRIX_COLS + event.key.col;
     layer_set_physical_owner(layer_owner);
@@ -1046,8 +1041,8 @@ void process_action(keyrecord_t *record, action_t action) {
 #ifndef NO_ACTION_LAYER
     layer_set_physical_owner(previous_layer_owner);
 #endif
-#ifdef TAP_DANCE_OWNED_ACTIONS
-    tap_dance_action_set_owner(td_previous_owner);
+#ifdef TAPDANCE_ENABLE
+    action_owner_select(previous_owner);
 #endif
 }
 
@@ -1100,7 +1095,7 @@ __attribute__((weak)) void register_code(uint8_t code) {
         // without this, keys with the same keycode, but different
         // modifiers will be reported incorrectly, see issue #1708
         if (is_key_pressed(code)) {
-#ifdef TAP_DANCE_OWNED_ACTIONS
+#ifdef ACTION_OWNERSHIP_ENABLE
             /* Every new down is its own keystroke, as in QMK. The up is
              * report-only, so another input that holds the usage keeps it. */
             del_key_from_report(code);
@@ -1286,8 +1281,8 @@ void clear_keyboard(void) {
  * FIXME: Needs documentation.
  */
 void clear_keyboard_but_mods(void) {
-#ifdef TAP_DANCE_OWNED_ACTIONS
-    tap_dance_clear_key_ownership();
+#ifdef ACTION_OWNERSHIP_ENABLE
+    action_ownership_reset_keys();
 #endif
     clear_keys();
     clear_keyboard_but_mods_and_keys();
@@ -1298,8 +1293,8 @@ void clear_keyboard_but_mods(void) {
  * FIXME: Needs documentation.
  */
 void clear_keyboard_but_mods_and_keys(void) {
-#ifdef TAP_DANCE_OWNED_ACTIONS
-    tap_dance_clear_hid_ownership();
+#ifdef ACTION_OWNERSHIP_ENABLE
+    action_ownership_reset_hid();
 #endif
 #ifdef EXTRAKEY_ENABLE
     host_system_send(0);

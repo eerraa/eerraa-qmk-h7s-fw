@@ -6,6 +6,10 @@
 #include "dynamic_keymap.h"
 #include "send_string.h"
 #include "timer.h"
+#include "host.h"
+#ifdef MOUSEKEY_ENABLE
+#    include "mousekey.h"
+#endif
 
 #ifndef DYNAMIC_KEYMAP_MACRO_DELAY
 #    define DYNAMIC_KEYMAP_MACRO_DELAY TAP_CODE_DELAY
@@ -56,10 +60,34 @@ static void macro_elapsed(uint32_t now) {
     }
 }
 
+static bool macro_has_outputs(void) {
+    return action_owner_has_outputs(ACTION_OWNER_MACRO_PERSISTENT) ||
+           action_owner_has_outputs(ACTION_OWNER_MACRO_TEMPORARY);
+}
+
+/* Feature lifetime owns publication. The common layer only removes its
+ * contributions; retired relative movement must never be replayed. */
+static void macro_publish_outputs(void) {
+    send_keyboard_report_force();
+#ifdef MOUSEKEY_ENABLE
+    report_mouse_t mouse = mousekey_get_report();
+    mouse.x = mouse.y = mouse.v = mouse.h = 0;
+    host_mouse_send(&mouse);
+#endif
+#ifdef EXTRAKEY_ENABLE
+    host_extra_reconcile();
+#endif
+}
+
 static void macro_finish(bool malformed) {
     /* Only string helper state is temporary. Explicit DOWN remains owned
      * across ordinary completion and malformed-command abort until its UP. */
-    action_macro_clear_owner(ACTION_MACRO_TEMPORARY);
+    if (action_owner_has_outputs(ACTION_OWNER_MACRO_TEMPORARY)) {
+        action_owner_t previous = action_owner_select(ACTION_OWNER_MACRO_TEMPORARY);
+        action_owner_release(ACTION_OWNER_MACRO_TEMPORARY);
+        macro_publish_outputs();
+        action_owner_select(previous);
+    }
     active = waiting = false;
     if (malformed) ++counters.malformed;
 }
@@ -99,10 +127,16 @@ bool era_macro_request(uint8_t id) {
 }
 
 void era_macro_cancel(void) {
-    if (active || pending_count || action_macro_has_outputs()) ++counters.canceled;
+    if (active || pending_count || macro_has_outputs()) ++counters.canceled;
     active = waiting = false;
     pending_head = pending_count = 0U;
-    action_macro_cancel_outputs();
+    action_owner_t previous = action_owner_select(ACTION_OWNER_REGULAR);
+    action_owner_release(ACTION_OWNER_MACRO_TEMPORARY);
+    action_owner_release(ACTION_OWNER_MACRO_PERSISTENT);
+    /* Reset retires even unchanged generation-bound unions. Reissue survivors
+     * after both macro owners are removed, without the retired session tag. */
+    macro_publish_outputs();
+    action_owner_select(previous);
 }
 
 void era_macro_session(uint32_t generation, bool valid, bool suspended) {
@@ -117,7 +151,9 @@ void era_macro_session(uint32_t generation, bool valid, bool suspended) {
 }
 
 bool era_macro_report_generation(uint32_t *generation) {
-    if (!session_known || (!action_macro_is_emitting() && !action_macro_has_outputs())) return false;
+    action_owner_t owner = action_owner_current();
+    bool emitting = owner == ACTION_OWNER_MACRO_PERSISTENT || owner == ACTION_OWNER_MACRO_TEMPORARY;
+    if (!session_known || (!emitting && !macro_has_outputs())) return false;
     *generation = session_generation;
     return true;
 }
@@ -127,19 +163,19 @@ static uint8_t macro_read(void) {
 }
 
 static void macro_code(uint8_t code, uint8_t command) {
-    uint8_t owner = command == SS_TAP_CODE ? ACTION_MACRO_TEMPORARY : ACTION_MACRO_PERSISTENT;
-    uint8_t previous = action_macro_set_owner(owner);
+    uint8_t owner = command == SS_TAP_CODE ? ACTION_OWNER_MACRO_TEMPORARY : ACTION_OWNER_MACRO_PERSISTENT;
+    uint8_t previous = action_owner_select(owner);
     if (command == SS_TAP_CODE) tap_code(code);
     else if (command == SS_DOWN_CODE) register_code(code);
     else unregister_code(code);
-    action_macro_restore_owner(previous);
+    action_owner_select(previous);
 }
 
 static void macro_char_edge(uint8_t code, bool down) {
-    uint8_t previous = action_macro_set_owner(ACTION_MACRO_TEMPORARY);
+    uint8_t previous = action_owner_select(ACTION_OWNER_MACRO_TEMPORARY);
     if (down) register_code(code);
     else unregister_code(code);
-    action_macro_restore_owner(previous);
+    action_owner_select(previous);
 }
 
 static bool macro_command(void) {
@@ -244,9 +280,9 @@ void era_macro_task(void) {
             case MACRO_CHAR_TAP: {
                 phase = MACRO_CHAR_ALTGR_UP;
                 if (IS_BASIC_KEYCODE(char_key) || IS_MODIFIER_KEYCODE(char_key)) {
-                    uint8_t previous = action_macro_set_owner(ACTION_MACRO_TEMPORARY);
+                    uint8_t previous = action_owner_select(ACTION_OWNER_MACRO_TEMPORARY);
                     tap_code_delay(char_key, DYNAMIC_KEYMAP_MACRO_DELAY);
-                    action_macro_restore_owner(previous);
+                    action_owner_select(previous);
                 } else {
                     /* tap_code_wait sleeps for non-keyboard codes, including
                      * KC_NO. Preserve that dwell with a cooperative release. */

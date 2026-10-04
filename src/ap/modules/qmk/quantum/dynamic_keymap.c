@@ -285,7 +285,11 @@ void dynamic_keymap_macro_set_buffer(uint16_t offset, uint16_t size, uint8_t *da
 void dynamic_keymap_macro_reset(void) { (void)dynamic_keymap_macro_reset_checked(); }
 
 void dynamic_keymap_macro_send(uint8_t id) {
+#ifdef ERA_MACRO_ENABLE
     (void)era_macro_request(id);
+#else
+    (void)id;
+#endif
 }
 
 void eeprom_note_change(uint32_t address, uint32_t length) {

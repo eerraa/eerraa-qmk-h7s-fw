@@ -21,7 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "action_layer.h"
 #include "timer.h"
 #include "keycode_config.h"
-#if defined(ERA_MACRO_ENABLE) && defined(MOUSEKEY_ENABLE)
+#ifdef MOUSEKEY_ENABLE
 #    include "mousekey.h"
 #endif
 #include <string.h>
@@ -30,33 +30,27 @@ extern keymap_config_t keymap_config;
 
 static uint8_t real_mods = 0;
 static uint8_t weak_mods = 0;
-#ifdef TAP_DANCE_OWNED_ACTIONS
-#    include "process_keycode/process_tap_dance.h"
-#    ifdef ERA_MACRO_ENABLE
-#        define ACTION_OWNED_COUNT (TAP_DANCE_MAX_SIMULTANEOUS + 2U)
-#    else
-#        define ACTION_OWNED_COUNT TAP_DANCE_MAX_SIMULTANEOUS
-#    endif
-_Static_assert(ACTION_OWNED_COUNT < UINT8_MAX, "Owned action IDs must fit in one byte");
-static uint8_t td_action_owner = UINT8_MAX;
-static uint8_t td_real_mods[ACTION_OWNED_COUNT];
-static uint8_t td_weak_mods[ACTION_OWNED_COUNT];
-static uint8_t td_real_union, td_weak_union;
-static uint8_t td_real_counts[8], td_weak_counts[8];
+#ifdef ACTION_OWNERSHIP_ENABLE
+_Static_assert(ACTION_OWNER_COUNT < UINT8_MAX, "Owned action IDs must fit in one byte");
+static action_owner_t current_owner = ACTION_OWNER_REGULAR;
+static uint8_t owned_real_mods[ACTION_OWNER_COUNT];
+static uint8_t owned_weak_mods[ACTION_OWNER_COUNT];
+static uint8_t owned_real_union, owned_weak_union;
+static uint8_t owned_real_counts[8], owned_weak_counts[8];
 /* Ordinary QMK usages remain bit state, not per-key reference counts. Only
  * TD and macro contributions have owners; the report shape stays unchanged. */
 static uint8_t regular_keys[32];
-static uint8_t td_keys[ACTION_OWNED_COUNT][32];
-static uint8_t td_key_counts[256];
-static uint8_t td_owner_key_counts[ACTION_OWNED_COUNT];
+static uint8_t owned_keys[ACTION_OWNER_COUNT][32];
+static uint8_t owned_key_counts[256];
+static uint8_t owner_key_counts[ACTION_OWNER_COUNT];
 
 void add_key(uint8_t key) {
     const uint8_t bit = (uint8_t)(1U << (key & 7));
-    if (td_action_owner < ACTION_OWNED_COUNT) {
-        if (!(td_keys[td_action_owner][key >> 3] & bit)) {
-            td_keys[td_action_owner][key >> 3] |= bit;
-            ++td_key_counts[key];
-            ++td_owner_key_counts[td_action_owner];
+    if (current_owner < ACTION_OWNER_COUNT) {
+        if (!(owned_keys[current_owner][key >> 3] & bit)) {
+            owned_keys[current_owner][key >> 3] |= bit;
+            ++owned_key_counts[key];
+            ++owner_key_counts[current_owner];
         }
     } else {
         regular_keys[key >> 3] |= bit;
@@ -66,43 +60,43 @@ void add_key(uint8_t key) {
 
 void del_key(uint8_t key) {
     const uint8_t bit = (uint8_t)(1U << (key & 7));
-    if (td_action_owner < ACTION_OWNED_COUNT) {
-        if (td_keys[td_action_owner][key >> 3] & bit) {
-            td_keys[td_action_owner][key >> 3] &= (uint8_t)~bit;
-            --td_key_counts[key];
-            --td_owner_key_counts[td_action_owner];
+    if (current_owner < ACTION_OWNER_COUNT) {
+        if (owned_keys[current_owner][key >> 3] & bit) {
+            owned_keys[current_owner][key >> 3] &= (uint8_t)~bit;
+            --owned_key_counts[key];
+            --owner_key_counts[current_owner];
         }
     } else {
         regular_keys[key >> 3] &= (uint8_t)~bit;
     }
-    if (!td_key_counts[key] && !(regular_keys[key >> 3] & bit)) del_key_from_report(key);
+    if (!owned_key_counts[key] && !(regular_keys[key >> 3] & bit)) del_key_from_report(key);
 }
 
-void tap_dance_clear_owner_keys(uint8_t owner) {
-    if (owner >= ACTION_OWNED_COUNT || !td_owner_key_counts[owner]) return;
-    const uint8_t previous = td_action_owner;
-    td_action_owner = owner;
+void action_owner_clear_keys(action_owner_t owner) {
+    if (owner >= ACTION_OWNER_COUNT || !owner_key_counts[owner]) return;
+    const uint8_t previous = current_owner;
+    current_owner = owner;
     for (uint16_t key = 0; key < 256; ++key) {
-        if (td_keys[owner][key >> 3] & (1U << (key & 7))) del_key((uint8_t)key);
+        if (owned_keys[owner][key >> 3] & (1U << (key & 7))) del_key((uint8_t)key);
     }
-    td_action_owner = previous;
+    current_owner = previous;
 }
 
-void tap_dance_clear_key_ownership(void) {
+void action_ownership_reset_keys(void) {
     memset(regular_keys, 0, sizeof(regular_keys));
-    memset(td_keys, 0, sizeof(td_keys));
-    memset(td_key_counts, 0, sizeof(td_key_counts));
-    memset(td_owner_key_counts, 0, sizeof(td_owner_key_counts));
+    memset(owned_keys, 0, sizeof(owned_keys));
+    memset(owned_key_counts, 0, sizeof(owned_key_counts));
+    memset(owner_key_counts, 0, sizeof(owner_key_counts));
 }
 
-uint8_t tap_dance_action_set_owner(uint8_t owner) {
-    uint8_t previous = td_action_owner;
-    td_action_owner = owner < TAP_DANCE_MAX_SIMULTANEOUS ? owner : UINT8_MAX;
+action_owner_t action_owner_select(action_owner_t owner) {
+    uint8_t previous = current_owner;
+    current_owner = owner < ACTION_OWNER_COUNT ? owner : ACTION_OWNER_REGULAR;
     return previous;
 }
-uint8_t tap_dance_action_get_owner(void) { return td_action_owner; }
+action_owner_t action_owner_current(void) { return current_owner; }
 /* Cost is bounded by the eight HID modifier bits, not the matrix size. */
-static void tap_dance_replace_mods(uint8_t *owned, uint8_t mods, uint8_t *counts, uint8_t *combined) {
+static void action_replace_mods(uint8_t *owned, uint8_t mods, uint8_t *counts, uint8_t *combined) {
     const uint8_t changed = *owned ^ mods;
     for (uint8_t i = 0; i < 8; ++i) {
         const uint8_t bit = (uint8_t)(1U << i);
@@ -116,182 +110,134 @@ static void tap_dance_replace_mods(uint8_t *owned, uint8_t mods, uint8_t *counts
     }
     *owned = mods;
 }
-void tap_dance_clear_owner_mods(uint8_t owner) {
-    if (owner < ACTION_OWNED_COUNT) {
-        tap_dance_replace_mods(&td_real_mods[owner], 0, td_real_counts, &td_real_union);
-        tap_dance_replace_mods(&td_weak_mods[owner], 0, td_weak_counts, &td_weak_union);
+void action_owner_clear_mods(action_owner_t owner) {
+    if (owner < ACTION_OWNER_COUNT) {
+        action_replace_mods(&owned_real_mods[owner], 0, owned_real_counts, &owned_real_union);
+        action_replace_mods(&owned_weak_mods[owner], 0, owned_weak_counts, &owned_weak_union);
     }
 }
 
-/* Mouse codes keep QMK bit state for ordinary inputs; TD contributions are
- * counted like keyboard usages. Each extra report holds one usage, so a TD
- * release clears only its own usage and never one another input holds. */
-#    define TD_MOUSE_CODES (KC_MS_ACCEL2 - KC_MS_UP + 1)
-_Static_assert(TD_MOUSE_CODES <= 32, "Mouse ownership uses one 32-bit mask");
+/* Ordinary mouse usages are bit state; explicit owner contributions are counted.
+ * System/consumer reports each represent only one selected usage. */
+#    define ACTION_MOUSE_CODES (KC_MS_ACCEL2 - KC_MS_UP + 1)
+_Static_assert(ACTION_MOUSE_CODES <= 32, "Mouse ownership uses one 32-bit mask");
 static uint32_t regular_mouse;
-static uint32_t td_mouse[ACTION_OWNED_COUNT];
-static uint8_t td_mouse_counts[TD_MOUSE_CODES];
+static uint32_t owned_mouse[ACTION_OWNER_COUNT];
+static uint8_t owned_mouse_counts[ACTION_MOUSE_CODES];
 static uint16_t regular_usage[2];
-static uint16_t td_usage[ACTION_OWNED_COUNT][2];
-static uint8_t td_usage_owners[2];
+static uint16_t owned_usage[ACTION_OWNER_COUNT][2];
+static uint8_t owned_usage_owners[2];
 
-bool tap_dance_mouse_update(uint8_t code, bool pressed) {
+bool action_mouse_update(uint8_t code, bool pressed) {
     if (code < KC_MS_UP || code > KC_MS_ACCEL2) return true;
     const uint8_t i = (uint8_t)(code - KC_MS_UP);
     const uint32_t bit = 1UL << i;
-    if (td_action_owner < ACTION_OWNED_COUNT) {
-        uint32_t *owned = &td_mouse[td_action_owner];
+    if (current_owner < ACTION_OWNER_COUNT) {
+        uint32_t *owned = &owned_mouse[current_owner];
         if (pressed && !(*owned & bit)) {
             *owned |= bit;
-            ++td_mouse_counts[i];
+            ++owned_mouse_counts[i];
         } else if (!pressed && (*owned & bit)) {
             *owned &= ~bit;
-            --td_mouse_counts[i];
+            --owned_mouse_counts[i];
         }
     } else {
         regular_mouse = pressed ? regular_mouse | bit : regular_mouse & ~bit;
     }
-    return pressed || (!td_mouse_counts[i] && !(regular_mouse & bit));
+    return pressed || (!owned_mouse_counts[i] && !(regular_mouse & bit));
 }
 
-/* Scanned only while some TD holds a usage on this page. */
-static bool td_usage_held(uint8_t page, uint16_t usage) {
-    for (uint8_t i = 0; td_usage_owners[page] && i < ACTION_OWNED_COUNT; ++i) {
-        if (td_usage[i][page] == usage) return true;
-    }
-    return false;
-}
-
-bool tap_dance_usage_update(uint8_t page, uint16_t usage, uint16_t current, bool pressed) {
-    const bool td = td_action_owner < ACTION_OWNED_COUNT;
-    uint16_t *held = td ? &td_usage[td_action_owner][page] : &regular_usage[page];
-    if (pressed) {
-        if (td && !*held) ++td_usage_owners[page];
-        *held = usage;
-        return true;
-    }
-    if (*held == usage) {
-        *held = 0;
-        if (td) --td_usage_owners[page];
-    }
-    if (regular_usage[page] == usage || td_usage_held(page, usage)) return false;
-    /* Without a TD on either side QMK's single-slot release is unchanged. */
-    return current == usage || !(td || td_usage_held(page, current));
-}
-
-void tap_dance_clear_owner_hid(uint8_t owner) {
-    if (owner >= ACTION_OWNED_COUNT) return;
-    const uint8_t previous = td_action_owner;
-    td_action_owner = owner;
-    for (uint8_t i = 0; td_mouse[owner] && i < TD_MOUSE_CODES; ++i) {
-        if (td_mouse[owner] & (1UL << i)) register_mouse((uint8_t)(KC_MS_UP + i), false);
-    }
-#    ifdef EXTRAKEY_ENABLE
-    if (td_usage[owner][TD_USAGE_SYSTEM] && tap_dance_usage_update(TD_USAGE_SYSTEM, td_usage[owner][TD_USAGE_SYSTEM], host_last_system_usage(), false)) host_system_send(0);
-    if (td_usage[owner][TD_USAGE_CONSUMER] && tap_dance_usage_update(TD_USAGE_CONSUMER, td_usage[owner][TD_USAGE_CONSUMER], host_last_consumer_usage(), false)) host_consumer_send(0);
-#    endif
-    td_action_owner = previous;
-}
-
-void tap_dance_clear_hid_ownership(void) {
-    regular_mouse = 0;
-    memset(td_mouse, 0, sizeof(td_mouse));
-    memset(td_mouse_counts, 0, sizeof(td_mouse_counts));
-    memset(regular_usage, 0, sizeof(regular_usage));
-    memset(td_usage, 0, sizeof(td_usage));
-    memset(td_usage_owners, 0, sizeof(td_usage_owners));
-}
-#endif
-
-
-#ifdef ERA_MACRO_ENABLE
-/* Two private report owners extend the existing contribution tables without
- * using a TD runtime slot or changing ordinary QMK bit-state semantics. */
-static uint8_t macro_owner_slot(uint8_t owner) {
-    return owner < 2U ? TAP_DANCE_MAX_SIMULTANEOUS + owner : UINT8_MAX;
-}
-
-uint8_t action_macro_set_owner(uint8_t owner) {
-    uint8_t previous = td_action_owner;
-    td_action_owner = macro_owner_slot(owner);
-    return previous;
-}
-
-void action_macro_restore_owner(uint8_t owner) { td_action_owner = owner; }
-
-bool action_macro_is_emitting(void) {
-    return td_action_owner >= TAP_DANCE_MAX_SIMULTANEOUS && td_action_owner < ACTION_OWNED_COUNT;
-}
-
-bool action_macro_has_outputs(void) {
-    for (uint8_t slot = TAP_DANCE_MAX_SIMULTANEOUS; slot < ACTION_OWNED_COUNT; ++slot) {
-        if (td_owner_key_counts[slot] || td_real_mods[slot] || td_weak_mods[slot] ||
-            td_mouse[slot] || td_usage[slot][0] || td_usage[slot][1]) return true;
+/* Only output mutations/reconciliation scan these bounded page contributions. */
+static bool action_usage_held(uint8_t page, uint16_t usage) {
+    for (uint8_t i = 0; owned_usage_owners[page] && i < ACTION_OWNER_COUNT; ++i) {
+        if (owned_usage[i][page] == usage) return true;
     }
     return false;
 }
 
 uint16_t action_owned_usage(uint8_t page, uint16_t current) {
-    if (page > 1U) return 0U;
-    if (current && (regular_usage[page] == current || td_usage_held(page, current))) return current;
+    if (page > ACTION_USAGE_PAGE_CONSUMER) return 0;
+    if (current && (regular_usage[page] == current || action_usage_held(page, current))) return current;
     if (regular_usage[page]) return regular_usage[page];
-    for (uint8_t slot = 0U; slot < ACTION_OWNED_COUNT; ++slot) {
-        if (td_usage[slot][page]) return td_usage[slot][page];
+    for (uint8_t owner = 0; owned_usage_owners[page] && owner < ACTION_OWNER_COUNT; ++owner) {
+        if (owned_usage[owner][page]) return owned_usage[owner][page];
     }
-    return 0U;
+    return 0;
 }
 
-void action_macro_clear_owner(uint8_t owner) {
-    uint8_t slot = macro_owner_slot(owner);
-    if (slot == UINT8_MAX) return;
-    bool held = td_owner_key_counts[slot] || td_real_mods[slot] || td_weak_mods[slot] ||
-                td_mouse[slot] || td_usage[slot][0] || td_usage[slot][1];
-    if (!held) return;
-    uint8_t previous = td_action_owner;
-    td_action_owner = slot;
-    tap_dance_clear_owner_keys(slot);
-    tap_dance_clear_owner_mods(slot);
-    tap_dance_clear_owner_hid(slot);
-    send_keyboard_report();
-    td_action_owner = previous;
+uint16_t action_usage_update(uint8_t page, uint16_t usage, uint16_t current, bool pressed) {
+    if (page > ACTION_USAGE_PAGE_CONSUMER) return 0;
+    const bool scoped = current_owner < ACTION_OWNER_COUNT;
+    uint16_t *held = scoped ? &owned_usage[current_owner][page] : &regular_usage[page];
+    if (pressed) {
+        if (scoped && !*held && usage) ++owned_usage_owners[page];
+        if (scoped && *held && !usage) --owned_usage_owners[page];
+        *held = usage;
+        return usage;
+    }
+    if (*held == usage && usage) {
+        *held = 0;
+        if (scoped) --owned_usage_owners[page];
+    }
+    return action_owned_usage(page, current);
 }
 
-static void macro_remove_owner_state(uint8_t slot) {
-    td_action_owner = slot;
-    tap_dance_clear_owner_keys(slot);
-    tap_dance_clear_owner_mods(slot);
-    for (uint8_t i = 0U; td_mouse[slot] && i < TD_MOUSE_CODES; ++i) {
-        if (!(td_mouse[slot] & (1UL << i))) continue;
-        uint8_t code = (uint8_t)(KC_MS_UP + i);
-        if (tap_dance_mouse_update(code, false)) {
+void action_owner_clear_hid(action_owner_t owner) {
+    if (owner >= ACTION_OWNER_COUNT) return;
+    const uint8_t previous = current_owner;
+    current_owner = owner;
+    for (uint8_t i = 0; owned_mouse[owner] && i < ACTION_MOUSE_CODES; ++i) {
+        if (owned_mouse[owner] & (1UL << i)) register_mouse((uint8_t)(KC_MS_UP + i), false);
+    }
+    for (uint8_t page = 0; page < 2; ++page) {
+        if (!owned_usage[owner][page]) continue;
+        owned_usage[owner][page] = 0;
+        --owned_usage_owners[page];
+#    ifdef EXTRAKEY_ENABLE
+        if (page == ACTION_USAGE_PAGE_SYSTEM)
+            host_system_send(action_owned_usage(page, host_last_system_usage()));
+        else
+            host_consumer_send(action_owned_usage(page, host_last_consumer_usage()));
+#    endif
+    }
+    current_owner = previous;
+}
+
+void action_ownership_reset_hid(void) {
+    regular_mouse = 0;
+    memset(owned_mouse, 0, sizeof(owned_mouse));
+    memset(owned_mouse_counts, 0, sizeof(owned_mouse_counts));
+    memset(regular_usage, 0, sizeof(regular_usage));
+    memset(owned_usage, 0, sizeof(owned_usage));
+    memset(owned_usage_owners, 0, sizeof(owned_usage_owners));
+}
+
+bool action_owner_has_outputs(action_owner_t owner) {
+    return owner < ACTION_OWNER_COUNT && (owner_key_counts[owner] || owned_real_mods[owner] ||
+           owned_weak_mods[owner] || owned_mouse[owner] || owned_usage[owner][0] || owned_usage[owner][1]);
+}
+
+void action_owner_release(action_owner_t owner) {
+    if (owner >= ACTION_OWNER_COUNT) return;
+    const action_owner_t previous = action_owner_select(owner);
+    action_owner_clear_keys(owner);
+    action_owner_clear_mods(owner);
+    for (uint8_t i = 0; owned_mouse[owner] && i < ACTION_MOUSE_CODES; ++i) {
+        if (!(owned_mouse[owner] & (1UL << i))) continue;
+        const uint8_t code = (uint8_t)(KC_MS_UP + i);
+        if (action_mouse_update(code, false)) {
 #    ifdef MOUSEKEY_ENABLE
             mousekey_off(code);
 #    endif
         }
     }
-    for (uint8_t page = 0U; page < 2U; ++page) {
-        uint16_t usage = td_usage[slot][page];
-        if (usage) (void)tap_dance_usage_update(page, usage, usage, false);
+    for (uint8_t page = 0; page < 2; ++page) {
+        if (owned_usage[owner][page]) {
+            owned_usage[owner][page] = 0;
+            --owned_usage_owners[page];
+        }
     }
-}
-
-void action_macro_cancel_outputs(void) {
-    uint8_t previous = td_action_owner;
-    macro_remove_owner_state(macro_owner_slot(ACTION_MACRO_TEMPORARY));
-    macro_remove_owner_state(macro_owner_slot(ACTION_MACRO_PERSISTENT));
-    /* Reset retires generation-bound latest snapshots even when their physical
-     * union is unchanged. Publish that surviving union without the macro tag. */
-    td_action_owner = UINT8_MAX;
-    send_keyboard_report();
-#    ifdef MOUSEKEY_ENABLE
-    report_mouse_t mouse = mousekey_get_report();
-    mouse.x = mouse.y = mouse.v = mouse.h = 0;
-    host_mouse_send(&mouse);
-#    endif
-#    ifdef EXTRAKEY_ENABLE
-    host_extra_reconcile();
-#    endif
-    td_action_owner = previous;
+    action_owner_select(previous);
 }
 #endif
 
@@ -307,7 +253,7 @@ report_keyboard_t *keyboard_report = &(report_keyboard_t){};
 report_nkro_t *nkro_report = &(report_nkro_t){};
 #endif
 
-#ifndef TAP_DANCE_OWNED_ACTIONS
+#ifndef ACTION_OWNERSHIP_ENABLE
 extern inline void add_key(uint8_t key);
 extern inline void del_key(uint8_t key);
 #endif
@@ -442,16 +388,16 @@ void clear_oneshot_swaphands(void) {
 /* One-shot layer state is global, so its layer bit is never a TD contribution,
  * even when a TD callback starts or consumes it. */
 static void oneshot_layer_switch(uint8_t layer, bool on) {
-#    ifdef TAP_DANCE_OWNED_ACTIONS
-    const uint8_t owner = tap_dance_action_set_owner(UINT8_MAX);
+#    ifdef ACTION_OWNERSHIP_ENABLE
+    const uint8_t owner = action_owner_select(UINT8_MAX);
 #    endif
     if (on) {
         layer_on(layer);
     } else {
         layer_off(layer);
     }
-#    ifdef TAP_DANCE_OWNED_ACTIONS
-    tap_dance_action_set_owner(owner);
+#    ifdef ACTION_OWNERSHIP_ENABLE
+    action_owner_select(owner);
 #    endif
 }
 
@@ -572,7 +518,7 @@ __attribute__((weak)) void keyboard_report_filter(report_keyboard_t *report) {
     (void)report;
 }
 
-void send_6kro_report(void) {
+static void send_6kro_report(bool force) {
     keyboard_report->mods = get_mods_for_report();
 
     /* Static like keyboard_report itself, so the host driver sees the same lifetime. */
@@ -581,12 +527,13 @@ void send_6kro_report(void) {
     keyboard_report_filter(&report);
 
 #ifdef PROTOCOL_VUSB
+    (void)force;
     host_keyboard_send(&report);
 #else
     static report_keyboard_t last_report;
 
     /* Only send the report if there are changes to propagate to the host. */
-    if (memcmp(&report, &last_report, sizeof(report_keyboard_t)) != 0) {
+    if (force || memcmp(&report, &last_report, sizeof(report_keyboard_t)) != 0 || host_keyboard_report_needs_send()) {
         memcpy(&last_report, &report, sizeof(report_keyboard_t));
         host_keyboard_send(&report);
     }
@@ -598,7 +545,7 @@ __attribute__((weak)) void nkro_report_filter(report_nkro_t *report) {
     (void)report;
 }
 
-void send_nkro_report(void) {
+static void send_nkro_report(bool force) {
     nkro_report->mods = get_mods_for_report();
 
     static report_nkro_t report;
@@ -608,7 +555,7 @@ void send_nkro_report(void) {
     static report_nkro_t last_report;
 
     /* Only send the report if there are changes to propagate to the host. */
-    if (memcmp(&report, &last_report, sizeof(report_nkro_t)) != 0) {
+    if (force || memcmp(&report, &last_report, sizeof(report_nkro_t)) != 0) {
         memcpy(&last_report, &report, sizeof(report_nkro_t));
         host_nkro_send(&report);
     }
@@ -619,16 +566,24 @@ void send_nkro_report(void) {
  *
  * FIXME: needs doc
  */
-void send_keyboard_report(void) {
+static void send_keyboard_report_internal(bool force) {
 #ifdef NKRO_ENABLE
     if (keyboard_protocol && keymap_config.nkro) {
-        send_nkro_report();
+        send_nkro_report(force);
     } else {
-        send_6kro_report();
+        send_6kro_report(force);
     }
 #else
-    send_6kro_report();
+    send_6kro_report(force);
 #endif
+}
+
+void send_keyboard_report(void) {
+    send_keyboard_report_internal(false);
+}
+
+void send_keyboard_report_force(void) {
+    send_keyboard_report_internal(true);
 }
 
 /** \brief Get mods
@@ -636,8 +591,8 @@ void send_keyboard_report(void) {
  * FIXME: needs doc
  */
 uint8_t get_mods(void) {
-#ifdef TAP_DANCE_OWNED_ACTIONS
-    return real_mods | td_real_union;
+#ifdef ACTION_OWNERSHIP_ENABLE
+    return real_mods | owned_real_union;
 #else
     return real_mods;
 #endif
@@ -647,9 +602,9 @@ uint8_t get_mods(void) {
  * FIXME: needs doc
  */
 void add_mods(uint8_t mods) {
-#ifdef TAP_DANCE_OWNED_ACTIONS
-    if (td_action_owner < ACTION_OWNED_COUNT) {
-        tap_dance_replace_mods(&td_real_mods[td_action_owner], td_real_mods[td_action_owner] | mods, td_real_counts, &td_real_union);
+#ifdef ACTION_OWNERSHIP_ENABLE
+    if (current_owner < ACTION_OWNER_COUNT) {
+        action_replace_mods(&owned_real_mods[current_owner], owned_real_mods[current_owner] | mods, owned_real_counts, &owned_real_union);
         return;
     }
 #endif
@@ -660,9 +615,9 @@ void add_mods(uint8_t mods) {
  * FIXME: needs doc
  */
 void del_mods(uint8_t mods) {
-#ifdef TAP_DANCE_OWNED_ACTIONS
-    if (td_action_owner < ACTION_OWNED_COUNT) {
-        tap_dance_replace_mods(&td_real_mods[td_action_owner], td_real_mods[td_action_owner] & (uint8_t)~mods, td_real_counts, &td_real_union);
+#ifdef ACTION_OWNERSHIP_ENABLE
+    if (current_owner < ACTION_OWNER_COUNT) {
+        action_replace_mods(&owned_real_mods[current_owner], owned_real_mods[current_owner] & (uint8_t)~mods, owned_real_counts, &owned_real_union);
         return;
     }
 #endif
@@ -673,9 +628,9 @@ void del_mods(uint8_t mods) {
  * FIXME: needs doc
  */
 void set_mods(uint8_t mods) {
-#ifdef TAP_DANCE_OWNED_ACTIONS
-    if (td_action_owner < ACTION_OWNED_COUNT) {
-        tap_dance_replace_mods(&td_real_mods[td_action_owner], mods, td_real_counts, &td_real_union);
+#ifdef ACTION_OWNERSHIP_ENABLE
+    if (current_owner < ACTION_OWNER_COUNT) {
+        action_replace_mods(&owned_real_mods[current_owner], mods, owned_real_counts, &owned_real_union);
         return;
     }
 #endif
@@ -694,8 +649,8 @@ void clear_mods(void) {
  * FIXME: needs doc
  */
 uint8_t get_weak_mods(void) {
-#ifdef TAP_DANCE_OWNED_ACTIONS
-    return weak_mods | td_weak_union;
+#ifdef ACTION_OWNERSHIP_ENABLE
+    return weak_mods | owned_weak_union;
 #else
     return weak_mods;
 #endif
@@ -705,9 +660,9 @@ uint8_t get_weak_mods(void) {
  * FIXME: needs doc
  */
 void add_weak_mods(uint8_t mods) {
-#ifdef TAP_DANCE_OWNED_ACTIONS
-    if (td_action_owner < ACTION_OWNED_COUNT) {
-        tap_dance_replace_mods(&td_weak_mods[td_action_owner], td_weak_mods[td_action_owner] | mods, td_weak_counts, &td_weak_union);
+#ifdef ACTION_OWNERSHIP_ENABLE
+    if (current_owner < ACTION_OWNER_COUNT) {
+        action_replace_mods(&owned_weak_mods[current_owner], owned_weak_mods[current_owner] | mods, owned_weak_counts, &owned_weak_union);
         return;
     }
 #endif
@@ -718,9 +673,9 @@ void add_weak_mods(uint8_t mods) {
  * FIXME: needs doc
  */
 void del_weak_mods(uint8_t mods) {
-#ifdef TAP_DANCE_OWNED_ACTIONS
-    if (td_action_owner < ACTION_OWNED_COUNT) {
-        tap_dance_replace_mods(&td_weak_mods[td_action_owner], td_weak_mods[td_action_owner] & (uint8_t)~mods, td_weak_counts, &td_weak_union);
+#ifdef ACTION_OWNERSHIP_ENABLE
+    if (current_owner < ACTION_OWNER_COUNT) {
+        action_replace_mods(&owned_weak_mods[current_owner], owned_weak_mods[current_owner] & (uint8_t)~mods, owned_weak_counts, &owned_weak_union);
         return;
     }
 #endif
@@ -731,9 +686,9 @@ void del_weak_mods(uint8_t mods) {
  * FIXME: needs doc
  */
 void set_weak_mods(uint8_t mods) {
-#ifdef TAP_DANCE_OWNED_ACTIONS
-    if (td_action_owner < ACTION_OWNED_COUNT) {
-        tap_dance_replace_mods(&td_weak_mods[td_action_owner], mods, td_weak_counts, &td_weak_union);
+#ifdef ACTION_OWNERSHIP_ENABLE
+    if (current_owner < ACTION_OWNER_COUNT) {
+        action_replace_mods(&owned_weak_mods[current_owner], mods, owned_weak_counts, &owned_weak_union);
         return;
     }
 #endif
@@ -744,11 +699,11 @@ void set_weak_mods(uint8_t mods) {
  * FIXME: needs doc
  */
 void clear_weak_mods(void) {
-#ifdef TAP_DANCE_OWNED_ACTIONS
+#ifdef ACTION_OWNERSHIP_ENABLE
     /* Preserve QMK's clear-on-next-press rule for weak (not held) modifiers. */
-    memset(td_weak_mods, 0, sizeof(td_weak_mods));
-    memset(td_weak_counts, 0, sizeof(td_weak_counts));
-    td_weak_union = 0;
+    memset(owned_weak_mods, 0, sizeof(owned_weak_mods));
+    memset(owned_weak_counts, 0, sizeof(owned_weak_counts));
+    owned_weak_union = 0;
 #endif
     weak_mods = 0;
 }

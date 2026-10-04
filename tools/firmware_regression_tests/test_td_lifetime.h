@@ -209,11 +209,12 @@ static void check_td_lifetime(const char *name) {
       scan(t+220U,td_first ? 0 : 1,false); task(); assert(last_consumer==KEYCODE2CONSUMER(KC_AUDIO_VOL_DOWN));
       scan(t+230U,td_first ? 1 : 0,false); task(); assert(last_consumer==0);
     }
-    /* Ordinary keys alone keep QMK's single-slot release. */
+    /* Ordinary output remains one slot: an unrelated UP cannot erase its newer usage. */
     reset_fixture(TD(0),RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,4999); tick(4999);
     other_keycode=KC_AUDIO_VOL_UP; third_keycode=KC_AUDIO_VOL_DOWN;
     scan(5000,1,true); scan(5010,2,true); assert(last_consumer==KEYCODE2CONSUMER(KC_AUDIO_VOL_DOWN));
-    scan(5020,1,false); assert(last_consumer==0); scan(5030,2,false);
+    scan(5020,1,false); assert(last_consumer==KEYCODE2CONSUMER(KC_AUDIO_VOL_DOWN));
+    scan(5030,2,false); assert(last_consumer==0);
   } else if (!strcmp(name,"osl_hold")) {
     /* The press consumes the one-shot layer; the dance still decides Tap or Hold. */
     tapdance_state[0].actions[1]=MO(2);

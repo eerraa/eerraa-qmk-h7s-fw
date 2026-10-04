@@ -19,6 +19,9 @@ bool qmkInit(void)
 {
   if (!eeprom_is_ready()) return false;
   if (!eeconfig_is_enabled() && !eeprom_apply_factory_defaults(true)) return false;
+#ifdef ERA_MACRO_ENABLE
+  era_macro_cancel();
+#endif
   via_hid_init();
   debounce_profile_init();                         // V251115R1: VIA 디바운스 프로필 초기 로드
 #ifdef G_TERM_ENABLE

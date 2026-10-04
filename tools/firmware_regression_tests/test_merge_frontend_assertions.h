@@ -215,9 +215,9 @@ static void check_merge_legacy_and_td(void)
   assert(merge_reports() == 1U && merge_trace[merge_report_index(0)].scan_token == 0U);
   merge_reset(KC_A);
   record = merge_record(KC_A, true);
-  tap_dance_action_set_owner(0U);
+  action_owner_select(0U);
   process_action(&record, action_for_keycode(KC_A));
-  tap_dance_action_set_owner(UINT8_MAX);
+  action_owner_select(UINT8_MAX);
   assert(merge_reports() == 1U && merge_trace[merge_report_index(0)].scan_token == 0U);
 }
 static void check_merge_tapping_replay(void)

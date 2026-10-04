@@ -20,6 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <stdint.h>
 #include "report.h"
 #include "modifiers.h"
+#include "action_owner.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,6 +32,8 @@ extern report_nkro_t *nkro_report;
 #endif
 
 void send_keyboard_report(void);
+/* Republish the current filtered state even if its contents have not changed. */
+void send_keyboard_report_force(void);
 
 /* Last stop before the host: a filter may remove usages from the copy that is
    sent, never add one, so the built report and its owners stay as they are.
@@ -40,39 +43,8 @@ void keyboard_report_filter(report_keyboard_t *report);
 void nkro_report_filter(report_nkro_t *report);
 #endif
 
-#if defined(TAPDANCE_ENABLE) || defined(ERA_MACRO_ENABLE)
-#    define TAP_DANCE_OWNED_ACTIONS
-/* A bounded TD contribution is separate from ordinary QMK bit state. */
-uint8_t tap_dance_action_set_owner(uint8_t owner);
-uint8_t tap_dance_action_get_owner(void);
-void tap_dance_clear_owner_mods(uint8_t owner);
-void tap_dance_clear_owner_layers(uint8_t owner);
-void tap_dance_clear_owner_keys(uint8_t owner);
-void tap_dance_clear_key_ownership(void);
-/* Mouse codes and the single-usage extra reports: return whether the output
- * may change, i.e. no other input still holds what this edge would drop. */
-#    define TD_USAGE_SYSTEM 0
-#    define TD_USAGE_CONSUMER 1
-bool tap_dance_mouse_update(uint8_t code, bool pressed);
-bool tap_dance_usage_update(uint8_t page, uint16_t usage, uint16_t current, bool pressed);
-void tap_dance_clear_owner_hid(uint8_t owner);
-void tap_dance_clear_hid_ownership(void);
-#endif
-
-
-#ifdef ERA_MACRO_ENABLE
-enum { ACTION_MACRO_PERSISTENT, ACTION_MACRO_TEMPORARY };
-uint8_t action_macro_set_owner(uint8_t owner);
-void action_macro_restore_owner(uint8_t previous);
-bool action_macro_is_emitting(void);
-bool action_macro_has_outputs(void);
-void action_macro_clear_owner(uint8_t owner);
-void action_macro_cancel_outputs(void);
-uint16_t action_owned_usage(uint8_t page, uint16_t current);
-#endif
-
 /* key */
-#ifdef TAP_DANCE_OWNED_ACTIONS
+#ifdef ACTION_OWNERSHIP_ENABLE
 void add_key(uint8_t key);
 void del_key(uint8_t key);
 #else

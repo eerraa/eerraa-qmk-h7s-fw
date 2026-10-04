@@ -75,6 +75,7 @@ def generate(root: Path, build: Path, source_root: Path | None = None) -> Path:
         event_header[event_header.index('/* key matrix position */'):event_header.index('/* Common keypos_t object factory */')],
         action_header[action_header.index('#ifndef TAP_CODE_DELAY'):action_header.index('/* Execute action per keyevent */')],
         '#include "action_tapping.h"\n#include "tapping_term_policy.h"\n',
+        strip_includes(read(selected / 'quantum/action_owner.h')).replace('#pragma once', ''),
         td_header[td_header.index('#ifdef TAPDANCE_ENABLE'):td_header.index('#define ACTION_TAP_DANCE_DOUBLE')],
         capacity + '\n#define KEYBOARD_REPORT_KEYS HW_KEYS_PRESS_MAX\n#define NKRO_REPORT_BITS 30\n',
         next(line for line in td_header.splitlines() if line.startswith('#define TD_INDEX')) + '\n',
@@ -159,6 +160,7 @@ def generate(root: Path, build: Path, source_root: Path | None = None) -> Path:
     weak_remap = '__attribute__((weak)) uint16_t tap_dance_remap_keycode(uint16_t keycode) {\n    return keycode;\n}\n'
     core = dance[dance.index('static tap_dance_state_t *active_td;'):]
     assert core.count(weak_remap) == 1
+    chunks += [function(dance, 'tap_dance_action_scope')]
     chunks += [core.replace(weak_remap, function(quantum, 'tap_dance_remap_keycode'))]
     action_functions = ['is_tap_action', 'is_tap_record', 'process_record_tap_hint']
     if 'static bool report_key_update_allowed(' in action:

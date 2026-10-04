@@ -18,9 +18,21 @@ static void test_session_snapshot(void)
   assert(usbHidGetSession().valid && !usbHidGetSession().suspended);
   uint8_t keys[HID_KEYBOARD_REPORT_SIZE] = {0};
   uint8_t consumer[3] = {4U, 0xE9U, 0U};
-  keys[2] = 4U;
+  keys[0] = 2U; keys[2] = 4U;
+  uint8_t system[3] = {3U, 0x82U, 0U};
+  uint8_t mouse[6] = {2U, 1U, 9U, 0U, 3U, 0U};
+  /* The host adapter must submit changed provenance even for equal payloads.
+   * Exercise the real transport's unbound -> bound latest-state replacement,
+   * then reset/reconfigure before a producer can republish its surviving union. */
+  assert(usbHidSendReport(keys, sizeof(keys)));
+  assert(usbHidSendReportEXK(consumer, sizeof(consumer)));
+  assert(usbHidSendReportEXK(system, sizeof(system)));
+  assert(usbHidSendReportEXK(mouse, sizeof(mouse)));
+  drain();
   assert(usbHidSendReportForGeneration(keys, sizeof(keys), first.generation));
   assert(usbHidSendReportEXKForGeneration(consumer, sizeof(consumer), first.generation));
+  assert(usbHidSendReportEXKForGeneration(system, sizeof(system), first.generation));
+  assert(usbHidSendReportEXKForGeneration(mouse, sizeof(mouse), first.generation));
   drain();
   test_usb_reset_pending = true;
   assert(!usbHidGetSession().valid);
