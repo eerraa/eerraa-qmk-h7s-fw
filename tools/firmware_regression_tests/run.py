@@ -155,8 +155,8 @@ def main() -> None:
         execute("test_merge_frontend", [generate_frontend(ROOT, BUILD)],
                 [f"-I{HERE}", f"-I{QMK/'quantum'}", f"-I{QMK/'port'}", *layout,
                  "-Wno-unused-parameter", "-Wno-unused-function", "-Wno-unused-variable"])
-        from macro_cases import generate as generate_macro
-        execute("test_dynamic_macro", [generate_macro(ROOT, BUILD)], [f"-I{BUILD}"])
+        from macro_executor_cases import generate as generate_macro
+        execute("test_macro_executor", [generate_macro(ROOT, BUILD)], [f"-I{BUILD/'macro-executor'}"])
     if args.only in (None, "rgb"):
         from rgb_input_cases import generate as generate_rgb
         source = generate_rgb(ROOT, BUILD)

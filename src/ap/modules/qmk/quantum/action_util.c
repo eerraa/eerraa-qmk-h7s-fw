@@ -21,6 +21,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "action_layer.h"
 #include "timer.h"
 #include "keycode_config.h"
+#if defined(ERA_MACRO_ENABLE) && defined(MOUSEKEY_ENABLE)
+#    include "mousekey.h"
+#endif
 #include <string.h>
 
 extern keymap_config_t keymap_config;
@@ -29,21 +32,27 @@ static uint8_t real_mods = 0;
 static uint8_t weak_mods = 0;
 #ifdef TAP_DANCE_OWNED_ACTIONS
 #    include "process_keycode/process_tap_dance.h"
+#    ifdef ERA_MACRO_ENABLE
+#        define ACTION_OWNED_COUNT (TAP_DANCE_MAX_SIMULTANEOUS + 2U)
+#    else
+#        define ACTION_OWNED_COUNT TAP_DANCE_MAX_SIMULTANEOUS
+#    endif
+_Static_assert(ACTION_OWNED_COUNT < UINT8_MAX, "Owned action IDs must fit in one byte");
 static uint8_t td_action_owner = UINT8_MAX;
-static uint8_t td_real_mods[TAP_DANCE_MAX_SIMULTANEOUS];
-static uint8_t td_weak_mods[TAP_DANCE_MAX_SIMULTANEOUS];
+static uint8_t td_real_mods[ACTION_OWNED_COUNT];
+static uint8_t td_weak_mods[ACTION_OWNED_COUNT];
 static uint8_t td_real_union, td_weak_union;
 static uint8_t td_real_counts[8], td_weak_counts[8];
 /* Ordinary QMK usages remain bit state, not per-key reference counts. Only
- * TD contributions have owners; report format and transport stay unchanged. */
+ * TD and macro contributions have owners; the report shape stays unchanged. */
 static uint8_t regular_keys[32];
-static uint8_t td_keys[TAP_DANCE_MAX_SIMULTANEOUS][32];
+static uint8_t td_keys[ACTION_OWNED_COUNT][32];
 static uint8_t td_key_counts[256];
-static uint8_t td_owner_key_counts[TAP_DANCE_MAX_SIMULTANEOUS];
+static uint8_t td_owner_key_counts[ACTION_OWNED_COUNT];
 
 void add_key(uint8_t key) {
     const uint8_t bit = (uint8_t)(1U << (key & 7));
-    if (td_action_owner < TAP_DANCE_MAX_SIMULTANEOUS) {
+    if (td_action_owner < ACTION_OWNED_COUNT) {
         if (!(td_keys[td_action_owner][key >> 3] & bit)) {
             td_keys[td_action_owner][key >> 3] |= bit;
             ++td_key_counts[key];
@@ -57,7 +66,7 @@ void add_key(uint8_t key) {
 
 void del_key(uint8_t key) {
     const uint8_t bit = (uint8_t)(1U << (key & 7));
-    if (td_action_owner < TAP_DANCE_MAX_SIMULTANEOUS) {
+    if (td_action_owner < ACTION_OWNED_COUNT) {
         if (td_keys[td_action_owner][key >> 3] & bit) {
             td_keys[td_action_owner][key >> 3] &= (uint8_t)~bit;
             --td_key_counts[key];
@@ -70,7 +79,7 @@ void del_key(uint8_t key) {
 }
 
 void tap_dance_clear_owner_keys(uint8_t owner) {
-    if (owner >= TAP_DANCE_MAX_SIMULTANEOUS || !td_owner_key_counts[owner]) return;
+    if (owner >= ACTION_OWNED_COUNT || !td_owner_key_counts[owner]) return;
     const uint8_t previous = td_action_owner;
     td_action_owner = owner;
     for (uint16_t key = 0; key < 256; ++key) {
@@ -88,7 +97,7 @@ void tap_dance_clear_key_ownership(void) {
 
 uint8_t tap_dance_action_set_owner(uint8_t owner) {
     uint8_t previous = td_action_owner;
-    td_action_owner = owner;
+    td_action_owner = owner < TAP_DANCE_MAX_SIMULTANEOUS ? owner : UINT8_MAX;
     return previous;
 }
 uint8_t tap_dance_action_get_owner(void) { return td_action_owner; }
@@ -108,7 +117,7 @@ static void tap_dance_replace_mods(uint8_t *owned, uint8_t mods, uint8_t *counts
     *owned = mods;
 }
 void tap_dance_clear_owner_mods(uint8_t owner) {
-    if (owner < TAP_DANCE_MAX_SIMULTANEOUS) {
+    if (owner < ACTION_OWNED_COUNT) {
         tap_dance_replace_mods(&td_real_mods[owner], 0, td_real_counts, &td_real_union);
         tap_dance_replace_mods(&td_weak_mods[owner], 0, td_weak_counts, &td_weak_union);
     }
@@ -120,17 +129,17 @@ void tap_dance_clear_owner_mods(uint8_t owner) {
 #    define TD_MOUSE_CODES (KC_MS_ACCEL2 - KC_MS_UP + 1)
 _Static_assert(TD_MOUSE_CODES <= 32, "Mouse ownership uses one 32-bit mask");
 static uint32_t regular_mouse;
-static uint32_t td_mouse[TAP_DANCE_MAX_SIMULTANEOUS];
+static uint32_t td_mouse[ACTION_OWNED_COUNT];
 static uint8_t td_mouse_counts[TD_MOUSE_CODES];
 static uint16_t regular_usage[2];
-static uint16_t td_usage[TAP_DANCE_MAX_SIMULTANEOUS][2];
+static uint16_t td_usage[ACTION_OWNED_COUNT][2];
 static uint8_t td_usage_owners[2];
 
 bool tap_dance_mouse_update(uint8_t code, bool pressed) {
     if (code < KC_MS_UP || code > KC_MS_ACCEL2) return true;
     const uint8_t i = (uint8_t)(code - KC_MS_UP);
     const uint32_t bit = 1UL << i;
-    if (td_action_owner < TAP_DANCE_MAX_SIMULTANEOUS) {
+    if (td_action_owner < ACTION_OWNED_COUNT) {
         uint32_t *owned = &td_mouse[td_action_owner];
         if (pressed && !(*owned & bit)) {
             *owned |= bit;
@@ -147,14 +156,14 @@ bool tap_dance_mouse_update(uint8_t code, bool pressed) {
 
 /* Scanned only while some TD holds a usage on this page. */
 static bool td_usage_held(uint8_t page, uint16_t usage) {
-    for (uint8_t i = 0; td_usage_owners[page] && i < TAP_DANCE_MAX_SIMULTANEOUS; ++i) {
+    for (uint8_t i = 0; td_usage_owners[page] && i < ACTION_OWNED_COUNT; ++i) {
         if (td_usage[i][page] == usage) return true;
     }
     return false;
 }
 
 bool tap_dance_usage_update(uint8_t page, uint16_t usage, uint16_t current, bool pressed) {
-    const bool td = td_action_owner < TAP_DANCE_MAX_SIMULTANEOUS;
+    const bool td = td_action_owner < ACTION_OWNED_COUNT;
     uint16_t *held = td ? &td_usage[td_action_owner][page] : &regular_usage[page];
     if (pressed) {
         if (td && !*held) ++td_usage_owners[page];
@@ -171,8 +180,9 @@ bool tap_dance_usage_update(uint8_t page, uint16_t usage, uint16_t current, bool
 }
 
 void tap_dance_clear_owner_hid(uint8_t owner) {
-    if (owner >= TAP_DANCE_MAX_SIMULTANEOUS) return;
-    const uint8_t previous = tap_dance_action_set_owner(owner);
+    if (owner >= ACTION_OWNED_COUNT) return;
+    const uint8_t previous = td_action_owner;
+    td_action_owner = owner;
     for (uint8_t i = 0; td_mouse[owner] && i < TD_MOUSE_CODES; ++i) {
         if (td_mouse[owner] & (1UL << i)) register_mouse((uint8_t)(KC_MS_UP + i), false);
     }
@@ -180,7 +190,7 @@ void tap_dance_clear_owner_hid(uint8_t owner) {
     if (td_usage[owner][TD_USAGE_SYSTEM] && tap_dance_usage_update(TD_USAGE_SYSTEM, td_usage[owner][TD_USAGE_SYSTEM], host_last_system_usage(), false)) host_system_send(0);
     if (td_usage[owner][TD_USAGE_CONSUMER] && tap_dance_usage_update(TD_USAGE_CONSUMER, td_usage[owner][TD_USAGE_CONSUMER], host_last_consumer_usage(), false)) host_consumer_send(0);
 #    endif
-    tap_dance_action_set_owner(previous);
+    td_action_owner = previous;
 }
 
 void tap_dance_clear_hid_ownership(void) {
@@ -190,6 +200,98 @@ void tap_dance_clear_hid_ownership(void) {
     memset(regular_usage, 0, sizeof(regular_usage));
     memset(td_usage, 0, sizeof(td_usage));
     memset(td_usage_owners, 0, sizeof(td_usage_owners));
+}
+#endif
+
+
+#ifdef ERA_MACRO_ENABLE
+/* Two private report owners extend the existing contribution tables without
+ * using a TD runtime slot or changing ordinary QMK bit-state semantics. */
+static uint8_t macro_owner_slot(uint8_t owner) {
+    return owner < 2U ? TAP_DANCE_MAX_SIMULTANEOUS + owner : UINT8_MAX;
+}
+
+uint8_t action_macro_set_owner(uint8_t owner) {
+    uint8_t previous = td_action_owner;
+    td_action_owner = macro_owner_slot(owner);
+    return previous;
+}
+
+void action_macro_restore_owner(uint8_t owner) { td_action_owner = owner; }
+
+bool action_macro_is_emitting(void) {
+    return td_action_owner >= TAP_DANCE_MAX_SIMULTANEOUS && td_action_owner < ACTION_OWNED_COUNT;
+}
+
+bool action_macro_has_outputs(void) {
+    for (uint8_t slot = TAP_DANCE_MAX_SIMULTANEOUS; slot < ACTION_OWNED_COUNT; ++slot) {
+        if (td_owner_key_counts[slot] || td_real_mods[slot] || td_weak_mods[slot] ||
+            td_mouse[slot] || td_usage[slot][0] || td_usage[slot][1]) return true;
+    }
+    return false;
+}
+
+uint16_t action_owned_usage(uint8_t page, uint16_t current) {
+    if (page > 1U) return 0U;
+    if (current && (regular_usage[page] == current || td_usage_held(page, current))) return current;
+    if (regular_usage[page]) return regular_usage[page];
+    for (uint8_t slot = 0U; slot < ACTION_OWNED_COUNT; ++slot) {
+        if (td_usage[slot][page]) return td_usage[slot][page];
+    }
+    return 0U;
+}
+
+void action_macro_clear_owner(uint8_t owner) {
+    uint8_t slot = macro_owner_slot(owner);
+    if (slot == UINT8_MAX) return;
+    bool held = td_owner_key_counts[slot] || td_real_mods[slot] || td_weak_mods[slot] ||
+                td_mouse[slot] || td_usage[slot][0] || td_usage[slot][1];
+    if (!held) return;
+    uint8_t previous = td_action_owner;
+    td_action_owner = slot;
+    tap_dance_clear_owner_keys(slot);
+    tap_dance_clear_owner_mods(slot);
+    tap_dance_clear_owner_hid(slot);
+    send_keyboard_report();
+    td_action_owner = previous;
+}
+
+static void macro_remove_owner_state(uint8_t slot) {
+    td_action_owner = slot;
+    tap_dance_clear_owner_keys(slot);
+    tap_dance_clear_owner_mods(slot);
+    for (uint8_t i = 0U; td_mouse[slot] && i < TD_MOUSE_CODES; ++i) {
+        if (!(td_mouse[slot] & (1UL << i))) continue;
+        uint8_t code = (uint8_t)(KC_MS_UP + i);
+        if (tap_dance_mouse_update(code, false)) {
+#    ifdef MOUSEKEY_ENABLE
+            mousekey_off(code);
+#    endif
+        }
+    }
+    for (uint8_t page = 0U; page < 2U; ++page) {
+        uint16_t usage = td_usage[slot][page];
+        if (usage) (void)tap_dance_usage_update(page, usage, usage, false);
+    }
+}
+
+void action_macro_cancel_outputs(void) {
+    uint8_t previous = td_action_owner;
+    macro_remove_owner_state(macro_owner_slot(ACTION_MACRO_TEMPORARY));
+    macro_remove_owner_state(macro_owner_slot(ACTION_MACRO_PERSISTENT));
+    /* Reset retires generation-bound latest snapshots even when their physical
+     * union is unchanged. Publish that surviving union without the macro tag. */
+    td_action_owner = UINT8_MAX;
+    send_keyboard_report();
+#    ifdef MOUSEKEY_ENABLE
+    report_mouse_t mouse = mousekey_get_report();
+    mouse.x = mouse.y = mouse.v = mouse.h = 0;
+    host_mouse_send(&mouse);
+#    endif
+#    ifdef EXTRAKEY_ENABLE
+    host_extra_reconcile();
+#    endif
+    td_action_owner = previous;
 }
 #endif
 
@@ -546,7 +648,7 @@ uint8_t get_mods(void) {
  */
 void add_mods(uint8_t mods) {
 #ifdef TAP_DANCE_OWNED_ACTIONS
-    if (td_action_owner < TAP_DANCE_MAX_SIMULTANEOUS) {
+    if (td_action_owner < ACTION_OWNED_COUNT) {
         tap_dance_replace_mods(&td_real_mods[td_action_owner], td_real_mods[td_action_owner] | mods, td_real_counts, &td_real_union);
         return;
     }
@@ -559,7 +661,7 @@ void add_mods(uint8_t mods) {
  */
 void del_mods(uint8_t mods) {
 #ifdef TAP_DANCE_OWNED_ACTIONS
-    if (td_action_owner < TAP_DANCE_MAX_SIMULTANEOUS) {
+    if (td_action_owner < ACTION_OWNED_COUNT) {
         tap_dance_replace_mods(&td_real_mods[td_action_owner], td_real_mods[td_action_owner] & (uint8_t)~mods, td_real_counts, &td_real_union);
         return;
     }
@@ -572,7 +674,7 @@ void del_mods(uint8_t mods) {
  */
 void set_mods(uint8_t mods) {
 #ifdef TAP_DANCE_OWNED_ACTIONS
-    if (td_action_owner < TAP_DANCE_MAX_SIMULTANEOUS) {
+    if (td_action_owner < ACTION_OWNED_COUNT) {
         tap_dance_replace_mods(&td_real_mods[td_action_owner], mods, td_real_counts, &td_real_union);
         return;
     }
@@ -604,7 +706,7 @@ uint8_t get_weak_mods(void) {
  */
 void add_weak_mods(uint8_t mods) {
 #ifdef TAP_DANCE_OWNED_ACTIONS
-    if (td_action_owner < TAP_DANCE_MAX_SIMULTANEOUS) {
+    if (td_action_owner < ACTION_OWNED_COUNT) {
         tap_dance_replace_mods(&td_weak_mods[td_action_owner], td_weak_mods[td_action_owner] | mods, td_weak_counts, &td_weak_union);
         return;
     }
@@ -617,7 +719,7 @@ void add_weak_mods(uint8_t mods) {
  */
 void del_weak_mods(uint8_t mods) {
 #ifdef TAP_DANCE_OWNED_ACTIONS
-    if (td_action_owner < TAP_DANCE_MAX_SIMULTANEOUS) {
+    if (td_action_owner < ACTION_OWNED_COUNT) {
         tap_dance_replace_mods(&td_weak_mods[td_action_owner], td_weak_mods[td_action_owner] & (uint8_t)~mods, td_weak_counts, &td_weak_union);
         return;
     }
@@ -630,7 +732,7 @@ void del_weak_mods(uint8_t mods) {
  */
 void set_weak_mods(uint8_t mods) {
 #ifdef TAP_DANCE_OWNED_ACTIONS
-    if (td_action_owner < TAP_DANCE_MAX_SIMULTANEOUS) {
+    if (td_action_owner < ACTION_OWNED_COUNT) {
         tap_dance_replace_mods(&td_weak_mods[td_action_owner], mods, td_weak_counts, &td_weak_union);
         return;
     }

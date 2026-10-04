@@ -43,6 +43,17 @@ SAVE/reload. These prove logical transitions, not game/USB latency.
   Remote-Wake cases inject the H7RS early-WKUINT behavior, enforce the 10 ms RWUSIG
   window, reject stale/SUSPSTS SOF, de-duplicate late WKUINT and consume VIA after
   fresh-SOF logical Resume.
+- `test_usb_session.h` executes coherent HID session snapshots, same-generation
+  Suspend, raw-reset retirement, failed initialization and IRQ-mask restoration.
+  Accepted generation-bound keyboard/consumer snapshots are not replayed before
+  the main loop can run after reconfiguration. Retired submissions and intervals
+  cannot alter a new session; ordinary physical snapshots remain reconciled.
+- `state_sync_cases.py` executes the production image writer and mutation owners:
+  pending writes immediately invalidate KEYMAP/MACRO, no-op writes and receipts
+  do not duplicate invalidation, and the macro completion fence remains closed
+  until verified readback. Core RGB semantic changes invalidate CONFIG while
+  output-only animation/sleep and repeated values do not. Baseline/removal
+  witnesses are separate evidence; these fixtures do not run the peer UI.
 - `test_usb_polling.h` checks the active keyboard IN setting across pending/saved
   mode changes, Other-Speed reads, FS/HS, Suspend, failed initialization and raw
   Reset. Failed-teardown tests also reject retained endpoint metadata.
@@ -297,14 +308,30 @@ native QMK headers and Tap Dance disabled. Tri-layer helper publication,
 shared physical owners, persistent same-bit layers and explicit replacement
 must not promote a temporary contribution into persistent state.
 
-### Dynamic macro bounds
+### Dynamic macro execution
 
-`--only input` also compiles the unmodified production macro reader with
-bounded in-memory EEPROM and string-output adapters. It checks a missing
-macro after the final terminator, a full-buffer valid macro, empty macros,
-tap/down/up/delay commands, truncated commands and the interrupted-write
-sentinel. An out-of-range read fails before touching memory. This verifies
-termination and read bounds, not real EEPROM or macro timing.
+`--only input` connects production `qmkUpdate`, VIA macro dispatch, the cooperative
+executor, send-string LUTs, QMK register/tap/clear functions, contribution tables,
+and keyboard/EXK/interval host adapters. Bounded EEPROM and endpoint admission
+are test adapters. It checks service and physical release during a long delay,
+command timing/order, FIFO overflow, active and queued content snapshots, malformed
+commands, explicit DOWN lifetime, keyboard clear, Suspend/resume, timer wrap,
+and shared ordinary/TD/macro keyboard, modifier, mouse, system/consumer ownership.
+Generation races must reject old synthetic submissions and republish surviving
+owners even when the logical union is unchanged. The actual HID class's matching
+admission/reconciliation checks are exercised separately by `test_usb_session.h`.
+Every shipped ASCII entry (except the command prefix) and all 255 nonzero TAP
+codes are compared with the original synchronous trace. Unmapped characters and
+non-keyboard dwell use cooperative release phases; none may enter `wait_ms`.
+Standalone `--positive-tap-delay`, `--nonkeyboard-layout` and `--custom-layout`
+variants cover positive tap delay and custom LUTs. `--remove-unmapped-fix`
+restores the reviewed executor only in generated input to expose its fallback.
+These deterministic clocks do not measure physical USB delivery or target latency.
+
+`macro_executor_cases.py --build <external-directory> --revision <base-commit>
+--liveness-only` can execute the same liveness requirement against a fixed parent.
+`--remove-fix --liveness-only` restores the synchronous caller only in generated
+copies. Input hashes and adapter boundaries accompany each generated fixture.
 
 ### Full-range tapping time
 

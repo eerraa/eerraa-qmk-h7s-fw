@@ -22,6 +22,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "util.h"
 #include "debug.h"
 #include "usb.h"
+#ifdef ERA_MACRO_ENABLE
+#    include "qmk/port/era_macro.h"
+#    include "action_util.h"
+#endif
 
 
 #ifdef DIGITIZER_ENABLE
@@ -98,6 +102,13 @@ led_t host_keyboard_led_state(void) {
 // V260911R3: QMK는 논리 해제를 즉시 완료하고, 호스트에 보이는 간격은 전송 계층이 소유한다.
 void host_keyboard_delay(uint16_t delay_ms)
 {
+#ifdef ERA_MACRO_ENABLE
+  uint32_t generation;
+  if (era_macro_report_generation(&generation)) {
+    usbHidDelayKeyboardReportForGeneration(delay_ms, generation);
+    return;
+  }
+#endif
   usbHidDelayKeyboardReport(delay_ms);
 }
 
@@ -137,6 +148,12 @@ void host_keyboard_send(report_keyboard_t *report)
 
   uint32_t scan_token = key_update_scan_token;
   key_update_scan_token = 0U;  // A native key action may opt in only its first report.
+#ifdef ERA_MACRO_ENABLE
+  uint32_t generation;
+  if (era_macro_report_generation(&generation)) {
+    usbHidSendReportForGeneration((uint8_t *)report, sizeof(report_keyboard_t), generation);
+  } else
+#endif
   if (scan_token != 0U) {
     key_update_count++;
     usbHidSubmitKeyUpdate((uint8_t *)report, sizeof(report_keyboard_t), scan_token, key_update_usage, key_update_pressed);
@@ -193,6 +210,17 @@ void host_nkro_send(report_nkro_t *report) {
     }
 }
 
+static void host_extra_snapshot(uint8_t *data, uint16_t length) {
+#ifdef ERA_MACRO_ENABLE
+    uint32_t generation;
+    if (era_macro_report_generation(&generation)) {
+        usbHidSendReportEXKForGeneration(data, length, generation);
+        return;
+    }
+#endif
+    usbHidSendReportEXK(data, length);
+}
+
 void host_mouse_send(report_mouse_t *report) {
 #ifdef BLUETOOTH_ENABLE
     if (where_to_send() == OUTPUT_BLUETOOTH) {
@@ -209,7 +237,7 @@ void host_mouse_send(report_mouse_t *report) {
     report->boot_x = (report->x > 127) ? 127 : ((report->x < -127) ? -127 : report->x);
     report->boot_y = (report->y > 127) ? 127 : ((report->y < -127) ? -127 : report->y);
 #endif
-    usbHidSendReportEXK((uint8_t *)report, sizeof(report_mouse_t));  // V260823R1: shared 엔드포인트로 마우스 리포트 전송
+    host_extra_snapshot((uint8_t *)report, sizeof(report_mouse_t));  // V260823R1: shared 엔드포인트로 마우스 리포트 전송
 }
 
 void host_system_send(uint16_t usage) {
@@ -221,7 +249,7 @@ void host_system_send(uint16_t usage) {
     .usage     = usage,
   };
 
-  usbHidSendReportEXK((uint8_t *)&report, sizeof(report_extra_t));
+  host_extra_snapshot((uint8_t *)&report, sizeof(report_extra_t));
 
 #ifdef DEBUG_KEY_SEND
   static uint32_t pre_time = 0;
@@ -254,7 +282,7 @@ void host_consumer_send(uint16_t usage) {
     .usage     = usage,
   };
 
-  usbHidSendReportEXK((uint8_t *)&report, sizeof(report_extra_t));
+  host_extra_snapshot((uint8_t *)&report, sizeof(report_extra_t));
 
 #ifdef DEBUG_KEY_SEND
   static uint32_t pre_time = 0;
@@ -269,6 +297,18 @@ void host_consumer_send(uint16_t usage) {
             exe_time % 1000);
 #endif  
 }
+
+
+#ifdef ERA_MACRO_ENABLE
+void host_extra_reconcile(void) {
+    last_system_usage = action_owned_usage(TD_USAGE_SYSTEM, last_system_usage);
+    last_consumer_usage = action_owned_usage(TD_USAGE_CONSUMER, last_consumer_usage);
+    report_extra_t system = {.report_id = REPORT_ID_SYSTEM, .usage = last_system_usage};
+    report_extra_t consumer = {.report_id = REPORT_ID_CONSUMER, .usage = last_consumer_usage};
+    host_extra_snapshot((uint8_t *)&system, sizeof(system));
+    host_extra_snapshot((uint8_t *)&consumer, sizeof(consumer));
+}
+#endif
 
 #ifdef JOYSTICK_ENABLE
 void host_joystick_send(joystick_t *joystick) {

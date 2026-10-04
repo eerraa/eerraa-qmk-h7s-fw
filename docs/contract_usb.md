@@ -114,6 +114,34 @@ its payload work is bounded snapshot copying, including freezing a candidate
 and making the Boot-form copy when a packet is armed. It must not execute QMK
 actions or wait for a scan to finish.
 
+### Nonblocking dynamic macros
+
+Dynamic VIA macros execute serially from a bounded FIFO of macro IDs. A full
+queue rejects the newest request and preserves accepted order. Each macro takes
+an immutable byte snapshot when it starts; later queued IDs use the contents
+current at their own start. Edits cannot change a running macro halfway through.
+The cooperative executor returns to matrix, VIA, RGB and storage service between
+steps and deadlines; it does not recurse into QMK or wait through a macro delay.
+Command order, character timing and transport-owned keyboard intervals remain.
+
+Synthetic output has separate ownership from ordinary and Tap Dance output.
+Explicit DOWN survives normal macro completion until its UP; temporary character
+modifiers are released on completion or malformed-input abort. A release must
+not remove the same usage or modifier held by another owner. Explicit keyboard
+clear and a retired USB session cancel active and queued macros and release
+macro contributions. Cancellation republishes mouse buttons with zero relative
+movement and wheel deltas; it does not replay old motion or consume the next
+ordinary mouse-task interval. Same-session Suspend pauses execution with remaining delay
+preserved, and Resume continues it.
+
+Reports containing macro contributions carry the admitted USB generation into
+transport enqueue. The existing IRQ lock checks it before queue, candidate or
+latest-state mutation. A new session neutralizes cached synthetic snapshots;
+the main loop cancels old macro ownership and republishes surviving physical/TD
+state, including unchanged unions. This prevents old macro output from crossing
+reconnect even when Reset occurs between executor observation and report submit.
+No QMK action runs in the USB ISR, and no wire command is added.
+
 ### Boot protocol report
 
 Interface 0 advertises BOOT/Keyboard, and SET_PROTOCOL on it selects the report

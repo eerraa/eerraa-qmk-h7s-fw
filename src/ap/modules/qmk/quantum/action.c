@@ -27,6 +27,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "action_tapping.h"
 #include "action_util.h"
 #include "action.h"
+#ifdef ERA_MACRO_ENABLE
+#    include "qmk/port/era_macro.h"
+#endif
 #include "wait.h"
 #include "keycode_config.h"
 #include "debug.h"
@@ -1268,7 +1271,10 @@ __attribute__((weak)) void unregister_weak_mods(uint8_t mods) {
  * FIXME: Needs documentation.
  */
 void clear_keyboard(void) {
-#ifdef TAP_DANCE_OWNED_ACTIONS
+#ifdef ERA_MACRO_ENABLE
+    era_macro_cancel();
+#endif
+#ifdef TAPDANCE_ENABLE
     tap_dance_cancel_all();
 #endif
     clear_mods();

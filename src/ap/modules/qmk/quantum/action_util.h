@@ -40,7 +40,7 @@ void keyboard_report_filter(report_keyboard_t *report);
 void nkro_report_filter(report_nkro_t *report);
 #endif
 
-#ifdef TAPDANCE_ENABLE
+#if defined(TAPDANCE_ENABLE) || defined(ERA_MACRO_ENABLE)
 #    define TAP_DANCE_OWNED_ACTIONS
 /* A bounded TD contribution is separate from ordinary QMK bit state. */
 uint8_t tap_dance_action_set_owner(uint8_t owner);
@@ -57,6 +57,18 @@ bool tap_dance_mouse_update(uint8_t code, bool pressed);
 bool tap_dance_usage_update(uint8_t page, uint16_t usage, uint16_t current, bool pressed);
 void tap_dance_clear_owner_hid(uint8_t owner);
 void tap_dance_clear_hid_ownership(void);
+#endif
+
+
+#ifdef ERA_MACRO_ENABLE
+enum { ACTION_MACRO_PERSISTENT, ACTION_MACRO_TEMPORARY };
+uint8_t action_macro_set_owner(uint8_t owner);
+void action_macro_restore_owner(uint8_t previous);
+bool action_macro_is_emitting(void);
+bool action_macro_has_outputs(void);
+void action_macro_clear_owner(uint8_t owner);
+void action_macro_cancel_outputs(void);
+uint16_t action_owned_usage(uint8_t page, uint16_t current);
 #endif
 
 /* key */

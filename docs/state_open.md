@@ -75,6 +75,19 @@ using `docs/contract_via.md` §6. Preserve existing localStorage history; do not
 re-expose diagnostics for old firmware. The H7S-only change does not implement
 or validate this app migration.
 
+### State Sync macro freshness: peer presentation follow-up
+
+The firmware invalidates MACRO at visible opener/payload changes and exposes the
+final zero only after verified completion (`docs/contract_via.md` §4). The app at
+`b575bb446325eb5a4fd15e7668c3fe3481f0b65d` rejects incomplete macro candidates,
+but its macro-ready selector does not consult StateSync freshness. An earlier
+AST may therefore remain visible while its replacement is dirty. Firmware
+invalidation alone does not establish a loading/stale indication in that UI.
+
+**Start condition**: in the app repository under `docs/MAP.md` §7, verify the
+current selector/pane and make stale presentation consistent with candidate
+freshness. Other-session uncommitted app work is not completion evidence here.
+
 ## 2. Hardware or external verification still open
 
 | Item | Next verification / entry condition |
@@ -97,6 +110,7 @@ or validate this app migration.
 | Wakeup-key rule | On FS and HS hosts that allow remote wake: a letter or Enter that wakes a sleeping host is not typed and the next press is; a key held at power-on or cable insertion (BIOS key) still reaches the host; a key held into Suspend and released there does not stick. |
 | Mouse buttons 6–8, Magic, Space Cadet | Buttons 6–8 register on Windows and macOS; Magic GUI lock and Space Cadet keys work from the keymap and from TD actions; overlapping mouse-key directions keep their speed. |
 | VIA RGB apply in Pulse effects | On hardware, verify brightness/colour SET is visible without a key press, leaving Pulse for a hue-driven effect does not inherit stale white output, a brightness change during Pulse Off Press (Hold) preserves the hold latch, RGB Sleep entered while a Hold key is down wakes to the base output and the waking key itself does not pulse, and Caps overlay release restores the committed base output. Include first LT/TD Caps activation at speed 0/15/255, near-simultaneous base/host frames, and Sleep of BRICK65/MAY65/SCULPTUREI physical indicators. |
+| Runtime publication and macro execution | On the current custom app and FS/HS hardware, change keymap/RGB with pending or failed persistence and confirm the next successful state read shows the applied values. During a long macro delay, check ordinary input and VIA progress, active-snapshot edits, FIFO order, overlapping physical/TD keys and modifiers, same-session Suspend/Resume, and unplug/reconnect without old macro replay. Host regressions do not measure real refresh or key latency. |
 | Maker USB identity | On each board, flash the current build and confirm the host enumerates the VID/PID and `KBD_MANUFACTURER` from its `<board>/config.h`; load its official JSON through `usevia.app` Design; reconnect the custom app after WebHID re-authorization and compare the identity with the app manifest (peer owner, `docs/MAP.md` §7). |
 | Stock polling selection | After Apply/reboot, verify a fresh stock read displays the saved Boot Polling Mode. Stock JSON omits polling TEXT under the client support policy; use Custom for endpoint observations. Do not interpret the dropdown as negotiated FS/HS speed. |
 | Official VIA reboot response mismatch | The user reported no VIA errors with BRICK60 B (40 ms before detach / 1000 ms detached) and C (500/100), and preferred C for smoother behavior. C is now the accepted default. The earlier CSV showed repeated request/response misalignment; the initial cause remains unproven. Reopen on recurrence and capture the transition, browser/host, disconnect/reconnect events and CSV. This observation does not establish all-host compatibility or Custom observation refresh/failure behavior. |
