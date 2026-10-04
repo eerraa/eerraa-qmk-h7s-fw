@@ -737,6 +737,7 @@ static void test_descriptor_intervals(void)
     for (unsigned i = 0; i < 4U; i++) assert(((USBD_EpDescTypeDef *)USBD_GetEpDesc(desc, endpoints[i]))->bInterval == 1U);
   }
 }
+#include "test_usb_session.h"
 #include "test_usb_polling.h"
 #include "test_keyboard_intervals.h"
 #include "test_keyboard_merge.h"
@@ -745,6 +746,7 @@ int main(void)
 {
   uint8_t data[32] = {0};
   assert(!usbHidEnqueueViaResponse(data, 32U, 0U));
+  test_session_snapshot();
   test_polling_label();
   test_first_mouse_and_order();
   test_zero_delay_caps();

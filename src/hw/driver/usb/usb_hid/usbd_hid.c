@@ -97,6 +97,8 @@ static hid_tx_packet_t extra_latest[3] = {
   { .length = 3U, .data = {4U} },
 };
 static bool keyboard_reconcile;
+static bool keyboard_latest_session_bound;
+static uint8_t extra_latest_session_bound;
 /* Logical physical-key updates may share this candidate while the endpoint is
  * busy. It is separate from the immutable transport queue; an idle endpoint
  * freezes it immediately, even halfway through the producing matrix scan. */
@@ -989,6 +991,18 @@ static bool usbHidSessionValid(USBD_HandleTypeDef *pdev)
       (pdev->dev_state == USBD_STATE_SUSPENDED && pdev->dev_old_state == USBD_STATE_CONFIGURED));
 }
 
+usb_hid_session_t usbHidGetSession(void)
+{
+  uint32_t irq = usbHidLock();
+  usb_hid_session_t session = {
+    .generation = transport_generation,
+    .valid = usbHidSessionValid(&USBD_Device),
+    .suspended = USBD_Device.dev_state == USBD_STATE_SUSPENDED,
+  };
+  usbHidUnlock(irq);
+  return session;
+}
+
 // Endpoint metadata belongs to the admitted HID session, independently of pending BootMode.
 const char *usbHidGetPollingLabel(void)
 {
@@ -1075,6 +1089,13 @@ static void usbHidResetTransport(void)
                                      (keyboard_candidate.valid ? 1U : 0U);
   memset(&keyboard_candidate, 0, sizeof(keyboard_candidate));
   transport_generation++;
+  // Synthetic contributions belong to their admitted session. The main loop
+  // republishes the surviving physical owners after cancelling the old macro.
+  if (keyboard_latest_session_bound) memset(keyboard_latest.data, 0, sizeof(keyboard_latest.data));
+  for (uint8_t i = 0U; i < 3U; i++)
+    if (extra_latest_session_bound & (1U << i)) memset(&extra_latest[i].data[1], 0, sizeof(extra_latest[i].data) - 1U);
+  keyboard_latest_session_bound = false;
+  extra_latest_session_bound = 0U;
   hidTxInit(&keyboard_tx, keyboard_slots, HID_TX_DEPTH);
   hidTxInit(&extra_tx, extra_slots, HID_TX_DEPTH);
   hidTxInit(&via_tx, via_slots, HID_TX_DEPTH);
@@ -1226,14 +1247,14 @@ bool usbHidRequestRemoteWakeFromInput(void)
 }
 
 // V260911R3: 마지막으로 수락한 리포트 뒤의 간격을 연장한다. active payload는 불변이다.
-void usbHidDelayKeyboardReport(uint16_t delay_ms)
+static void usbHidDelayKeyboard(uint16_t delay_ms, bool session_bound, uint32_t generation)
 {
   if (delay_ms == 0U)
   {
     return;
   }
   uint32_t irq = usbHidLock();
-  if (usbHidSessionValid(&USBD_Device))
+  if ((!session_bound || generation == transport_generation) && usbHidSessionValid(&USBD_Device))
   {
     uint16_t *interval = NULL;
     usbHidFreezeKeyCandidateLocked();
@@ -1262,6 +1283,16 @@ void usbHidDelayKeyboardReport(uint16_t delay_ms)
   usbHidUnlock(irq);
 }
 
+void usbHidDelayKeyboardReport(uint16_t delay_ms)
+{
+  usbHidDelayKeyboard(delay_ms, false, 0U);
+}
+
+void usbHidDelayKeyboardReportForGeneration(uint16_t delay_ms, uint32_t generation)
+{
+  usbHidDelayKeyboard(delay_ms, true, generation);
+}
+
 /* Validate the producer's declared single-key update against the preceding
  * snapshot. Slot reordering, a filter changing other usages, duplicates, and
  * modifiers all fall back to ordinary immutable reports. */
@@ -1283,12 +1314,16 @@ static bool usbHidIsSingleKeyUpdate(const hid_tx_packet_t *packet, uint8_t usage
   return changed;
 }
 
-static bool usbHidSubmitKeyboard(uint8_t *data, uint16_t length, uint32_t scan_token, uint8_t usage, bool pressed)
+static bool usbHidSubmitKeyboard(uint8_t *data, uint16_t length, uint32_t scan_token, uint8_t usage, bool pressed, bool session_bound, uint32_t generation)
 {
   if (data == NULL || length != HID_KEYBOARD_REPORT_SIZE) return false;
   hid_tx_packet_t packet = { .length = HID_KEYBOARD_REPORT_SIZE };
   memcpy(packet.data, data, length);
   uint32_t irq = usbHidLock();
+  if (session_bound && (generation != transport_generation || !usbHidSessionValid(&USBD_Device))) {
+    usbHidUnlock(irq);
+    return false;
+  }
   usbHidPumpLocked(&USBD_Device);
   bool configured = usbHidSessionValid(&USBD_Device);
   bool eligible = scan_token != 0U && configured && USBD_Device.dev_state == USBD_STATE_CONFIGURED &&
@@ -1317,6 +1352,7 @@ static bool usbHidSubmitKeyboard(uint8_t *data, uint16_t length, uint32_t scan_t
     }
   }
   keyboard_latest = packet;
+  keyboard_latest_session_bound = session_bound;
   if (!ok) {
     if (configured) {
       transport_stats.keyboard_coalesced++;
@@ -1330,12 +1366,17 @@ static bool usbHidSubmitKeyboard(uint8_t *data, uint16_t length, uint32_t scan_t
 
 bool usbHidSendReport(uint8_t *data, uint16_t length)
 {
-  return usbHidSubmitKeyboard(data, length, 0U, 0U, false);
+  return usbHidSubmitKeyboard(data, length, 0U, 0U, false, false, 0U);
+}
+
+bool usbHidSendReportForGeneration(uint8_t *data, uint16_t length, uint32_t generation)
+{
+  return usbHidSubmitKeyboard(data, length, 0U, 0U, false, true, generation);
 }
 
 bool usbHidSubmitKeyUpdate(uint8_t *data, uint16_t length, uint32_t scan_token, uint8_t usage, bool pressed)
 {
-  return usbHidSubmitKeyboard(data, length, scan_token, usage, pressed);
+  return usbHidSubmitKeyboard(data, length, scan_token, usage, pressed, false, 0U);
 }
 
 void usbHidEndKeyScan(uint32_t scan_token)
@@ -1348,17 +1389,23 @@ void usbHidEndKeyScan(uint32_t scan_token)
   usbHidUnlock(irq);
 }
 
-bool usbHidSendReportEXK(uint8_t *data, uint16_t length)
+static bool usbHidSubmitExtra(uint8_t *data, uint16_t length, bool session_bound, uint32_t generation)
 {
   if (data == NULL || length == 0U || data[0] < 2U || data[0] > 4U ||
       length != (data[0] == 2U ? 6U : 3U)) return false;
   hid_tx_packet_t packet = { .length = (uint8_t)length };
   memcpy(packet.data, data, length);
   uint32_t irq = usbHidLock();
+  if (session_bound && (generation != transport_generation || !usbHidSessionValid(&USBD_Device))) {
+    usbHidUnlock(irq);
+    return false;
+  }
   usbHidFreezeKeyCandidateLocked();
   usbHidPumpLocked(&USBD_Device);
   uint8_t index = data[0] - 2U;
   extra_latest[index] = packet;
+  if (session_bound) extra_latest_session_bound |= 1U << index;
+  else extra_latest_session_bound &= ~(1U << index);
   // 상대 이동/휠은 재연결 및 overflow 복구에서 반복하지 않는다. 버튼만 현재 상태다.
   if (index == 0U) memset(&extra_latest[0].data[2], 0, 4U);
   bool configured = usbHidSessionValid(&USBD_Device);
@@ -1372,6 +1419,16 @@ bool usbHidSendReportEXK(uint8_t *data, uint16_t length)
   usbHidPumpLocked(&USBD_Device);
   usbHidUnlock(irq);
   return ok;
+}
+
+bool usbHidSendReportEXK(uint8_t *data, uint16_t length)
+{
+  return usbHidSubmitExtra(data, length, false, 0U);
+}
+
+bool usbHidSendReportEXKForGeneration(uint8_t *data, uint16_t length, uint32_t generation)
+{
+  return usbHidSubmitExtra(data, length, true, generation);
 }
 
 void usbHidOnBusResetBegin(void)

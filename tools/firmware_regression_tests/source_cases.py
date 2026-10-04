@@ -96,7 +96,7 @@ int main(void) {
     keyboard_send=function(hid,'usbHidSubmitKeyboard')
     assert 'usbHidSubmitKeyboard' in function(hid,'usbHidSendReport')
     assert 'usbHidSubmitKeyboard' in function(hid,'usbHidSubmitKeyUpdate')
-    extra_send=function(hid,'usbHidSendReportEXK')
+    extra_send=function(hid,'usbHidSubmitExtra')
     on_resume=function(hid,'usbHidOnResume')
     accept_sof=function(hid,'usbHidConsumeWakeSof')
     assert 'USBD_STATE_SUSPENDED' in wake_entry and 'usbHidRemoteWakeSuspended()' in wake_entry
