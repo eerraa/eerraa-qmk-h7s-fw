@@ -316,19 +316,15 @@ __ALIGN_BEGIN static uint8_t USBD_HID_CfgDesc[USB_HID_CONFIG_DESC_SIZ] __ALIGN_E
 };
 #endif /* USE_USBD_COMPOSITE  */
 
-/* USB HID device Configuration Descriptor */
-__ALIGN_BEGIN static uint8_t USBD_HID_Desc[USB_HID_DESC_SIZ] __ALIGN_END =
+/* Keep each interface response aligned and alive for the EP0 FIFO word reads. */
+__ALIGN_BEGIN static uint8_t USBD_HID_Desc[3][12] __ALIGN_END =
 {
-  /* 18 */
-  0x09,                                               /* bLength: HID Descriptor size */
-  HID_DESCRIPTOR_TYPE,                                /* bDescriptorType: HID */
-  0x11,                                               /* bcdHID: HID Class Spec release number */
-  0x01,
-  0x00,                                               /* bCountryCode: Hardware target country */
-  0x01,                                               /* bNumDescriptors: Number of HID class descriptors to follow */
-  0x22,                                               /* bDescriptorType */
-  HID_KEYBOARD_REPORT_DESC_SIZE,                      /* wItemLength: Total length of Report descriptor */
-  0x00,
+  {0x09, HID_DESCRIPTOR_TYPE, 0x11, 0x01, 0x00, 0x01, HID_REPORT_DESC,
+   LOBYTE(HID_KEYBOARD_REPORT_DESC_SIZE), HIBYTE(HID_KEYBOARD_REPORT_DESC_SIZE)},
+  {0x09, HID_DESCRIPTOR_TYPE, 0x11, 0x01, 0x00, 0x01, HID_REPORT_DESC,
+   LOBYTE(HID_KEYBOARD_VIA_REPORT_DESC_SIZE), HIBYTE(HID_KEYBOARD_VIA_REPORT_DESC_SIZE)},
+  {0x09, HID_DESCRIPTOR_TYPE, 0x11, 0x01, 0x00, 0x01, HID_REPORT_DESC,
+   LOBYTE(HID_EXK_REPORT_DESC_SIZE), HIBYTE(HID_EXK_REPORT_DESC_SIZE)},
 };
 
 #ifndef USE_USBD_COMPOSITE
@@ -696,6 +692,11 @@ static uint8_t USBD_HID_Setup(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *re
           break;
 
         case USB_REQ_GET_DESCRIPTOR:
+          if (req->wIndex >= 3U || (req->wValue & 0xFFU) != 0U) {
+            USBD_CtlError(pdev, req);
+            ret = USBD_FAIL;
+            break;
+          }
           logDebug("  USB_REQ_GET_DESCRIPTOR  : 0x%X\n", req->wValue); 
           if ((req->wValue >> 8) == HID_REPORT_DESC)
           {
@@ -719,7 +720,7 @@ static uint8_t USBD_HID_Setup(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *re
           }
           else if ((req->wValue >> 8) == HID_DESCRIPTOR_TYPE)
           {
-            pbuf = USBD_HID_Desc;
+            pbuf = USBD_HID_Desc[req->wIndex];
             len = MIN(USB_HID_DESC_SIZ, req->wLength);
           }
           else

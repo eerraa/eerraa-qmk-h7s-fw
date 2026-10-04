@@ -44,9 +44,10 @@ uint32_t USBD_CMPSIT_GetClassID(USBD_HandleTypeDef *d, USBD_CompositeClassTypeDe
 #define TEST_CDC_CLASS_ID 0U
 #endif
 
+static void (*delay_hook)(void);
 uint32_t millis(void) { return clock_ms; }
 uint32_t micros(void) { return clock_ms * 1000U; }
-void delay(uint32_t milliseconds) { clock_ms += milliseconds; }
+void delay(uint32_t milliseconds) { clock_ms += milliseconds; if (delay_hook) { void (*hook)(void) = delay_hook; delay_hook = NULL; hook(); } }
 
 USBD_StatusTypeDef USBD_LL_OpenEP(USBD_HandleTypeDef *d, uint8_t ep, uint8_t type, uint16_t size)
 {
@@ -382,8 +383,7 @@ static void test_packet_failures(USBD_SpeedTypeDef speed)
   tx_status = USBD_OK;
   assert(transmit() == USBD_OK && complete_tx() == USBD_OK);
   rx_status = USBD_FAIL;
-  /* The real interface currently ignores failed rearm status. Record that
-   * boundary rather than claiming queue-loss/recovery guarantees. */
+  /* Failed rearm keeps the received prefix and schedules a SOF retry. */
   assert(complete_rx(0xC7U, 7U) == USBD_OK && active_rx == NULL && handle()->RxState == 0U);
   assert(USBD_CDC_ReceivePacket(&USBD_Device) == USBD_FAIL && active_rx == NULL);
   rx_status = USBD_OK;
@@ -392,7 +392,7 @@ static void test_packet_failures(USBD_SpeedTypeDef speed)
   assert(set_tx(UserTxBufferFS, packet) == USBD_OK && transmit() == USBD_OK);
   tx_status = USBD_FAIL;
   unsigned completions = transmit_complete_calls;
-  assert(complete_tx() == USBD_FAIL && handle()->TxState == 1U && !tx_armed[3]);
+  assert(complete_tx() == USBD_FAIL && handle()->TxState == 2U && !tx_armed[3]);
   assert(transmit_complete_calls == completions && set_tx(UserTxBufferFS, 17U) == USBD_BUSY);
   tx_status = USBD_OK;
   stop();
@@ -549,16 +549,122 @@ static void test_core_registration(void)
   check_core_released_interface(&replacement_interface, false);
   puts("PASS: NULL registration cannot erase retained callbacks; same-interface registration and replacement after successful cleanup still work");
 }
+
+static void test_service_retry(USBD_SpeedTypeDef speed)
+{
+  configure(speed);
+  queued_tx(0x31U);
+  tx_status = USBD_FAIL;
+  assert(USBD_CDC.SOF(&USBD_Device) == USBD_OK && !tx_armed[3]);
+  queued_tx(0x42U);
+  tx_status = USBD_OK;
+  assert(USBD_CDC.SOF(&USBD_Device) == USBD_OK && tx_armed[3]);
+  assert(active_tx_length[3] == 32U && active_tx[3][0] == 0x31U);
+  assert(complete_tx() == USBD_OK);
+  assert(USBD_CDC.SOF(&USBD_Device) == USBD_OK && active_tx[3][0] == 0x42U);
+  assert(complete_tx() == USBD_OK);
+  stop();
+}
+static void test_rx_retry(USBD_SpeedTypeDef speed)
+{
+  configure(speed);
+  rx_status = USBD_FAIL;
+  (void)complete_rx(0x53U, 7U);
+  assert(cdcIfAvailable() == 7U && active_rx == NULL);
+  for (unsigned i = 0U; i < 3U; i++) {
+    (void)USBD_CDC.SOF(&USBD_Device); assert(active_rx == NULL);
+  }
+  rx_status = USBD_OK;
+  assert(USBD_CDC.SOF(&USBD_Device) == USBD_OK && active_rx == UserRxBufferFS);
+  assert(complete_rx(0x64U, 7U) == USBD_OK);
+  for (unsigned i = 0U; i < 14U; i++) assert(cdcIfRead() == (i < 7U ? 0x53U : 0x64U));
+  stop();
+}
+static void test_zlp_retry(USBD_SpeedTypeDef speed)
+{
+  configure(speed);
+  uint32_t packet = speed == USBD_SPEED_HIGH ? 512U : 64U;
+  memset(UserTxBufferFS, 0x75U, packet);
+  assert(set_tx(UserTxBufferFS, packet) == USBD_OK && transmit() == USBD_OK);
+  unsigned completions = transmit_complete_calls;
+  tx_status = USBD_FAIL;
+  assert(complete_tx() == USBD_FAIL && !tx_armed[3]);
+  assert(transmit_complete_calls == completions);
+  queued_tx(0x86U);
+  (void)USBD_CDC.SOF(&USBD_Device);
+  tx_status = USBD_OK;
+  assert(USBD_CDC.SOF(&USBD_Device) == USBD_OK && tx_armed[3]);
+  assert(active_tx_length[3] == 0U && transmit_complete_calls == completions);
+  assert(complete_tx() == USBD_OK && transmit_complete_calls == completions + 1U);
+  assert(USBD_CDC.SOF(&USBD_Device) == USBD_OK && active_tx[3][0] == 0x86U);
+  assert(complete_tx() == USBD_OK);
+  stop();
+}
+static void test_new_session(USBD_SpeedTypeDef speed)
+{
+  configure(speed);
+  queued_tx(0x97U);
+  tx_status = USBD_FAIL; (void)USBD_CDC.SOF(&USBD_Device); tx_status = USBD_OK;
+  queued_tx(0x98U);
+  assert(complete_rx(0xA8U, 7U) == USBD_OK);
+  uint8_t line[7] = {0xB0, 0x04, 0, 0, 0, 0, 8};
+  assert(USBD_CDC_fops.Control(&USBD_Device, CDC_SET_LINE_CODING, line, 7U) == USBD_OK);
+  assert(USBD_LL_Reset(&USBD_Device) == USBD_OK);
+  assert(USBD_SetClassConfig(&USBD_Device, 1U) == USBD_OK);
+  USBD_Device.dev_state = USBD_STATE_CONFIGURED; USBD_Device.dev_config = 1U;
+  assert(cdcIfAvailable() == 0U && cdcIfGetBaud() == 115200U && CDC_Reset_Status == 0U);
+  assert(USBD_CDC.SOF(&USBD_Device) == USBD_OK && !tx_armed[3]);
+  USBD_SetupReqTypedef req = {.bmRequest = 0x21U, .bRequest = CDC_SET_CONTROL_LINE_STATE, .wValue = 1U};
+  assert(USBD_CDC.Setup(&USBD_Device, &req) == USBD_OK && cdcIfIsConnected());
+  queued_tx(0xB9U); assert(USBD_CDC.SOF(&USBD_Device) == USBD_OK && active_tx[3][0] == 0xB9U);
+  assert(complete_tx() == USBD_OK);
+  stop();
+}
+
+static void reset_during_write(void)
+{
+  assert(USBD_LL_Reset(&USBD_Device) == USBD_OK);
+  assert(USBD_SetClassConfig(&USBD_Device, 1U) == USBD_OK);
+  USBD_Device.dev_state = USBD_STATE_CONFIGURED; USBD_Device.dev_config = 1U;
+  USBD_SetupReqTypedef req = {.bmRequest = 0x21U, .bRequest = CDC_SET_CONTROL_LINE_STATE, .wValue = 1U};
+  assert(USBD_CDC.Setup(&USBD_Device, &req) == USBD_OK && cdcIfIsConnected());
+}
+static void test_write_session(void)
+{
+  configure(USBD_SPEED_HIGH);
+  uint8_t data[2048]; memset(data, 0xCA, sizeof(data));
+  assert(cdcIfWrite(data, sizeof(data) - 1U) == sizeof(data) - 1U);
+  delay_hook = reset_during_write;
+  assert(cdcIfWrite(data, sizeof(data)) == 0U);
+  assert(qbufferAvailable(&q_tx) == 0U && cdcIfAvailable() == 0U);
+  assert(USBD_CDC.SOF(&USBD_Device) == USBD_OK && !tx_armed[3]);
+  USBD_Device.dev_state = USBD_STATE_SUSPENDED;
+  assert(!cdcIfIsConnected());
+  USBD_Device.dev_state = USBD_STATE_CONFIGURED;
+  assert(cdcIfIsConnected()); /* Suspend did not discard the host's DTR. */
+  queued_tx(0xDBU); assert(USBD_CDC.SOF(&USBD_Device) == USBD_OK && active_tx[3][0] == 0xDBU);
+  assert(complete_tx() == USBD_OK);
+  test_irqmask = 1U;
+  assert(cdcIfWrite(data, sizeof(data)) == sizeof(data) - 1U && test_irqmask == 1U);
+  test_irqmask = 0U;
+  stop();
+}
+
 int main(int argc, char **argv)
 {
   assert(argc <= 2);
   const char *selected = argc > 1 ? argv[1] : "all";
   const char *cases[] = {"all", "normal", "close", "close-storage", "init", "rx-init", "partial", "interface", "packet", "churn",
-                        "core-normal", "core-recovery", "core-interface", "core-empty", "core-registration"};
+                        "write-session", "service-retry", "rx-retry", "zlp-retry", "new-session", "core-normal", "core-recovery", "core-interface", "core-empty", "core-registration"};
   bool known = false;
   for (unsigned i = 0U; i < sizeof(cases) / sizeof(cases[0]); i++) known |= !strcmp(selected, cases[i]);
   assert(known);
   bool all = !strcmp(selected, "all");
+  if (all || !strcmp(selected, "service-retry")) { test_service_retry(USBD_SPEED_FULL); test_service_retry(USBD_SPEED_HIGH); }
+  if (all || !strcmp(selected, "rx-retry")) { test_rx_retry(USBD_SPEED_FULL); test_rx_retry(USBD_SPEED_HIGH); }
+  if (all || !strcmp(selected, "zlp-retry")) { test_zlp_retry(USBD_SPEED_FULL); test_zlp_retry(USBD_SPEED_HIGH); }
+  if (all || !strcmp(selected, "new-session")) { test_new_session(USBD_SPEED_FULL); test_new_session(USBD_SPEED_HIGH); }
+  if (all || !strcmp(selected, "write-session")) test_write_session();
   if (all || !strcmp(selected, "normal")) { test_normal(USBD_SPEED_FULL); test_normal(USBD_SPEED_HIGH); }
   if (all || !strcmp(selected, "close")) {
     test_failed_close(CDC_IN_EP, false, false); test_failed_close(CDC_OUT_EP, false, false);

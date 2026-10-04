@@ -37,6 +37,9 @@ SAVE/reload. These prove logical transitions, not game/USB latency.
   returned and unrelated code has reused the stack, checking response lifetime.
   Boot protocol cases check the 8-byte form, the first six non-empty slots, the
   resync and unchanged armed packet at a protocol change, and interface/request checks.
+  HID-descriptor reads for keyboard, VIA and EXK match their FS/HS configuration
+  and actual report lengths, retain aligned response storage, clamp short reads,
+  and reject all other interface indices.
   Remote-Wake cases inject the H7RS early-WKUINT behavior, enforce the 10 ms RWUSIG
   window, reject stale/SUSPSTS SOF, de-duplicate late WKUINT and consume VIA after
   fresh-SOF logical Resume.
@@ -140,13 +143,18 @@ SAVE/reload. These prove logical transitions, not game/USB latency.
   permit explicit successful cleanup; normal cleanup still clears the alias.
   Close failure, interface failure, LL errors, owner-absent cleanup and interface
   registration checks run in both configurations. Repeated
-  configuration checks bounded class storage; application queues are reset
-  between fixture cases. Endpoint operations and composite endpoint lookup are
-  adapters. Arm errors are injected at the USBD LL boundary; the current HAL
-  transmit/receive wrappers discard `USB_EPStartXfer`'s result, so these tests do
-  not establish detection of every controller failure. CDC interface queue
-  delivery after a rejected arm, automatic progress
-  after a failed rearm/ZLP, and arbitrary main/IRQ API concurrency are not proven.
+  configuration checks bounded class storage. Rejected TX arms preserve the
+  staged payload ahead of later bytes; SOF retries failed RX arms and bulk ZLPs.
+  Reset/reconfigure cases execute without resetting application queues in the
+  fixture and reject old RX/TX bytes, staged payloads and line-coding intent.
+  A reset during a backpressured main-thread write must stop that write before
+  the new session; Suspend preserves DTR, and nested PRIMASK is retained.
+  Endpoint operations and composite endpoint lookup are adapters. Arm errors
+  are injected at the USBD LL boundary; the current HAL transmit/receive
+  wrappers discard `USB_EPStartXfer`'s result, so these tests do not establish
+  detection of every controller failure. Arbitrary instruction-level IRQ
+  interleavings and the duration of the bounded queue critical section remain
+  outside these deterministic fixtures.
 - `usb_composite_cases.py` executes the actual core Init/Clear/Stop/DeInit/Reset and
   SET_CONFIGURATION helper with three explicit class adapters. It checks first
   Init failure, rollback of earlier successes only, retained failed-cleanup

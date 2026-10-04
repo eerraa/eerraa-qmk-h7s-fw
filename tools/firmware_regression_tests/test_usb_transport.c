@@ -690,6 +690,41 @@ static void test_host_sleeping(void)
   assert(!usbHidHostSleeping());
 }
 
+static void test_interface_descriptors(void)
+{
+  const uint16_t lengths[] = {HID_KEYBOARD_REPORT_DESC_SIZE, HID_KEYBOARD_VIA_REPORT_DESC_SIZE, HID_EXK_REPORT_DESC_SIZE};
+  for (unsigned speed = 0U; speed < 2U; speed++) {
+    uint16_t size;
+    uint8_t *config = speed ? USBD_HID.GetHSConfigDescriptor(&size) : USBD_HID.GetFSConfigDescriptor(&size);
+    uint8_t interface = 0xFFU;
+    for (uint16_t offset = 0U; offset < size; offset += config[offset]) {
+      assert(config[offset] >= 2U);
+      if (config[offset + 1U] == USB_DESC_TYPE_INTERFACE) interface = config[offset + 2U];
+      if (config[offset + 1U] != HID_DESCRIPTOR_TYPE) continue;
+      assert(interface < 3U);
+      for (uint16_t length = 0U; length <= 12U; length++) {
+        USBD_SetupReqTypedef req = {.bmRequest = 0x81U, .bRequest = USB_REQ_GET_DESCRIPTOR,
+          .wValue = HID_DESCRIPTOR_TYPE << 8, .wIndex = interface, .wLength = length};
+        assert(USBD_HID.Setup(&USBD_Device, &req) == USBD_OK);
+        assert(sent_length == (length < USB_HID_DESC_SIZ ? length : USB_HID_DESC_SIZ));
+        assert(!memcmp(sent_data, config + offset, sent_length));
+        assert(((uintptr_t)sent_data & 3U) == 0U);
+      }
+      USBD_SetupReqTypedef req = {.bmRequest = 0x81U, .bRequest = USB_REQ_GET_DESCRIPTOR,
+        .wValue = HID_REPORT_DESC << 8, .wIndex = interface, .wLength = 0xFFFFU};
+      assert(USBD_HID.Setup(&USBD_Device, &req) == USBD_OK && sent_length == lengths[interface]);
+      assert((uint16_t)(config[offset + 7U] | (config[offset + 8U] << 8)) == sent_length);
+    }
+  }
+  for (uint32_t index = 3U; index <= UINT16_MAX; index++) {
+    USBD_SetupReqTypedef req = {.bmRequest = 0x81U, .bRequest = USB_REQ_GET_DESCRIPTOR,
+      .wValue = HID_DESCRIPTOR_TYPE << 8, .wIndex = (uint16_t)index, .wLength = 9U};
+    assert(USBD_HID.Setup(&USBD_Device, &req) == USBD_FAIL);
+    req.wValue = HID_REPORT_DESC << 8;
+    assert(USBD_HID.Setup(&USBD_Device, &req) == USBD_FAIL);
+  }
+}
+
 static void test_descriptor_intervals(void)
 {
   uint16_t size;
@@ -723,6 +758,7 @@ int main(void)
   test_pool_lifecycle();
   test_remote_wake();
   test_suspend_tap();
+  test_interface_descriptors();
   test_descriptor_intervals();
   test_host_sleeping();
   stop();
