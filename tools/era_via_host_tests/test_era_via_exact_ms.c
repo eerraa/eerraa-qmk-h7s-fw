@@ -478,7 +478,7 @@ int main(void) {
     report[4] = 0xAB;
     report[5] = 0xCD;
     before    = era_state_sync_config_revision();
-    expect_true("GET 0x06 handled", era_state_sync_via_command(report, 32));
+    expect_true("GET 0x80 handled", era_state_sync_via_command(report, 32));
     expect_eq_u8("envelope cmd", report[0], id_get_keyboard_value);
     expect_eq_u8("envelope sel", report[1], ERA_STATE_SYNC_KEYBOARD_VALUE);
     expect_eq_u8("envelope ver", report[2], ERA_STATE_SYNC_ENVELOPE_VERSION);
@@ -489,7 +489,12 @@ int main(void) {
     expect_true("keymap rev nonzero", be32(&report[8]) != 0);
     expect_true("macro rev nonzero", be32(&report[12]) != 0);
     expect_true("config rev nonzero", be32(&report[16]) != 0);
-    expect_true("GET 0x06 does not bump", era_state_sync_config_revision() == before);
+    expect_true("GET 0x80 does not bump", era_state_sync_config_revision() == before);
+
+    zero_report(report);
+    report[0] = id_get_keyboard_value;
+    report[1] = 0x06;
+    expect_true("QMK keycode version is not State Sync", !era_state_sync_via_command(report, 32));
 
     test_state_sync_invalid();
     test_mousekey();

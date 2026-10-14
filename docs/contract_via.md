@@ -1,7 +1,7 @@
 # VIA wire contract
 
 Genre: contract
-Canonical for: official VIA compatibility, exact-value encoding, State Sync revision semantics, the single raw-HID TX producer, selector `0x06`/`0x07` wire rules, and firmware/app responsibility boundaries
+Canonical for: official VIA compatibility, exact-value encoding, State Sync revision semantics, the single raw-HID TX producer, selector `0x80`/`0x07` wire rules, and firmware/app responsibility boundaries
 
 Implementation-owned inventories are not repeated here. Current command/channel/value ids are in `src/ap/modules/qmk/quantum/via.h`; dispatch is in `src/ap/modules/qmk/quantum/via.c` and `<board>/port/via_port.c`; official VIA definitions are `src/ap/modules/qmk/keyboards/era/**/json/*-VIA.JSON`; the firmware version is `_DEF_FIRMWARE_VERSION` in `src/hw/hw_def.h`.
 
@@ -13,7 +13,9 @@ Stock VIA with the firmware-local definitions keeps basic configuration usable. 
 
 Shipped channel/value meanings are wire ABI. Do not renumber or reuse a shipped id to compact a hole. VIA-reserved channels 1, 3, 4, and 5 remain reserved; retired channel 13 value 3 remains reserved by `docs/contract_usb.md` §4. New features take unused additive ids. Review firmware and both definition surfaces in the same compatibility change, using the stock usability policy above. Advanced Tap Dance editing (§3) and polling observations (§6) belong to the Custom app; official JSON retains the basic path without changing the Custom Value wire ABI. Use `via.h` and the JSON as the current id inventory rather than copying the full list here.
 
-GET keyboard-value selectors `0x06` (§5) and `0x07` (§6) are ERA additions in an id range QMK extends in order. QMK VIA protocol 13 (QMK release 2026-05-31) gives `0x06` to QMK's id_keycodes_version, which official VIA reads from protocol-13 boards before remapping. Keep `VIA_PROTOCOL_VERSION` at `0x000C` until both selectors move to new ids together with the app (`the-via-eerraa/docs/adr/0001-state-sync-protocol.md`); shipped firmware keeps its ids.
+VIA protocol 13 (`0x000D`) reserves GET keyboard-value selector `0x06` for QMK's `id_keycodes_version`. H7S returns QMK keycode version 0.0.8 (`0x00000008`, big-endian in report bytes 2..5): every implemented range matches the protocol-13 dictionary, including UG_* at the legacy RGB_* values `0x7820`..`0x782A`. RM_* is not implemented because no H7S board uses RGB Matrix. Stock definitions use `qmk_rgblight_keycodes`.
+
+State Sync moves from the legacy selector `0x06` to vendor selector `0x80` (§5); `0x06` no longer accepts a State Sync envelope. Custom apps must use `0x80` with this firmware and retain their legacy routing only for older firmware; app migration is owned by `the-via-eerraa/docs/adr/0001-state-sync-protocol.md`. Retired diagnostics selector `0x07` remains reserved and unhandled (§6).
 
 The local `menu` check verifies that firmware-routed channels remain reachable from official JSON. The `tapdance` check verifies the official editing boundary for every slot and mode byte. Neither verifies the peer app overlay or a live official-browser session.
 
@@ -122,7 +124,7 @@ The second physical press never adds a speculative base input before a hold.
 
 ## 4. State Sync revision meaning
 
-Selector `0x06` publishes three RAM uint32 equality tokens: KEYMAP, MACRO, and CONFIG. They start at 1 and skip 0 on wrap. They are invalidation tokens, not data values and not EEPROM addresses.
+Selector `0x80` publishes three RAM uint32 equality tokens: KEYMAP, MACRO, and CONFIG. They start at 1 and skip 0 on wrap. They are invalidation tokens, not data values and not EEPROM addresses.
 
 - All three tokens invalidate the values observable through existing GET. A changed
   runtime value advances its domain before another command can read it. A token
@@ -154,16 +156,16 @@ value presentation remain app-owned and are not a firmware latency guarantee.
 
 The app treats revision inequality only as invalidation and re-reads authoritative values through existing VIA GET. Revision-bracketing, candidate commit, capability opt-in, and cache continuity are app-owned in `the-via-eerraa/docs/adr/0001-state-sync-protocol.md`.
 
-## 5. selector `0x06` — State Sync v1
+## 5. selector `0x80` — State Sync v1
 
-`id_get_keyboard_value` (`0x02`) + selector `0x06`; envelope version `0x01`; all multibyte integers are big-endian. SET is not routed for this selector. The payload is exactly 32 bytes.
+`id_get_keyboard_value` (`0x02`) + selector `0x80`; envelope version `0x01`; all multibyte integers are big-endian. SET is not routed for this selector. The payload is exactly 32 bytes.
 
 ### Request
 
 | Byte | Meaning |
 | ---: | --- |
 | `0` | GET keyboard value `0x02` |
-| `1` | selector `0x06` |
+| `1` | selector `0x80` |
 | `2` | requested envelope version `0x01` |
 | `3` | `0` |
 | `4..5` | host request tag, BE16 |
@@ -174,7 +176,7 @@ The app treats revision inequality only as invalidation and re-reads authoritati
 | Byte | Meaning |
 | ---: | --- |
 | `0` | `0x02` |
-| `1` | `0x06` |
+| `1` | `0x80` |
 | `2` | firmware envelope version `0x01` |
 | `3` | status: OK `0x00`, unsupported version `0x01`, invalid `0x02` |
 | `4..5` | echoed host tag, BE16 |

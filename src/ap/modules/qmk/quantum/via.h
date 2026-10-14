@@ -59,7 +59,14 @@
 
 // This is changed only when the command IDs change,
 // so VIA Configurator can detect compatible firmware.
-#define VIA_PROTOCOL_VERSION 0x000C
+#define VIA_PROTOCOL_VERSION 0x000D
+
+// H7S reports QMK keycode version 0.0.8: all implemented ranges match VIA's
+// protocol-13 dictionary (UG_* = legacy RGB_* at 0x7820-0x782A).
+// RM_* is not implemented because no H7S board uses RGB Matrix.
+#ifndef QMK_KEYCODES_VERSION_BCD
+#    define QMK_KEYCODES_VERSION_BCD 0x00000008
+#endif
 
 // This is a version number for the firmware for the keyboard.
 // It can be used to ensure the VIA keyboard definition and the firmware
@@ -102,7 +109,8 @@ enum via_keyboard_value_id {
     id_switch_matrix_state = 0x03,
     id_firmware_version    = 0x04,
     id_device_indication   = 0x05,
-    id_era_state_sync      = 0x06,  // V260821R1: GET_KEYBOARD_VALUE 리비전 봉투
+    id_keycodes_version    = 0x06,
+    id_era_state_sync      = 0x80,  // GET_KEYBOARD_VALUE revision envelope; outside QMK's selectors.
     // 0x07 is reserved for the retired ERA USB diagnostics selector.
 };
 

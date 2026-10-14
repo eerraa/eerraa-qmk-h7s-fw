@@ -384,6 +384,14 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
                     command_data[4] = value & 0xFF;
                     break;
                 }
+                case id_keycodes_version: {
+                    uint32_t value  = QMK_KEYCODES_VERSION_BCD;
+                    command_data[1] = (value >> 24) & 0xFF;
+                    command_data[2] = (value >> 16) & 0xFF;
+                    command_data[3] = (value >> 8) & 0xFF;
+                    command_data[4] = value & 0xFF;
+                    break;
+                }
                 case id_era_state_sync: {  // V260821R1: 버퍼만 채운다. 실제 TX는 via_hid_task → usbHidEnqueueViaResponse.
                     if (!era_state_sync_via_command(data, length)) {
                         *command_id = id_unhandled;

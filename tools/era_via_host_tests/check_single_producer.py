@@ -38,7 +38,7 @@ def main() -> int:
         print("FAIL via_hid_task must call usbHidEnqueueViaResponse")
         return 1
     if "era_state_sync_via_command" not in via or "id_era_state_sync" not in via:
-        print("FAIL via.c GET switch must fill 0x06 without owning TX")
+        print("FAIL via.c GET switch must fill 0x80 without owning TX")
         return 1
     print("PASS single raw-HID producer")
     return 0

@@ -5,8 +5,8 @@
 #include <stdint.h>
 
 
-// V260821R1: GET_KEYBOARD_VALUE(0x02) selector. G1 승인 0x06.
-#define ERA_STATE_SYNC_KEYBOARD_VALUE          0x06U
+// GET_KEYBOARD_VALUE(0x02) vendor selector; 0x06 belongs to QMK keycode version.
+#define ERA_STATE_SYNC_KEYBOARD_VALUE          0x80U
 #define ERA_STATE_SYNC_ENVELOPE_VERSION        0x01U
 #define ERA_STATE_SYNC_STATUS_OK               0x00U
 #define ERA_STATE_SYNC_STATUS_UNSUPPORTED_VERSION 0x01U

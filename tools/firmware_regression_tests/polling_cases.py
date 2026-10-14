@@ -21,7 +21,9 @@ def generate(root: Path, build: Path) -> Path:
             routers.append(function(source, "via_handle_usb_polling_channel").replace("via_handle_usb_polling_channel", f"router_{i}"))
     assert len(routers) == 5
     via = (qmk / "quantum/via.c").read_text(encoding="utf-8")
-    cases = via[via.index("        case id_get_keyboard_value:"):via.index("        case id_dynamic_keymap_get_keycode:")]
+    cases = via[via.index("        case id_get_protocol_version:"):via.index("        case id_dynamic_keymap_get_keycode:")]
+    protocol = re.search(r"^#define VIA_PROTOCOL_VERSION[^\n]*", header, re.M).group(0)
+    keycodes_version = re.search(r"#ifndef QMK_KEYCODES_VERSION_BCD\n.*?#endif", header, re.S).group(0)
     version = re.search(r"add_compile_definitions\(VIA_FIRMWARE_VERSION=(0x[0-9A-Fa-f]+)\)", (qmk / "CMakeLists.txt").read_text()).group(1)
     preamble = r'''
 #include <assert.h>
@@ -39,11 +41,9 @@ static uint32_t via_get_layout_options(void) { return 0; }
 static matrix_row_t matrix_get_row(uint8_t r) { (void)r; return 0; }
 static void via_set_layout_options(uint32_t v) { (void)v; }
 static void via_set_device_indication(uint8_t v) { (void)v; }
-static bool era_state_sync_via_command(uint8_t *d, uint8_t n) { (void)d; (void)n; return false; }
-static unsigned bumps, applies;
+static unsigned applies;
 static const char *label = "8000 Hz (HS)";
 static const char *usbHidGetPollingLabel(void) { return label; }
-static void era_state_sync_bump_config(void) { bumps++; }
 '''
     stubs = r'''
 static UsbBootMode_t saved = USB_BOOT_MODE_HS_8K;
@@ -73,11 +73,11 @@ int main(void) {
       assert(memcmp(p+1,before+1,33)==0);
       routers[i](NULL,n);
     }
-    unsigned old_bumps=bumps, old_applies=applies;
+    unsigned old_bumps=era_state_sync_config_revision(), old_applies=applies;
     memset(p,0xA5,sizeof(p));p[0]=id_custom_set_value;p[1]=13;p[2]=4;
     memcpy(before,p,sizeof(p));routers[i](p,32);assert(memcmp(p,before,34)==0);
     p[0]=id_custom_save;routers[i](p,2);
-    assert(bumps==old_bumps && applies==old_applies);
+    assert(era_state_sync_config_revision()==old_bumps && applies==old_applies);
     p[0]=id_custom_get_value;p[2]=3;routers[i](p,32);assert(p[0]==id_unhandled);
     p[0]=id_custom_set_value;p[2]=1;p[3]=2;routers[i](p,32);
     p[0]=id_custom_get_value;routers[i](p,32);assert(p[3]==2);
@@ -86,11 +86,11 @@ int main(void) {
     label="8000 Hz (HS)";p[0]=id_custom_get_value;p[2]=4;routers[i](p,32);
     assert(strcmp((char *)p+3,"8000 Hz (HS)")==0);
   }
-  unsigned reset_bumps=bumps, reset_applies=applies;
+  unsigned reset_bumps=era_state_sync_config_revision(), reset_applies=applies;
   UsbBootMode_t actual_mode=saved;
   bootmode_publish_defaults();
   assert(pending_boot_mode==USB_BOOT_MODE_DEFAULT_VALUE && pending_boot_mode_init);
-  assert(saved==actual_mode && bumps==reset_bumps && applies==reset_applies);
+  assert(saved==actual_mode && era_state_sync_config_revision()==reset_bumps && applies==reset_applies);
   for (unsigned cmd=2; cmd<=3; cmd++) {
     uint8_t p[32], before[32];
     for(unsigned i=0;i<32;i++)p[i]=(uint8_t)(i+123);
@@ -99,10 +99,25 @@ int main(void) {
   }
   uint8_t v[32]={id_get_keyboard_value,id_firmware_version};keyboard_value(v,32);
   assert(v[2]==0 && v[3]==0 && v[4]==0 && v[5]==1);
-  puts("PASS: production BootMode + 5 routers: ASCII/padding/short frames/read-only/pending/Apply; retired selector echo; support revision 1");
+  uint8_t protocol[32]={0x01};keyboard_value(protocol,32);
+  assert(protocol[0]==0x01 && protocol[1]==0 && protocol[2]==13);
+  uint8_t keycodes[32]={0x02,0x06};keyboard_value(keycodes,32);
+  assert(keycodes[0]==0x02 && keycodes[1]==0x06);
+  assert(keycodes[2]==0 && keycodes[3]==0 && keycodes[4]==0 && keycodes[5]==8);
+  for(unsigned i=6;i<32;i++) assert(keycodes[i]==0);
+  uint8_t sync[32]={0x02,0x80,0x01,0,0xAB,0xCD};keyboard_value(sync,32);
+  assert(sync[0]==0x02 && sync[1]==0x80 && sync[2]==1 && sync[3]==0);
+  assert(sync[4]==0xAB && sync[5]==0xCD && sync[6]==7 && sync[7]==0);
+  assert(sync[8]==0 && sync[9]==0 && sync[10]==0 && sync[11]==1);
+  assert(sync[12]==0 && sync[13]==0 && sync[14]==0 && sync[15]==1);
+  uint32_t config=((uint32_t)sync[16]<<24)|((uint32_t)sync[17]<<16)|((uint32_t)sync[18]<<8)|sync[19];
+  assert(config==era_state_sync_config_revision());
+  for(unsigned i=20;i<32;i++) assert(sync[i]==0);
+  puts("PASS: production BootMode + 5 routers: ASCII/padding/short frames/read-only/pending/Apply; retired selector echo; support revision 1; protocol 13/keycode version/State Sync routing");
   return 0;
 }
 '''.replace("ROUTERS", names)
     out = build / "test_polling_wire.c"
-    out.write_text(preamble + "\n#define VIA_FIRMWARE_VERSION " + version + "\n" + enums + mode + "\n" + default_mode + "\n" + stubs + boot + "\n".join(routers) + wrapper + tests, encoding="utf-8")
+    state_sync = '\n#include "' + (qmk / "port/era_state_sync.c").as_posix() + '"\n'
+    out.write_text(preamble + state_sync + protocol + "\n" + keycodes_version + "\n#define VIA_FIRMWARE_VERSION " + version + "\n" + enums + mode + "\n" + default_mode + "\n" + stubs + boot + "\n".join(routers) + wrapper + tests, encoding="utf-8")
     return out
