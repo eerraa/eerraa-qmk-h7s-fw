@@ -8,7 +8,10 @@ from source_cases import function
 def generate(root: Path, build: Path) -> Path:
     qmk = root / "src/ap/modules/qmk"
     header = (qmk / "quantum/via.h").read_text(encoding="utf-8")
-    enums = "\n".join(re.findall(r"enum via_(?:command_id|keyboard_value_id|qmk_usb_polling_value)\s*\{.*?\};", header, re.S))
+    enums = "\n".join(re.findall(
+        r"enum (?:via_(?:command_id|keyboard_value_id|qmk_usb_polling_value)|era_keyboard_value_id)\s*\{.*?\};",
+        header, re.S,
+    ))
     usb = (root / "src/hw/driver/usb/usb.h").read_text(encoding="utf-8")
     mode = re.search(r"typedef enum UsbBootMode\b.*?} UsbBootMode_t;", usb, re.S).group(0)
     default_mode = re.search(r"#ifndef USB_BOOT_MODE_DEFAULT_VALUE\n.*?#endif", usb, re.S).group(0)

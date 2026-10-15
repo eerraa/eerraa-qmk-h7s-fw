@@ -22,7 +22,10 @@ def gcc() -> str:
 
 def execute(name: str, sources: list[Path], flags: list[str]) -> None:
     out = BUILD / (name + (".exe" if os.name == "nt" else ""))
-    command = [gcc(), "-std=gnu11", "-O2", "-g", "-Wall", "-Wextra", "-Werror", *flags, *map(str, sources), "-o", str(out)]
+    # Extracted production enums retain their dependency on generated wire ids.
+    command = [gcc(), "-std=gnu11", "-O2", "-g", "-Wall", "-Wextra", "-Werror",
+               "-include", str(QMK / "port/era_wire.h"), *flags,
+               f"-I{QMK / 'quantum'}", *map(str, sources), "-o", str(out)]
     print("BUILD", name, flush=True)
     subprocess.run(command, check=True, timeout=90)
     subprocess.run([str(out)], check=True, timeout=30)

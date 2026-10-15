@@ -33,7 +33,7 @@
 #include "timer.h"
 #include "wait.h"
 #include "version.h" // for QMK_BUILDDATE used in EEPROM magic
-#include "era_state_sync.h"  // V260821R1: GET 0x06 리비전 봉투. TX는 raw_hid_send가 아니라 via_hid_task enqueue.
+#include "era_state_sync.h"  // State Sync responses are enqueued by via_hid_task.
 
 #if defined(AUDIO_ENABLE)
 #    include "audio.h"

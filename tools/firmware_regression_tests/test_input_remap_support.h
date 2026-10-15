@@ -2,8 +2,8 @@
  * VIA dispatch, matrix, tapping, quantum, layers and reports are production. */
 #define DYNAMIC_KEYMAP_LAYER_COUNT 4
 #define DYNAMIC_KEYMAP_EEPROM_ADDR 64
-#define VIA_PROTOCOL_VERSION 13
-#define QMK_KEYCODES_VERSION_BCD 0x00000008
+#define VIA_PROTOCOL_VERSION ERA_WIRE_VIA_PROTOCOL_VERSION
+#define QMK_KEYCODES_VERSION_BCD ERA_WIRE_VIA_KEYCODES_VERSION
 #define VIA_FIRMWARE_VERSION 0
 static uint8_t fixture_keymap_image[64 + 4 * MATRIX_ROWS * MATRIX_COLS * 2];
 static uint16_t fixture_reset_keycode;

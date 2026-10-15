@@ -71,7 +71,7 @@ PATH_TOKEN = re.compile(
 # `<board>/port/via_port.c`처럼 각 보드에 있는 파일을 가리키는 표기.
 BOARD_PREFIX = "<board>/"
 IDENT_TOKEN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-DOCS_REF = re.compile(r"docs/[A-Za-z0-9_./-]+\.(?:md|txt)")
+DOCS_REF = re.compile(r"(?<![A-Za-z0-9_/-])docs/[A-Za-z0-9_./-]+\.(?:md|txt)")
 RELEASE_FILE = re.compile(r"-(V\d{6}R\d)\.(?:uf2|JSON)")
 
 # 저장 형식의 원천. 여기서 뽑은 사실이 바뀌면 이미 저장된 바이트를 새 의미로 읽게 되므로,
@@ -217,13 +217,13 @@ def boards() -> list[dict]:
 
 
 def channel_map() -> dict[str, int]:
+    from era_wire_contract import enum_values, wire_defines
+
     text = read(VIA_H)
-    block = re.search(r"enum via_channel_id\s*\{(.*?)\}", text, re.S)
-    if not block:
-        raise SystemExit("via.h에서 via_channel_id enum을 찾지 못했다")
+    defines = wire_defines(read(ROOT / "src/ap/modules/qmk/port/era_wire.h"))
     return {
-        name: int(value)
-        for name, value in re.findall(r"(id_\w+)\s*=\s*(\d+)", block.group(1))
+        **enum_values(text, "via_channel_id", defines),
+        **enum_values(text, "era_channel_id", defines),
     }
 
 

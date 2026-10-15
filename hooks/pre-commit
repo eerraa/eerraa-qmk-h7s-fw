@@ -30,10 +30,15 @@ fi
 
 CHANGED=$(git -C "$ROOT" diff --cached --name-only) || exit 1
 STOCK_ARMED=0
+WIRE_ARMED=0
 while IFS= read -r path; do
   case "$path" in
     src/ap/modules/qmk/keyboards/era/*|src/hw/driver/usb/*|tools/era_stock_via.py|hooks/pre-commit)
       STOCK_ARMED=1 ;;
+  esac
+  case "$path" in
+    src/ap/modules/qmk/*|src/hw/driver/usb/*|tools/era_wire_contract.py|hooks/pre-commit)
+      WIRE_ARMED=1 ;;
   esac
 done <<EOF
 $CHANGED
@@ -43,6 +48,9 @@ run_checks() {
   "$1" "$CHECKER" || return $?
   if [ "$STOCK_ARMED" = 1 ]; then
     "$1" "$TMP_DIR/tools/era_stock_via.py" || return $?
+  fi
+  if [ "$WIRE_ARMED" = 1 ]; then
+    "$1" "$TMP_DIR/tools/era_wire_contract.py" || return $?
   fi
 }
 

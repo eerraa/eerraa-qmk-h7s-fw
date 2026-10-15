@@ -56,6 +56,7 @@ def prepare_sandbox() -> None:
         "tapdance.h",
         "era_state_sync.c",
         "era_state_sync.h",
+        "era_wire.h",
         "mousekey_config.c",
         "mousekey_config.h",
         "rgb_sleep.c",
@@ -76,6 +77,7 @@ def prepare_sandbox() -> None:
 def main() -> int:
     os.chdir(ROOT)
     run([sys.executable, str(HERE / "test_stock_via.py")])
+    run([sys.executable, str(HERE / "test_wire_contract.py")])
     run([sys.executable, str(HERE / 'test_mouse_runtime.py')])
     prepare_sandbox()
     gcc_exact = [

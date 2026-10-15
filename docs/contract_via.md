@@ -1,9 +1,22 @@
 # VIA wire contract
 
 Genre: contract
-Canonical for: official VIA compatibility, exact-value encoding, State Sync revision semantics, the single raw-HID TX producer, selector `0x80`/`0x07` wire rules, and firmware/app responsibility boundaries
+Canonical for: official VIA compatibility, exact-value encoding, State Sync revision semantics, the single raw-HID TX producer, selector behavior, and firmware/app responsibility boundaries
 
-Implementation-owned inventories are not repeated here. Current command/channel/value ids are in `src/ap/modules/qmk/quantum/via.h`; dispatch is in `src/ap/modules/qmk/quantum/via.c` and `<board>/port/via_port.c`; official VIA definitions are `src/ap/modules/qmk/keyboards/era/**/json/*-VIA.JSON`; the firmware version is `_DEF_FIRMWARE_VERSION` in `src/hw/hw_def.h`.
+Wire-number ownership is `the-via-eerraa/config/era-wire.json` under
+`the-via-eerraa/docs/adr/0005-era-wire-registry.md`. Firmware consumes the
+generated `src/ap/modules/qmk/port/era_wire.h`; existing enum/macro names are
+aliases, not independent allocation tables. Dispatch is in
+`src/ap/modules/qmk/quantum/via.c` and board port handlers; official definitions
+are `src/ap/modules/qmk/keyboards/era/**/json/*-VIA.JSON`; the firmware version
+is `_DEF_FIRMWARE_VERSION` in `src/hw/hw_def.h`.
+
+`python -X utf8 tools/era_wire_contract.py` compares official enum name/value
+sets, protocol/keycodes versions and literal redefinitions of ERA aliases.
+The firmware expands the generated official tables as compile-time assertions.
+The commit hook runs the check on its staged snapshot for VIA, keycodes,
+generated-header and ERA-source changes. Negative fixtures are included in
+`tools/era_via_host_tests/test_wire_contract.py` and the VIA host-test launcher.
 
 The app-side owners are `the-via-eerraa/docs/adr/0001-state-sync-protocol.md` for State Sync/exact-ms and `the-via-eerraa/docs/adr/0002-h7s-usb-diagnostics.md` for the retired diagnostics migration. Local document checks prove only this repository; a peer or remote revision is not verified merely because these pointers exist.
 
@@ -11,11 +24,18 @@ The app-side owners are `the-via-eerraa/docs/adr/0001-state-sync-protocol.md` fo
 
 Stock VIA with the firmware-local definitions keeps basic configuration usable. Features it cannot support correctly, or that need complicated explanations or awkward UI, are reduced in official JSON and supported in the Custom app at usekb.cc. usevia.txt documents this boundary. Preserve existing wire meanings; equal UI exposure is not required.
 
-Shipped channel/value meanings are wire ABI. Do not renumber or reuse a shipped id to compact a hole. VIA-reserved channels 1, 3, 4, and 5 remain reserved; retired channel 13 value 3 remains reserved by `docs/contract_usb.md` §4. New features take unused additive ids. Review firmware and both definition surfaces in the same compatibility change, using the stock usability policy above. Advanced Tap Dance editing (§3) and polling observations (§6) belong to the Custom app; official JSON retains the basic path without changing the Custom Value wire ABI. Use `via.h` and the JSON as the current id inventory rather than copying the full list here.
+Shipped channel/value meanings are wire ABI. Do not renumber or reuse a shipped id to compact a hole. Official and retired allocations remain reserved by the registry; `docs/contract_usb.md` §4 owns the retired behavior. New features take unused additive ids. Review firmware and both definition surfaces in the same compatibility change, using the stock usability policy above. Advanced Tap Dance editing (§3) and polling observations (§6) belong to the Custom app; official JSON retains the basic path without changing the Custom Value wire ABI.
 
-VIA protocol 13 (`0x000D`) reserves GET keyboard-value selector `0x06` for QMK's `id_keycodes_version`. H7S returns QMK keycode version 0.0.8 (`0x00000008`, big-endian in report bytes 2..5): every implemented range matches the protocol-13 dictionary, including UG_* at the legacy RGB_* values `0x7820`..`0x782A`. RM_* is not implemented because no H7S board uses RGB Matrix. Stock definitions use `qmk_rgblight_keycodes`.
+The registry's official keyboard-value table owns `id_keycodes_version`.
+H7S returns ERA_WIRE_VIA_KEYCODES_VERSION big-endian in report bytes 2..5;
+every implemented range matches that dictionary, including UG_* at the legacy
+RGB_* values `0x7820`..`0x782A`. RM_* is not implemented because no H7S board
+uses RGB Matrix. Stock definitions use `qmk_rgblight_keycodes`.
 
-State Sync moves from the legacy selector `0x06` to vendor selector `0x80` (§5); `0x06` no longer accepts a State Sync envelope. Custom apps must use `0x80` with this firmware and retain their legacy routing only for older firmware; app migration is owned by `the-via-eerraa/docs/adr/0001-state-sync-protocol.md`. Retired diagnostics selector `0x07` remains reserved and unhandled (§6).
+State Sync uses the registry's current vendor selector, not its legacy
+selector. Custom apps retain legacy routing only for older firmware; app
+migration is owned by `the-via-eerraa/docs/adr/0001-state-sync-protocol.md`.
+The retired diagnostics selector remains reserved and unhandled (§6).
 
 The local `menu` check verifies that firmware-routed channels remain reachable from official JSON. The `tapdance` check verifies the official editing boundary for every slot and mode byte. Neither verifies the peer app overlay or a live official-browser session.
 
@@ -44,11 +64,11 @@ The shipped legacy Year/Month/Day/Revision values keep their zero-based meaning.
 
 ### Non-obvious custom-control semantics
 
-- RGB Sleep has one shared uint16-second timeout, default 600 seconds, and one shared master enable. Official VIA exposes channel 18 values 1 (minute presets) and 3 (master), not exact value 2; Custom VIA may use value 2. OFF preserves the timeout and SAVE owns persistence. The master gates input-idle sleep, explicit USB Suspend, and host-loss sleep after SOF has been stale for 300 ms once a host was seen. Sleep is a physical-output gate and must not rewrite the user's RGB enable, effect, hue, saturation, or value.
+- RGB Sleep has one shared uint16-second timeout, default 600 seconds, and one shared master enable. Official VIA exposes the registered preset and master controls, not the Custom app's exact-seconds control. OFF preserves the timeout and SAVE owns persistence. The master gates input-idle sleep, explicit USB Suspend, and host-loss sleep after SOF has been stale for 300 ms once a host was seen. Sleep is a physical-output gate and must not rewrite the user's RGB enable, effect, hue, saturation, or value.
 - Pulse controls retain the 5..260 ms setting range (5 ms + the stored one-byte speed) and the physical-press deadline and Hold semantics: a Hold effect lasts while any key pressed in that effect is still down. A Pulse onset which is not covered by an indicator must not be coalesced away before transmission: it remains protected until a complete output frame has been observed and at least 5 ms of wire dwell has elapsed. This minimum may extend a short logical deadline; it is not a promise to end exactly 5 ms after the physical press. Active indicators, output Sleep and RGB OFF take priority and cancel that protection; output Sleep and RGB OFF also retire the physical latch and tracked keys, and masked historical pulses are not replayed. A same-effect colour/brightness commit preserves the physical latch. Host LED bits are authoritative USB feedback; layer reevaluation must not republish an older sampled value. No new VIA id, value encoding or EEPROM layout is introduced by this output contract.
 - Entering a hue-driven RGB effect from a different base effect while stored saturation is zero restores saturation to 255. Switching variants of the same effect or any nonzero saturation leaves the stored colour unchanged. `rgblight_mode_transition_sat()` owns that implementation.
 - KKUK normalizes enable and clamps Delay to 5..30 ticks and Repeat to 5..20 ticks on load and live SET. A semantic live change starts a fresh tracking epoch; keys already held before the change are not retroactively counted, a release uncounts only a press that was counted at the same matrix position, and repeat elapsed time is measured from a current timestamp. Active, non-overlapping SOCD pairs are excluded both from that count and from the release pulse: their raw held usages stay in the report before the SOCD filter selects its winner. Disabled or invalid pairs have no exemption. Modifiers are never cleared; release and restore are sent in the same KKUK task.
-- SOCD (kill switch) resolves on the report the host receives, whoever put each usage there (physical key, Tap Dance, macro): no sent report carries both usages of an eligible pair. The stored mode byte, value 4 on channels 10/11, is 1 Last Input, 2 Neutral, 3 First Input, 4 key-0 priority, 5 key-1 priority, the same values as EERRAA; an unknown mode leaves the setting unchanged. A pair is eligible only with distinct reportable basic/modifier usages; overlapping enabled pairs are inert. A semantic live change restarts the pair and sends the resolved report at once, so a usage the old setting hid returns without input; two keys already held with no known order are both withheld until one is pressed again. Unsupported retained 16-bit keycodes may round-trip through storage/UI but must never be truncated into reportable usages.
+- SOCD (kill switch) resolves on the report the host receives, whoever put each usage there (physical key, Tap Dance, macro): no sent report carries both usages of an eligible pair. Its registered stored mode byte uses the shared SOCD_MODES encodings for Last Input, Neutral, First Input and either key's priority; an unknown mode leaves the setting unchanged. A pair is eligible only with distinct reportable basic/modifier usages; overlapping enabled pairs are inert. A semantic live change restarts the pair and sends the resolved report at once, so a usage the old setting hid returns without input; two keys already held with no known order are both withheld until one is pressed again. Unsupported retained 16-bit keycodes may round-trip through storage/UI but must never be truncated into reportable usages.
 
 ## 2. Single raw-HID TX producer
 
@@ -62,11 +82,16 @@ Only complete 32-byte VIA OUT frames are admitted. Keymap/macro buffer commands 
 
 ## 3. exact-ms / exact-sec
 
-Exact Custom Value SET/GET uses the existing `id_custom_set_value` (`0x07`) / `id_custom_get_value` (`0x08`) commands. The exact value is a two-byte big-endian uint16 after command/channel/value-id.
+Exact Custom Value SET/GET uses the existing `id_custom_set_value` /
+`id_custom_get_value` commands. The exact value is a two-byte big-endian uint16
+after command/channel/value-id.
 
 ### TAPPING and Tap Dance exact milliseconds
 
-H7S exact-ms addresses are global TAPPING channel 15 value 5 and Tap Dance channel 16 values 41..48. SET accepts 1..65535 ms inclusive. Zero is invalid. Fewer than two value bytes (`length < 5`) or an out-of-range value is refused and leaves storage unchanged. Exact GET returns the stored uint16 without snapping.
+H7S exact-ms addresses are the registered TAPPING global exact term and
+TAPDANCE_H7S exact-term bank. SET accepts 1..65535 ms inclusive. Zero is invalid.
+Fewer than two value bytes (`length < 5`) or an out-of-range value is refused
+and leaves storage unchanged. Exact GET returns the stored uint16 without snapping.
 
 Official `*-VIA.JSON` definitions keep the legacy one-byte ×10 ms controls. Legacy SET snaps onto the 100..500 / 20 ms grid; legacy GET projects the exact stored value onto that grid without writing storage. An official-VIA read therefore must not destroy a custom-app value such as 137 or 65535 ms. Tap Dance slot terms remain independent of global `TAPPING_TERM`.
 
@@ -81,10 +106,11 @@ timing under the stock usability policy in §1. Restricting advanced slots preve
 editor from changing actions whose inheritance, explicit silence and timing it
 cannot explain or edit completely.
 
-H7S channel 16 values 49..56 select the input mode for TD0..TD7 through
-Custom Value GET/SET/SAVE. Payload byte 0 is 0 legacy, 1 after-decision, or
-2 on-press. Missing payloads and other values are refused without mutation.
-GET/SET echo appends `0xD2` in byte 1 when the buffer has room. A definition
+The registered TAPDANCE_H7S mode bank selects the input mode for TD0..TD7
+through Custom Value GET/SET/SAVE. TAPDANCE_MODES owns the Legacy,
+after-decision and on-press encodings. Missing payloads and other values are
+refused without mutation. GET/SET echo appends the registered mode marker
+in byte 1 when the buffer has room. A definition
 alone is not support evidence: older firmware's unmarked zero reply must keep
 the old editor. The four action and term IDs keep their encodings.
 
@@ -120,11 +146,12 @@ press so a settings edit cannot change the gesture's output or release owner.
 
 ### Tap Dance independent timing
 
-Channel 16 values 57..64 hold TD0..TD7's separate hold time, BE16 0..65535;
-zero follows the original term. Values 65..72 enable hold-on-other-key, byte
-0/1 only. Hold-time GET/SET echo has marker `0xD3` in value byte 2; the flag
-has `0xD3` in byte 1. Mode GET/SET echo retains byte 1 `0xD2` and advertises
-these extra controls with byte 2 `0xD3`. Old firmware is never probed for the
+The registered TAPDANCE_H7S hold-time bank holds TD0..TD7's separate hold
+time, BE16 0..65535; zero follows the original term. Its hold-other bank uses
+the TAPDANCE_HOLD_OTHER encodings. Hold-time GET/SET echo has the registered
+timing marker in value byte 2; the flag has it in byte 1. Mode GET/SET echo
+retains the mode marker in byte 1 and advertises these extra controls with
+the timing marker in byte 2. Old firmware is never probed for the
 new values without that capability. These controls are edited in the custom app;
 official definitions omit their bindings and do not query the advanced timing
 values. Invalid and short SETs never mutate settings.
@@ -141,7 +168,9 @@ The second physical press never adds a speculative base input before a hold.
 
 ## 4. State Sync revision meaning
 
-Selector `0x80` publishes three RAM uint32 equality tokens: KEYMAP, MACRO, and CONFIG. They start at 1 and skip 0 on wrap. They are invalidation tokens, not data values and not EEPROM addresses.
+The current State Sync selector publishes three RAM uint32 equality tokens:
+KEYMAP, MACRO, and CONFIG. They start at 1 and skip 0 on wrap. They are
+invalidation tokens, not data values and not EEPROM addresses.
 
 - All three tokens invalidate the values observable through existing GET. A changed
   runtime value advances its domain before another command can read it. A token
@@ -173,17 +202,20 @@ value presentation remain app-owned and are not a firmware latency guarantee.
 
 The app treats revision inequality only as invalidation and re-reads authoritative values through existing VIA GET. Revision-bracketing, candidate commit, capability opt-in, and cache continuity are app-owned in `the-via-eerraa/docs/adr/0001-state-sync-protocol.md`.
 
-## 5. selector `0x80` — State Sync v1
+## 5. Current selector — State Sync v1
 
-`id_get_keyboard_value` (`0x02`) + selector `0x80`; envelope version `0x01`; all multibyte integers are big-endian. SET is not routed for this selector. The payload is exactly 32 bytes.
+`id_get_keyboard_value` + ERA_WIRE_STATE_SYNC_SELECTORS_CURRENT, with
+ERA_WIRE_STATE_SYNC_ENVELOPE_VERSION; all multibyte integers are big-endian.
+SET is not routed for this selector. ERA_WIRE_VIA_REPORT_SIZE owns the fixed
+payload size; byte positions below describe that unchanged envelope.
 
 ### Request
 
 | Byte | Meaning |
 | ---: | --- |
-| `0` | GET keyboard value `0x02` |
-| `1` | selector `0x80` |
-| `2` | requested envelope version `0x01` |
+| `0` | `id_get_keyboard_value` |
+| `1` | current registered State Sync selector |
+| `2` | requested registered envelope version |
 | `3` | `0` |
 | `4..5` | host request tag, BE16 |
 | `6..31` | `0` |
@@ -192,19 +224,19 @@ The app treats revision inequality only as invalidation and re-reads authoritati
 
 | Byte | Meaning |
 | ---: | --- |
-| `0` | `0x02` |
-| `1` | `0x80` |
-| `2` | firmware envelope version `0x01` |
-| `3` | status: OK `0x00`, unsupported version `0x01`, invalid `0x02` |
+| `0` | `id_get_keyboard_value` |
+| `1` | current registered State Sync selector |
+| `2` | registered firmware envelope version |
+| `3` | registered STATE_SYNC_STATUS: OK, unsupported version, invalid |
 | `4..5` | echoed host tag, BE16 |
-| `6` | domain mask; OK is KEYMAP `0x01` \| MACRO `0x02` \| CONFIG `0x04` = `0x07` |
+| `6` | registered STATE_SYNC_DOMAINS mask; OK includes KEYMAP, MACRO and CONFIG |
 | `7` | `0` |
 | `8..11` | keymap revision, BE32 |
 | `12..15` | macro revision, BE32 |
 | `16..19` | config revision, BE32 |
 | `20..31` | `0` |
 
-Validation order is normative. A version other than `0x01` returns unsupported-version even if reserved bytes are nonzero. With a supported version, any nonzero reserved request byte (`3` or `6..31`) returns invalid. The tag is echoed in both cases; revisions are filled only for OK.
+Validation order is normative. A version other than the registered version returns unsupported-version even if reserved bytes are nonzero. With a supported version, any nonzero reserved request byte (`3` or `6..31`) returns invalid. The tag is echoed in both cases; revisions are filled only for OK.
 
 `length < 32` is not an INVALID v1 envelope. The direct handler returns false; raw-HID admission rejects the short frame before dispatch, so there is no selector response. Do not synthesize a v1 error envelope for a short report.
 
@@ -217,16 +249,16 @@ App responsibility: send tagged 32-byte GETs through the per-path serialized tra
 User diagnostics and dedicated firmware instrumentation are removed. The observation
 loss (report timing, queue peak/drop sessions, loop stalls and USB event histories)
 is accepted; internal transport counters are not a user-facing replacement.
-Keyboard-value selector `0x07` remains reserved. GET/SET return `id_unhandled`
+The registry's retired diagnostics selector remains reserved. GET/SET return `id_unhandled`
 by changing only byte 0; selector, tag and all other request bytes are preserved.
-This retirement does not change `VIA_PROTOCOL_VERSION` or custom SET command id `0x07`.
+This retirement does not change `VIA_PROTOCOL_VERSION` or the custom SET command.
 
-Custom channel 13/value 4 is read-only. A 32-byte GET returns a NUL-terminated
+The registered H7S polling-current value is read-only. A full-size GET returns a NUL-terminated
 ASCII value in bytes 3..31 (29 bytes including NUL); unused bytes are zero.
 Only `1000 Hz (FS)`, `2000 Hz (HS)`, `4000 Hz (HS)`, `8000 Hz (HS)` and
 `Unavailable` are valid. Short GETs are rejected before writing the payload.
-SET has no side effects; channel SAVE retains its no-op meaning. Value 1 is
-pending selection, value 2 is Apply, and retired value 3 remains reserved.
+SET has no side effects; channel SAVE retains its no-op meaning. The registry
+owns pending-selection, Apply and the permanently reserved retired value.
 Neither GET nor the read-only SET changes CONFIG revision or EEPROM.
 
 The HID owner copies session validity, its actual keyboard IN endpoint's
