@@ -109,10 +109,14 @@ def test_staged_snapshot() -> None:
             encoding="utf-8",
         )
         (repo / "proof.txt").write_text("staged\n", encoding="utf-8")
+        (repo / "tools" / "era_stock_via.py").write_text(
+            "# staged STOCK checker fixture\n", encoding="utf-8",
+        )
 
         subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
         subprocess.run(
-            ["git", "add", "hooks/pre-commit", "tools/era_doc_refs.py", "proof.txt"],
+            ["git", "add", "hooks/pre-commit", "tools/era_doc_refs.py",
+             "tools/era_stock_via.py", "proof.txt"],
             cwd=repo,
             check=True,
         )

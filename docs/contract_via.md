@@ -19,6 +19,23 @@ State Sync moves from the legacy selector `0x06` to vendor selector `0x80` (§5)
 
 The local `menu` check verifies that firmware-routed channels remain reachable from official JSON. The `tapdance` check verifies the official editing boundary for every slot and mode byte. Neither verifies the peer app overlay or a live official-browser session.
 
+`python -X utf8 tools/era_stock_via.py` checks every firmware-local STOCK JSON:
+valid JSON, no qmk_lighting, exactly the lighting keycode module implied by
+the board config.h, matching USB_VID/USB_PID and MATRIX_ROWS/MATRIX_COLS.
+Backlight selects qmk_backlight_keycodes; rgblight selects
+qmk_rgblight_keycodes; both select qmk_backlight_rgblight_keycodes; RGB Matrix
+selects qmk_rgb_matrix_keycodes; no user-controllable engine selects none.
+Other combinations are refused with the board name. The tool's INDICATOR_ONLY
+declaration is empty: every current board enables rgblight, none backlight;
+shared RGB indicators do not disable the user-controllable engine.
+`src/hw/driver/usb/usb_hid/usbd_desc.c` and
+`src/hw/driver/usb/usb_cmp/usbd_desc.c` use the board USB ids directly, with no
+split-half PID transformation. No H7S split board is currently shipped.
+The commit hook runs this check on the staged snapshot when board/definition
+or USB configuration changes. Positive inventory and negative fixtures run
+with `python -X utf8 tools/era_via_host_tests/test_stock_via.py` and are included
+in the VIA host-test launcher.
+
 Official menu names are shared with EERRAA: lighting sits under `Lighting` in submenus named for where the LEDs are (`Underglow`, `RGB Row`, never an engine name), and lock indication under `Indicators` with `Indicator` / `Indicator N` dropdowns whose value 0 reads `RGB Effect` where the indicator shares the lighting LEDs (INTIGRITY80, BRICK60) and `Off` on a dedicated LED. Labels are not wire ABI, but a rename must reach every official JSON, `docs/usevia.txt` and the app definition together.
 
 ### VERSION

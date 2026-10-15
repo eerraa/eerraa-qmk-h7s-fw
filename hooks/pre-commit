@@ -28,16 +28,34 @@ if [ ! -f "$CHECKER" ]; then
   exit 1
 fi
 
+CHANGED=$(git -C "$ROOT" diff --cached --name-only) || exit 1
+STOCK_ARMED=0
+while IFS= read -r path; do
+  case "$path" in
+    src/ap/modules/qmk/keyboards/era/*|src/hw/driver/usb/*|tools/era_stock_via.py|hooks/pre-commit)
+      STOCK_ARMED=1 ;;
+  esac
+done <<EOF
+$CHANGED
+EOF
+
+run_checks() {
+  "$1" "$CHECKER" || return $?
+  if [ "$STOCK_ARMED" = 1 ]; then
+    "$1" "$TMP_DIR/tools/era_stock_via.py" || return $?
+  fi
+}
+
 # 명령 이름만으로는 부족하다. WindowsApps의 Store 별칭은 python3로 검색되지만
 # 스크립트를 실행하지 못하므로 실제 인터프리터를 probe하고 fallback한다.
 if command -v python3 >/dev/null 2>&1 &&
    python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1; then
-  python3 "$CHECKER"
+  run_checks python3
   exit $?
 fi
 if command -v python >/dev/null 2>&1 &&
    python -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1; then
-  python "$CHECKER"
+  run_checks python
   exit $?
 fi
 echo "H7S pre-commit: 실행 가능한 Python 3.8+ 인터프리터를 python3 또는 python에서 찾지 못했다." >&2
