@@ -22,18 +22,6 @@ with tempfile.TemporaryDirectory(prefix='era-mouse-runtime-') as directory:
 #define IS_MOUSEKEY_MOVE(c) ((c)>=1 && (c)<=4)
 #define IS_MOUSEKEY_WHEEL(c) ((c)>=5 && (c)<=8)
 #define IS_MOUSEKEY_BUTTON(c) ((c)==9)
-#define KC_MS_UP QK_MOUSE_CURSOR_UP
-#define KC_MS_DOWN QK_MOUSE_CURSOR_DOWN
-#define KC_MS_LEFT QK_MOUSE_CURSOR_LEFT
-#define KC_MS_RIGHT QK_MOUSE_CURSOR_RIGHT
-#define KC_MS_WH_UP QK_MOUSE_WHEEL_UP
-#define KC_MS_WH_DOWN QK_MOUSE_WHEEL_DOWN
-#define KC_MS_WH_LEFT QK_MOUSE_WHEEL_LEFT
-#define KC_MS_WH_RIGHT QK_MOUSE_WHEEL_RIGHT
-#define KC_MS_BTN1 QK_MOUSE_BUTTON_1
-#define KC_MS_ACCEL0 QK_MOUSE_ACCELERATION_0
-#define KC_MS_ACCEL1 QK_MOUSE_ACCELERATION_1
-#define KC_MS_ACCEL2 QK_MOUSE_ACCELERATION_2
 ''')
     (out/'host.h').write_text('''#pragma once
 #include <stdint.h>

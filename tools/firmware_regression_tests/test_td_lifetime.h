@@ -1,5 +1,5 @@
 static bool hid_output_down(uint16_t code) {
-  if (IS_MOUSE_KEYCODE(code)) return (mouse_codes_down & (1UL << (code - KC_MS_UP))) != 0;
+  if (IS_MOUSE_KEYCODE(code)) return (mouse_codes_down & (1UL << (code - QK_MOUSE_CURSOR_UP))) != 0;
   if (IS_CONSUMER_KEYCODE(code)) return last_consumer == KEYCODE2CONSUMER(code);
   return last_system == KEYCODE2SYSTEM(code);
 }
@@ -187,7 +187,7 @@ static void check_td_lifetime(const char *name) {
     assert(layer_state==0);
   } else if (!strcmp(name,"hid_shared")) {
     /* Mouse and extra-report usages shared with a normal key follow the last owner. */
-    const uint16_t outputs[]={KC_MS_BTN1,KC_MS_UP,KC_AUDIO_VOL_UP,KC_SYSTEM_SLEEP};
+    const uint16_t outputs[]={QK_MOUSE_BUTTON_1,QK_MOUSE_CURSOR_UP,KC_AUDIO_VOL_UP,KC_SYSTEM_SLEEP};
     for(unsigned i=0;i<8;++i) {
       const uint16_t out=outputs[i/2]; const bool td_release_first=i&1; const uint32_t t=2000U+1000U*i;
       reset_fixture(TD(0),RGBLIGHT_MODE_PULSE_OFF_PRESS_HOLD,t-1U); tick(t-1U); automatic_caps_feedback=false;

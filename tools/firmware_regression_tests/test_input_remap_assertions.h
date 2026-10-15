@@ -147,7 +147,7 @@ static void check_input_remap(const char *name)
     const unsigned before_tap = a_reports;
     input_remap_via(KC_B, mutation); scan(1050, 0, false);
     assert(a_reports > before_tap && !is_key_pressed(KC_A) && !is_key_pressed(KC_B) && layer_state == 0);
-    input_remap_begin(KC_MS_BTN1); assert(mouse_codes_down);
+    input_remap_begin(QK_MOUSE_BUTTON_1); assert(mouse_codes_down);
     input_remap_via(KC_B, mutation); scan(1050, 0, false); assert(mouse_codes_down == 0);
     input_remap_begin(KC_AUDIO_VOL_UP); assert(last_consumer);
     input_remap_via(KC_B, mutation); scan(1050, 0, false); assert(last_consumer == 0);

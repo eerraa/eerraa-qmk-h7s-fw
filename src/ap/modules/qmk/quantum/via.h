@@ -61,13 +61,6 @@
 // so VIA Configurator can detect compatible firmware.
 #define VIA_PROTOCOL_VERSION 0x000D
 
-// H7S reports QMK keycode version 0.0.8: all implemented ranges match VIA's
-// protocol-13 dictionary (UG_* = legacy RGB_* at 0x7820-0x782A).
-// RM_* is not implemented because no H7S board uses RGB Matrix.
-#ifndef QMK_KEYCODES_VERSION_BCD
-#    define QMK_KEYCODES_VERSION_BCD 0x00000008
-#endif
-
 // This is a version number for the firmware for the keyboard.
 // It can be used to ensure the VIA keyboard definition and the firmware
 // have the same version, especially if there are changes to custom values.

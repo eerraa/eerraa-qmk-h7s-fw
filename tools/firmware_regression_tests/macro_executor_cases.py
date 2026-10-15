@@ -104,7 +104,7 @@ def generate(root: Path, build: Path, remove_fix: bool = False,
         key_lut = key_lut.split("{", 1)[1].split("}", 1)[0]
         keycodes = [key.strip() for key in key_lut.split(",") if key.strip()]
         assert len(keycodes) == 128
-        keycodes[13], keycodes[126], keycodes[94] = "KC_NO", "KC_AUDIO_VOL_UP", "KC_MS_BTN1"
+        keycodes[13], keycodes[126], keycodes[94] = "KC_NO", "KC_AUDIO_VOL_UP", "QK_MOUSE_BUTTON_1"
         (target / "layout_override.c").write_text(
             '#include <stdint.h>\n#include "keycode.h"\n'
             'const uint8_t ascii_to_keycode_lut[128] = {' + ",".join(keycodes) + '};\n'

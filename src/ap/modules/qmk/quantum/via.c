@@ -23,6 +23,7 @@
 #endif
 
 #include "via.h"
+#include "keycodes.h" // owns the version of the keycode table reported to VIA
 
 #include "raw_hid.h"
 #include "dynamic_keymap.h"

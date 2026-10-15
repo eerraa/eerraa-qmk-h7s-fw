@@ -195,10 +195,10 @@ static void usbHidDelayKeyboardReportForGeneration(uint16_t interval, uint32_t g
 }
 #endif
 static void mousekey_on(uint8_t code) {
-    if (code >= KC_MS_BTN1 && code <= KC_MS_BTN8) logical_mouse.buttons |= 1U << (code - KC_MS_BTN1);
+    if (code >= QK_MOUSE_BUTTON_1 && code <= QK_MOUSE_BUTTON_8) logical_mouse.buttons |= 1U << (code - QK_MOUSE_BUTTON_1);
 }
 static void mousekey_off(uint8_t code) {
-    if (code >= KC_MS_BTN1 && code <= KC_MS_BTN8) logical_mouse.buttons &= ~(1U << (code - KC_MS_BTN1));
+    if (code >= QK_MOUSE_BUTTON_1 && code <= QK_MOUSE_BUTTON_8) logical_mouse.buttons &= ~(1U << (code - QK_MOUSE_BUTTON_1));
 }
 void mousekey_send(void) { host_mouse_send(&logical_mouse); }
 report_mouse_t mousekey_get_report(void) { return logical_mouse; }
@@ -525,14 +525,14 @@ static void init_lifetime(void) {
 static void extra_ownership(void) {
     const uint8_t held[] = {SS_QMK_PREFIX,SS_DOWN_CODE,KC_SYSTEM_SLEEP,
                            SS_QMK_PREFIX,SS_DOWN_CODE,KC_AUDIO_VOL_UP,
-                           SS_QMK_PREFIX,SS_DOWN_CODE,KC_MS_BTN1,0};
+                           SS_QMK_PREFIX,SS_DOWN_CODE,QK_MOUSE_BUTTON_1,0};
     reset_fixture(held, sizeof(held));
-    register_code(KC_SYSTEM_SLEEP); register_code(KC_AUDIO_VOL_UP); register_code(KC_MS_BTN1);
+    register_code(KC_SYSTEM_SLEEP); register_code(KC_AUDIO_VOL_UP); register_code(QK_MOUSE_BUTTON_1);
     dynamic_keymap_macro_send(0); drain(50);
-    unregister_code(KC_SYSTEM_SLEEP); unregister_code(KC_AUDIO_VOL_UP); unregister_code(KC_MS_BTN1);
+    unregister_code(KC_SYSTEM_SLEEP); unregister_code(KC_AUDIO_VOL_UP); unregister_code(QK_MOUSE_BUTTON_1);
     assert(accepted_system == SYSTEM_SLEEP && accepted_consumer == AUDIO_VOL_UP && accepted_mouse.buttons == 1U);
     uint8_t previous = action_owner_select(0);
-    register_code(KC_SYSTEM_SLEEP); register_code(KC_AUDIO_VOL_UP); register_code(KC_MS_BTN1);
+    register_code(KC_SYSTEM_SLEEP); register_code(KC_AUDIO_VOL_UP); register_code(QK_MOUSE_BUTTON_1);
     action_owner_select(previous);
     logical_mouse.x = 9; logical_mouse.y = -7; logical_mouse.v = 3; logical_mouse.h = -2;
     accepted_system = accepted_consumer = 0U; accepted_mouse.buttons = 0U; ++session.generation;
@@ -542,14 +542,14 @@ static void extra_ownership(void) {
     assert(accepted_mouse.x == 0 && accepted_mouse.y == 0 && accepted_mouse.v == 0 && accepted_mouse.h == 0);
     assert(logical_mouse.x == 9 && logical_mouse.y == -7 && logical_mouse.v == 3 && logical_mouse.h == -2);
     previous = action_owner_select(0);
-    unregister_code(KC_SYSTEM_SLEEP); unregister_code(KC_AUDIO_VOL_UP); unregister_code(KC_MS_BTN1);
+    unregister_code(KC_SYSTEM_SLEEP); unregister_code(KC_AUDIO_VOL_UP); unregister_code(QK_MOUSE_BUTTON_1);
     action_owner_select(previous);
     assert(accepted_system == 0U && accepted_consumer == 0U && accepted_mouse.buttons == 0U);
     const uint8_t identical[] = {SS_QMK_PREFIX,SS_DOWN_CODE,KC_LEFT_SHIFT,
         SS_QMK_PREFIX,SS_DOWN_CODE,KC_SYSTEM_SLEEP,SS_QMK_PREFIX,SS_DOWN_CODE,KC_AUDIO_VOL_UP,
-        SS_QMK_PREFIX,SS_DOWN_CODE,KC_MS_BTN1,0};
+        SS_QMK_PREFIX,SS_DOWN_CODE,QK_MOUSE_BUTTON_1,0};
     reset_fixture(identical, sizeof(identical));
-    register_code(KC_LEFT_SHIFT); register_code(KC_SYSTEM_SLEEP); register_code(KC_AUDIO_VOL_UP); register_code(KC_MS_BTN1);
+    register_code(KC_LEFT_SHIFT); register_code(KC_SYSTEM_SLEEP); register_code(KC_AUDIO_VOL_UP); register_code(QK_MOUSE_BUTTON_1);
     assert(!accepted_keyboard_bound && !accepted_system_bound && !accepted_consumer_bound && !accepted_mouse_bound);
     for (unsigned cycle = 0U; cycle < 2U; ++cycle) {
         dynamic_keymap_macro_send(0); drain(50);
@@ -559,7 +559,7 @@ static void extra_ownership(void) {
         assert(accepted_keyboard.mods == MOD_BIT(KC_LEFT_SHIFT) && accepted_system == SYSTEM_SLEEP && accepted_consumer == AUDIO_VOL_UP && accepted_mouse.buttons == 1U);
     }
     dynamic_keymap_macro_send(0); drain(50);
-    unregister_code(KC_LEFT_SHIFT); unregister_code(KC_SYSTEM_SLEEP); unregister_code(KC_AUDIO_VOL_UP); unregister_code(KC_MS_BTN1);
+    unregister_code(KC_LEFT_SHIFT); unregister_code(KC_SYSTEM_SLEEP); unregister_code(KC_AUDIO_VOL_UP); unregister_code(QK_MOUSE_BUTTON_1);
     assert(accepted_keyboard.mods == MOD_BIT(KC_LEFT_SHIFT) && accepted_system == SYSTEM_SLEEP && accepted_consumer == AUDIO_VOL_UP && accepted_mouse.buttons == 1U);
     assert(accepted_keyboard_bound && accepted_system_bound && accepted_consumer_bound && accepted_mouse_bound);
     era_macro_cancel();
@@ -641,13 +641,13 @@ static void ownership_boundaries(void) {
         reset_fixture(empty, sizeof(empty));
         for (unsigned i = 0U; i < 3U; ++i) {
             old = action_owner_select(owners[i]);
-            register_code(KC_A); register_code(KC_LEFT_SHIFT); register_code(KC_MS_BTN1);
+            register_code(KC_A); register_code(KC_LEFT_SHIFT); register_code(QK_MOUSE_BUTTON_1);
             action_owner_select(old);
         }
         for (unsigned step = 0U; step < 3U; ++step) {
             unsigned released = permutations[order][step];
             old = action_owner_select(owners[released]);
-            unregister_code(KC_A); unregister_code(KC_LEFT_SHIFT); unregister_code(KC_MS_BTN1);
+            unregister_code(KC_A); unregister_code(KC_LEFT_SHIFT); unregister_code(QK_MOUSE_BUTTON_1);
             action_owner_select(old);
             assert(logical_keys[KC_A] == (step != 2U));
             assert((get_mods() != 0U) == (step != 2U));

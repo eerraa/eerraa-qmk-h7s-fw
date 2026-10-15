@@ -174,6 +174,10 @@ def main() -> None:
                 [f"-I{HERE}", f"-I{HERE/'ws2812_include'}", f"-I{ROOT/'src/common/hw/include'}",
                  f"-I{ROOT/'src/ap/modules'}", "-Wno-unused-function", "-Wno-return-type"])
     if args.only in (None, "guards"):
+        from keycode_cases import generate as generate_keycodes
+        execute("test_keycode_invariance", [generate_keycodes(ROOT, BUILD)],
+                [f"-I{QMK/'quantum'}", f"-I{QMK/'quantum/keymap_extras'}",
+                 f"-I{QMK/'quantum/sequencer'}"])
         from polling_cases import generate as generate_polling
         execute("test_polling_wire", [generate_polling(ROOT, BUILD)], [])
         from source_cases import generate

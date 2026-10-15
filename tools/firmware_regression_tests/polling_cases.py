@@ -23,7 +23,7 @@ def generate(root: Path, build: Path) -> Path:
     via = (qmk / "quantum/via.c").read_text(encoding="utf-8")
     cases = via[via.index("        case id_get_protocol_version:"):via.index("        case id_dynamic_keymap_get_keycode:")]
     protocol = re.search(r"^#define VIA_PROTOCOL_VERSION[^\n]*", header, re.M).group(0)
-    keycodes_version = re.search(r"#ifndef QMK_KEYCODES_VERSION_BCD\n.*?#endif", header, re.S).group(0)
+    keycodes_version = '#include "' + (qmk / "quantum/keycodes.h").as_posix() + '"'
     version = re.search(r"add_compile_definitions\(VIA_FIRMWARE_VERSION=(0x[0-9A-Fa-f]+)\)", (qmk / "CMakeLists.txt").read_text()).group(1)
     preamble = r'''
 #include <assert.h>

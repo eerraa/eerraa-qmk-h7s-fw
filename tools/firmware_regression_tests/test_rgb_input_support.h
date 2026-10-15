@@ -200,8 +200,8 @@ static void delay(uint32_t ms)
  * usage routing and ownership are the production functions. */
 static uint32_t mouse_codes_down;
 static uint16_t last_system, last_consumer;
-static void mousekey_on(uint8_t code) { mouse_codes_down |= 1UL << (code - KC_MS_UP); }
-static void mousekey_off(uint8_t code) { mouse_codes_down &= ~(1UL << (code - KC_MS_UP)); }
+static void mousekey_on(uint8_t code) { mouse_codes_down |= 1UL << (code - QK_MOUSE_CURSOR_UP); }
+static void mousekey_off(uint8_t code) { mouse_codes_down &= ~(1UL << (code - QK_MOUSE_CURSOR_UP)); }
 static void mousekey_send(void) {}
 static void mousekey_clear(void) { mouse_codes_down = 0; }
 static void host_system_send(uint16_t usage) { last_system = usage; }

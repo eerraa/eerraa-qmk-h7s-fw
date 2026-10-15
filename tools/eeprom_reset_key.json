@@ -1,6 +1,6 @@
 {
   "reset_key": "0x48375303",
-  "reason": "V261004R1 MOUSE v2 integer count/time format; full settings reset approved; slot offsets unchanged",
+  "reason": "QMK keycodes 0.0.8 alignment: every stored keycode keeps its value (keycode invariance test in tools/firmware_regression_tests); QK_OUTPUT_* moved 0x7C20-0x7C22 to 0x7780/0x7784/0x7786 but no H7S build handles them (BLUETOOTH_ENABLE undefined); via.h keycodes-version define removed (protocol reply, not stored); reset key unchanged",
   "groups": {
     "board src/ap/modules/qmk/keyboards/era/comm/intigrity80/config.h": "0249ead8a27d8278",
     "board src/ap/modules/qmk/keyboards/era/keynetix/may65/config.h": "d883bb76de304c3e",
@@ -19,7 +19,7 @@
     "define src/ap/modules/qmk/quantum/eeconfig.h": "dd5bb6355fc2efdc",
     "define src/ap/modules/qmk/quantum/via.h": "33d86cf7629b1e4d",
     "define src/hw/hw_def.h": "3f7372b66a895715",
-    "file src/ap/modules/qmk/quantum/keycodes.h": "9da72a9c3ee3e8e4",
+    "file src/ap/modules/qmk/quantum/keycodes.h": "8193d2f809162abd",
     "file src/ap/modules/qmk/quantum/rgblight/rgblight_modes.h": "98e4266d1f662ebb",
     "slots": "b577ded15eea9adc",
     "type UsbBootMode_t": "e688e1777b465d38",
