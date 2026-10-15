@@ -8,6 +8,10 @@ H7S Firmware Guide
 
 ■ 펌웨어 업데이트
 
+V261015R1은 VIA 프로토콜 13을 지원합니다. 이 배포본의 JSON을 공식
+VIA(usevia.app)에서 쓰면 키코드 경고 없이 조명 키가 표시됩니다. 저장 형식은
+V261005R1과 같아 키맵·매크로·설정을 유지합니다.
+
 V261005R1은 EEPROM 저장 경로를 정리한 유지보수 업데이트입니다.
 V261004R1/R2와 저장 형식이 같아 키맵·매크로·설정을 유지합니다.
 
@@ -64,6 +68,10 @@ English
 ----------------------------------------------------------------------
 
 ■ Firmware Update
+
+V261015R1 supports VIA protocol 13. With the JSON in this package, official
+VIA (usevia.app) shows the lighting keys without a keycode warning. The storage
+format is the same as V261005R1, so keymaps, macros and settings are kept.
 
 V261005R1 is a maintenance update that cleans up the EEPROM storage path.
 Storage is unchanged from V261004R1/R2; keymaps, macros and settings are preserved.
