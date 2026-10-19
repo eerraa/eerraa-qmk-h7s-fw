@@ -1,2 +1,7 @@
-/build
-/build*/
+# Local tool state, including component-local directories.
+.mixdog/
+__pycache__/
+
+# Local worktrees and user-directed handover storage.
+/eerraa-qmk-h7s-fw-worktrees/
+/eerraa-qmk-h7s-fw-handover/
